@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
 const { auth } = require('../middleware/auth');
+const { body } = require('express-validator'); 
 const { authLimiter } = require('../middleware/rateLimit');
 const { validators, handleValidationErrors } = require('../utils/validators');
 
@@ -14,6 +15,8 @@ router.post(
   '/signup',
   authLimiter,
   [
+    validators.name(), 
+    validators.phone(),
     validators.email(),
     validators.password(),
     handleValidationErrors,
@@ -30,7 +33,10 @@ router.post(
   '/login',
   authLimiter,
   [
-    validators.email(),
+    body('emailOrPhone')
+      .trim()
+      .notEmpty()
+      .withMessage('Email or phone is required'),
     validators.password(),
     handleValidationErrors,
   ],
@@ -69,5 +75,19 @@ router.post('/resend-verification', auth, authController.resendVerification);
  * @access  Private
  */
 router.get('/me', auth, authController.getMe);
+
+/**
+ * @route   POST /api/auth/forgot-password
+ * @desc    Send password reset link
+ * @access  Public
+ */
+router.post('/forgot-password', validators.email(), handleValidationErrors, authController.forgotPassword);
+
+/**
+ * @route   POST /api/auth/reset-password
+ * @desc    Reset password
+ * @access  Public
+ */
+router.post('/reset-password', validators.password(), handleValidationErrors, authController.resetPassword);
 
 module.exports = router;

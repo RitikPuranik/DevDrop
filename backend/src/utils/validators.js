@@ -24,6 +24,18 @@ const handleValidationErrors = (req, res, next) => {
  * Common validation rules
  */
 const validators = {
+  name: () =>
+    body('name')
+      .trim()
+      .isLength({ min: 2, max: 100 })
+      .withMessage('Name must be between 2 and 100 characters'),
+
+  phone: () =>
+    body('phone')
+      .trim()
+      .matches(/^[0-9]{10}$/)
+      .withMessage('Please provide a valid 10-digit phone number'),
+      
   // Email validation
   email: () => 
     body('email')

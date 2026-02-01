@@ -245,6 +245,38 @@ const sendPayoutNotification = async (seller, payout) => {
   }
 };
 
+const sendPasswordResetEmail = async (user, token) => {
+  try {
+    const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+
+    const mailOptions = {
+      from: process.env.EMAIL_FROM,
+      to: user.email,
+      subject: EMAIL_SUBJECTS.PASSWORD_RESET,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>Reset your password</h2>
+          <p>Click the link below to reset your password:</p>
+          <div style="margin: 30px 0;">
+            <a href="${resetUrl}"
+               style="background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px;">
+              Reset Password
+            </a>
+          </div>
+          <p>This link expires in 15 minutes.</p>
+        </div>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`✅ Password reset email sent to ${user.email}`);
+  } catch (error) {
+    console.error('Error sending password reset email:', error);
+    throw error;
+  }
+};
+
+
 module.exports = {
   sendVerificationEmail,
   sendWelcomeEmail,
@@ -252,4 +284,5 @@ module.exports = {
   sendSellerNotification,
   sendStatusUpdateEmail,
   sendPayoutNotification,
+  sendPasswordResetEmail,
 };

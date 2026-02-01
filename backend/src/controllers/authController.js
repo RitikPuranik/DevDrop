@@ -10,7 +10,16 @@ const emailService = require('../services/emailService');
  */
 const signup = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { name, phone, email, password } = req.body;
+
+    // ADD: Check if phone already exists
+    const existingPhone = await User.findOne({ phone });
+    if (existingPhone) {
+      return res.status(400).json({
+        success: false,
+        message: 'User with this phone number already exists',
+      });
+    }
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
@@ -21,8 +30,10 @@ const signup = async (req, res) => {
       });
     }
 
-    // Create user
+    // CHANGE: Create user (add name and phone)
     const user = new User({
+      name,      // ADD
+      phone,     // ADD
       email,
       password,
       role: 'user',
@@ -40,6 +51,8 @@ const signup = async (req, res) => {
       data: {
         user: {
           id: user._id,
+          name: user.name,        // ADD
+          phone: user.phone,      // ADD
           email: user.email,
           role: user.role,
           isVerified: user.isVerified,
@@ -64,15 +77,20 @@ const signup = async (req, res) => {
  */
 const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { emailOrPhone, password } = req.body; // CHANGE
 
-    // Find user and include password
-    const user = await User.findOne({ email }).select('+password');
+    // CHANGE: Find user by email OR phone
+    const user = await User.findOne({
+      $or: [
+        { email: emailOrPhone },
+        { phone: emailOrPhone }
+      ]
+    }).select('+password');
 
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid email or password',
+        message: 'Invalid credentials', // CHANGE message
       });
     }
 
@@ -254,6 +272,8 @@ const getMe = async (req, res) => {
       success: true,
       data: {
         id: user._id,
+        name: user.name,        // ADD
+        phone: user.phone,      // ADD
         email: user.email,
         role: user.role,
         isVerified: user.isVerified,
@@ -270,11 +290,104 @@ const getMe = async (req, res) => {
   }
 };
 
+/**
+ * @route   POST /api/auth/forgot-password
+ * @desc    Forgot password - send reset link
+ * @access  Private
+ */
+const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      // Security: do not reveal if email exists
+      return res.json({
+        success: true,
+        message: 'If this email exists, a reset link has been sent',
+      });
+    }
+
+    // Generate reset token
+    const resetToken = user.generateResetPasswordToken();
+    await user.save();
+
+    // Send reset email
+    await emailService.sendPasswordResetEmail(user, resetToken);
+
+    res.json({
+      success: true,
+      message: 'Password reset link sent to email',
+    });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error sending reset password email',
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * @route   POST /api/auth/reset-password
+ * @desc    Reset password using token
+ * @access  Public
+ */
+const resetPassword = async (req, res) => {
+  try {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token and new password are required',
+      });
+    }
+
+    const hashedToken = hashToken(token);
+
+    const user = await User.findOne({
+      resetPasswordToken: hashedToken,
+      resetPasswordExpiry: { $gt: Date.now() },
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired reset token',
+      });
+    }
+
+    // Set new password
+    user.password = password;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpiry = undefined;
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Password reset successful. You can now log in.',
+    });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error resetting password',
+      error: error.message,
+    });
+  }
+};
+
+
 module.exports = {
   signup,
   login,
   verifyEmail,
   resendVerification,
   getMe,
-  sendVerificationEmail
+  sendVerificationEmail,
+  forgotPassword,
+  resetPassword,
 };
