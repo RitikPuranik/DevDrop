@@ -113,6 +113,43 @@ const login = async (req, res) => {
 };
 
 /**
+ * @route   POST /api/auth/send-verification
+ * @desc    Send email verification link
+ * @access  Private
+ */
+const sendVerificationEmail = async (req, res) => {
+  try {
+    const user = req.user;
+
+    if (user.isVerified) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is already verified',
+      });
+    }
+
+    // Generate token
+    const verificationToken = user.generateVerificationToken();
+    await user.save();
+
+    // Send email
+    await emailService.sendVerificationEmail(user, verificationToken);
+
+    res.json({
+      success: true,
+      message: 'Verification email sent successfully',
+    });
+  } catch (error) {
+    console.error('Send verification email error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to send verification email',
+      error: error.message,
+    });
+  }
+};
+
+/**
  * @route   POST /api/auth/verify-email
  * @desc    Verify user email
  * @access  Public
@@ -239,4 +276,5 @@ module.exports = {
   verifyEmail,
   resendVerification,
   getMe,
+  sendVerificationEmail
 };

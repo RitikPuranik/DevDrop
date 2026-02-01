@@ -38,6 +38,18 @@ router.post(
 );
 
 /**
+ * @route   POST /api/auth/send-verification
+ * @desc    Send email verification
+ * @access  Private
+ */
+router.post(
+  '/send-verification',
+  auth,
+  authController.sendVerificationEmail
+);
+
+
+/**
  * @route   POST /api/auth/verify-email
  * @desc    Verify user email
  * @access  Public
