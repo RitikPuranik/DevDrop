@@ -174,6 +174,24 @@ const approveWebsite = async (req, res) => {
   try {
     const { id } = req.params;
     const files = req.files;
+    const { deployedLink } = req.body; // Get deployed link from request body
+
+    // Validate deployed link
+    if (!deployedLink || deployedLink.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Deployed link is required',
+      });
+    }
+
+    // Validate URL format
+    const urlPattern = /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/;
+    if (!urlPattern.test(deployedLink)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid URL for deployed link',
+      });
+    }
 
     // Validate files (video is optional)
     if (!files || !files.sourceCode || !files.docs) {
@@ -229,6 +247,9 @@ const approveWebsite = async (req, res) => {
     if (previewVideoData) {
       website.previewVideoUrl = previewVideoData.path;
     }
+
+    // Update deployed link
+    website.deployedUrl = deployedLink;
 
     website.files = {
       sourceCode: sourceCodeData,
@@ -341,23 +362,27 @@ const getDashboard = async (req, res) => {
       },
     ]);
 
-    // Total revenue (platform fee + tax)
+    // Total revenue (platform fee + tax) with detailed breakdown
     const revenueData = await Purchase.aggregate([
       { $match: { paymentStatus: 'completed' } },
       {
         $group: {
           _id: null,
-          platformRevenue: { $sum: { $add: ['$platformFee', '$tax'] } },
-          totalSales: { $sum: '$totalPaid' },
-          count: { $sum: 1 },
+          totalPlatformFees: { $sum: '$platformFee' },
+          totalTaxCollected: { $sum: '$tax' },
+          totalSellerPayments: { $sum: '$sellerPrice' },
+          totalGrossRevenue: { $sum: '$totalPaid' },
+          totalTransactions: { $sum: 1 },
         },
       },
     ]);
 
     const revenue = revenueData.length > 0 ? revenueData[0] : {
-      platformRevenue: 0,
-      totalSales: 0,
-      count: 0,
+      totalPlatformFees: 0,
+      totalTaxCollected: 0,
+      totalSellerPayments: 0,
+      totalGrossRevenue: 0,
+      totalTransactions: 0,
     };
 
     // Pending payouts
@@ -395,9 +420,20 @@ const getDashboard = async (req, res) => {
           return acc;
         }, {}),
         revenue: {
-          platformRevenue: revenue.platformRevenue,
-          totalSales: revenue.totalSales,
-          totalTransactions: revenue.count,
+          // What YOU (admin/platform owner) earn
+          platformFees: revenue.totalPlatformFees,           // Your direct earnings
+          taxCollected: revenue.totalTaxCollected,           // Tax collected (pay to govt)
+          totalAdminRevenue: revenue.totalPlatformFees + revenue.totalTaxCollected, // Total you receive
+          
+          // What goes to sellers
+          totalSellerPayments: revenue.totalSellerPayments,  // Total you must pay sellers
+          
+          // Overall metrics
+          totalGrossRevenue: revenue.totalGrossRevenue,      // Total money collected
+          totalTransactions: revenue.totalTransactions,
+          
+          // Net profit (after paying sellers and tax)
+          netProfit: revenue.totalPlatformFees,              // Your profit after all payments
         },
         pendingPayouts: {
           amount: pendingPayouts.totalAmount,
