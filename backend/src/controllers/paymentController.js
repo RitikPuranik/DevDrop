@@ -4,7 +4,7 @@ const Payment = require('../models/Payment');
 const Payout = require('../models/Payout');
 const User = require('../models/User');
 const BankDetails = require('../models/BankDetails');
-const stripe = require('../config/stripe');
+const stripeService = require('../services/stripeService');
 const { calculatePricing } = require('../utils/helpers');
 const { WEBSITE_STATUS, PAYMENT_STATUS, PAYOUT_STATUS } = require('../utils/constants');
 const emailService = require('../services/emailService');
@@ -70,31 +70,20 @@ const createPaymentIntent = async (req, res) => {
     // Calculate pricing
     const pricing = calculatePricing(website.price);
 
-    // Get seller's bank details for automatic transfer
-    const sellerBankDetails = await BankDetails.findOne({ 
-      userId: website.sellerId._id 
-    });
-
-    // Create Stripe PaymentIntent
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: pricing.totalPaid * 100, // Convert to paise/cents
-      currency: 'inr',
-      metadata: {
+    // Create Stripe PaymentIntent using service
+    const paymentIntent = await stripeService.createPaymentIntent(
+      pricing.totalPaid,
+      'INR',
+      {
         websiteId: websiteId.toString(),
         buyerId: buyerId.toString(),
         sellerId: website.sellerId._id.toString(),
         category: website.category,
-        sellerPrice: pricing.sellerPrice,
-        platformFee: pricing.platformFee,
-        tax: pricing.tax,
-      },
-      // Enable automatic transfer to seller
-      transfer_data: sellerBankDetails ? {
-        amount: pricing.sellerPrice * 100, // Seller gets exact price
-        // destination: sellerStripeAccountId, // We'll set this up later
-      } : undefined,
-      description: `Purchase: ${website.name}`,
-    });
+        sellerPrice: pricing.sellerPrice.toString(),
+        platformFee: pricing.platformFee.toString(),
+        tax: pricing.tax.toString(),
+      }
+    );
 
     // Create payment record in database
     const payment = new Payment({
@@ -143,8 +132,8 @@ const confirmPayment = async (req, res) => {
   try {
     const { paymentIntentId } = req.body;
 
-    // Retrieve payment intent from Stripe
-    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+    // Retrieve payment intent from Stripe using service
+    const paymentIntent = await stripeService.retrievePaymentIntent(paymentIntentId);
 
     if (paymentIntent.status !== 'succeeded') {
       return res.status(400).json({
@@ -210,38 +199,30 @@ const confirmPayment = async (req, res) => {
 
     await purchase.save();
 
-    // AUTO-TRANSFER TO SELLER using Stripe Transfer API
+    // Create payout record for seller
     const sellerBankDetails = await BankDetails.findOne({ 
       userId: website.sellerId._id 
     });
 
     if (sellerBankDetails) {
-      try {
-        // Create transfer to seller
-        // Note: Seller must have Stripe Connect account
-        // We'll implement this in next step
-        
-        // For now, create payout record for manual processing
-        const payout = new Payout({
-          sellerId: website.sellerId._id,
-          purchaseId: purchase._id,
-          websiteId: website._id,
-          amount: pricing.sellerPrice,
-          bankDetails: {
-            accountHolderName: sellerBankDetails.accountHolderName,
-            accountNumber: sellerBankDetails.accountNumber,
-            ifscCode: sellerBankDetails.ifscCode,
-            bankName: sellerBankDetails.bankName,
-            upiId: sellerBankDetails.upiId,
-          },
-          status: PAYOUT_STATUS.PENDING,
-        });
+      const payout = new Payout({
+        sellerId: website.sellerId._id,
+        purchaseId: purchase._id,
+        websiteId: website._id,
+        amount: pricing.sellerPrice,
+        bankDetails: {
+          accountHolderName: sellerBankDetails.accountHolderName,
+          accountNumber: sellerBankDetails.accountNumber,
+          ifscCode: sellerBankDetails.ifscCode,
+          bankName: sellerBankDetails.bankName,
+          branch: sellerBankDetails.branch,
+          accountType: sellerBankDetails.accountType,
+          upiId: sellerBankDetails.upiId,
+        },
+        status: PAYOUT_STATUS.PENDING,
+      });
 
-        await payout.save();
-      } catch (transferError) {
-        console.error('Transfer error:', transferError);
-        // Continue even if transfer fails - admin can process manually
-      }
+      await payout.save();
     }
 
     // If exclusive, mark as sold
@@ -285,53 +266,68 @@ const confirmPayment = async (req, res) => {
 
 /**
  * @route   POST /api/payment/webhook
- * @desc    Handle Stripe webhooks
- * @access  Public (verified by Stripe signature)
+ * @desc    Handle Stripe webhooks (OPTIONAL - works without webhook secret)
+ * @access  Public (verified by Stripe signature if secret is configured)
  */
 const handleWebhook = async (req, res) => {
+  // Check if webhooks are configured
+  if (!process.env.STRIPE_WEBHOOK_SECRET) {
+    console.log('⚠️  STRIPE_WEBHOOK_SECRET not configured. Skipping webhook handling.');
+    console.log('💡 Tip: Payments will work fine using manual confirmation via /api/payment/confirm');
+    return res.status(200).json({ 
+      received: true,
+      message: 'Webhooks not configured. Using manual payment confirmation instead.' 
+    });
+  }
+
   const sig = req.headers['stripe-signature'];
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
   let event;
 
   try {
-    // Verify webhook signature
-    event = stripe.webhooks.constructEvent(
+    // Verify webhook signature using service
+    event = stripeService.verifyWebhookSignature(
       req.body,
       sig,
       webhookSecret
     );
   } catch (err) {
-    console.error('Webhook signature verification failed:', err.message);
+    console.error('❌ Webhook signature verification failed:', err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
+
+  console.log('✅ Webhook received:', event.type);
 
   // Handle the event
   switch (event.type) {
     case 'payment_intent.succeeded':
       const paymentIntent = event.data.object;
+      console.log('💰 Payment succeeded:', paymentIntent.id);
       await handlePaymentSuccess(paymentIntent);
       break;
 
     case 'payment_intent.payment_failed':
       const failedPayment = event.data.object;
+      console.log('❌ Payment failed:', failedPayment.id);
       await handlePaymentFailure(failedPayment);
       break;
 
     case 'charge.refunded':
       const refund = event.data.object;
-      console.log('Charge refunded:', refund.id);
+      console.log('💸 Charge refunded:', refund.id);
+      // Optionally handle refund logic here
       break;
 
     default:
-      console.log(`Unhandled event type: ${event.type}`);
+      console.log(`ℹ️  Unhandled event type: ${event.type}`);
   }
 
   res.json({ received: true });
 };
 
 /**
- * Handle successful payment
+ * Handle successful payment (called by webhook or manual confirmation)
  */
 const handlePaymentSuccess = async (paymentIntent) => {
   try {
@@ -339,21 +335,31 @@ const handlePaymentSuccess = async (paymentIntent) => {
       stripePaymentIntentId: paymentIntent.id,
     });
 
-    if (payment && payment.status !== 'succeeded') {
-      payment.status = 'succeeded';
-      payment.stripeChargeId = paymentIntent.latest_charge;
-      payment.stripeResponse = paymentIntent;
-      await payment.save();
-
-      console.log('Payment marked as succeeded:', paymentIntent.id);
+    if (!payment) {
+      console.log('⚠️  Payment record not found for:', paymentIntent.id);
+      return;
     }
+
+    // Skip if already processed
+    if (payment.status === 'succeeded') {
+      console.log('ℹ️  Payment already marked as succeeded:', paymentIntent.id);
+      return;
+    }
+
+    // Update payment record
+    payment.status = 'succeeded';
+    payment.stripeChargeId = paymentIntent.latest_charge;
+    payment.stripeResponse = paymentIntent;
+    await payment.save();
+
+    console.log('✅ Payment marked as succeeded:', paymentIntent.id);
   } catch (error) {
-    console.error('Handle payment success error:', error);
+    console.error('❌ Handle payment success error:', error);
   }
 };
 
 /**
- * Handle failed payment
+ * Handle failed payment (called by webhook)
  */
 const handlePaymentFailure = async (paymentIntent) => {
   try {
@@ -361,15 +367,82 @@ const handlePaymentFailure = async (paymentIntent) => {
       stripePaymentIntentId: paymentIntent.id,
     });
 
-    if (payment) {
-      payment.status = 'failed';
-      payment.stripeResponse = paymentIntent;
-      await payment.save();
-
-      console.log('Payment marked as failed:', paymentIntent.id);
+    if (!payment) {
+      console.log('⚠️  Payment record not found for:', paymentIntent.id);
+      return;
     }
+
+    // Update payment record
+    payment.status = 'failed';
+    payment.stripeResponse = paymentIntent;
+    payment.failureReason = paymentIntent.last_payment_error?.message || 'Payment failed';
+    await payment.save();
+
+    console.log('❌ Payment marked as failed:', paymentIntent.id);
   } catch (error) {
-    console.error('Handle payment failure error:', error);
+    console.error('❌ Handle payment failure error:', error);
+  }
+};
+
+/**
+ * @route   POST /api/payment/refund
+ * @desc    Create refund for a payment (Admin only)
+ * @access  Admin
+ */
+const createRefund = async (req, res) => {
+  try {
+    const { paymentIntentId, reason } = req.body;
+
+    // Find payment record
+    const payment = await Payment.findOne({
+      stripePaymentIntentId: paymentIntentId,
+    });
+
+    if (!payment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Payment not found',
+      });
+    }
+
+    if (payment.status !== 'succeeded') {
+      return res.status(400).json({
+        success: false,
+        message: 'Can only refund succeeded payments',
+      });
+    }
+
+    // Create refund using service
+    const refund = await stripeService.createRefund(
+      paymentIntentId,
+      null, // Full refund
+      reason || 'requested_by_customer'
+    );
+
+    // Update payment record
+    payment.status = 'refunded';
+    payment.refundId = refund.id;
+    payment.refundAmount = payment.amount;
+    payment.refundReason = reason;
+    payment.refundedAt = new Date();
+    await payment.save();
+
+    res.json({
+      success: true,
+      message: 'Refund processed successfully',
+      data: {
+        refundId: refund.id,
+        amount: payment.amount,
+        status: refund.status,
+      },
+    });
+  } catch (error) {
+    console.error('Create refund error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error creating refund',
+      error: error.message,
+    });
   }
 };
 
@@ -377,4 +450,5 @@ module.exports = {
   createPaymentIntent,
   confirmPayment,
   handleWebhook,
+  createRefund,
 };
