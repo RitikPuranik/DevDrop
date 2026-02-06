@@ -1,23 +1,14 @@
 @import "tailwindcss";
 
-/* Ensure Three.js canvas doesn't add spacing */
-canvas {
-  display: block;
-}
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
 
-/* Global reset */
 body {
+  background-color: #000;
   margin: 0;
   padding: 0;
-  background-color: black;
-}
-/* Hide scrollbar for Chrome, Safari and Opera */
-::-webkit-scrollbar {
-  display: none;
+  overflow-x: hidden;
 }
 
-/* Hide scrollbar for IE, Edge and Firefox */
-html {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
+.font-serif {
+  font-family: 'Playfair Display', serif;
 }
