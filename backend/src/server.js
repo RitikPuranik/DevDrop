@@ -2,6 +2,8 @@ require('dotenv').config();
 const app = require('./app');
 const connectDB = require('./config/database');
 const logger = require('./utils/logger');
+const { startCronJobs } = require('./services/auctionCronService');
+
 
 // Port configuration
 const PORT = process.env.PORT || 5000;
@@ -14,6 +16,9 @@ const server = app.listen(PORT, () => {
   logger.info(`🚀 Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
   console.log(`🚀 Server running on http://localhost:${PORT}`);
 });
+
+// Start cron jobs
+startCronJobs();
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {
