@@ -1,10 +1,7 @@
+import Loading_Screen from "./components/Loading_Screen";
 
-import Home from "./components/Home"
-
-export default function App() {
-  return (
-    <div className="bg-black text-white">
-      <Home />
-    </div>
-  )
+function App() {
+  return <Loading_Screen />;
 }
+
+export default App;

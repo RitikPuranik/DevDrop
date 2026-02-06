@@ -1,4 +1,4 @@
-import React, { useEffect, useRef ,useState} from 'react';
+import React, { useEffect, useRef ,useState,} from 'react';
 import { motion, useScroll, useTransform, useSpring,AnimatePresence } from 'framer-motion';
 import { ChevronDown, Layers, Cpu, ArrowRight } from 'lucide-react';
 import LoadingScreen from './Loading_Screen';
