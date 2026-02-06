@@ -16,6 +16,7 @@ const paymentRoutes = require('./routes/payment.routes');
 const payoutRoutes = require('./routes/payout.routes');
 const wishlistRoutes = require('./routes/wishlist.routes');
 const assetRoutes = require('./routes/asset.routes');
+const auctionRoutes = require('./routes/auction.routes');
 
 // Create Express app
 const app = express();
@@ -71,6 +72,7 @@ app.use('/api/payment', paymentRoutes);
 app.use('/api/payout', payoutRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/assets', assetRoutes);
+app.use('/api/auctions', auctionRoutes);
 
 // 404 handler
 app.use(notFound);
