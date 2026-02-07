@@ -2,14 +2,12 @@ import React from 'react';
 
 const Home = () => {
   return (
-    <div className="min-h-screen pt-32 px-10">
+    <div className="min-h-screen pt-32 px-10 text-white ">
       <section className="max-w-6xl mx-auto">
         <span className="text-beige/60 uppercase tracking-widest text-sm mb-4 block">
           Creative Design Studio
         </span>
-        <a href="/about" className="text-beige/60 uppercase tracking-widest text-sm mb-4 block">
-          About Us
-        </a>
+      
         <h2 className="text-7xl md:text-[10rem] font-serif leading-[0.85] tracking-tighter">
           Crafting <br />
           Digital <br />
