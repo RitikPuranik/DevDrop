@@ -6,6 +6,7 @@ import Loader from './components/Loading_Screen';
 import Home from './pages/Home';
 import About from './pages/AboutUs';
 import LinkTransition from './components/TransitionLink';
+import Navbar from './components/Navbar';
 
 export default function App() {
   const [showIntro, setShowIntro] = useState(false);
@@ -39,11 +40,11 @@ export default function App() {
       {introFinished && (
         <>
           <Loader />
-          <nav className="fixed top-0 w-full p-8 flex justify-center gap-10 z-[50] text-white mix-blend-difference">
+          {/* <nav className="fixed top-0 w-full p-8 flex justify-center gap-10 z-[50] text-white mix-blend-difference">
             <LinkTransition to="/" className="font-serif uppercase tracking-widest text-xs">Index</LinkTransition>
             <LinkTransition to="/about" className="font-serif uppercase tracking-widest text-xs">About</LinkTransition>
-          </nav>
-          
+          </nav> */}
+          <Navbar />
           <main className="bg-black min-h-screen">
             <Routes>
               <Route path="/" element={<Home />} />
