@@ -1,5 +1,5 @@
-import React from 'react';
-import { motion, useScroll, useTransform } from 'framer-motion';
+import React,{useRef} from 'react';
+import { motion, useScroll, useTransform,useSpring} from 'framer-motion';
 
 const Home = () => {
   return (
@@ -10,8 +10,7 @@ const Home = () => {
       {/* 2. OVERLAPPING CONTENT - Slides over Hero */}
       <div className="relative z-10">
         <SmoothImageSection />
-        <ProjectShowcase />
-        <Marquee />
+        <FuelUpSection />
       </div>
 
       {/* 3. FOOTER - Revealed behind content */}
@@ -19,6 +18,7 @@ const Home = () => {
         <h2 className="text-[10vw] font-serif italic opacity-20">devdrop</h2>
       </footer>
     </div>
+    
   );
 };
 
@@ -67,50 +67,100 @@ const SmoothImageSection = () => {
         </div>
       </motion.div>
     </section>
+    
   );
 };
+const FuelUpSection = () => {
+  const sectionRef = useRef(null);
+  const { scrollYProgress } = useScroll({
+    target: sectionRef,
+    offset: ["start end", "end start"]
+  });
 
-const ProjectShowcase = () => {
+  const smoothProgress = useSpring(scrollYProgress, { 
+    stiffness: 150, 
+    damping: 30,
+    restDelta: 0.001 
+  });
+
   return (
-    <section className="py-40 px-12 border-t border-[#e8e2d6]/10">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-32">
-        <div className="space-y-6">
-          <span className="text-[10px] tracking-[0.5em] uppercase opacity-40">Selected Work</span>
-          <h2 className="text-6xl font-serif italic">The Obsidian <br/> Portfolio</h2>
-        </div>
-        <div className="space-y-20 pt-32">
-          <ProjectItem title="Lumina" category="Brand Identity" />
-          <ProjectItem title="Vertex" category="Web Experience" />
+    <section ref={sectionRef} className="relative h-[180vh] bg-black">
+      <div className="sticky top-0 h-screen w-full flex flex-col items-center justify-center px-6 overflow-hidden">
+        <div className="relative flex flex-col items-center text-center max-w-[95vw]">
+          
+          <ScrubLine text="Stir Up Your" progress={smoothProgress} range={[0.1, 0.2]} />
+          
+          <div className="relative flex flex-col items-center -my-4 z-10">
+             <ScrubLine text="Fearless Past And" progress={smoothProgress} range={[0.15, 0.25]} />
+
+             {/* THE STICKER */}
+             <motion.div 
+               style={{ 
+                 scale: useTransform(smoothProgress, [0.25, 0.35], [0, 1]),
+                 rotate: useTransform(smoothProgress, [0.25, 0.35], [-12, -4]),
+                 opacity: useTransform(smoothProgress, [0.25, 0.28], [0, 1]),
+               }}
+               className="bg-[#d2904b] text-[#7a3e2e] px-10 py-3 -my-6 relative z-20 shadow-[0_20px_50px_rgba(0,0,0,0.3)] select-none border-4 border-[#7a3e2e]/10"
+             >
+               <span className="text-[6vw] font-black uppercase leading-none tracking-tighter italic">
+                 Fuel Up
+               </span>
+             </motion.div>
+
+             <ScrubLine text="Your Future With" progress={smoothProgress} range={[0.35, 0.45]} />
+          </div>
+          
+          <motion.span 
+             style={{ opacity: useTransform(smoothProgress, [0.45, 0.5], [0.1, 0.4]) }}
+             className="text-[4vw] font-serif italic lowercase text-[#f4e6d9] mt-2 mb-0"
+          >
+            every
+          </motion.span>
+
+          <ScrubLine text="Gulp of Perfect Protein" progress={smoothProgress} range={[0.5, 0.6]} isSubText={true} />
+          
         </div>
       </div>
     </section>
   );
 };
 
-const ProjectItem = ({ title, category }) => (
-  <motion.div 
-    whileHover={{ x: 20 }}
-    className="border-b border-[#e8e2d6]/20 pb-8 flex justify-between items-end group cursor-pointer"
-  >
-    <h3 className="text-5xl font-serif italic group-hover:text-[#e8e2d6] transition-colors">{title}</h3>
-    <span className="text-xs uppercase tracking-widest opacity-40">{category}</span>
-  </motion.div>
-);
+// 1. The main line component (No hooks inside map here!)
+const ScrubLine = ({ text, progress, range, isSubText = false }) => {
+  const words = text.split(" ");
+  
+  return (
+    <span className={`flex flex-wrap justify-center gap-[0.3em] font-black uppercase tracking-tighter text-[#f4e6d9] leading-[0.8] 
+      ${isSubText ? 'text-[5.5vw]' : 'text-[8.5vw]'} relative z-0`}>
+      {words.map((word, i) => {
+        // Calculate the specific timing for this word
+        const start = range[0] + (i * (range[1] - range[0]) / words.length);
+        const end = start + (range[1] - range[0]) / words.length;
 
-const Marquee = () => (
-  <div className="py-20 overflow-hidden whitespace-nowrap border-y border-[#e8e2d6]/10">
-    <motion.div 
-      animate={{ x: [0, -1000] }}
-      transition={{ repeat: Infinity, ease: "linear", duration: 25 }}
-      className="flex gap-20 text-[6vw] font-serif italic tracking-tighter uppercase"
-    >
-      {[...Array(4)].map((_, i) => (
-        <span key={i} className={i % 2 === 0 ? "" : "text-transparent stroke-beige"}>
-          Innovative Design • Seamless Motion • devdrop Studio •
-        </span>
-      ))}
-    </motion.div>
-  </div>
-);
+        // Render a NEW component for each word to keep hooks stable
+        return (
+          <IndividualWord 
+            key={i} 
+            word={word} 
+            progress={progress} 
+            range={[start, end]} 
+          />
+        );
+      })}
+    </span>
+  );
+};
+
+// 2. The sub-component that handles the hooks safely
+const IndividualWord = ({ word, progress, range }) => {
+  const opacity = useTransform(progress, range, [0.15, 1]);
+  const y = useTransform(progress, range, [8, 0]);
+
+  return (
+    <motion.span style={{ opacity, y }} className="inline-block">
+      {word}
+    </motion.span>
+  );
+};
 
 export default Home;

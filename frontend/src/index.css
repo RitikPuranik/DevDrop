@@ -1,7 +1,6 @@
-@import "tailwindcss";
 
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
-
+@import "tailwindcss";
 .stroke-beige {
   -webkit-text-stroke: 1px rgba(232, 226, 214, 0.3);
 }
@@ -9,9 +8,22 @@ body {
   background-color: #000;
   margin: 0;
   padding: 0;
-  overflow-x: hidden;
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+  
+  /* Optional: Smooth scrolling for that premium feel */
+  scroll-behavior: smooth;
+  overscroll-behavior: none;
 }
 
 .font-serif {
   font-family: 'Playfair Display', serif;
+}
+
+h1, h2, h3 {
+  /* This prevents the "bold" look and makes serif fonts look elite */
+  font-weight: 300; 
+}
+::-webkit-scrollbar {
+  display: none;
 }
