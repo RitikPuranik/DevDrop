@@ -163,7 +163,6 @@ const sendPaymentReminders = cron.schedule('0 */6 * * *', async () => {
 });
 
 
-
 /**
  * Start cron jobs
  */
