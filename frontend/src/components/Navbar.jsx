@@ -41,11 +41,13 @@ const Navbar = () => {
           </AnimatePresence>
           
           <motion.div 
-            animate={isOpen ? { rotate: 45, y: 4, backgroundColor: "#0c0c0c" } : { rotate: 0, y: 0, backgroundColor: "#e8e2d6" }}
+            animate={isOpen ? { rotate: 45, y: 4, backgroundColor: "#000" } : { rotate: 0, y: 0, backgroundColor: "#e8e2d6" }}
+            transition={{ duration: 0.9, ease: [0.19, 1, 0.22, 1] }} 
             className="w-8 h-[2px]"
           />
           <motion.div 
-            animate={isOpen ? { rotate: -45, y: -4, backgroundColor: "#0c0c0c" } : { rotate: 0, y: 0, backgroundColor: "#e8e2d6" }}
+            animate={isOpen ? { rotate: -45, y: -4, backgroundColor: "#000" } : { rotate: 0, y: 0, backgroundColor: "#e8e2d6" }}
+            transition={{ duration: 0.9, ease: [0.19, 1, 0.22, 1] }} 
             className="w-8 h-[2px]"
           />
         </button>

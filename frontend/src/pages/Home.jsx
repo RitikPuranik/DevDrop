@@ -85,10 +85,10 @@ const FuelUpSection = () => {
 
   return (
     <section ref={sectionRef} className="relative h-[180vh] bg-black">
-      <div className="sticky top-0 h-screen w-full flex flex-col items-center justify-center px-6 overflow-hidden">
-        <div className="relative flex flex-col items-center text-center max-w-[95vw]">
+      <div className="sticky top-0 h-screen w-full flex flex-col items-center justify-center px-6  overflow-hidden">
+        <div className="relative flex flex-col items-center text-center  max-w-[95vw]">
           
-          <ScrubLine text="Stir Up Your" progress={smoothProgress} range={[0.1, 0.2]} />
+          <ScrubLine text="Stir Up Your" progress={smoothProgress} range={[0.1, 0.2]} /><br></br>
           
           <div className="relative flex flex-col items-center -my-4 z-10">
              <ScrubLine text="Fearless Past And" progress={smoothProgress} range={[0.15, 0.25]} />
@@ -100,7 +100,7 @@ const FuelUpSection = () => {
                  rotate: useTransform(smoothProgress, [0.25, 0.35], [-12, -4]),
                  opacity: useTransform(smoothProgress, [0.25, 0.28], [0, 1]),
                }}
-               className="bg-[#d2904b] text-[#7a3e2e] px-10 py-3 -my-6 relative z-20 shadow-[0_20px_50px_rgba(0,0,0,0.3)] select-none border-4 border-[#7a3e2e]/10"
+               className="bg-[#d2904b] text-black px-10 py-3 -my-6 relative z-20  select-none border-8 border-black"
              >
                <span className="text-[6vw] font-black uppercase leading-none tracking-tighter italic">
                  Fuel Up
