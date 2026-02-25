@@ -7,6 +7,7 @@ import Home from './pages/Home';
 import About from './pages/AboutUs';
 import LinkTransition from './components/TransitionLink';
 import Navbar from './components/Navbar';
+import FlipOnScroll from './pages/FlipOnScroll';
 
 export default function App() {
   const [showIntro, setShowIntro] = useState(false);
@@ -49,6 +50,7 @@ export default function App() {
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/about" element={<About />} />
+              <Route path="/flip" element={<FlipOnScroll />} />
             </Routes>
           </main>
         </>

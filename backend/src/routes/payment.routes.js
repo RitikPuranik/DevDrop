@@ -6,33 +6,33 @@ const { paymentLimiter } = require('../middleware/rateLimit');
 const paymentController = require('../controllers/paymentController');
 
 /**
- * @route   POST /api/payment/create-payment-intent
- * @desc    Create Stripe payment intent (requires email verification)
+ * @route   POST /api/payment/create-order
+ * @desc    Create Razorpay order (requires email verification)
  * @access  Private (Verified users only)
  */
 router.post(
-  '/create-payment-intent', 
+  '/create-order', 
   auth, 
   verifyEmail, 
   paymentLimiter, 
-  paymentController.createPaymentIntent
+  paymentController.createOrder
 );
 
 /**
- * @route   POST /api/payment/confirm
- * @desc    Confirm Stripe payment
+ * @route   POST /api/payment/verify
+ * @desc    Verify Razorpay payment signature
  * @access  Private
  */
-router.post('/confirm', auth, paymentController.confirmPayment);
+router.post('/verify', auth, paymentController.verifyPayment);
 
 /**
  * @route   POST /api/payment/webhook
- * @desc    Stripe webhook handler
- * @access  Public (verified by Stripe signature)
+ * @desc    Razorpay webhook handler
+ * @access  Public (verified by Razorpay signature)
  */
 router.post(
   '/webhook',
-  express.raw({ type: 'application/json' }), // Important for Stripe
+  express.raw({ type: 'application/json' }),
   paymentController.handleWebhook
 );
 

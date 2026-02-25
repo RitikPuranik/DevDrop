@@ -4,6 +4,7 @@ const userController = require('../controllers/userController');
 const { auth } = require('../middleware/auth');
 const { validators, handleValidationErrors } = require('../utils/validators');
 const { body } = require('express-validator');
+const bankSetupController = require('../controllers/bankSetupController'); // Add this
 
 // All routes require authentication
 router.use(auth);
@@ -66,5 +67,11 @@ router.get('/dashboard', userController.getDashboard);
  * @access  Private
  */
 router.get('/purchases', userController.getPurchases);
+
+// 🔥 NEW ROUTES FOR AUTOMATIC PAYOUTS
+router.post('/bank-details/setup-payouts', auth, bankSetupController.setupRazorpayPayouts);
+router.post('/bank-details/setup-upi', auth, bankSetupController.setupUPIPayouts);
+router.get('/bank-details/payout-status', auth, bankSetupController.getPayoutSetupStatus);
+router.post('/bank-details/toggle-payouts', auth, bankSetupController.togglePayouts);
 
 module.exports = router;

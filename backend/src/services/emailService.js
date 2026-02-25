@@ -276,6 +276,48 @@ const sendPasswordResetEmail = async (user, token) => {
   }
 };
 
+/**
+ * Send admin alert for failed payouts
+ */
+const sendAdminAlert = async ({ subject, message, error, details }) => {
+  try {
+    const adminEmails = process.env.ADMIN_EMAILS?.split(',') || ['admin@yourplatform.com'];
+
+    const mailOptions = {
+      from: process.env.EMAIL_FROM,
+      to: adminEmails.join(','),
+      subject: `🚨 ${subject}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px;">
+          <h2 style="color: #dc2626;">Automatic Payout Alert</h2>
+          <p><strong>${message}</strong></p>
+          
+          ${error ? `
+            <div style="background-color: #fee2e2; padding: 15px; border-radius: 5px; margin: 10px 0;">
+              <p><strong>Error:</strong> ${error}</p>
+            </div>
+          ` : ''}
+          
+          ${details ? `
+            <div style="background-color: #f3f4f6; padding: 15px; border-radius: 5px; margin: 10px 0;">
+              <p style="white-space: pre-line;"><strong>Details:</strong><br>${details}</p>
+            </div>
+          ` : ''}
+          
+          <p style="margin-top: 20px;">Please check the admin dashboard for more information.</p>
+          <hr>
+          <p style="color: #6b7280; font-size: 12px;">This is an automated message from your marketplace platform.</p>
+        </div>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`✅ Admin alert sent: ${subject}`);
+  } catch (error) {
+    console.error('Error sending admin alert:', error);
+  }
+};
+
 
 module.exports = {
   sendVerificationEmail,
@@ -285,4 +327,5 @@ module.exports = {
   sendStatusUpdateEmail,
   sendPayoutNotification,
   sendPasswordResetEmail,
+  sendAdminAlert,
 };

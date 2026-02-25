@@ -6,7 +6,7 @@ const bankDetailsSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true,
-      unique: true, // ✅ single unique index
+      unique: true,
     },
     accountHolderName: {
       type: String,
@@ -40,8 +40,45 @@ const bankDetailsSchema = new mongoose.Schema(
       trim: true,
       match: [/^[\w.-]+@[\w.-]+$/, 'Invalid UPI ID'],
     },
+    
+    // 🔥 NEW FIELDS FOR AUTOMATIC PAYOUTS
+    razorpayContactId: {
+      type: String,
+      index: true,
+      sparse: true,
+    },
+    razorpayFundAccountId: {
+      type: String,
+      index: true,
+      sparse: true,
+    },
+    razorpayStatus: {
+      type: String,
+      enum: ['pending', 'active', 'failed'],
+      default: 'pending',
+    },
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+    verifiedAt: Date,
+    verificationFailedReason: String,
+    
+    // Payout preferences
+    defaultPayoutMode: {
+      type: String,
+      enum: ['bank', 'upi'],
+      default: 'bank',
+    },
+    payoutEnabled: {
+      type: Boolean,
+      default: true,
+    },
   },
   { timestamps: true }
 );
+
+// Index for faster queries
+bankDetailsSchema.index({ razorpayStatus: 1, payoutEnabled: 1 });
 
 module.exports = mongoose.model('BankDetails', bankDetailsSchema);

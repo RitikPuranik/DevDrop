@@ -49,6 +49,19 @@ const submitWebsite = async (req, res) => {
           requiresBankDetails: true,
         });
       }
+
+        // 🔥 NEW: Check if they've enabled automatic payouts
+      if (bankDetails.razorpayStatus !== 'active') {
+        return res.status(400).json({
+          success: false,
+          message: 'Please enable automatic payouts before listing a paid website',
+          requiresPayoutSetup: true,
+          data: {
+            hasBankDetails: true,
+            needsPayoutSetup: true,
+          },
+        });
+      }
     }
 
     // Create website submission

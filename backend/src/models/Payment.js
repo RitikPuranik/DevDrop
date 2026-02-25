@@ -5,7 +5,7 @@ const paymentSchema = new mongoose.Schema({
   purchaseId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Purchase',
-    required: false, // ← Made optional (created later)
+    required: false,
   },
   
   // Website and buyer references
@@ -20,16 +20,36 @@ const paymentSchema = new mongoose.Schema({
     required: true,
   },
   
-  // Stripe payment details
+  // Payment gateway
+  paymentMethod: {
+    type: String,
+    enum: ['razorpay', 'stripe'],
+    default: 'razorpay',
+  },
+  
+  // Razorpay payment details
+  razorpayOrderId: {
+    type: String,
+    index: true,
+    sparse: true,
+  },
+  razorpayPaymentId: {
+    type: String,
+    index: true,
+    sparse: true,
+  },
+  razorpaySignature: String,
+  
+  // Keep for backward compatibility during migration
   stripePaymentIntentId: {
     type: String,
-    required: true,
-    unique: true,
     index: true,
+    sparse: true,
   },
   stripeChargeId: {
     type: String,
     index: true,
+    sparse: true,
   },
   stripeCustomerId: String,
   
@@ -52,7 +72,10 @@ const paymentSchema = new mongoose.Schema({
     index: true,
   },
   
-  // Stripe response data
+  // Gateway response data
+  razorpayResponse: {
+    type: mongoose.Schema.Types.Mixed,
+  },
   stripeResponse: {
     type: mongoose.Schema.Types.Mixed,
   },
@@ -68,7 +91,6 @@ const paymentSchema = new mongoose.Schema({
   failureCode: String,
   
   // Metadata
-  paymentMethod: String,
   paymentEmail: String,
   
 }, {
@@ -76,10 +98,8 @@ const paymentSchema = new mongoose.Schema({
 });
 
 // Indexes for better performance
-// paymentSchema.index({ stripePaymentIntentId: 1 });
-// paymentSchema.index({ stripeChargeId: 1 });
 paymentSchema.index({ buyerId: 1, createdAt: -1 });
 paymentSchema.index({ websiteId: 1 });
-// paymentSchema.index({ status: 1 });
+paymentSchema.index({ status: 1 });
 
 module.exports = mongoose.model('Payment', paymentSchema);

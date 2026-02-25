@@ -27,3 +27,73 @@ h1, h2, h3 {
 ::-webkit-scrollbar {
   display: none;
 }
+
+/* PAGE BACKGROUND */
+.page {
+  background: radial-gradient(
+    circle at top,
+    #1a1a1a 0%,
+    #0b0b0b 60%,
+    #050505 100%
+  );
+  min-height: 100vh;
+}
+
+/* EACH SCROLL SECTION */
+.section {
+  height: 120vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* FLIP CARD CONTAINER */
+.flip-card {
+  width: 300px;
+  height: 480px;
+  transform-style: preserve-3d;
+  will-change: transform;
+  transition: transform 0.12s linear;
+  border-radius: 20px;
+}
+
+/* VIDEO */
+.flip-card video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 20px;
+
+  /* Prevent mirrored back face */
+  backface-visibility: hidden;
+
+  /* Depth + floating feel */
+  box-shadow:
+    0 40px 100px rgba(0, 0, 0, 0.65),
+    0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+/* SOFT SHADOW UNDER CARD */
+.flip-card::after {
+  content: "";
+  position: absolute;
+  inset: auto 10% -30px 10%;
+  height: 40px;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0.6) 0%,
+    transparent 70%
+  );
+  filter: blur(14px);
+  transform: translateZ(-1px);
+}
+
+/* MOBILE TWEAKS */
+@media (max-width: 768px) {
+  .flip-card {
+    width: 240px;
+    height: 400px;
+  }
+}
+
+
