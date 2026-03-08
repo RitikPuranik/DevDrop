@@ -2,82 +2,44 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
-const { errorHandler, notFound } = require('./middleware/errorHandler');
-const { generalLimiter } = require('./middleware/rateLimit');
+const { errorHandler, notFound } = require('./shared/middleware/errorHandler');
+const { generalLimiter } = require('./shared/middleware/rateLimit');
 
-// Import routes
-const authRoutes = require('./routes/auth.routes');
-const userRoutes = require('./routes/user.routes');
-const websiteRoutes = require('./routes/website.routes');
-const sellerRoutes = require('./routes/seller.routes');
-const buyerRoutes = require('./routes/buyer.routes');
-const adminRoutes = require('./routes/admin.routes');
-const paymentRoutes = require('./routes/payment.routes');
-const payoutRoutes = require('./routes/payout.routes');
-const wishlistRoutes = require('./routes/wishlist.routes');
-const assetRoutes = require('./routes/asset.routes');
-const auctionRoutes = require('./routes/auction.routes');
-
-// Create Express app
 const app = express();
 
-// Security middleware
+// Security
 app.use(helmet());
+app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:3000', credentials: true }));
 
-// CORS configuration
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true,
-}));
+// Webhook must receive raw body for Razorpay signature verification — register BEFORE json parser
+app.use('/api/payment/webhook', express.raw({ type: 'application/json' }), (req, res, next) => {
+  if (req.method === 'POST') req.rawBody = req.body;
+  next();
+});
 
-// Webhook route MUST come before body parser middleware
-// Stripe webhooks require raw body
-app.use('/api/payment/webhook', 
-  express.raw({ type: 'application/json' }),
-  require('./routes/payment.routes')
-);
-
-// Body parser middleware (for all other routes)
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// Logging middleware
-if (process.env.NODE_ENV === 'development') {
-  app.use(morgan('dev'));
-} else {
-  app.use(morgan('combined'));
-}
-
-// Rate limiting
+app.use(process.env.NODE_ENV === 'development' ? morgan('dev') : morgan('combined'));
 app.use('/api/', generalLimiter);
 
 // Health check
-app.get('/health', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Server is running',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV,
-  });
-});
+app.get('/health', (req, res) => res.json({ success: true, message: 'Server is running', timestamp: new Date().toISOString(), environment: process.env.NODE_ENV }));
 
-// API Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/user', userRoutes);
-app.use('/api/websites', websiteRoutes);
-app.use('/api/seller', sellerRoutes);
-app.use('/api/buyer', buyerRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/payment', paymentRoutes);
-app.use('/api/payout', payoutRoutes);
-app.use('/api/wishlist', wishlistRoutes);
-app.use('/api/assets', assetRoutes);
-app.use('/api/auctions', auctionRoutes);
+// Modular routes
+app.use('/api/auth',      require('./modules/auth'));
+app.use('/api/user',      require('./modules/user'));
+app.use('/api/websites',  require('./modules/website'));
+app.use('/api/seller',    require('./modules/seller'));
+app.use('/api/buyer',     require('./modules/buyer'));
+app.use('/api/admin',     require('./modules/admin'));
+app.use('/api/payment',   require('./modules/payment'));
+app.use('/api/payout',    require('./modules/payout'));
+app.use('/api/wishlist',  require('./modules/wishlist'));
+app.use('/api/assets',    require('./modules/asset'));
+app.use('/api/auctions',  require('./modules/auction'));
+app.use('/api/analytics', require('./modules/analytics'));
 
-// 404 handler
 app.use(notFound);
-
-// Global error handler
 app.use(errorHandler);
 
 module.exports = app;
