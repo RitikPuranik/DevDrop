@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import IntroLoader from './components/Intro_Loader';
@@ -12,21 +12,25 @@ import FlipOnScroll from './pages/FlipOnScroll';
 export default function App() {
   const [showIntro, setShowIntro] = useState(false);
   const [introFinished, setIntroFinished] = useState(false);
+  // Track if this is the very first mount after intro — suppress Loading_Screen once
+  const suppressNextLoader = useRef(false);
 
   useEffect(() => {
     const seenIntro = sessionStorage.getItem('devdrop_intro_seen');
     if (!seenIntro) {
       setShowIntro(true);
     } else {
-      setIntroFinished(true); // If already seen, allow site to show immediately
+      setIntroFinished(true);
     }
   }, []);
 
   const handleIntroComplete = () => {
     sessionStorage.setItem('devdrop_intro_seen', 'true');
+    suppressNextLoader.current = true; // first transition: skip Loading_Screen
     setShowIntro(false);
-    // Delay setting introFinished slightly to allow AnimatePresence exit to play
-    setTimeout(() => setIntroFinished(true), 1000); 
+    setTimeout(() => {
+      setIntroFinished(true);
+    }, 1000);
   };
 
   return (
@@ -37,14 +41,9 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Only mount the site content and Arc Loader after intro is done */}
       {introFinished && (
         <>
-          <Loader />
-          {/* <nav className="fixed top-0 w-full p-8 flex justify-center gap-10 z-[50] text-white mix-blend-difference">
-            <LinkTransition to="/" className="font-serif uppercase tracking-widest text-xs">Index</LinkTransition>
-            <LinkTransition to="/about" className="font-serif uppercase tracking-widest text-xs">About</LinkTransition>
-          </nav> */}
+          <Loader suppressOnce={suppressNextLoader} />
           <Navbar />
           <main className="bg-black min-h-screen">
             <Routes>
