@@ -1,9 +1,13 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { motion, useScroll, useTransform, useSpring } from 'framer-motion';
 
-const Home = () => (
+const Home = ({ preloadedVideoRef, introComplete, fromIntro }) => (
   <div className="bg-black text-[#e8e2d6] selection:bg-[#e8e2d6] selection:text-black">
-    <VideoHeroSection />
+    <VideoHeroSection
+      preloadedVideoRef={preloadedVideoRef}
+      introComplete={introComplete}
+      fromIntro={fromIntro}
+    />
     <div className="relative z-10">
       <SmoothImageSection />
       <FuelUpSection />
@@ -14,55 +18,81 @@ const Home = () => (
   </div>
 );
 
-const VideoHeroSection = () => {
-  const videoRef = useRef(null);
-  const [ready, setReady] = useState(false);
+const VideoHeroSection = ({ preloadedVideoRef, introComplete, fromIntro }) => {
+  const wrapperRef = useRef(null);
+  const hasAppended = useRef(false);
+  const [visible, setVisible] = useState(false); // ← controls section visibility
 
   const { scrollY } = useScroll();
   const videoScale     = useTransform(scrollY, [0, 700], [1, 1.12]);
   const sectionOpacity = useTransform(scrollY, [0, 520], [1, 0]);
   const overlayOpacity = useTransform(scrollY, [0, 450], [0, 0.9]);
 
+  // Append video element on mount
   useEffect(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    const onReady = () => { setReady(true); v.play().catch(() => {}); };
-    v.addEventListener('canplaythrough', onReady);
-    return () => v.removeEventListener('canplaythrough', onReady);
+    const wrapper = wrapperRef.current;
+    if (!wrapper || hasAppended.current) return;
+    const vid = preloadedVideoRef?.current;
+    if (!vid) return;
+
+    vid.className = 'w-full h-full object-cover';
+    vid.style.filter = 'brightness(0.8) contrast(1.12) saturate(0.85)';
+    wrapper.appendChild(vid);
+    hasAppended.current = true;
+
+    return () => {
+      if (wrapper.contains(vid)) wrapper.removeChild(vid);
+      hasAppended.current = false;
+    };
   }, []);
 
+  // Play + show with correct delay depending on entry path
+  useEffect(() => {
+    if (!introComplete) return;
+
+    const vid = preloadedVideoRef?.current;
+    const isFromIntro = fromIntro?.current === true;
+
+    if (isFromIntro) {
+      // Coming straight off the intro — no delay, instant reveal
+      fromIntro.current = false; // reset for future navigations
+      setVisible(true);
+      vid?.play().catch(() => {});
+    } else {
+      // Navigating from another page — 0.5s delay
+      const timer = setTimeout(() => {
+        setVisible(true);
+        vid?.play().catch(() => {});
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [introComplete]);
+
   return (
-    <section className="sticky top-0 h-screen overflow-hidden z-0">
-      {/* VIDEO */}
+    <motion.section
+      className="sticky top-0 h-screen overflow-hidden z-0"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: visible ? 1 : 0 }}
+      transition={{ duration: 0.4, ease: 'easeOut' }}
+    >
       <motion.div style={{ scale: videoScale }} className="absolute inset-0">
-        <video
-          ref={videoRef}
-          src="/dewdrop.s3.mp4"
-          muted playsInline preload="auto"
-          className="w-full h-full object-cover"
-          style={{ filter: 'brightness(0.8) contrast(1.12) saturate(0.85)' }}
-        />
+        <div ref={wrapperRef} className="w-full h-full" />
       </motion.div>
 
-      {/* LETTERBOX */}
       <div className="absolute top-0 left-0 right-0 h-[6vh] bg-black pointer-events-none z-10" />
       <div className="absolute bottom-0 left-0 right-0 h-[6vh] bg-black pointer-events-none z-10" />
 
-      {/* VIGNETTE */}
       <div className="absolute inset-0 pointer-events-none" style={{
         background: 'radial-gradient(ellipse 75% 75% at 50% 50%, transparent 25%, rgba(0,0,0,0.7) 100%)'
       }} />
 
-      {/* GRAIN */}
       <div className="absolute inset-0 pointer-events-none opacity-[0.04]" style={{
         backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
         backgroundSize: '180px',
       }} />
 
-      {/* SCROLL FADE */}
       <motion.div style={{ opacity: overlayOpacity }} className="absolute inset-0 bg-black pointer-events-none" />
 
-      {/* SCROLL HINT */}
       <motion.div style={{ opacity: sectionOpacity }}
         className="absolute bottom-[8vh] left-0 right-0 flex justify-center z-20 pointer-events-none">
         <motion.div
@@ -74,9 +104,11 @@ const VideoHeroSection = () => {
           <div style={{ width:1, height:44, background:'linear-gradient(to bottom, rgba(232,226,214,.4), transparent)' }} />
         </motion.div>
       </motion.div>
-    </section>
+    </motion.section>
   );
 };
+
+// ── rest of file unchanged ──
 
 const SmoothImageSection = () => {
   const { scrollYProgress } = useScroll();
