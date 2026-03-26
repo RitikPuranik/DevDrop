@@ -53,4 +53,9 @@ const getSalesStats = async (period = 30) => {
   return sales;
 };
 
-module.exports = { getPlatformStats, getWebsiteStats, getSalesStats };
+const getAllUser = async () => {
+  const user = await User.find({});
+  return user;
+}
+
+module.exports = { getPlatformStats, getWebsiteStats, getSalesStats, getAllUser };

@@ -28,4 +28,14 @@ const getSalesStats = async (req, res) => {
   }
 };
 
-module.exports = { getPlatformStats, getWebsiteStats, getSalesStats };
+const getAllUser =async (req, res) => {
+  try {
+    const datas = await analyticsService.getAllUser();
+    res.json({ success: true, data:datas})
+  }
+  catch(error){
+    res.status(500).json({success: false, message: 'andi mandi sandi priyal pagalu ',  error: error.message})
+  }
+}
+
+module.exports = { getPlatformStats, getWebsiteStats, getSalesStats, getAllUser };
