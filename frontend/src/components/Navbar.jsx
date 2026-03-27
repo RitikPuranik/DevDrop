@@ -8,7 +8,7 @@ const Navbar = () => {
 
   const menuItems = [
     { to: "/", label: "Home", src: "https://images.unsplash.com/photo-1578357078586-491adf1aa5ba?q=80&w=464&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" },
-    { to: "/websites", label: "Websites", src: "https://images.unsplash.com/photo-1467232004584-a241de8bcf5d?q=80&w=869" },
+    { to: "/template", label: "Websites", src: "https://images.unsplash.com/photo-1467232004584-a241de8bcf5d?q=80&w=869" },
     { to: "/about", label: "About Us", src: "https://images.unsplash.com/photo-1642543348745-03b1219733d9?q=80&w=1470" },
     { to: "/work", label: "Programs", src: "https://images.unsplash.com/photo-1614850523296-d8c1af93d400?q=80&w=1500" },
     { to: "/contact", label: "Contacts", src: "https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=1500" },
