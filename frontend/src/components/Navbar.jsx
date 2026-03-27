@@ -21,7 +21,7 @@ const Navbar = () => {
     <>
       <nav className="fixed top-0 w-full px-12 py-8 flex justify-between items-center z-[110] mix-blend-difference">
         <LinkTransition to="/" className="text-white font-serif italic text-3xl tracking-tighter">
-          devdrop.
+          devdrop
         </LinkTransition>
 
         <button 

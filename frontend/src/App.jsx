@@ -7,6 +7,7 @@ import Home from './pages/Home';
 import About from './pages/AboutUs';
 import Navbar from './components/Navbar';
 import Template from './pages/Template';
+import Footer from './components/Footer';
 
 const VIDEO_SRC = '/dewdrop.s3.mp4';
 
@@ -67,12 +68,15 @@ export default function App() {
                     introComplete={introComplete}
                     fromIntro={fromIntro} // ← pass as ref so Home can read+reset it
                   />
+        
                 }
               />
               <Route path="/about" element={<About />} />
               <Route path="/template" element={<Template />} />
+              
             </Routes>
           </main>
+          <Footer />
         </>
       )}
     </Router>

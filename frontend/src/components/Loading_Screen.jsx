@@ -2,36 +2,43 @@ import React, { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import gsap from 'gsap';
 
-const Loader = () => {
+// suppressOnce is a ref passed from App — when true, skip the animation once
+const Loader = ({ suppressOnce }) => {
   const containerRef = useRef(null);
   const pathRef = useRef(null);
   const textRef = useRef(null);
   const location = useLocation();
+  const isFirst = useRef(true);
 
   useEffect(() => {
-    // When the new page is "ready" behind the beige wall:
-    const tl = gsap.timeline();
+    // On the very first location trigger (intro→home), skip animation
+    if (isFirst.current && suppressOnce?.current) {
+      isFirst.current = false;
+      suppressOnce.current = false;
+      if (containerRef.current) containerRef.current.style.display = 'none';
+      return;
+    }
+    isFirst.current = false;
 
-    tl.set(containerRef.current, { display: "block" })
-      // 1. Show "devdrop" briefly
+    const tl = gsap.timeline();
+    tl.set(containerRef.current, { display: 'block' })
       .to(textRef.current, { opacity: 1, y: 0, duration: 0.4 })
       .to(textRef.current, { opacity: 0, y: -20, duration: 0.3, delay: 0.5 })
-      // 2. Arch UP to reveal the new page
       .to(pathRef.current, {
-        attr: { d: "M0 0 L100 0 L100 100 Q50 50 0 100 L0 0" },
+        attr: { d: 'M0 0 L100 0 L100 100 Q50 50 0 100 L0 0' },
         duration: 0.7,
-        ease: "power3.in",
+        ease: 'power3.in',
       })
       .to(pathRef.current, {
-        attr: { d: "M0 0 L100 0 L100 0 Q50 0 0 0 L0 0" },
+        attr: { d: 'M0 0 L100 0 L100 0 Q50 0 0 0 L0 0' },
         duration: 0.5,
-        ease: "power3.out",
+        ease: 'power3.out',
       })
-      .set(containerRef.current, { display: "none" });
+      .set(containerRef.current, { display: 'none' });
   }, [location]);
 
   return (
-    <div ref={containerRef} className="loader-container fixed inset-0 z-[9999] pointer-events-none">
+    <div ref={containerRef} className="loader-container fixed inset-0 z-[9999] pointer-events-none" style={{ display: 'none' }}>
       <svg className="absolute top-0 w-full h-[110vh] fill-[#e8e2d6]" viewBox="0 0 100 100" preserveAspectRatio="none">
         <path className="loader-path" ref={pathRef} d="M0 0 L100 0 L100 100 Q50 100 0 100 L0 0" />
       </svg>

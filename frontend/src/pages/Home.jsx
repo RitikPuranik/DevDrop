@@ -1,165 +1,127 @@
-import React,{useRef} from 'react';
-import { motion, useScroll, useTransform,useSpring} from 'framer-motion';
+import React, { useRef, useEffect, useState } from 'react';
+import { motion, useScroll, useTransform, useSpring } from 'framer-motion';
+import secondVideo from '../assets/videos/v2.mp4'; 
 
-const Home = () => {
-  return (
-    <div className="bg-black text-[#e8e2d6] selection:bg-[#e8e2d6] selection:text-black">
-      {/* 1. HERO SECTION - Pinned and Fades Out */}
-      <HeroSection />
-
-      {/* 2. OVERLAPPING CONTENT - Slides over Hero */}
-      <div className="relative z-10">
-        <SmoothImageSection />
-        <FuelUpSection />
-      </div>
-
-      {/* 3. FOOTER - Revealed behind content */}
-      <footer className="h-[60vh] flex items-center justify-center border-t border-[#e8e2d6]/10">
-        <h2 className="text-[10vw] font-serif italic opacity-20">devdrop</h2>
-      </footer>
+const Home = ({ preloadedVideoRef, introComplete, fromIntro }) => (
+  <div className="bg-[#050505] text-[#e8e2d6] selection:bg-[#e8e2d6] selection:text-black antialiased">
+    <VideoHeroSection
+      preloadedVideoRef={preloadedVideoRef}
+      introComplete={introComplete}
+      fromIntro={fromIntro}
+    />
+    
+    <div className="relative z-10">
+      <SmoothVideoSection />
     </div>
-    
-  );
-};
+  </div>
+);
 
-const HeroSection = () => {
+/* ─── VIDEO HERO (BACKGROUND) ─── */
+const VideoHeroSection = ({ preloadedVideoRef, introComplete, fromIntro }) => {
+  const wrapperRef = useRef(null);
+  const hasAppended = useRef(false);
+  const [visible, setVisible] = useState(false);
   const { scrollY } = useScroll();
-  // Hero text moves slower than scroll for parallax effect
-  const y = useTransform(scrollY, [0, 500], [0, 200]);
-  const opacity = useTransform(scrollY, [0, 400], [1, 0]);
+
+  // Background video subtly shrinks and blurs as foreground arrives
+  const videoScale = useTransform(scrollY, [0, 1000], [1.05, 1]);
+  const videoBlur  = useTransform(scrollY, [200, 800], ["blur(0px)", "blur(10px)"]);
+  const opacity    = useTransform(scrollY, [0, 800], [0.5, 0.2]);
+
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper || hasAppended.current) return;
+    const vid = preloadedVideoRef?.current;
+    if (!vid) return;
+    vid.className = 'w-full h-full object-cover';
+    wrapper.appendChild(vid);
+    hasAppended.current = true;
+    return () => { if (wrapper.contains(vid)) wrapper.removeChild(vid); hasAppended.current = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!introComplete) return;
+    const vid = preloadedVideoRef?.current;
+    if (fromIntro?.current) {
+      fromIntro.current = false;
+      setVisible(true);
+      vid?.play().catch(() => {});
+    } else {
+      const timer = setTimeout(() => { setVisible(true); vid?.play().catch(() => {}); }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [introComplete]);
 
   return (
-    <section className="sticky top-0 h-screen flex flex-col justify-center px-12 z-0">
-      <motion.div style={{ y, opacity }}>
-        <h1 className="text-[15vw] leading-[0.8] font-serif italic tracking-tighter">
-          Crafting <br /> 
-          <span className="ml-[10vw]">The Void</span>
-        </h1>
-        <div className="mt-12 flex gap-20 items-end">
-          <p className="max-w-xs text-sm uppercase tracking-widest opacity-50">
-            A boutique studio merging digital craft with architectural soul.
-          </p>
-        </div>
+    <motion.section className="sticky top-0 h-screen overflow-hidden z-0" animate={{ opacity: visible ? 1 : 0 }}>
+      <motion.div style={{ scale: videoScale, filter: videoBlur, opacity }} className="absolute inset-0">
+        <div ref={wrapperRef} className="w-full h-full" />
       </motion.div>
-    </section>
+    </motion.section>
   );
 };
 
-const SmoothImageSection = () => {
-  const { scrollYProgress } = useScroll();
-  // Image expands and corners round off as you scroll
-  const scale = useTransform(scrollYProgress, [0.1, 0.3], [0.8, 1]);
-  const rotate = useTransform(scrollYProgress, [0.1, 0.3], [5, 0]);
-
-  return (
-    <section className="h-screen flex items-center justify-center px-6">
-      <motion.div 
-        style={{ scale, rotate }}
-        className="w-full h-[80vh] overflow-hidden rounded-xl"
-      >
-        <div className="w-full h-full bg-[#1a1a1a] flex items-center justify-center">
-           {/* Replace with a high-end architectural image */}
-           <img 
-             src="https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=2070&auto=format&fit=crop" 
-             className="w-full h-full object-cover opacity-60 grayscale hover:grayscale-0 transition-all duration-1000"
-             alt="Luxury Architecture"
-           />
-        </div>
-      </motion.div>
-    </section>
-    
-  );
-};
-const FuelUpSection = () => {
-  const sectionRef = useRef(null);
+/* ─── SMOOTH VIDEO SECTION (PORTAL REVEAL) ─── */
+const SmoothVideoSection = () => {
+  const targetRef = useRef(null);
   const { scrollYProgress } = useScroll({
-    target: sectionRef,
+    target: targetRef,
     offset: ["start end", "end start"]
   });
 
-  const smoothProgress = useSpring(scrollYProgress, { 
-    stiffness: 150, 
-    damping: 30,
-    restDelta: 0.001 
-  });
+  // Smooth "Liquid" physics
+  const smoothP = useSpring(scrollYProgress, { stiffness: 40, damping: 24 });
+
+  // Matching the UI Screenshot geometry
+  const width = useTransform(smoothP, [0.1, 0.45], ["60%", "92%"]);
+  const height = useTransform(smoothP, [0.1, 0.45], ["65vh", "88vh"]);
+  const borderRadius = useTransform(smoothP, [0.1, 0.45], ["80px", "54px"]);
+  const cardY = useTransform(smoothP, [0, 0.4], [100, 0]); // "Lift" effect
+  
+  // Floating Controls (Search/Collection bar from your image)
+  const controlsOp = useTransform(smoothP, [0.35, 0.5], [0, 1]);
+  const controlsY  = useTransform(smoothP, [0.35, 0.5], [10, 0]);
 
   return (
-    <section ref={sectionRef} className="relative h-[180vh] bg-black">
-      <div className="sticky top-0 h-screen w-full flex flex-col items-center justify-center px-6  overflow-hidden">
-        <div className="relative flex flex-col items-center text-center  max-w-[95vw]">
-          
-          <ScrubLine text="Stir Up Your" progress={smoothProgress} range={[0.1, 0.2]} /><br></br>
-          
-          <div className="relative flex flex-col items-center -my-4 z-10">
-             <ScrubLine text="Fearless Past And" progress={smoothProgress} range={[0.15, 0.25]} />
-
-             {/* THE STICKER */}
-             <motion.div 
-               style={{ 
-                 scale: useTransform(smoothProgress, [0.25, 0.35], [0, 1]),
-                 rotate: useTransform(smoothProgress, [0.25, 0.35], [-12, -4]),
-                 opacity: useTransform(smoothProgress, [0.25, 0.28], [0, 1]),
-               }}
-               className="bg-[#d2904b] text-black px-10 py-3 -my-6 relative z-20  select-none border-8 border-black"
-             >
-               <span className="text-[6vw] font-black uppercase leading-none tracking-tighter italic">
-                 Fuel Up
-               </span>
-             </motion.div>
-
-             <ScrubLine text="Your Future With" progress={smoothProgress} range={[0.35, 0.45]} />
-          </div>
-          
-          <motion.span 
-             style={{ opacity: useTransform(smoothProgress, [0.45, 0.5], [0.1, 0.4]) }}
-             className="text-[4vw] font-serif italic lowercase text-[#f4e6d9] mt-2 mb-0"
+    <section ref={targetRef} className="h-[200vh] relative">
+      <div className="sticky top-0 h-screen w-full flex items-center justify-center z-10">
+        
+        {/* The Video Card */}
+        <motion.div 
+          style={{ 
+            width, 
+            height,
+            borderRadius, 
+            y: cardY,
+            boxShadow: "0 50px 100px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.08)" 
+          }} 
+          className="relative overflow-hidden bg-[#121212] group"
+        >
+          {/* Inner Video with Parallax */}
+          <motion.div 
+            style={{ scale: useTransform(smoothP, [0.1, 0.6], [1.2, 1]) }}
+            className="w-full h-full"
           >
-            every
-          </motion.span>
+            <video
+              src={secondVideo}
+              autoPlay
+              loop
+              muted
+              playsInline
+              className="w-full h-full object-cover opacity-90 transition-opacity duration-700 group-hover:opacity-100"
+            />
+          </motion.div>
 
-          <ScrubLine text="Gulp of Perfect Protein" progress={smoothProgress} range={[0.5, 0.6]} isSubText={true} />
+          {/* Frosted Border Gradient (Bottom) */}
+          <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
           
-        </div>
+          {/* Subtle Label */}
+          <div className="absolute bottom-10 left-10">
+             <h3 className="text-xl font-serif italic tracking-tight opacity-40">visual perspective</h3>
+          </div>
+        </motion.div>
       </div>
     </section>
-  );
-};
-
-// 1. The main line component (No hooks inside map here!)
-const ScrubLine = ({ text, progress, range, isSubText = false }) => {
-  const words = text.split(" ");
-  
-  return (
-    <span className={`flex flex-wrap justify-center gap-[0.3em] font-black uppercase tracking-tighter text-[#f4e6d9] leading-[0.8] 
-      ${isSubText ? 'text-[5.5vw]' : 'text-[8.5vw]'} relative z-0`}>
-      {words.map((word, i) => {
-        // Calculate the specific timing for this word
-        const start = range[0] + (i * (range[1] - range[0]) / words.length);
-        const end = start + (range[1] - range[0]) / words.length;
-
-        // Render a NEW component for each word to keep hooks stable
-        return (
-          <IndividualWord 
-            key={i} 
-            word={word} 
-            progress={progress} 
-            range={[start, end]} 
-          />
-        );
-      })}
-    </span>
-  );
-};
-
-// 2. The sub-component that handles the hooks safely
-const IndividualWord = ({ word, progress, range }) => {
-  const opacity = useTransform(progress, range, [0.15, 1]);
-  const y = useTransform(progress, range, [8, 0]);
-
-  return (
-    <motion.span style={{ opacity, y }} className="inline-block">
-      {word}
-    </motion.span>
   );
 };
 
