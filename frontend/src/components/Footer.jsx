@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 
-const Footer = () => {
+const DevDropStudioFooter = () => {
   const [time, setTime] = useState("");
 
   useEffect(() => {
@@ -12,87 +12,59 @@ const Footer = () => {
   }, []);
 
   return (
-    <footer className="relative w-full bg-black text-[#E8E2D6] px-[6vw] pt-32 pb-8 overflow-hidden font-sans border-t border-white/5">
+    <footer className="w-full bg-[#050505] font-sans selection:bg-[#E31E24] selection:text-white">
       
-      {/* 1. BACKGROUND TEXTURE & SKETCHES */}
-      <div className="absolute inset-0 opacity-[0.03] pointer-events-none mix-blend-overlay bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]" />
-      
-      {/* Halftone Dots (Matching Hero Style) */}
-      <div className="absolute top-0 right-0 w-1/3 h-full opacity-5 pointer-events-none" 
-           style={{ backgroundImage: `radial-gradient(#fbb034 1.5px, transparent 0)`, backgroundSize: '16px 16px' }} />
+      {/* ─── SECTION 1: THE ARC (Newsletter Area) ─── */}
+      <div className="relative overflow-hidden bg-transparent pt-10">
+        <div 
+          className="relative bg-[#e8e2d6] pt-20 pb-24 px-6 flex flex-col items-center justify-center text-center"
+          style={{ clipPath: 'ellipse(100% 100% at 50% 100%)' }}
+        >
+          {/* FLOATING STICKERS: Anchored to the color-change line */}
+          <GeometricShard bottom="10px" left="15%" rotate={15} size={70} color="#E31E24" opacity={0.4} />
+          <GeometricShard bottom="20px" left="40%" rotate={-10} size={50} color="#050505" opacity={0.2} />
+          <GeometricShard bottom="5px" right="20%" rotate={45} size={60} color="#E31E24" opacity={0.3} />
+          <GeometricShard bottom="10px" right="5%" rotate={-25} size={40} color="#050505" opacity={0.15} />
 
-      {/* 2. DECORATIVE STICKERS (Foliage & Loops) */}
-      <div className="absolute bottom-[-20px] left-[-20px] w-64 z-20 pointer-events-none opacity-20 grayscale">
-        <img src="https://png.pngtree.com/png-vector/20220616/ourmid/pngtree-green-leaf-tropical-palm-png-image_5091871.png" alt="foliage" className="w-full" />
-      </div>
+          <div className="relative z-10 max-w-2xl">
+            <h2 className="text-4xl md:text-6xl font-black uppercase tracking-tighter italic text-[#050505] mb-4">
+              Subscribe to <span className="text-[#E31E24]">Perspective</span>
+            </h2>
+            <p className="text-[10px] uppercase tracking-[0.4em] font-bold opacity-40 mb-10 max-w-md mx-auto">
+              to stay up to date on all the latest builds
+            </p>
 
-      <div className="max-w-[1400px] mx-auto relative z-30">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-20 pb-20 border-b border-white/10">
-          
-          {/* LEFT: DIRECTORY & BRAND */}
-          <div className="flex flex-col justify-between">
-            <div className="mb-16">
-              <span className="text-[#fbb034] font-['Permanent_Marker',cursive] text-2xl block mb-2 rotate-[-3deg]">devdrop</span>
-              <h2 className="text-4xl font-black uppercase tracking-tighter italic">Creative <span className="text-[#fbb034]">Solutions</span></h2>
-              <p className="text-xs uppercase tracking-[0.4em] opacity-40 mt-4 max-w-sm leading-relaxed">
-                Architecting digital perspectives <br /> through fluid motion systems.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-10">
-              <FooterGroup title="Resources" links={['Case Studies', 'Our Process', 'Pricing', 'Blog']} />
-              <FooterGroup title="Agency" links={['About Us', 'Careers', 'Contact', 'Privacy']} />
-              <FooterGroup title="Connect" links={['Instagram', 'LinkedIn', 'Bento', 'Twitter']} />
-            </div>
-          </div>
-
-          {/* RIGHT: ACTION ZONE + MAN IMAGE */}
-          <div className="relative pt-12 lg:pt-0 lg:pl-16 lg:border-l border-white/5">
-            <div className="relative z-40">
-              {/* Handwritten Note */}
-              <div className="absolute -top-16 right-0 hidden md:block">
-              </div>
-              {/* PILL INPUT (OfficeSpace Style) */}
-              <div className="relative mt-30 max-w-md group shadow-2xl">
-                <input 
-                  type="email" 
-                  placeholder="Drop your email..." 
-                  className="w-full bg-[#E8E2D6] text-black rounded-full py-5 px-8 outline-none text-sm font-bold"
-                />
-                <button className="absolute right-2 top-1/2 -translate-y-1/2 bg-[#fbb034] hover:bg-black text-white w-12 h-12 rounded-full flex items-center justify-center transition-all duration-500">
-                  <span className="text-xl font-bold">→</span>
-                </button>
-              </div>
-            </div>
-
-            {/* THE MAN IMAGE (Transparent without URL container) */}
-            <motion.div 
-              initial={{ y: 50, opacity: 0 }}
-              whileInView={{ y: 0, opacity: 1 }}
-              viewport={{ once: true }}
-              className="absolute -bottom-24 -right-16 w-[320px] md:w-[480px] z-10 pointer-events-none hidden md:block"
-            >
-              <img 
-                src="https://www.pngarts.com/files/3/Man-Transparent-Background-PNG.png" 
-                alt="Business Man" 
-                className="w-full h-auto drop-shadow-[0_30px_60px_rgba(0,0,0,0.8)]"
+            {/* THE PILL INPUT (Sleek sizing like reference) */}
+            <div className="relative flex items-center bg-white rounded-full p-1.5 w-full max-w-lg mx-auto shadow-xl border border-black/5">
+              <input 
+                type="email" 
+                placeholder="Enter your email address" 
+                className="flex-1 bg-transparent text-[#050505] px-6 outline-none text-[10px] font-bold placeholder:opacity-30"
               />
-            </motion.div>
+              <button className="bg-[#E31E24] text-white px-8 py-3.5 rounded-full font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all duration-500 shadow-md">
+                Subscribe
+              </button>
+            </div>
           </div>
         </div>
+      </div>
 
-        {/* BOTTOM STRIP */}
-        <div className="flex flex-col md:flex-row justify-between items-center pt-8 gap-6 text-[10px] uppercase tracking-[0.5em] opacity-30">
-          <div className="flex items-center gap-6">
-            <p>© 2026 devdrop studio</p>
-            <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              <span>System: Online</span>
+    
+
+      {/* ─── SECTION 3: DIRECTORY (Bottom Layout) ─── */}
+      <div className="bg-[#050505] text-[#e8e2d6] py-16 px-[8vw] border-t border-white/5">
+        <div className="max-w-[1200px] mx-auto grid grid-cols-2 lg:grid-cols-4 gap-12">
+          <LinkGroup title="Product Categories" links={['Web Architecture', 'Branding', 'Motion Studio', 'Bento Systems']} />
+          <LinkGroup title="Resources" links={['Our Story', 'Process', 'Privacy Policy', 'Sitemap']} />
+          <LinkGroup title="Follow Us On" links={['Instagram', 'LinkedIn', 'X.com', 'Dribbble']} />
+          
+          <div className="space-y-6">
+            <h5 className="text-[#E31E24] text-[10px] font-black uppercase tracking-[0.3em]">Build Stack</h5>
+            <div className="grid grid-cols-4 gap-2 opacity-10">
+              {[...Array(8)].map((_, i) => (
+                <div key={i} className="h-7 w-full border border-[#e8e2d6] rounded-sm flex items-center justify-center text-[5px] font-bold italic">DEV</div>
+              ))}
             </div>
-          </div>
-          <div className="flex gap-10 font-mono">
-            <span>{time} IST</span>
-            <span className="hover:text-white cursor-pointer transition-colors">/Privacy</span>
           </div>
         </div>
       </div>
@@ -100,12 +72,40 @@ const Footer = () => {
   );
 };
 
-const FooterGroup = ({ title, links }) => (
-  <div className="flex flex-col gap-5">
-    <h5 className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#fbb034]">{title}</h5>
-    <ul className="flex flex-col gap-2">
+/* --- Abstract SVG Geometric Sticker --- */
+const GeometricShard = ({ top, bottom, left, right, rotate, size, color, opacity }) => (
+  <motion.div 
+    initial={{ y: 20, opacity: 0 }}
+    whileInView={{ y: 0, opacity: opacity }}
+    animate={{ 
+        rotate: [rotate, rotate + 8, rotate],
+        y: [0, -10, 0] 
+    }}
+    transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+    className="absolute pointer-events-none z-20"
+    style={{ top, bottom, left, right }}
+  >
+    <svg width={size} height={size} viewBox="0 0 100 100" fill="none" style={{ filter: 'drop-shadow(0px 4px 4px rgba(0,0,0,0.1))' }}>
+      <path d="M50 10L90 90H10L50 10Z" fill={color} fillOpacity={0.8} />
+      <circle cx="50" cy="55" r="20" stroke="white" strokeWidth="2" strokeDasharray="4 4" />
+    </svg>
+  </motion.div>
+);
+
+const ContactBlock = ({ title, top, bottom }) => (
+  <div className="border-l border-white/10 pl-8 space-y-2">
+    <h5 className="text-[#E31E24] text-[10px] uppercase font-black tracking-widest">{title}</h5>
+    <p className="text-lg font-black text-white tracking-tight">{top}</p>
+    <p className="text-[11px] font-bold text-white/40 uppercase tracking-tighter">{bottom}</p>
+  </div>
+);
+
+const LinkGroup = ({ title, links }) => (
+  <div className="space-y-6">
+    <h5 className="text-[#E31E24] text-[10px] font-black uppercase tracking-[0.3em]">{title}</h5>
+    <ul className="space-y-3">
       {links.map(link => (
-        <li key={link} className="text-[11px] uppercase tracking-widest opacity-40 hover:opacity-100 cursor-pointer transition-all hover:translate-x-1">
+        <li key={link} className="text-[10px] font-bold text-white/40 hover:text-white cursor-pointer transition-all uppercase tracking-[0.1em]">
           {link}
         </li>
       ))}
@@ -113,4 +113,4 @@ const FooterGroup = ({ title, links }) => (
   </div>
 );
 
-export default Footer;
+export default DevDropStudioFooter;
