@@ -26,7 +26,7 @@ const VideoHeroSection = ({ preloadedVideoRef, introComplete, fromIntro }) => {
   // Background video subtly shrinks and blurs as foreground arrives
   const videoScale = useTransform(scrollY, [0, 1000], [1.05, 1]);
   const videoBlur  = useTransform(scrollY, [200, 800], ["blur(0px)", "blur(10px)"]);
-  const opacity    = useTransform(scrollY, [0, 800], [0.5, 0.2]);
+  const opacity    = useTransform(scrollY, [0, 800], [1, 0.55]);
 
   useEffect(() => {
     const wrapper = wrapperRef.current;
