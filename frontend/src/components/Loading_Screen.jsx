@@ -20,8 +20,15 @@ const Loader = ({ suppressOnce }) => {
     }
     isFirst.current = false;
 
+    // FIX: Kill any previous animations to prevent glitching on rapid navigation
+    gsap.killTweensOf([containerRef.current, pathRef.current, textRef.current]);
+    
+    // FIX: Instant scroll to top so the new page starts at the upper side
+    window.scrollTo(0, 0);
+
     const tl = gsap.timeline();
     tl.set(containerRef.current, { display: 'block' })
+      .set(pathRef.current, { attr: { d: 'M0 0 L100 0 L100 100 Q50 100 0 100 L0 0' } }) // Reset path
       .to(textRef.current, { opacity: 1, y: 0, duration: 0.4 })
       .to(textRef.current, { opacity: 0, y: -20, duration: 0.3, delay: 0.5 })
       .to(pathRef.current, {

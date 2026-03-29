@@ -60,6 +60,7 @@ export default function App() {
           <Navbar />
           <main className="bg-black min-h-screen">
             <Routes>
+              
               <Route
                 path="/"
                 element={
@@ -75,8 +76,9 @@ export default function App() {
               <Route path="/template" element={<Template />} />
               
             </Routes>
+               <Footer />
           </main>
-          <Footer />
+       
         </>
       )}
     </Router>
