@@ -58,12 +58,30 @@ const VideoHeroSection = ({ preloadedVideoRef, introComplete, fromIntro }) => {
 
     vid.className = 'w-full h-full object-cover';
     if (!wrapper.contains(vid)) wrapper.appendChild(vid);
+  }, [preloadedVideoRef]);
 
-    if (introComplete) {
+  // Separate effect: handles play timing based on entry route
+  useEffect(() => {
+  if (!introComplete) return;
+
+  const vid = preloadedVideoRef?.current;
+  if (!vid) return;
+
+  const comingFromIntro = fromIntro?.current === true;
+
+  if (comingFromIntro) {
+    fromIntro.current = false;
+    setVisible(true);
+    // ✅ Video already playing from App.jsx — just show it, don't restart
+  } else {
+    const timer = setTimeout(() => {
       setVisible(true);
+      vid.currentTime = 0;
       vid.play().catch(() => {});
-    }
-  }, [introComplete, preloadedVideoRef]);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }
+}, [introComplete]);
 
   return (
     <motion.section 
