@@ -1,133 +1,154 @@
-import React, { useState, useRef } from 'react';
-import { motion, AnimatePresence, useMotionValue, useSpring } from 'framer-motion';
+import React, { useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Mail, MapPin, Phone, ArrowUpRight, MessageSquare, Headphones } from 'lucide-react';
 
-export default function FunContact() {
-  const [formState, setFormState] = useState('idle'); // idle, sending, success
-  const containerRef = useRef(null);
+const ClassyObsidianTransition = () => {
+  const [stage, setStage] = useState(1); // 1: Intro, 2: Reveal, 3: Final UI
 
-  // Custom Cursor Logic
-  const cursorX = useMotionValue(-100);
-  const cursorY = useMotionValue(-100);
-  const springConfig = { damping: 25, stiffness: 700 };
-  const cursorXSpring = useSpring(cursorX, springConfig);
-  const cursorYSpring = useSpring(cursorY, springConfig);
-
-  const handleMouseMove = (e) => {
-    const { clientX, clientY } = e;
-    cursorX.set(clientX);
-    cursorY.set(clientY);
-  };
-
-  const triggerSubmit = (e) => {
-    e.preventDefault();
-    setFormState('sending');
-    setTimeout(() => setFormState('success'), 2000);
-  };
+  useEffect(() => {
+    const timer1 = setTimeout(() => setStage(2), 1500); // Start Wipe
+    const timer2 = setTimeout(() => setStage(3), 3000); // UI Active
+    return () => { clearTimeout(timer1); clearTimeout(timer2); };
+  }, []);
 
   return (
-    <div 
-      ref={containerRef}
-      onMouseMove={handleMouseMove}
-      className="relative min-h-screen bg-[#050505] overflow-hidden flex items-center justify-center cursor-none selection:bg-orange-500/30"
-    >
-      {/* ── CUSTOM BLOB CURSOR ── */}
-      <motion.div
-        style={{ x: cursorXSpring, y: cursorYSpring, translateX: '-50%', translateY: '-50%' }}
-        className="fixed top-0 left-0 w-8 h-8 bg-orange-500 rounded-full pointer-events-none z-[999] mix-blend-difference"
-      />
-      <motion.div
-        style={{ x: cursorXSpring, y: cursorYSpring, translateX: '-50%', translateY: '-50%' }}
-        className="fixed top-0 left-0 w-128 h-128 bg-orange-500/10 blur-[100px] rounded-full pointer-events-none z-0"
-      />
+    <div className="relative h-screen w-full bg-[#050505] text-[#e5e2da] overflow-hidden font-serif">
+      
+      {/* 1. THE CLASSY NAVBAR (Always Visible, Primary Anchor) */}
+      <nav className="fixed top-0 w-full p-8 flex justify-between items-center z-[100] mix-blend-difference">
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
+          className="text-[10px] tracking-[0.6em] font-bold uppercase"
+        >
+          Studio / Archive®
+        </motion.div>
+        <motion.div 
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
+          className="flex gap-8 text-[10px] tracking-widest uppercase opacity-40"
+        >
+          <span>Work</span>
+          <span>About</span>
+          <span className="text-white opacity-100 underline underline-offset-8">Contact</span>
+        </motion.div>
+      </nav>
 
-      <AnimatePresence mode="wait">
-        {formState !== 'success' ? (
-          <motion.div 
-            key="contact-form"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ y: -100, opacity: 0, filter: 'blur(20px)' }}
-            className="z-10 w-full max-w-4xl px-10"
+      <AnimatePresence>
+        {/* 2. THE INTRO CURTAIN (Inspired by Image 4 Elements) */}
+        {stage < 3 && (
+          <motion.div
+            key="curtain"
+            initial={{ y: 0 }}
+            exit={{ y: "-100%" }}
+            transition={{ duration: 1.2, ease: [0.76, 0, 0.24, 1] }}
+            className="absolute inset-0 z-50 bg-[#ff8a7a] flex items-center justify-center"
           >
-            <div className="mb-16">
-              <motion.span 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="text-orange-500 font-mono tracking-[0.8em] text-xs block mb-4"
-              >
-                READY TO DROP?
-              </motion.span>
-              <h1 className="text-white text-7xl md:text-9xl font-medium tracking-tighter">
-                Say <span className="italic font-light text-white/20 hover:text-orange-500 transition-colors duration-500">Hello</span>
-              </h1>
-            </div>
-
-            <form onSubmit={triggerSubmit} className="space-y-12">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-                <InteractiveInput placeholder="What's your name?" />
-                <InteractiveInput placeholder="Email address" type="email" />
-              </div>
-              <InteractiveInput placeholder="Tell us about the dream..." isTextArea />
-
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="group relative flex items-center gap-6"
-              >
-                <div className="w-24 h-24 rounded-full border border-white/20 flex items-center justify-center group-hover:bg-white group-hover:border-white transition-all duration-500">
-                  <span className="text-white group-hover:text-black text-3xl">→</span>
-                </div>
-                <span className="text-white text-2xl font-light tracking-wide uppercase">
-                  {formState === 'sending' ? 'Sending...' : 'Drop it'}
-                </span>
-              </motion.button>
-            </form>
-          </motion.div>
-        ) : (
-          <motion.div 
-            key="success"
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-center z-10"
-          >
-            <h2 className="text-orange-500 text-9xl font-black mb-4">GOT IT.</h2>
-            <p className="text-white/40 font-mono tracking-widest uppercase">We'll manifest a reply soon.</p>
-            <button 
-              onClick={() => setFormState('idle')}
-              className="mt-12 px-8 py-3 border border-white/10 rounded-full text-white/40 hover:text-white hover:border-white transition-all"
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, y: -100 }}
+              className="flex gap-12"
             >
-              Back to Earth
-            </button>
+              {[MapPin, Mail, Phone].map((Icon, i) => (
+                <div key={i} className="p-8 bg-white rounded-full shadow-2xl text-[#4b32c8]">
+                  <Icon size={40} strokeWidth={1.5} />
+                </div>
+              ))}
+            </motion.div>
+            {/* Grid Pattern Overlay */}
+            <div className="absolute inset-0 opacity-10 pointer-events-none" 
+                 style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Background Subtle Grid */}
-      <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] pointer-events-none" />
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]" />
-    </div>
-  );
-}
+      {/* 3. THE FINAL OBSIDIAN UI (Image 5 & 6 Logic) */}
+      <motion.main 
+        initial={{ opacity: 0, scale: 1.1 }}
+        animate={stage === 3 ? { opacity: 1, scale: 1 } : {}}
+        transition={{ duration: 1, ease: "easeOut" }}
+        className="relative h-full w-full flex flex-col justify-center px-8 md:px-24"
+      >
+        <div className="grid lg:grid-cols-2 gap-20 items-center">
+          
+          {/* Left: Editorial Content */}
+          <div className="space-y-12">
+            <div className="space-y-2">
+              <motion.span 
+                initial={{ opacity: 0 }} animate={stage === 3 ? { opacity: 0.4 } : {}}
+                className="text-[10px] tracking-[0.5em] uppercase font-sans"
+              >
+                Inquiries / 2026
+              </motion.span>
+              <h1 className="text-[clamp(3rem,8vw,6rem)] leading-[0.9] font-medium tracking-tighter">
+                Want to start <br /> <span className="italic font-light">a new project?</span>
+              </h1>
+            </div>
 
-function InteractiveInput({ placeholder, type = "text", isTextArea = false }) {
-  return (
-    <div className="relative group">
-      {isTextArea ? (
-        <textarea
-          required
-          placeholder={placeholder}
-          rows={1}
-          className="w-full bg-transparent border-b border-white/10 py-4 text-2xl text-white outline-none focus:border-orange-500 transition-all placeholder:text-white/10 resize-none"
-        />
-      ) : (
-        <input
-          required
-          type={type}
-          placeholder={placeholder}
-          className="w-full bg-transparent border-b border-white/10 py-4 text-2xl text-white outline-none focus:border-orange-500 transition-all placeholder:text-white/10"
-        />
-      )}
-      <div className="absolute bottom-0 left-0 w-0 h-[2px] bg-orange-500 group-focus-within:w-full transition-all duration-700 ease-out" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <SupportCard 
+                title="Sales" 
+                icon={<MessageSquare size={20} />} 
+                desc="Strategy and brand architecture." 
+              />
+              <SupportCard 
+                title="Support" 
+                icon={<Headphones size={20} />} 
+                desc="Ongoing digital maintenance." 
+              />
+            </div>
+          </div>
+
+          {/* Right: The Persona "Artifact" */}
+          <div className="relative flex justify-center">
+            <motion.div 
+              initial={{ opacity: 0, x: 50 }}
+              animate={stage === 3 ? { opacity: 1, x: 0 } : {}}
+              className="relative w-[380px] h-[520px] bg-[#111] rounded-[2rem] overflow-hidden border border-white/5"
+            >
+              <img 
+                src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&q=80" 
+                className="w-full h-full object-cover grayscale opacity-40 hover:opacity-100 transition-opacity duration-1000"
+                alt="Persona"
+              />
+              
+              {/* Floating Black Retro Phone (The image 5 anchor) */}
+              <motion.div 
+                animate={{ y: [0, -15, 0] }}
+                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                className="absolute bottom-10 -left-10 p-6 bg-white text-black rounded-3xl shadow-2xl"
+              >
+                <Phone size={40} fill="black" />
+              </motion.div>
+            </motion.div>
+          </div>
+
+        </div>
+      </motion.main>
+
+      {/* Decorative Corner Element (Image 1 squiggle vibe) */}
+      <div className="absolute bottom-10 right-10 opacity-20 pointer-events-none">
+        <svg width="100" height="40" viewBox="0 0 100 40">
+          <path d="M0 20 Q 25 0, 50 20 T 100 20" fill="none" stroke="currentColor" strokeWidth="0.5" />
+        </svg>
+      </div>
     </div>
   );
-}
+};
+
+const SupportCard = ({ title, icon, desc }) => (
+  <motion.div 
+    whileHover={{ backgroundColor: "rgba(255,255,255,0.03)" }}
+    className="p-8 rounded-2xl border border-white/5 space-y-4 transition-colors group cursor-pointer"
+  >
+    <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-[#ff8a7a]">
+      {icon}
+    </div>
+    <div className="space-y-1">
+      <h3 className="text-lg font-medium">{title}</h3>
+      <p className="text-[10px] text-white/30 tracking-widest uppercase">{desc}</p>
+    </div>
+    <ArrowUpRight size={16} className="opacity-0 group-hover:opacity-100 transition-opacity text-[#ff8a7a]" />
+  </motion.div>
+);
+
+export default ClassyObsidianTransition;

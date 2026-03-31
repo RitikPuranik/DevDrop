@@ -91,6 +91,7 @@ const handleIntroComplete = () => {
               />
               <Route path="/about" element={<About />} />
               <Route path="/template" element={<Template />} />
+              <Route path="/contact" element={<ContactUs />} />
               
             </Routes>
             <Footer />
