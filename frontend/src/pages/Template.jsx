@@ -25,15 +25,15 @@ export default function SmoothEliteGallery() {
     <div className="min-h-screen bg-[#080808] text-white selection:bg-orange-500 font-sans antialiased">
       
       {/* --- MAIN GRID --- */}
-      <main className="max-w-7xl mx-auto px-6 py-20">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+      <main className="max-w-6xl mx-auto px-7 py-20">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {TEMPLATES.map((item) => (
             <motion.div
               layoutId={`card-${item.id}`}
               key={item.id}
               onClick={() => setSelectedId(item)}
               transition={transition}
-              className="group cursor-pointer bg-[#111] rounded-[40px] p-4 border border-white/5 hover:border-orange-500/30 transition-colors will-change-transform"
+              className=" group cursor-pointer bg-[#111] rounded-[40px] p-4 border border-white/5 hover:border-orange-500/30 transition-colors will-change-transform"
             >
               <motion.div 
                 layoutId={`image-box-${item.id}`}

@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import LinkTransition from './TransitionLink';
+import img from '../assets/image.png'; // Placeholder image for the right sticker
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [hoveredIndex, setHoveredIndex] = useState(0);
 
   const menuItems = [
-    { to: "/", label: "Home", src: "https://images.unsplash.com/photo-1578357078586-491adf1aa5ba?q=80&w=464&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" },
+    { to: "/", label: "Home", src: "https://images.unsplash.com/photo-1642543349642-0d04e91511c9?q=80&w=871&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" },
     { to: "/template", label: "Websites", src: "https://images.unsplash.com/photo-1467232004584-a241de8bcf5d?q=80&w=869" },
-    { to: "/about", label: "About Us", src: "https://images.unsplash.com/photo-1642543348745-03b1219733d9?q=80&w=1470" },
-    { to: "/work", label: "Programs", src: "https://images.unsplash.com/photo-1614850523296-d8c1af93d400?q=80&w=1500" },
-    { to: "/contact", label: "Contacts", src: "https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=1500" },
+    { to: "/about", label: "About Us", src: img },
+    { to: "/work", label: "People's Love", src: "https://plus.unsplash.com/premium_photo-1739436074076-3c6d73478d59?q=80&w=812&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" },
+    { to: "/contact", label: "Contacts", src: "https://images.unsplash.com/photo-1703669020883-66f3e77ae929?q=80&w=435&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" },
   ];
 
   // Faster Spylt-style ease (ExpoOut)
@@ -35,7 +36,7 @@ const Navbar = () => {
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 exit={{ scale: 0 }}
-                className="absolute inset-0 bg-white rounded-full z-[-1]"
+                className="absolute inset-0 bg-[#e8e2d6] rounded-full z-[-1]"
               />
             )}
           </AnimatePresence>
@@ -59,10 +60,10 @@ const Navbar = () => {
             animate={{ y: 0 }}
             exit={{ y: "-100%" }}
             transition={{ duration: 0.6, ease: fastEase }}
-            className="fixed inset-0 z-[100] flex bg-white overflow-hidden" 
+            className="fixed inset-0 z-[100] flex bg-[#e8e2d6] overflow-hidden" 
           >
             {/* LEFT SIDE: Text Anchored to Bottom */}
-            <div className="w-1/2 h-full flex flex-col justify-end pb-24 px-24">
+            <div className=" mt-10 w-1/2 h-full flex flex-col justify-end pb-24 px-24">
               <div className="flex flex-col">
                 {menuItems.map((item, index) => (
                   <MenuItem 
@@ -116,7 +117,7 @@ const MenuItem = ({ label, to, onHover, close, isDimmed }) => (
     >
       <LinkTransition 
         to={to} 
-        className={`text-[5.5vw] leading-[0.9] font-bold italic uppercase tracking-tighter block transition-opacity duration-300 cursor-pointer ${isDimmed ? 'opacity-50' : 'opacity-100'} text-black`}
+        className={`text-[6.5vw] leading-[1.1] font-serif italic   tracking-tighter block transition-opacity duration-300 cursor-pointer ${isDimmed ? 'opacity-50' : 'opacity-100'} text-black`}
       >
         {label}
       </LinkTransition>

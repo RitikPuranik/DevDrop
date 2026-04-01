@@ -10,7 +10,6 @@ const TEAM = [
   { name: 'Lucas Ferreira', role: 'Brand Strategist',    img: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&q=80' },
 ];
 
-/* Smooth tear seam — gentle, not jagged */
 function buildTearPoints(H, steps = 60) {
   const pts = [];
   for (let i = 0; i <= steps; i++) {
@@ -43,28 +42,31 @@ function makePaths(progress, W, H, pts) {
 }
 
 export function TeamReveal({ sp }) {
-  /* Scroll map:
-     0.72–0.76 : section fades in (paper already visible)
-     0.76–0.84 : paper rests — user reads it
-     0.84–0.97 : buttery tear opens
-     0.97+     : group photo fully visible, holds
+  /*
+    Scroll map (relative to About.jsx's 1000vh):
+    0.60 – 0.65  : section fades in — immediately after gallery ends at 0.62
+    0.65 – 0.72  : paper rests, user reads / registers it
+    0.72 – 0.88  : tear opens (faster spring: stiffness 55, damping 22)
+    0.88+        : group photo fully visible, paper gone
   */
-  const sectionOpacity = useTransform(sp, [0.62, 0.755], [0, 1]);
 
-  // Tear driven by a very soft spring — feels like real paper
-  const rawTear    = useTransform(sp, [0.84, 0.97], [0, 1]);
-  const tearSpring = useSpring(rawTear, { stiffness: 22, damping: 20 });
+  // Fade in right as the last gallery card finishes
+  const sectionOpacity = useTransform(sp, [0.60, 0.655], [0, 1]);
 
-  // Photo fades in mid-tear
-  const photoOpacity = useTransform(rawTear, [0.30, 0.72], [0, 1]);
-  const photoScale   = useTransform(rawTear, [0.30, 0.80], [1.05, 1]);
+  // Faster, snappier tear spring
+  const rawTear    = useTransform(sp, [0.72, 0.88], [0, 1]);
+  const tearSpring = useSpring(rawTear, { stiffness: 55, damping: 22 });
+
+  // Photo fades in mid-tear — slightly earlier so it's visible sooner
+  const photoOpacity = useTransform(rawTear, [0.20, 0.60], [0, 1]);
+  const photoScale   = useTransform(rawTear, [0.20, 0.75], [1.05, 1]);
 
   // Labels appear after photo
-  const labelOpacity = useTransform(rawTear, [0.62, 0.90], [0, 1]);
-  const labelY       = useTransform(rawTear, [0.62, 0.90], [22, 0]);
+  const labelOpacity = useTransform(rawTear, [0.55, 0.85], [0, 1]);
+  const labelY       = useTransform(rawTear, [0.55, 0.85], [22, 0]);
 
-  // Paper fades completely out at the end
-  const paperOpacity = useTransform(rawTear, [0.82, 0.99], [1, 0]);
+  // Paper fades out sooner so photo isn't blocked long
+  const paperOpacity = useTransform(rawTear, [0.75, 0.96], [1, 0]);
 
   const containerRef = useRef(null);
   const [dims, setDims]   = useState({ W: 1440, H: 900 });
@@ -84,8 +86,11 @@ export function TeamReveal({ sp }) {
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
   }, []);
+  useEffect(() => {
+  const initial = makePaths(0, dims.W, dims.H, tearPts);
+  setPaths(initial);
+}, [dims, tearPts]);
 
-  // Update SVG paths on every spring tick
   useEffect(() => {
     return tearSpring.on('change', v => {
       setPaths(makePaths(v, dims.W, dims.H, tearPts));
@@ -94,17 +99,24 @@ export function TeamReveal({ sp }) {
 
   const { W, H } = dims;
 
-  return (
-    <motion.div
-      ref={containerRef}
-      style={{
-        opacity: sectionOpacity,
-        position: 'absolute', inset: 0, zIndex: 400,
-        background: '#080704',
-        overflow: 'hidden',
-      }}
-    >
+  // Background opacity: covers the page the moment gallery fades out, no gap
+  const bgOpacity = useTransform(sp, [0.56, 0.60], [0, 1]);
 
+  return (
+    <div
+      ref={containerRef}
+      style={{ position: 'absolute', inset: 0, zIndex: 400, overflow: 'hidden' }}
+    >
+      {/* Always-dark backing — eliminates black flash between gallery and reveal */}
+      <motion.div style={{
+        position: 'absolute', inset: 0,
+        background: '#080704',
+        opacity: bgOpacity,
+        pointerEvents: 'none',
+      }} />
+
+      {/* Content fades in on cue */}
+      <motion.div style={{ opacity: sectionOpacity, position: 'absolute', inset: 0 }}>
       {/* ══ GROUP PHOTO — revealed behind paper ══ */}
       <motion.div style={{
         position: 'absolute', inset: 0,
@@ -114,7 +126,6 @@ export function TeamReveal({ sp }) {
         alignItems: 'center', justifyContent: 'center',
         gap: 0,
       }}>
-        {/* Full-bleed group photo */}
         <div style={{
           width: '74%', maxWidth: 860,
           height: '46vh', minHeight: 280,
@@ -131,12 +142,10 @@ export function TeamReveal({ sp }) {
               filter: 'sepia(15%) contrast(1.05) brightness(0.84) saturate(0.9)',
             }}
           />
-          {/* Subtle vignette */}
           <div style={{
             position: 'absolute', inset: 0,
             background: 'linear-gradient(to bottom, rgba(8,7,4,0.48) 0%, transparent 28%, transparent 65%, rgba(8,7,4,0.70) 100%)',
           }} />
-          {/* Corner stamps */}
           <div style={{ position:'absolute', top:14, left:16,
             borderLeft:'1px solid rgba(200,165,90,0.32)', borderTop:'1px solid rgba(200,165,90,0.32)', padding:'5px 10px' }}>
             <div style={{ fontFamily:"'Space Mono',monospace", fontSize:7.5, letterSpacing:'0.55em', color:'#c8a55a' }}>EST. MMXXVI</div>
@@ -147,7 +156,6 @@ export function TeamReveal({ sp }) {
           </div>
         </div>
 
-        {/* Eyebrow + headline */}
         <motion.div style={{ opacity: labelOpacity, y: labelY, textAlign: 'center', marginTop: 26, width: '74%', maxWidth: 860 }}>
           <div style={{ display:'flex', alignItems:'center', gap:16, marginBottom:14 }}>
             <div style={{ flex:1, height:'1px', background:'linear-gradient(to left, rgba(200,165,90,0.45), transparent)' }} />
@@ -163,7 +171,6 @@ export function TeamReveal({ sp }) {
             Driven by <span style={{ color:'#c8903a' }}>Obsession</span>
           </h2>
 
-          {/* 6-member pills — 3 per row */}
           <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'10px 14px' }}>
             {TEAM.map((m, i) => (
               <motion.div key={i}
@@ -190,7 +197,7 @@ export function TeamReveal({ sp }) {
         </motion.div>
       </motion.div>
 
-      {/* ══ PAPER — clean, no lines, no text, pure parchment ══ */}
+      {/* ══ PAPER ══ */}
       <motion.svg
         style={{ position:'absolute', inset:0, width:'100%', height:'100%', opacity:paperOpacity, overflow:'visible' }}
         viewBox={`0 0 ${W} ${H}`}
@@ -198,40 +205,30 @@ export function TeamReveal({ sp }) {
         xmlns="http://www.w3.org/2000/svg"
       >
         <defs>
-          {/* Identical parchment — both halves use same gradient */}
           <linearGradient id="parchL" x1="0" y1="0" x2="1" y2="0">
             <stop offset="0%"   stopColor="#f8edd8" />
             <stop offset="60%"  stopColor="#f2e2c2" />
             <stop offset="100%" stopColor="#e9d6ae" />
           </linearGradient>
-          {/* Right half: same stops, mirrored direction */}
           <linearGradient id="parchR" x1="1" y1="0" x2="0" y2="0">
             <stop offset="0%"   stopColor="#f8edd8" />
             <stop offset="60%"  stopColor="#f2e2c2" />
             <stop offset="100%" stopColor="#e9d6ae" />
           </linearGradient>
-
-          {/* Matching shadows — same blur, inward toward seam */}
           <filter id="shadowL" x="-2%" y="-2%" width="120%" height="104%">
             <feGaussianBlur in="SourceAlpha" stdDeviation="28" />
             <feOffset dx="22" dy="0" />
             <feComposite in2="SourceGraphic" operator="out" />
-            <feComponentTransfer>
-              <feFuncA type="linear" slope="0.60" />
-            </feComponentTransfer>
+            <feComponentTransfer><feFuncA type="linear" slope="0.60" /></feComponentTransfer>
             <feMerge><feMergeNode /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
           <filter id="shadowR" x="-18%" y="-2%" width="120%" height="104%">
             <feGaussianBlur in="SourceAlpha" stdDeviation="28" />
             <feOffset dx="-22" dy="0" />
             <feComposite in2="SourceGraphic" operator="out" />
-            <feComponentTransfer>
-              <feFuncA type="linear" slope="0.60" />
-            </feComponentTransfer>
+            <feComponentTransfer><feFuncA type="linear" slope="0.60" /></feComponentTransfer>
             <feMerge><feMergeNode /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
-
-          {/* Very subtle paper noise — just enough to feel physical */}
           <filter id="paperGrain" x="0%" y="0%" width="100%" height="100%" colorInterpolationFilters="sRGB">
             <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch" result="noise"/>
             <feColorMatrix type="saturate" values="0" in="noise" result="grey"/>
@@ -240,30 +237,21 @@ export function TeamReveal({ sp }) {
           </filter>
         </defs>
 
-        {/* LEFT */}
         <g filter="url(#shadowL)">
           <path d={paths.L} fill="url(#parchL)" filter="url(#paperGrain)" />
-          {/* Subtle warm overlay near tear edge for depth */}
           <path d={paths.L} fill="url(#parchL)" opacity="0.18" />
         </g>
-
-        {/* RIGHT — same gradient mirrored, same shadow mirrored */}
         <g filter="url(#shadowR)">
           <path d={paths.R} fill="url(#parchR)" filter="url(#paperGrain)" />
           <path d={paths.R} fill="url(#parchR)" opacity="0.18" />
         </g>
 
-        {/* Seam — soft, blended, no harsh lines */}
-        {/* Deep shadow at the fold */}
         <path d={paths.T} fill="none" stroke="rgba(0,0,0,0.28)" strokeWidth="14" strokeLinecap="round" />
-        {/* Mid shadow */}
         <path d={paths.T} fill="none" stroke="rgba(0,0,0,0.14)" strokeWidth="6" strokeLinecap="round" />
-        {/* Bright highlight — the torn paper edge catching light */}
         <path d={paths.T} fill="none" stroke="rgba(255,248,228,0.75)" strokeWidth="1.5" strokeLinecap="round" />
-
       </motion.svg>
-
-    </motion.div>
+      </motion.div>{/* end content fade wrapper */}
+    </div>
   );
 }
 
