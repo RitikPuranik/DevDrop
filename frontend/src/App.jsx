@@ -9,6 +9,7 @@ import Navbar from './components/Navbar';
 import Template from './pages/Template';
 import Footer from './components/Footer';
 import ContactUs from './pages/ContactUs';
+import ReviewPage from './pages/Review';
 
 const VIDEO_SRC = '/dewdrop.s3.mp4';
 
@@ -92,6 +93,7 @@ const handleIntroComplete = () => {
               <Route path="/about" element={<About />} />
               <Route path="/template" element={<Template />} />
               <Route path="/contact" element={<ContactUs />} />
+              <Route path="/review" element={<ReviewPage />} />
               
             </Routes>
             <Footer />
