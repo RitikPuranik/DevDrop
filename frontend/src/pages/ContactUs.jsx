@@ -38,7 +38,7 @@ export default function ZohoInspiredUI() {
                   <div className="w-3 h-3 rounded-full bg-[#FFBD2E]"></div>
                   <div className="w-3 h-3 rounded-full bg-[#28C940]"></div>
                 </div>
-                <div className="ml-8 flex-1 max-w-sm bg-black/40 border border-white/5 rounded-full h-7 flex items-center px-4 text-[10px] text-gray-500 font-mono tracking-widest">
+                <div className="ml-8 flex-1 max-w-sm  border rounded-full h-7 flex items-center px-4 text-[10px] text-gray-500 font-mono tracking-widest">
                   <Globe size={12} className="mr-2 text-blue-500" />
                   studiosites.co/contact-hub
                 </div>
@@ -94,7 +94,7 @@ export default function ZohoInspiredUI() {
           <div className="absolute -left-8 md:left-[2%] lg:left-[-4%] top-[15%] md:top-[20%] z-20 pointer-events-none md:pointer-events-auto">
              <motion.div 
                whileHover={{ rotate: -5, scale: 1.05 }}
-               className="relative p-6 bg-black border-[3px] border-cyan-400 rounded-[40px] rotate-[-15deg] shadow-[15px_15px_0px_0px_rgba(6,182,212,0.15)]"
+               className="relative p-6 bg-gray-700 border-[3px] border-gray-800 rounded-[40px] rotate-[-15deg] shadow-[15px_15px_0px_0px_rgba(6,182,212,0.15)]"
              >
                 <Phone size={70} className="text-white fill-white md:w-[80px] md:h-[80px]" />
                 <div className="mt-4 text-center border-t border-cyan-400/30 pt-4">

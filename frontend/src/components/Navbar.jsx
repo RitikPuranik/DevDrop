@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import LinkTransition from './TransitionLink';
-import img from '../assets/image.png'; // Placeholder image for the right sticker
+import img from '../assets/image.png'; 
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -12,10 +12,10 @@ const Navbar = () => {
     { to: "/template", label: "Websites", src: "https://images.unsplash.com/photo-1467232004584-a241de8bcf5d?q=80&w=869" },
     { to: "/about", label: "About Us", src: img },
     { to: "/review", label: "People's Love", src: "https://plus.unsplash.com/premium_photo-1739436074076-3c6d73478d59?q=80&w=812&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" },
+    { to: "/contact", label: "Make Your Own", src: "https://images.unsplash.com/photo-1703669020883-66f3e77ae929?q=80&w=435&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" },
     { to: "/contact", label: "Contact Us", src: "https://images.unsplash.com/photo-1703669020883-66f3e77ae929?q=80&w=435&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" },
   ];
 
-  // Faster Spylt-style ease (ExpoOut)
   const fastEase = [0.19, 1, 0.22, 1];
 
   return (
@@ -29,7 +29,6 @@ const Navbar = () => {
           onClick={() => setIsOpen(!isOpen)}
           className="w-12 h-12 flex flex-col justify-center items-center gap-1.5 cursor-pointer relative group"
         >
-          {/* Circular background for the "X" to ensure it's visible over images */}
           <AnimatePresence>
             {isOpen && (
               <motion.div 
@@ -53,6 +52,7 @@ const Navbar = () => {
           />
         </button>
       </nav>
+
       <AnimatePresence>
         {isOpen && (
           <motion.div
@@ -62,9 +62,11 @@ const Navbar = () => {
             transition={{ duration: 0.6, ease: fastEase }}
             className="fixed inset-0 z-[100] flex bg-[#e8e2d6] overflow-hidden" 
           >
-            {/* LEFT SIDE: Text Anchored to Bottom */}
-            <div className=" mt-10 w-1/2 h-full flex flex-col justify-end pb-24 px-24">
-              <div className="flex flex-col">
+            {/* LEFT SIDE: Content shifted up and centered */}
+            <div className=" mt-12  w-1/2 h-full flex flex-col justify-center text-center pb-12 px-24">
+              
+              {/* Menu Section */}
+              <div className="flex flex-col -ml-5 mb-5">
                 {menuItems.map((item, index) => (
                   <MenuItem 
                     key={index}
@@ -76,6 +78,23 @@ const Navbar = () => {
                   />
                 ))}
               </div>
+
+              {/* Login Button Section - Centered with Brown Color */}
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3, duration: 0.6, ease: fastEase }}
+                className="flex flex-col items-center -ml-5"
+              >
+                <LinkTransition 
+                  to="/login"
+                  onClick={() => setIsOpen(false)}
+                  className="px-12 py-4 bg-[#8b7355] text-white  rounded-full font-bold tracking-widest uppercase text-[10px] hover:bg-black transition-all duration-500 shadow-lg active:scale-95"
+                >
+                   Login
+                </LinkTransition>
+              </motion.div>
+
             </div>
 
             {/* RIGHT SIDE: FAST SIMULTANEOUS FADE */}
@@ -86,7 +105,7 @@ const Navbar = () => {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  transition={{ duration: 0.3, ease: "linear" }} // Faster fade
+                  transition={{ duration: 0.3, ease: "linear" }}
                   className="absolute inset-0 w-full h-full"
                 >
                   <img
@@ -117,7 +136,7 @@ const MenuItem = ({ label, to, onHover, close, isDimmed }) => (
     >
       <LinkTransition 
         to={to} 
-        className={`text-[6.5vw] leading-[1.1] font-serif italic   tracking-tighter block transition-opacity duration-300 cursor-pointer ${isDimmed ? 'opacity-50' : 'opacity-100'} text-black`}
+        className={`text-[5.0vw] leading-[1.1] font-serif italic tracking-tighter block transition-opacity duration-300 cursor-pointer ${isDimmed ? 'opacity-50' : 'opacity-100'} text-black`}
       >
         {label}
       </LinkTransition>
