@@ -1,0 +1,168 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@layer base {
+  * {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    box-sizing: border-box;
+  }
+  html, body, #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    font-family: 'Inter', sans-serif;
+    background: #0f0f13;
+    color: #e2e8f0;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply px-4 py-2 bg-amber-100 hover:bg-amber-100/90 text-black rounded-lg text-sm font-semibold transition-all duration-200 flex items-center gap-2 shrink-0;
+  }
+  .btn-ghost {
+    @apply px-3 py-2 text-zinc-400 hover:text-white hover:bg-white/5 rounded-lg text-sm transition-all duration-200 flex items-center gap-2 shrink-0;
+  }
+  .btn-danger {
+    @apply px-3 py-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg text-sm transition-all duration-200 flex items-center gap-2 shrink-0;
+  }
+  .input-field {
+    @apply w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-amber-300 transition-colors;
+  }
+  .label {
+    @apply text-xs text-zinc-400 font-medium uppercase tracking-wide mb-1 block;
+  }
+  .panel-divider {
+    @apply border-b border-zinc-800 my-3;
+  }
+  .section-title {
+    @apply text-xs font-bold text-zinc-500 uppercase tracking-widest px-4 py-2;
+  }
+}
+
+/* ── Scrollbar ─────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #15151a; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #bebea1; }
+
+/* ── Canvas element states ──────────────────────────────────── */
+.canvas-el {
+  position: relative;
+  transition: outline 0.1s ease;
+  cursor: default;
+}
+.canvas-el:hover:not(.preview-mode) {
+  outline: 2px dashed rgba(243, 237, 204, 0.4);
+  outline-offset: 1px;
+}
+.canvas-el.selected {
+  outline: 2px solid amber-100 !important;
+  outline-offset: 1px;
+}
+
+/* ── Drag handles ──────────────────────────────────────────── */
+.drag-handle { cursor: grab; }
+.drag-handle:active { cursor: grabbing; }
+
+/* ── Resize handle ─────────────────────────────────────────── */
+.resize-se {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  width: 10px; height: 10px;
+  background:amber-100/20;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  cursor: se-resize;
+  z-index: 50;
+}
+
+/* ── Grid overlay ──────────────────────────────────────────── */
+.grid-bg {
+  background-image: radial-gradient(circle, #2a2a38 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* ── Block hover tooltip ────────────────────────────────────── */
+.block-type-badge {
+  position: absolute;
+  top: -22px;
+  left: 0;
+  background: #f3db73;
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 60;
+}
+
+/* ── Animations ─────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-in { animation: fadeIn 0.2s ease-out; }
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+.ai-shimmer {
+  background: linear-gradient(90deg, #1a1a22 25%, #2d2d3e 50%, #1a1a22 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* ── Left panel block items ────────────────────────────────── */
+.block-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  color: #94a3b8;
+  font-size: 12.5px;
+  font-weight: 500;
+  user-select: none;
+}
+.block-item:hover {
+  background: rgba(255,255,255,0.06);
+  color: #fff;
+}
+.block-item:hover .block-add-icon { opacity: 1; }
+.block-add-icon { opacity: 0; transition: opacity 0.15s; margin-left: auto; color: #6366f1; }
+
+/* ── Canvas element controls ───────────────────────────────── */
+.el-controls {
+  position: absolute;
+  top: -28px;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background:amber-100/20;
+  border-radius: 4px 4px 0 0;
+  padding: 2px 4px;
+  z-index: 60;
+}
+.el-controls button {
+  padding: 2px 4px;
+  color: rgba(255,255,255,0.8);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.1s;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+}
+.el-controls button:hover { background: rgba(255,255,255,0.15); color: #fff; }
