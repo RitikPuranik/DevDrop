@@ -6,13 +6,11 @@ import IntroLoader from './components/Intro_Loader';
 import Loader from './components/Loading_Screen';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
-
 import Home from './pages/Home';
 import About from './pages/AboutUs';
 import Template from './pages/Templates';
 import ContactUs from './pages/ContactUs';
 import ReviewPage from './pages/Review';
-import MakeYourOwn from './pages/webcraft/src/App.jsx';
 
 const VIDEO_SRC = '/dewdrop.s3.mp4';
 
@@ -113,7 +111,7 @@ function AppContent() {
               <Route path="/review" element={<ReviewPage />} />
 
               {/* Builder */}
-              <Route path="/website" element={<MakeYourOwn />} />
+              {/* <Route path="/website" element={<MakeYourOwn />} /> */}
 
             </Routes>
 
