@@ -189,7 +189,7 @@ export default function About() {
               transition={{ delay: 1.1, duration: 0.7 }}
               style={{
                 display: 'block', fontSize: 10, letterSpacing: '0.5em',
-                textTransform: 'uppercase', color: '#f97316', marginBottom: 20, opacity: 0.85,
+                textTransform: 'uppercase', color: '#8b7355', marginBottom: 20, opacity: 0.85,
               }}
             >
               Our Story
@@ -206,7 +206,7 @@ export default function About() {
               }}
             >
               About<br />
-              <span style={{ color: '#f97316' }}>Us</span>
+              <span style={{ color: '#8b7355' }}>Us</span>
             </motion.h1>
 
             <motion.div
@@ -244,7 +244,7 @@ export default function About() {
             fontFamily: "'Playfair Display', serif", fontStyle: 'italic',
             fontSize: '14vw', lineHeight: 0.85, margin: 0,
           }}>
-            Since <span style={{ color: '#f97316' }}>'26</span>
+            Since <span style={{ color: '#8b7355' }}>'26</span>
           </h1>
         </motion.div>
 

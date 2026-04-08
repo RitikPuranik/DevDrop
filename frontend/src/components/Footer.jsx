@@ -25,7 +25,7 @@ const DevDropCompactFooter = () => {
         </div>
         
         <div className="mt-4 md:mt-0 flex items-center gap-3">
-          <div className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+          <div className="w-1.5 h-1.5 rounded-full bg-[#e8e2d6]  animate-pulse" />
           <span className="text-[10px] font-mono text-[#e8e2d6]/60 uppercase tracking-widest">System Active / {time} IST</span>
         </div>
       </div>
@@ -35,7 +35,7 @@ const DevDropCompactFooter = () => {
         
         {/* Column 1: Directory */}
         <div className="space-y-4">
-          <h5 className="text-[9px] font-mono text-orange-500 uppercase tracking-[0.3em]">Navigation</h5>
+          <h5 className="text-[12px] font-mono text-[#8b7355] uppercase tracking-[0.3em]">Navigation</h5>
           <ul className="space-y-2">
             {['Templates', 'Archive', 'Components'].map(link => (
               <li key={link} className="text-xs font-serif italic text-[#e8e2d6]/40 hover:text-[#e8e2d6] cursor-pointer transition-colors">
@@ -47,7 +47,7 @@ const DevDropCompactFooter = () => {
 
         {/* Column 2: Studio */}
         <div className="space-y-4">
-          <h5 className="text-[9px] font-mono text-orange-500 uppercase tracking-[0.3em]">Studio</h5>
+          <h5 className="text-[12px] font-mono text-[#8b7355] uppercase tracking-[0.3em]">Studio</h5>
           <ul className="space-y-2">
             {['Process', 'Licensing', 'Contact'].map(link => (
               <li key={link} className="text-xs font-serif italic text-[#e8e2d6]/40 hover:text-[#e8e2d6] cursor-pointer transition-colors">
@@ -59,7 +59,7 @@ const DevDropCompactFooter = () => {
 
         {/* Column 3: Social */}
         <div className="space-y-4">
-          <h5 className="text-[9px] font-mono text-orange-500 uppercase tracking-[0.3em]">Social</h5>
+          <h5 className="text-[12px] font-mono text-[#8b7355] uppercase tracking-[0.3em]">Social</h5>
           <ul className="space-y-2">
             {['Instagram', 'Dribbble', 'X.com'].map(link => (
               <li key={link} className="text-xs font-serif italic text-[#e8e2d6]/40 hover:text-[#e8e2d6] cursor-pointer transition-colors">

@@ -25,7 +25,7 @@ export default function SmoothEliteGallery() {
     <div className="min-h-screen bg-[#080808] text-white selection:bg-orange-500 font-sans antialiased">
       
       {/* --- MAIN GRID --- */}
-      <main className="max-w-6xl mx-auto px-7 py-20">
+      <main className="max-w-7xl mx-auto px-7 py-20">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {TEMPLATES.map((item) => (
             <motion.div
@@ -33,20 +33,20 @@ export default function SmoothEliteGallery() {
               key={item.id}
               onClick={() => setSelectedId(item)}
               transition={transition}
-              className=" group cursor-pointer bg-[#111] rounded-[40px] p-4 border border-white/5 hover:border-orange-500/30 transition-colors will-change-transform"
+              className="  group cursor-pointer bg-[#111] rounded-[40px] p-4 border border-white/5 hover:border-[#8b7355] transition-colors will-change-transform"
             >
               <motion.div 
                 layoutId={`image-box-${item.id}`}
                 transition={transition}
                 style={{ backgroundColor: item.color }}
-                className="aspect-[3/4] rounded-[32px] mb-6 relative overflow-hidden flex items-center justify-center border border-white/5"
+                className="aspect-[12/11] rounded-[32px] mb-6 relative overflow-hidden flex items-center justify-center border border-white/5"
               >
-                <div className="w-24 h-24 bg-white/5 blur-3xl rounded-full" />
+                <div className="w-26 h-24 bg-white/5 blur-3xl rounded-full" />
               </motion.div>
 
               <div className="px-2">
                 <motion.h3 layoutId={`title-${item.id}`} transition={transition} className="font-black text-xl tracking-tight">{item.title}</motion.h3>
-                <motion.p layoutId={`price-${item.id}`} transition={transition} className="text-orange-500 font-bold text-sm tracking-widest">{item.price}</motion.p>
+                <motion.p layoutId={`price-${item.id}`} transition={transition} className="text-[#8b7355] font-bold text-sm tracking-widest">{item.price}</motion.p>
               </div>
             </motion.div>
           ))}

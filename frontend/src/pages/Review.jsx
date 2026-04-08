@@ -129,11 +129,11 @@ function GallerySection() {
 
   const headX  = useTransform(s, [0.22, 0.68], [0, -320]);
   const headOp = useTransform(s, [0.22, 0.60], [1, 0]);
-  const t      = useTransform(s, [0.24, 0.90], [0, 1]);
+  const t      = useTransform(s, [0.24, 0.80], [0, 1]);
   const hintOp = useTransform(s, [0, 0.08], [1, 0]);
 
   return (
-    <div ref={ref} style={{ height: '700vh' }} className="relative bg-black">
+    <div ref={ref} style={{ height: '300vh' }} className="relative bg-black">
       <div className="sticky top-0 w-full h-screen overflow-hidden bg-black">
         <motion.div
           style={{ x: headX, opacity: headOp }}
@@ -324,8 +324,7 @@ function MotionCard({ card, t, fanX, fanY, fanScale, fanRotate, gridX, gridY, ca
           width: '100%',
           height: '100%',
           objectFit: 'cover',
-          mixBlendMode: 'multiply',
-          opacity: 0.88,
+          
         }}
       />
 
