@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
+import { Toaster } from "sonner";
+import "react-toastify/dist/ReactToastify.css";
 
 import IntroLoader from './components/Intro_Loader';
 import Loader from './components/Loading_Screen';
@@ -114,7 +116,18 @@ function AppContent() {
               {/* <Route path="/website" element={<MakeYourOwn />} /> */}
 
             </Routes>
-
+            <Toaster
+  position="top-right"
+  richColors
+  toastOptions={{
+    style: {
+      backdropFilter: "blur(10px)",
+      background: "rgba(30,30,30,0.8)",
+      color: "#fff",
+      border: "1px solid rgba(255,255,255,0.1)"
+    }
+  }}
+/>
           </main>
 
           {/* Hide Footer on Builder */}

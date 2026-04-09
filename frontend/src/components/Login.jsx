@@ -1,34 +1,44 @@
 import React, { useState, useEffect } from "react";
-import { Mail, Lock, User, Phone, X, Github, Chrome, Linkedin, ArrowRight } from "lucide-react";
+import {
+  Mail,
+  Lock,
+  User,
+  Phone,
+  X,
+  Github,
+  Chrome,
+  Linkedin,
+  ArrowRight,
+} from "lucide-react";
 import { authAPI } from "../api/auth";
-
+import { toast } from "sonner";
 export default function AuthModal({ isOpen, onClose }) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
 
   const [loginData, setLoginData] = useState({
     email: "",
-    password: ""
+    password: "",
   });
 
   const [signupData, setSignupData] = useState({
     name: "",
     phone: "",
     email: "",
-    password: ""
+    password: "",
   });
 
   const handleLoginChange = (e) => {
     setLoginData({
       ...loginData,
-      [e.target.name]: e.target.value
+      [e.target.name]: e.target.value,
     });
   };
 
   const handleSignupChange = (e) => {
     setSignupData({
       ...signupData,
-      [e.target.name]: e.target.value
+      [e.target.name]: e.target.value,
     });
   };
 
@@ -37,14 +47,19 @@ export default function AuthModal({ isOpen, onClose }) {
 
     try {
       const res = await authAPI.login(loginData);
-      console.log(res.data);
 
-      alert("Login successful");
+      console.log("LOGIN RESPONSE:", res.data);
+
+      // store token
+      localStorage.setItem("token", res.data.data.token);
+
+      toast.success("Login successful!");
+
       onClose();
-
     } catch (err) {
-      console.error(err);
-      alert(err.response?.data?.message || "Login failed");
+      console.log("LOGIN ERROR:", err.response?.data);
+
+      toast.success(err.response?.data?.message || "Login failed");
     }
   };
 
@@ -52,15 +67,19 @@ export default function AuthModal({ isOpen, onClose }) {
     e.preventDefault();
 
     try {
+      console.log("Signup data:", signupData);
+
       const res = await authAPI.register(signupData);
-      console.log(res.data);
 
-      alert("Account created successfully");
+      console.log("SIGNUP RESPONSE:", res.data);
+
+      toast.success("Account created successfully");
+
       setIsSignUp(false);
-
     } catch (err) {
-      console.error(err);
-      alert(err.response?.data?.message || "Signup Failed");
+      console.log("SIGNUP ERROR:", err.response?.data);
+
+      toast.success(err.response?.data?.message || "Signup Failed");
     }
   };
 
@@ -69,7 +88,7 @@ export default function AuthModal({ isOpen, onClose }) {
   }, [isOpen]);
 
   if (!shouldRender) return null;
-console.log("Signup data:", signupData);
+  console.log("Signup data:", signupData);
   return (
     <div
       className={`fixed inset-0 z-[9999] flex items-center justify-center p-4 transition-all duration-500 ${
@@ -223,7 +242,6 @@ console.log("Signup data:", signupData);
             ${isSignUp ? "translate-x-1/2" : "translate-x-0"}`}
           >
             <div className="flex h-full w-full text-[#F5F2ED]">
-
               <div className="flex flex-col items-center justify-center w-1/2 px-12 text-center">
                 <h2 className="text-3xl font-serif font-bold mb-4">
                   One of us?
@@ -257,7 +275,6 @@ console.log("Signup data:", signupData);
                   Sign Up
                 </button>
               </div>
-
             </div>
           </div>
         </div>

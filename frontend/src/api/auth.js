@@ -6,13 +6,20 @@ const API = axios.create({
 
 export const authAPI = {
 
+  // LOGIN
   login: (data) =>
     API.post("/login", {
       emailOrPhone: data.email,
       password: data.password
     }),
 
+  // SIGNUP
   register: (data) =>
-    API.post("/signup", data)
+    API.post("/signup", {
+      name: data.name,
+      phone: data.phone,
+      email: data.email,
+      password: data.password
+    })
 
 };
