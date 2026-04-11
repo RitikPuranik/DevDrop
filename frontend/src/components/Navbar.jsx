@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import LinkTransition from './TransitionLink';
 import AuthModal from './Login'; // Make sure to import the Modal component
 import img from '../assets/image.png'; 
-
+import { User, LogOut } from "lucide-react";
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [hoveredIndex, setHoveredIndex] = useState(0);
@@ -25,6 +25,16 @@ const Navbar = () => {
     setIsOpen(false);
     setShowAuthModal(true);
   };
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+React.useEffect(() => {
+  const token = localStorage.getItem("token");
+  setIsLoggedIn(!!token);
+}, []);
+const handleLogout = () => {
+  localStorage.removeItem("token");
+  setIsLoggedIn(false);
+};
 
   return (
     <>
@@ -95,12 +105,31 @@ const Navbar = () => {
                 transition={{ delay: 0.3, duration: 0.6, ease: fastEase }}
                 className="flex flex-col items-center -ml-5"
               >
-                <button 
-                  onClick={openLogin}
-                  className="px-12 py-4 bg-[#8b7355] text-white rounded-full font-bold tracking-widest uppercase text-[10px] hover:bg-black transition-all duration-500 shadow-lg active:scale-95"
-                >
-                   Login
-                </button>
+               {!isLoggedIn ? (
+  <button 
+    onClick={openLogin}
+    className="px-12 py-4 bg-[#8b7355] text-white rounded-full font-bold tracking-widest uppercase text-[10px] hover:bg-black transition-all duration-500 shadow-lg active:scale-95"
+  >
+    Login
+  </button>
+) : (
+  <div className="flex items-center gap-6 justify-center">
+    
+    <button className="flex items-center gap-2 px-6 py-3 bg-[#8b7355] text-white rounded-full text-[10px] uppercase tracking-widest hover:bg-black transition-all duration-500">
+      <User size={16} />
+      Profile
+    </button>
+
+    <button 
+      onClick={handleLogout}
+      className="flex items-center gap-2 px-6 py-3 bg-black text-white rounded-full text-[10px] uppercase tracking-widest hover:bg-[#8b7355] transition-all duration-500"
+    >
+      <LogOut size={16} />
+      Logout
+    </button>
+
+  </div>
+)}
               </motion.div>
             </div>
 
