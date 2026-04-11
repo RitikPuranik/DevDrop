@@ -7,7 +7,7 @@ const payoutSchema = new mongoose.Schema({
 
   amount: { type: Number, required: true, min: 0 },
 
-  // Bank details snapshot at time of payout
+  // Snapshot of seller bank details at time payout was created
   bankDetails: {
     accountHolderName: String,
     accountNumber: String,
@@ -23,16 +23,14 @@ const payoutSchema = new mongoose.Schema({
     index: true,
   },
 
-  // Cashfree payout identifiers
-  cashfreeTransferId:   String, // our unique ID sent to Cashfree
-  cashfreeReferenceId:  String, // Cashfree's reference ID
-  isAutomatic:          { type: Boolean, default: true },
+  // All payouts are manual — admin processes them
+  isAutomatic: { type: Boolean, default: false },
 
-  // Transaction details
-  utr:             String, // Unique Transaction Reference from bank
+  // Transaction details filled in by admin when processing
+  utr:             String, // Unique Transaction Reference from bank transfer
   transactionDate: Date,
 
-  // Admin
+  // Admin who processed the payout
   processedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   processedAt: Date,
   adminNotes:  String,
@@ -45,6 +43,5 @@ const payoutSchema = new mongoose.Schema({
 payoutSchema.index({ sellerId: 1, status: 1 });
 payoutSchema.index({ status: 1, createdAt: -1 });
 payoutSchema.index({ purchaseId: 1 });
-payoutSchema.index({ cashfreeTransferId: 1 }, { sparse: true });
 
 module.exports = mongoose.model('Payout', payoutSchema);

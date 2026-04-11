@@ -4,14 +4,14 @@ const Payment  = require('./payment.model');
 const Payout   = require('../payout/payout.model');
 const User     = require('../user/user.model');
 const BankDetails = require('../user/bankDetails.model');
-const cashfreeService = require('../../services/cashfree.service');
+const razorpayService = require('../../services/razorpay.service');
 const { calculatePricing } = require('../../shared/utils/helpers');
 const { WEBSITE_STATUS, PAYMENT_STATUS, PAYOUT_STATUS } = require('../../shared/utils/constants');
 const emailService = require('../../services/email.service');
 
 /**
  * @route  POST /api/payment/create-order
- * @desc   Create Cashfree order for paid/exclusive website
+ * @desc   Create Razorpay order for paid/exclusive website
  * @access Private (Verified users only)
  */
 const createOrder = async (req, res) => {
@@ -40,36 +40,20 @@ const createOrder = async (req, res) => {
 
     const pricing = calculatePricing(website.price);
 
-    // Cashfree order ID must be unique — use timestamp + websiteId suffix
-    const orderId = `order_${Date.now()}_${websiteId.toString().slice(-6)}`;
+    // Internal receipt ID — unique per order attempt
+    const receiptId = `rcpt_${Date.now()}_${websiteId.toString().slice(-6)}`;
 
-    const returnUrl = `${process.env.FRONTEND_URL}/payment/callback?order_id={order_id}`;
-    const notifyUrl = `${process.env.BACKEND_URL || process.env.FRONTEND_URL}/api/payment/webhook`;
-
-    const cfOrder = await cashfreeService.createOrder(
-      orderId,
-      pricing.totalPaid,
-      'INR',
-      {
-        id: buyer._id.toString(),
-        email: buyer.email,
-        phone: buyer.phone || '9999999999',
-        name: buyer.name,
-      },
-      returnUrl,
-      notifyUrl
-    );
+    const rzpOrder = await razorpayService.createOrder(receiptId, pricing.totalPaid, 'INR');
 
     // Save payment record
     const payment = new Payment({
       websiteId,
       buyerId: buyer._id,
-      cashfreeOrderId: orderId,
-      cashfreeSessionId: cfOrder.payment_session_id,
+      razorpayOrderId: rzpOrder.id,
       amount: pricing.totalPaid,
       currency: 'INR',
       status: 'created',
-      paymentMethod: 'cashfree',
+      paymentMethod: 'razorpay',
     });
     await payment.save();
 
@@ -77,12 +61,18 @@ const createOrder = async (req, res) => {
       success: true,
       message: 'Order created successfully',
       data: {
-        orderId,
-        paymentSessionId: cfOrder.payment_session_id, // used by Cashfree JS SDK on frontend
+        razorpayOrderId: rzpOrder.id,
+        razorpayKeyId: process.env.RAZORPAY_KEY_ID,
         amount: pricing.totalPaid,
+        amountInPaise: rzpOrder.amount,
         currency: 'INR',
         breakdown: pricing,
         websiteDetails: { id: website._id, name: website.name, category: website.category },
+        prefill: {
+          name: buyer.name,
+          email: buyer.email,
+          contact: buyer.phone || '',
+        },
       },
     });
   } catch (error) {
@@ -93,32 +83,40 @@ const createOrder = async (req, res) => {
 
 /**
  * @route  POST /api/payment/verify
- * @desc   Verify payment after frontend redirect + auto pay seller
+ * @desc   Verify Razorpay payment signature after checkout.
+ *         Creates a PENDING payout record — admin will pay seller manually.
  * @access Private
  */
 const verifyPayment = async (req, res) => {
   try {
-    const { orderId } = req.body;
-    if (!orderId) return res.status(400).json({ success: false, message: 'orderId is required' });
+    const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
 
-    // Fetch order status from Cashfree
-    const cfOrder = await cashfreeService.fetchOrder(orderId);
-
-    if (cfOrder.order_status !== 'PAID') {
+    if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
       return res.status(400).json({
         success: false,
-        message: `Payment not completed. Status: ${cfOrder.order_status}`,
+        message: 'razorpayOrderId, razorpayPaymentId, and razorpaySignature are all required',
       });
     }
 
-    // Get payment record
-    const paymentRecord = await Payment.findOne({ cashfreeOrderId: orderId });
+    // Verify signature authenticity
+    const isValid = razorpayService.verifyPaymentSignature(razorpayOrderId, razorpayPaymentId, razorpaySignature);
+    if (!isValid) {
+      return res.status(400).json({ success: false, message: 'Invalid payment signature — possible tampering detected' });
+    }
+
+    // Fetch payment record
+    const paymentRecord = await Payment.findOne({ razorpayOrderId });
     if (!paymentRecord) return res.status(404).json({ success: false, message: 'Payment record not found' });
     if (paymentRecord.status === 'succeeded') return res.status(400).json({ success: false, message: 'Payment already processed' });
 
-    // Get payment details from Cashfree
-    const payments = await cashfreeService.fetchPaymentsByOrderId(orderId);
-    const successPayment = payments.find(p => p.payment_status === 'SUCCESS');
+    // Fetch payment details from Razorpay to double-check status
+    const rzpPayment = await razorpayService.fetchPayment(razorpayPaymentId);
+    if (rzpPayment.status !== 'captured' && rzpPayment.status !== 'authorized') {
+      return res.status(400).json({
+        success: false,
+        message: `Payment not successful. Razorpay status: ${rzpPayment.status}`,
+      });
+    }
 
     const website = await Website.findById(paymentRecord.websiteId).populate('sellerId');
     if (!website) return res.status(404).json({ success: false, message: 'Website not found' });
@@ -127,8 +125,9 @@ const verifyPayment = async (req, res) => {
 
     // Update payment record
     paymentRecord.status = 'succeeded';
-    paymentRecord.cashfreePaymentId = successPayment?.cf_payment_id?.toString();
-    paymentRecord.gatewayResponse = successPayment;
+    paymentRecord.razorpayPaymentId = razorpayPaymentId;
+    paymentRecord.razorpaySignature = razorpaySignature;
+    paymentRecord.gatewayResponse = rzpPayment;
     await paymentRecord.save();
 
     // Create purchase record
@@ -141,8 +140,8 @@ const verifyPayment = async (req, res) => {
       platformFee: pricing.platformFee,
       tax: pricing.tax,
       totalPaid: pricing.totalPaid,
-      cashfreeOrderId: orderId,
-      cashfreePaymentId: successPayment?.cf_payment_id?.toString(),
+      razorpayOrderId,
+      razorpayPaymentId,
       paymentStatus: PAYMENT_STATUS.COMPLETED,
       purchaseDate: new Date(),
     });
@@ -151,127 +150,36 @@ const verifyPayment = async (req, res) => {
     paymentRecord.purchaseId = purchase._id;
     await paymentRecord.save();
 
-    // ==================== AUTO PAYOUT TO SELLER ====================
+    // ========== MANUAL PAYOUT — Create pending record for admin to process ==========
     const sellerBankDetails = await BankDetails.findOne({ userId: website.sellerId._id });
-    let payoutStatus  = 'pending';
-    let payoutMessage = '';
-    let payoutUtr     = null;
-    let payoutId      = null;
 
-    if (!sellerBankDetails) {
-      // No bank details — create pending payout, alert admin
-      const payoutRecord = new Payout({
-        sellerId: website.sellerId._id, purchaseId: purchase._id, websiteId: website._id,
-        amount: pricing.sellerPrice, status: PAYOUT_STATUS.PENDING,
-        failureReason: 'No bank details provided', isAutomatic: false,
-      });
-      await payoutRecord.save();
-      payoutId = payoutRecord._id;
-      payoutMessage = 'Seller bank details missing — admin will handle';
+    const payoutRecord = new Payout({
+      sellerId: website.sellerId._id,
+      purchaseId: purchase._id,
+      websiteId: website._id,
+      amount: pricing.sellerPrice,
+      bankDetails: sellerBankDetails ? {
+        accountHolderName: sellerBankDetails.accountHolderName,
+        accountNumber: sellerBankDetails.accountNumber,
+        ifscCode: sellerBankDetails.ifscCode,
+        bankName: sellerBankDetails.bankName,
+        upiId: sellerBankDetails.upiId,
+      } : null,
+      status: PAYOUT_STATUS.PENDING,
+      isAutomatic: false,
+      failureReason: sellerBankDetails ? null : 'Seller has no bank details on file',
+    });
+    await payoutRecord.save();
 
+    // Notify admin of pending payout
+    try {
       await emailService.sendAdminAlert({
-        subject: 'Seller Missing Bank Details',
-        message: `Seller ${website.sellerId.email} has no bank details.`,
-        details: `Website: ${website.name}\nAmount: ₹${pricing.sellerPrice}\nPurchase ID: ${purchase._id}`,
+        subject: `New Payout Pending — ${website.name}`,
+        message: `A new purchase was made. Please process the seller payout manually.`,
+        details: `Seller: ${website.sellerId.email}\nWebsite: ${website.name}\nAmount: ₹${pricing.sellerPrice}\nPurchase ID: ${purchase._id}\nPayout ID: ${payoutRecord._id}${!sellerBankDetails ? '\n\n⚠️ WARNING: Seller has no bank details saved!' : ''}`,
       });
-
-    } else {
-      try {
-        // Cashfree beneficiary ID — create once per seller, reuse forever
-        let beneficiaryId = sellerBankDetails.cashfreeBeneficiaryId;
-
-        if (!beneficiaryId) {
-          beneficiaryId = `bene_${website.sellerId._id.toString()}`;
-
-          // Check if already exists on Cashfree side (handles server restart edge case)
-          const existing = await cashfreeService.getBeneficiary(beneficiaryId);
-
-          if (!existing) {
-            await cashfreeService.addBeneficiary({
-              beneficiaryId,
-              name:  sellerBankDetails.accountHolderName,
-              email: website.sellerId.email,
-              phone: website.sellerId.phone || '9999999999',
-              bankAccount: sellerBankDetails.accountNumber,
-              ifsc: sellerBankDetails.ifscCode,
-              upiId: sellerBankDetails.defaultPayoutMode === 'upi' ? sellerBankDetails.upiId : null,
-            });
-          }
-
-          sellerBankDetails.cashfreeBeneficiaryId = beneficiaryId;
-          sellerBankDetails.cashfreeStatus = 'active';
-          await sellerBankDetails.save();
-          console.log(`✅ Cashfree beneficiary created: ${beneficiaryId}`);
-        }
-
-        // Unique transfer ID per purchase
-        const transferId = `txn_${purchase._id.toString()}`;
-
-        const payoutRecord = new Payout({
-          sellerId: website.sellerId._id, purchaseId: purchase._id, websiteId: website._id,
-          amount: pricing.sellerPrice,
-          bankDetails: {
-            accountHolderName: sellerBankDetails.accountHolderName,
-            accountNumber: sellerBankDetails.accountNumber,
-            ifscCode: sellerBankDetails.ifscCode,
-            bankName: sellerBankDetails.bankName,
-            upiId: sellerBankDetails.upiId,
-          },
-          status: 'processing',
-          cashfreeTransferId: transferId,
-          isAutomatic: true,
-        });
-        await payoutRecord.save();
-        payoutId = payoutRecord._id;
-
-        // 💰 Send money to seller
-        const transfer = await cashfreeService.createPayout({
-          transferId,
-          beneficiaryId,
-          amount: pricing.sellerPrice,
-          remarks: `Payment for ${website.name}`,
-          mode: sellerBankDetails.defaultPayoutMode === 'upi' ? 'upi' : 'banktransfer',
-        });
-
-        console.log(`✅ Cashfree payout initiated: ${transferId}`);
-
-        payoutRecord.cashfreeReferenceId = transfer?.data?.referenceId;
-        payoutRecord.status = PAYOUT_STATUS.COMPLETED;
-        payoutRecord.utr = transfer?.data?.utr || `CF_${Date.now()}`;
-        payoutRecord.transactionDate = new Date();
-        payoutRecord.processedAt = new Date();
-        await payoutRecord.save();
-
-        payoutUtr = payoutRecord.utr;
-        payoutStatus = 'completed';
-        payoutMessage = `Payment sent! UTR: ${payoutRecord.utr}`;
-
-        await emailService.sendPayoutNotification(website.sellerId, {
-          amount: pricing.sellerPrice, utr: payoutRecord.utr,
-          status: 'completed', bankName: sellerBankDetails.bankName,
-          websiteName: website.name,
-        });
-
-      } catch (payoutError) {
-        console.error('❌ Payout failed:', payoutError);
-
-        await Payout.findOneAndUpdate(
-          { purchaseId: purchase._id },
-          { status: PAYOUT_STATUS.FAILED, failureReason: payoutError.message },
-          { upsert: true }
-        );
-
-        payoutStatus  = 'failed';
-        payoutMessage = 'Auto payout failed — admin will process manually';
-
-        await emailService.sendAdminAlert({
-          subject: '🚨 URGENT: Automatic Payout Failed',
-          message: `Failed to pay seller ${website.sellerId.email} ₹${pricing.sellerPrice}`,
-          details: `Seller: ${website.sellerId.email}\nWebsite: ${website.name}\nAmount: ₹${pricing.sellerPrice}\nError: ${payoutError.message}\n\nAction Required: Process manually in admin dashboard.`,
-        });
-      }
-    }
-    // ==================== END PAYOUT ====================
+    } catch (e) { console.error('Admin alert email error:', e); }
+    // ========== END PAYOUT HANDLING ==========
 
     // Mark exclusive website as sold
     if (website.category === 'exclusive') {
@@ -286,19 +194,20 @@ const verifyPayment = async (req, res) => {
     try {
       await emailService.sendPurchaseConfirmation(buyer, website, purchase);
       await emailService.sendSellerNotification(website.sellerId, website, purchase);
-    } catch (e) { console.error('Email error:', e); }
+    } catch (e) { console.error('Confirmation email error:', e); }
 
     res.json({
       success: true,
-      message: payoutStatus === 'completed'
-        ? 'Payment verified! Seller paid automatically. 💰'
-        : payoutStatus === 'failed'
-          ? 'Payment verified. Payout failed — admin will handle.'
-          : 'Payment verified. Seller payout is pending.',
+      message: 'Payment verified successfully! The seller will be paid by the admin shortly.',
       data: {
         purchase,
         website: { id: website._id, name: website.name, category: website.category },
-        payout:  { status: payoutStatus, amount: pricing.sellerPrice, message: payoutMessage, id: payoutId, utr: payoutUtr },
+        payout: {
+          status: 'pending',
+          amount: pricing.sellerPrice,
+          message: 'Payout will be processed by admin',
+          id: payoutRecord._id,
+        },
         breakdown: pricing,
       },
     });
@@ -311,63 +220,66 @@ const verifyPayment = async (req, res) => {
 
 /**
  * @route  POST /api/payment/webhook
- * @desc   Handle Cashfree webhooks
+ * @desc   Handle Razorpay webhooks (payment.captured, payment.failed, refund.created)
  * @access Public
  */
 const handleWebhook = async (req, res) => {
   try {
-    const signature = req.headers['x-webhook-signature'];
-    const timestamp = req.headers['x-webhook-timestamp'];
+    const razorpaySignature = req.headers['x-razorpay-signature'];
 
-    if (signature && timestamp) {
+    if (razorpaySignature && process.env.RAZORPAY_WEBHOOK_SECRET) {
       const rawBody = Buffer.isBuffer(req.body) ? req.body.toString() : JSON.stringify(req.body);
-      const isValid = cashfreeService.verifyWebhookSignature(rawBody, signature, timestamp);
+      const isValid = razorpayService.verifyWebhookSignature(rawBody, razorpaySignature);
       if (!isValid) return res.status(400).json({ success: false, message: 'Invalid webhook signature' });
     }
 
     const event = Buffer.isBuffer(req.body) ? JSON.parse(req.body.toString()) : req.body;
-    const eventType = event?.type;
-    console.log('✅ Cashfree webhook received:', eventType);
+    const eventType = event?.event;
+    console.log('✅ Razorpay webhook received:', eventType);
 
     switch (eventType) {
-      case 'PAYMENT_SUCCESS_WEBHOOK': {
-        const data = event.data;
-        const orderId = data?.order?.order_id;
+      case 'payment.captured': {
+        const payment = event.payload?.payment?.entity;
+        const orderId = payment?.order_id;
         if (orderId) {
           await Payment.findOneAndUpdate(
-            { cashfreeOrderId: orderId },
-            { status: 'succeeded', cashfreePaymentId: data?.payment?.cf_payment_id?.toString(), gatewayResponse: data }
+            { razorpayOrderId: orderId },
+            { status: 'succeeded', razorpayPaymentId: payment?.id, gatewayResponse: payment }
           );
-          console.log(`💰 Payment succeeded for order: ${orderId}`);
+          console.log(`💰 Payment captured for order: ${orderId}`);
         }
         break;
       }
-      case 'PAYMENT_FAILED_WEBHOOK': {
-        const data = event.data;
-        const orderId = data?.order?.order_id;
+      case 'payment.failed': {
+        const payment = event.payload?.payment?.entity;
+        const orderId = payment?.order_id;
         if (orderId) {
           await Payment.findOneAndUpdate(
-            { cashfreeOrderId: orderId },
-            { status: 'failed', failureReason: data?.payment?.payment_message, gatewayResponse: data }
+            { razorpayOrderId: orderId },
+            { status: 'failed', failureReason: payment?.error_description, failureCode: payment?.error_code, gatewayResponse: payment }
           );
           console.log(`❌ Payment failed for order: ${orderId}`);
         }
         break;
       }
-      case 'REFUND_STATUS_WEBHOOK': {
-        const data = event.data;
-        const orderId = data?.order?.order_id;
-        if (orderId) {
+      case 'refund.created': {
+        const refund = event.payload?.refund?.entity;
+        const paymentId = refund?.payment_id;
+        if (paymentId) {
           await Payment.findOneAndUpdate(
-            { cashfreeOrderId: orderId },
-            { status: 'refunded', refundId: data?.refund?.refund_id, refundAmount: data?.refund?.refund_amount, refundedAt: new Date() }
+            { razorpayPaymentId: paymentId },
+            { status: 'refunded', refundId: refund?.id, refundAmount: refund?.amount / 100, refundedAt: new Date() }
           );
-          await Purchase.findOneAndUpdate({ cashfreeOrderId: orderId }, { paymentStatus: 'refunded' });
+          await Purchase.findOneAndUpdate(
+            { razorpayPaymentId: paymentId },
+            { paymentStatus: 'refunded' }
+          );
+          console.log(`↩️  Refund created for payment: ${paymentId}`);
         }
         break;
       }
       default:
-        console.log(`ℹ️  Unhandled webhook type: ${eventType}`);
+        console.log(`ℹ️  Unhandled webhook event: ${eventType}`);
     }
 
     res.json({ received: true });
@@ -384,18 +296,25 @@ const handleWebhook = async (req, res) => {
  */
 const createRefund = async (req, res) => {
   try {
-    const { orderId, amount, reason } = req.body;
+    const { paymentId, amount, reason } = req.body;
 
-    const paymentRecord = await Payment.findOne({ cashfreeOrderId: orderId });
+    const paymentRecord = await Payment.findOne({
+      $or: [{ _id: paymentId }, { razorpayPaymentId: paymentId }],
+    });
     if (!paymentRecord) return res.status(404).json({ success: false, message: 'Payment not found' });
     if (paymentRecord.status !== 'succeeded') return res.status(400).json({ success: false, message: 'Can only refund succeeded payments' });
+    if (!paymentRecord.razorpayPaymentId) return res.status(400).json({ success: false, message: 'Razorpay payment ID missing — cannot process refund' });
 
-    const refundId = `refund_${Date.now()}`;
-    const refund = await cashfreeService.createRefund(orderId, refundId, amount || paymentRecord.amount, reason);
+    const refundAmount = amount || paymentRecord.amount;
+    const refund = await razorpayService.createRefund(
+      paymentRecord.razorpayPaymentId,
+      refundAmount,
+      { reason: reason || 'Refund requested' }
+    );
 
     paymentRecord.status = 'refunded';
-    paymentRecord.refundId = refundId;
-    paymentRecord.refundAmount = amount || paymentRecord.amount;
+    paymentRecord.refundId = refund.id;
+    paymentRecord.refundAmount = refundAmount;
     paymentRecord.refundReason = reason;
     paymentRecord.refundedAt = new Date();
     await paymentRecord.save();

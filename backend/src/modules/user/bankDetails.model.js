@@ -24,23 +24,13 @@ const bankDetailsSchema = new mongoose.Schema({
     match: [/^[\w.-]+@[\w.-]+$/, 'Invalid UPI ID'],
   },
 
-  // Cashfree beneficiary ID (generated once, reused for all payouts)
-  cashfreeBeneficiaryId: { type: String, index: true, sparse: true },
-  cashfreeStatus: {
-    type: String,
-    enum: ['pending', 'active', 'failed'],
-    default: 'pending',
-  },
-
-  isVerified:              { type: Boolean, default: false },
-  verifiedAt:              Date,
+  isVerified:               { type: Boolean, default: false },
+  verifiedAt:               Date,
   verificationFailedReason: String,
 
   defaultPayoutMode: { type: String, enum: ['bank', 'upi'], default: 'bank' },
   payoutEnabled:     { type: Boolean, default: true },
 
 }, { timestamps: true });
-
-bankDetailsSchema.index({ cashfreeStatus: 1, payoutEnabled: 1 });
 
 module.exports = mongoose.model('BankDetails', bankDetailsSchema);

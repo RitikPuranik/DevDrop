@@ -22,7 +22,7 @@ const submitWebsite = async (req, res) => {
     if (category !== WEBSITE_CATEGORIES.FREE) {
       const bankDetails = await BankDetails.findOne({ userId: sellerId });
       if (!bankDetails) return res.status(400).json({ success: false, message: 'Please add your bank details before listing a paid website', requiresBankDetails: true });
-      if (bankDetails.cashfreeStatus !== 'active') return res.status(400).json({ success: false, message: 'Please enable automatic payouts before listing a paid website', requiresPayoutSetup: true });
+      if (!bankDetails.isVerified || !bankDetails.payoutEnabled) return res.status(400).json({ success: false, message: 'Please verify your bank details before listing a paid website', requiresPayoutSetup: true });
     }
 
     const website = new Website({ name, description, techStack: techStack || {}, category, price, deployedUrl, githubUrl, sellerId, status: WEBSITE_STATUS.PENDING_REVIEW });

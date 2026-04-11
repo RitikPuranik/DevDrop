@@ -24,31 +24,15 @@ const purchaseSchema = new mongoose.Schema(
     },
 
     // Pricing
-    sellerPrice: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
-    platformFee: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
-    tax: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
-    totalPaid: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
+    sellerPrice: { type: Number, required: true, min: 0 },
+    platformFee: { type: Number, required: true, min: 0 },
+    tax:         { type: Number, required: true, min: 0 },
+    totalPaid:   { type: Number, required: true, min: 0 },
 
-    // Payment
-    stripePaymentIntentId: String,
-    stripeChargeId: String,
-    stripeTransferId: String,
+    // Razorpay identifiers
+    razorpayOrderId:   { type: String, index: true, sparse: true },
+    razorpayPaymentId: { type: String, index: true, sparse: true },
+
     paymentStatus: {
       type: String,
       enum: ['pending', 'completed', 'failed', 'refunded'],
@@ -58,10 +42,7 @@ const purchaseSchema = new mongoose.Schema(
     },
 
     // Access
-    downloadCount: {
-      type: Number,
-      default: 0,
-    },
+    downloadCount:  { type: Number, default: 0 },
     lastAccessedAt: Date,
 
     purchaseDate: {
@@ -72,13 +53,9 @@ const purchaseSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// ✅ ONLY THESE INDEXES EXIST
 purchaseSchema.index({ buyerId: 1, purchaseDate: -1 });
 purchaseSchema.index({ sellerId: 1, purchaseDate: -1 });
-purchaseSchema.index(
-  { websiteId: 1, buyerId: 1 },
-  { unique: true }
-);
+purchaseSchema.index({ websiteId: 1, buyerId: 1 }, { unique: true });
 
 purchaseSchema.virtual('isCompleted').get(function () {
   return this.paymentStatus === 'completed';

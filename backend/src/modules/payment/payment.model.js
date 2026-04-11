@@ -5,14 +5,14 @@ const paymentSchema = new mongoose.Schema({
   websiteId:  { type: mongoose.Schema.Types.ObjectId, ref: 'Website', required: true },
   buyerId:    { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 
-  paymentMethod: { type: String, enum: ['cashfree'], default: 'cashfree' },
+  paymentMethod: { type: String, enum: ['razorpay'], default: 'razorpay' },
 
-  // Cashfree identifiers
-  cashfreeOrderId:   { type: String, index: true, sparse: true },
-  cashfreePaymentId: { type: String, index: true, sparse: true },
-  cashfreeSessionId: String, // payment_session_id used by frontend SDK
+  // Razorpay identifiers
+  razorpayOrderId:   { type: String, index: true, sparse: true },
+  razorpayPaymentId: { type: String, index: true, sparse: true },
+  razorpaySignature: { type: String },
 
-  // Amount
+  // Amount (stored in INR, not paise)
   amount:   { type: Number, required: true },
   currency: { type: String, default: 'INR', uppercase: true },
 
@@ -24,7 +24,7 @@ const paymentSchema = new mongoose.Schema({
     index: true,
   },
 
-  // Gateway response
+  // Full gateway response for debugging/audit
   gatewayResponse: { type: mongoose.Schema.Types.Mixed },
 
   // Refund
