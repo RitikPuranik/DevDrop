@@ -25,8 +25,8 @@
     "nodemailer": "^6.9.7",
     "uuid": "^9.0.1",
     "winston": "^3.11.0",
-    "cashfree-pg": "^3.0.0",
-    "axios": "^1.6.0"
+    "axios": "^1.6.0",
+    "razorpay": "^2.9.0"
   },
   "devDependencies": {
     "jest": "^29.7.0",
