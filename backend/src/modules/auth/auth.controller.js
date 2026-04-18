@@ -50,9 +50,7 @@ const sendVerificationEmail = async (req, res) => {
     const user = req.user;
     if (user.isVerified) return res.status(400).json({ success: false, message: 'Email is already verified' });
 
-    const verificationToken = user.generateVerificationToken();
-    await user.save();
-    await emailService.sendVerificationEmail(user, verificationToken);
+    await emailService.sendVerificationEmail(user);
 
     res.json({ success: true, message: 'Verification email sent successfully' });
   } catch (error) {

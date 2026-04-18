@@ -22,6 +22,7 @@ const WEBSITE_STATUS = {
   REJECTED: 'rejected',
   APPROVED: 'approved',
   SOLD: 'sold',
+  IN_AUCTION: 'in_auction',
 };
 
 // Payment status

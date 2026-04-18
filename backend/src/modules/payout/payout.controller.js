@@ -2,6 +2,7 @@ const Payout = require('./payout.model');
 const Purchase = require('../payment/purchase.model');
 const Website = require('../website/website.model');
 const User = require('../user/user.model');
+const mongoose = require('mongoose');
 const { PAYOUT_STATUS } = require('../../shared/utils/constants');
 const { getPaginationMetadata } = require('../../shared/utils/helpers');
 const emailService = require('../../services/email.service');
@@ -180,7 +181,7 @@ const getSellerPayouts = async (req, res) => {
 
     // Calculate summary
     const summary = await Payout.aggregate([
-      { $match: { sellerId: new require('mongoose').Types.ObjectId(sellerId) } },
+      { $match: { sellerId: new mongoose.Types.ObjectId(sellerId) } },
       {
         $group: {
           _id: '$status',
