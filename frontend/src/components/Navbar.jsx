@@ -35,14 +35,19 @@ const Navbar = () => {
   const menuItems = [
     { to: "/", label: "Home", src: "https://images.unsplash.com/photo-1642543349642-0d04e91511c9?q=80&w=871" },
     { to: "/template", label: "Websites", src: "https://images.unsplash.com/photo-1467232004584-a241de8bcf5d?q=80&w=869" },
+    { to: "/auctions", label: "Auctions", src: "https://images.unsplash.com/photo-1633158829585-23ba8f7c8caf?q=80&w=870" },
     { to: "/about", label: "About Us", src: img },
     { to: "/review", label: "People's Love", src: "https://plus.unsplash.com/premium_photo-1739436074076-3c6d73478d59?q=80&w=812" },
     { to: "/contact", label: "Contact Us", src: "https://images.unsplash.com/photo-1534536281715-e28d76689b4d?q=80&w=870" },
   ];
 
-  // 2. Conditionally add Profile to the bottom of the list
+  // 2. Conditionally add Sell & Profile for logged-in users
   const finalMenuItems = isLoggedIn 
-    ? [...menuItems, { to: "/profile", label: "Profile", src: "https://images.unsplash.com/photo-1511367461989-f85a21fda167?q=80&w=1000" }] 
+    ? [
+        ...menuItems,
+        { to: "/sell", label: "Sell", src: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=870" },
+        { to: "/profile", label: "Profile", src: "https://images.unsplash.com/photo-1511367461989-f85a21fda167?q=80&w=1000" },
+      ] 
     : menuItems;
 
   const fastEase = [0.19, 1, 0.22, 1];

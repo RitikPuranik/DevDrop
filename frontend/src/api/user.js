@@ -1,13 +1,9 @@
 import api from "./axios";
 
 export const userAPI = {
-
-  getUser: () => {
-    return api.get("/user/me");
-  },
-
-  updateUser: (data) => {
-    return api.put("/user/update", data);
-  }
-
+  getProfile: () => api.get("/user/profile"),
+  getDashboard: () => api.get("/user/dashboard"),
+  getPurchases: (page = 1) => api.get(`/user/purchases?page=${page}`),
+  getBankDetails: () => api.get("/user/bank-details"),
+  saveBankDetails: (data) => api.post("/user/bank-details", data),
 };

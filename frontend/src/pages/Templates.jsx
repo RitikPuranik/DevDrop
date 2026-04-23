@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Play, ShoppingCart, Zap, Search, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { websiteAPI } from "../api/website";
 
 const transition = { duration: 0.6, ease: [0.43, 0.13, 0.23, 0.96] };
 
 export default function SmoothEliteGallery() {
+  const navigate = useNavigate();
   const [templates, setTemplates] = useState([]); 
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState(null);
@@ -110,7 +112,7 @@ export default function SmoothEliteGallery() {
                     layout
                     layoutId={`card-${itemId}`}
                     key={itemId}
-                    onClick={() => setSelectedId(item)}
+                    onClick={() => navigate(`/website/${itemId}`)}
                     transition={transition}
                     className="group cursor-pointer bg-[#111] rounded-[40px] p-4 border border-white/5 hover:border-[#8b7355] transition-all duration-500 will-change-transform"
                   >
@@ -121,14 +123,14 @@ export default function SmoothEliteGallery() {
                       className="aspect-[12/11] rounded-[32px] mb-6 relative overflow-hidden flex items-center justify-center border border-white/5"
                     >
                       <div className="w-26 h-24 bg-white/5 blur-3xl rounded-full group-hover:bg-orange-500/10 transition-colors" />
-                      {item.type === 'exclusive' && (
+                      {(item.type === 'exclusive' || item.category === 'exclusive') && (
                         <Zap size={20} className="absolute top-6 right-6 text-orange-500 fill-orange-500" />
                       )}
                     </motion.div>
 
                     <div className="px-2">
-                      <motion.h3 layoutId={`title-${itemId}`} transition={transition} className="font-black text-xl tracking-tight">{item.title}</motion.h3>
-                      <motion.p layoutId={`price-${itemId}`} transition={transition} className="text-[#8b7355] font-bold text-sm tracking-widest uppercase">{item.price}</motion.p>
+                      <motion.h3 layoutId={`title-${itemId}`} transition={transition} className="font-black text-xl tracking-tight">{item.title || item.name}</motion.h3>
+                      <motion.p layoutId={`price-${itemId}`} transition={transition} className="text-[#8b7355] font-bold text-sm tracking-widest uppercase">{item.category === 'free' ? 'FREE' : item.price ? (typeof item.price === 'number' ? `₹${item.price}` : item.price) : ''}</motion.p>
                     </div>
                   </motion.div>
                 );

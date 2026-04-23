@@ -38,6 +38,7 @@ app.use('/api/wishlist',  require('./modules/wishlist'));
 app.use('/api/assets',    require('./modules/asset'));
 app.use('/api/auctions',  require('./modules/auction'));
 app.use('/api/analytics', require('./modules/analytics'));
+app.use('/api/contact',   require('./modules/contact'));
 
 app.use(notFound);
 app.use(errorHandler);

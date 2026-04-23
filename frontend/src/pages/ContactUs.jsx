@@ -1,7 +1,51 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { contactAPI } from '../api/contact';
+import { toast } from 'sonner';
 import man from "../assets/man.png";
 
 const LiquidMeltContactCard = () => {
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    message: '',
+  });
+  const [loading, setLoading] = useState(false);
+
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    // Basic client-side validation
+    if (!formData.name.trim() || !formData.email.trim() || !formData.phone.trim()) {
+      toast.error('Please fill in all required fields.');
+      return;
+    }
+
+    if (!/^[0-9]{10}$/.test(formData.phone.trim())) {
+      toast.error('Please enter a valid 10-digit phone number.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const res = await contactAPI.submit(formData);
+      toast.success(res.data?.message || 'Enquiry sent successfully!');
+      setFormData({ name: '', email: '', phone: '', message: '' });
+    } catch (err) {
+      const msg =
+        err.response?.data?.message ||
+        err.response?.data?.errors?.[0]?.message ||
+        'Something went wrong. Please try again.';
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div style={styles.body}>
       {/* 1. TEXTURE LAYER */}
@@ -30,7 +74,7 @@ const LiquidMeltContactCard = () => {
         </filter>
       </svg>
 
-      {/* 3. THE CARD CONTAINER (MEASURES UNCHANGED) */}
+      {/* 3. THE CARD CONTAINER */}
       <div style={styles.cardContainer}>
         <div style={styles.meltLayer}>
           <div style={styles.mainRect} />
@@ -50,23 +94,71 @@ const LiquidMeltContactCard = () => {
               <h1 style={styles.h1}>Get in <br/>touch</h1>
               <p style={styles.p}>Premium support for the modern curator. Drop us a line below.</p>
               
-              <div style={styles.formGroup}>
+              <form onSubmit={handleSubmit} style={styles.formGroup}>
                 <div style={styles.fieldRow}>
                   <div style={{...styles.field, flex: 1}}>
-                    <label style={styles.label}>FULL NAME</label>
-                    <input style={styles.input} type="text" placeholder="John Doe" />
+                    <label style={styles.label}>FULL NAME *</label>
+                    <input
+                      style={styles.input}
+                      type="text"
+                      name="name"
+                      placeholder="John Doe"
+                      value={formData.name}
+                      onChange={handleChange}
+                      required
+                    />
                   </div>
                   <div style={{...styles.field, flex: 1}}>
-                    <label style={styles.label}>EMAIL</label>
-                    <input style={styles.input} type="email" placeholder="hello@company.com" />
+                    <label style={styles.label}>EMAIL *</label>
+                    <input
+                      style={styles.input}
+                      type="email"
+                      name="email"
+                      placeholder="hello@company.com"
+                      value={formData.email}
+                      onChange={handleChange}
+                      required
+                    />
                   </div>
                 </div>
+
                 <div style={styles.field}>
-                  <label style={styles.label}>MESSAGE</label>
-                  <textarea style={{...styles.input, height: '100px', resize: 'none'}} placeholder="How can we help?" />
+                  <label style={styles.label}>PHONE NUMBER *</label>
+                  <input
+                    style={styles.input}
+                    type="tel"
+                    name="phone"
+                    placeholder="9876543210"
+                    value={formData.phone}
+                    onChange={handleChange}
+                    maxLength={10}
+                    required
+                  />
                 </div>
-                <button style={styles.button}>SEND ENQUIRY</button>
-              </div>
+
+                <div style={styles.field}>
+                  <label style={styles.label}>MESSAGE <span style={{ opacity: 0.5, fontWeight: 400 }}>(optional)</span></label>
+                  <textarea
+                    style={{...styles.input, height: '80px', resize: 'none'}}
+                    name="message"
+                    placeholder="How can we help?"
+                    value={formData.message}
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{
+                    ...styles.button,
+                    opacity: loading ? 0.6 : 1,
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {loading ? 'SENDING...' : 'SEND ENQUIRY'}
+                </button>
+              </form>
             </div>
 
             {/* RIGHT COLUMN: Static Blended Image */}
@@ -134,7 +226,7 @@ const styles = {
   cardContainer: {
     position: 'relative',
     width: '1100px',
-    height: '650px',
+    height: '680px',
     zIndex: 2,
   },
   meltLayer: {
@@ -181,8 +273,8 @@ const styles = {
     padding: '30px 0'
   },
   h1: { color: '#1a1a1a', fontSize: '64px', margin: '0 0 10px 0', fontWeight: '900', lineHeight: '0.85', letterSpacing: '-3px', textTransform: 'uppercase' },
-  p: { color: '#8b7355', fontSize: '15px', lineHeight: '1.5', marginBottom: '40px', maxWidth: '340px' },
-  formGroup: { display: 'flex', flexDirection: 'column', gap: '25px' },
+  p: { color: '#8b7355', fontSize: '15px', lineHeight: '1.5', marginBottom: '30px', maxWidth: '340px' },
+  formGroup: { display: 'flex', flexDirection: 'column', gap: '20px' },
   fieldRow: { display: 'flex', gap: '20px' },
   field: { display: 'flex', flexDirection: 'column', gap: '8px' },
   label: { fontSize: '10px', color: '#1a1a1a', fontWeight: '800', letterSpacing: '1.5px' },
@@ -194,6 +286,8 @@ const styles = {
     outline: 'none',
     fontSize: '15px',
     color: '#1a1a1a',
+    fontFamily: '"Inter", sans-serif',
+    transition: 'border-color 0.3s ease',
   },
   button: {
     background: '#1a1a1a',
@@ -204,9 +298,10 @@ const styles = {
     fontWeight: '900',
     width: 'fit-content',
     cursor: 'pointer',
-    marginTop: '10px',
+    marginTop: '5px',
     fontSize: '11px',
-    letterSpacing: '2px'
+    letterSpacing: '2px',
+    transition: 'all 0.3s ease',
   },
   illustrationWrapper: { 
     flex: 1, 
@@ -219,7 +314,7 @@ const styles = {
     position: 'absolute',
     width: '260px',
     height: '260px',
-    backgroundColor: 'rgba(139, 115, 85, 0.1)', // Very subtle warmth
+    backgroundColor: 'rgba(139, 115, 85, 0.1)',
     filter: 'blur(30px)',
     borderRadius: '50%',
     zIndex: 9
@@ -228,8 +323,8 @@ const styles = {
     width: '300px', 
     height: 'auto', 
     zIndex: 10, 
-    filter: 'sepia(0.3) contrast(1.1) brightness(0.95)', // Blends into beige palette
-    mixBlendMode: 'multiply', // Makes it look "etched" into the card
+    filter: 'sepia(0.3) contrast(1.1) brightness(0.95)',
+    mixBlendMode: 'multiply',
     pointerEvents: 'none'
   },
   contactDetails: { 

@@ -2,3 +2,8 @@ export { authAPI } from "./auth";
 export { userAPI } from "./user";
 export { websiteAPI } from "./website";
 export { paymentAPI } from "./payment";
+export { contactAPI } from "./contact";
+export { sellerAPI } from "./seller";
+export { buyerAPI } from "./buyer";
+export { wishlistAPI } from "./wishlist";
+export { auctionAPI } from "./auction";
