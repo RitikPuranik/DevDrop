@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ExternalLink, Heart, ShoppingBag, ArrowLeft, Loader2, Eye, Github, Zap, Clock, ChevronRight } from 'lucide-react';
+import { ExternalLink, Heart, ShoppingBag, ArrowLeft, Loader2, Eye, Zap, Clock, ChevronRight } from 'lucide-react';
 import { websiteAPI } from '../api/website';
 import { wishlistAPI } from '../api/wishlist';
 import { buyerAPI } from '../api/buyer';
@@ -277,7 +277,7 @@ export default function WebsiteDetail() {
                   <a href={website.githubUrl} target="_blank" rel="noreferrer"
                     className="flex items-center justify-between px-5 py-3.5 bg-[#111] border border-white/5 rounded-2xl text-xs font-bold text-white/40 hover:text-white hover:border-white/15 transition-all group"
                   >
-                    <span className="flex items-center gap-2"><Github size={14} /> GitHub Repo</span>
+                    <span className="flex items-center gap-2"> GitHub Repo</span>
                     <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
                   </a>
                 )}

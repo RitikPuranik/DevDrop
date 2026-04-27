@@ -5,13 +5,14 @@ import {
   User,
   Phone,
   X,
-  Github,
-  Chrome,
-  Linkedin,
+  Code2, // Replacement for Github (guaranteed to exist)
+  Globe, // Replacement for Chrome (guaranteed to exist)
+  Share2, // Replacement for Linkedin (guaranteed to exist)
   ArrowRight,
 } from "lucide-react";
 import { authAPI } from "../api/auth";
 import { toast } from "sonner";
+
 export default function AuthModal({ isOpen, onClose }) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
@@ -47,19 +48,15 @@ export default function AuthModal({ isOpen, onClose }) {
 
     try {
       const res = await authAPI.login(loginData);
-
       console.log("LOGIN RESPONSE:", res.data);
 
       // store token
       localStorage.setItem("token", res.data.data.token);
-
       toast.success("Login successful!");
-
       onClose();
     } catch (err) {
       console.log("LOGIN ERROR:", err.response?.data);
-
-      toast.success(err.response?.data?.message || "Login failed");
+      toast.error(err.response?.data?.message || "Login failed");
     }
   };
 
@@ -68,18 +65,14 @@ export default function AuthModal({ isOpen, onClose }) {
 
     try {
       console.log("Signup data:", signupData);
-
       const res = await authAPI.register(signupData);
-
       console.log("SIGNUP RESPONSE:", res.data);
 
       toast.success("Account created successfully");
-
       setIsSignUp(false);
     } catch (err) {
       console.log("SIGNUP ERROR:", err.response?.data);
-
-      toast.success(err.response?.data?.message || "Signup Failed");
+      toast.error(err.response?.data?.message || "Signup Failed");
     }
   };
 
@@ -88,7 +81,7 @@ export default function AuthModal({ isOpen, onClose }) {
   }, [isOpen]);
 
   if (!shouldRender) return null;
-  console.log("Signup data:", signupData);
+
   return (
     <div
       className={`fixed inset-0 z-[9999] flex items-center justify-center p-4 transition-all duration-500 ${
@@ -125,11 +118,11 @@ export default function AuthModal({ isOpen, onClose }) {
               Create Account
             </h2>
 
-            {/* <div className="mt-2 flex gap-3 mb-6">
-              <SocialIcon Icon={Chrome} />
-              <SocialIcon Icon={Github} />
-              <SocialIcon Icon={Linkedin} />
-            </div> */}
+            <div className="mt-2 flex gap-3 mb-6">
+              <SocialIcon Icon={Globe} />
+              <SocialIcon Icon={Code2} />
+              <SocialIcon Icon={Share2} />
+            </div>
 
             <AuthInput
               icon={User}
@@ -167,7 +160,7 @@ export default function AuthModal({ isOpen, onClose }) {
               onChange={handleSignupChange}
             />
 
-            <button className="group  w-full py-4 bg-[#8b7355] text-white rounded-2xl text-xs font-bold uppercase tracking-[0.2em] hover:bg-[#725e46] active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+            <button className="group w-full py-4 bg-[#8b7355] text-white rounded-2xl text-xs font-bold uppercase tracking-[0.2em] hover:bg-[#725e46] active:scale-[0.98] transition-all flex items-center justify-center gap-2">
               Sign Up
               <ArrowRight
                 size={14}
@@ -194,11 +187,11 @@ export default function AuthModal({ isOpen, onClose }) {
               Please enter your credentials
             </p>
 
-            {/* <div className="flex gap-3 mb-6">
-              <SocialIcon Icon={Chrome} />
-              <SocialIcon Icon={Github} />
-              <SocialIcon Icon={Linkedin} />
-            </div> */}
+            <div className="flex gap-3 mb-6">
+              <SocialIcon Icon={Globe} />
+              <SocialIcon Icon={Code2} />
+              <SocialIcon Icon={Share2} />
+            </div>
 
             <AuthInput
               icon={Mail}
@@ -218,7 +211,7 @@ export default function AuthModal({ isOpen, onClose }) {
               onChange={handleLoginChange}
             />
 
-            <button className="text-xs text-[#8b7355] mt-4 hover:text-[#3d342b] underline underline-offset-4 transition-colors">
+            <button type="button" className="text-xs text-[#8b7355] mt-4 hover:text-[#3d342b] underline underline-offset-4 transition-colors">
               Forgot your password?
             </button>
 
@@ -246,12 +239,11 @@ export default function AuthModal({ isOpen, onClose }) {
                 <h2 className="text-3xl font-serif font-bold mb-4">
                   One of us?
                 </h2>
-
                 <p className="text-white/80 text-sm mb-10 leading-relaxed font-light">
                   If you already have an account, just sign in.
                 </p>
-
                 <button
+                  type="button"
                   onClick={() => setIsSignUp(false)}
                   className="px-12 py-3 border border-white/40 rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-[#F5F2ED] hover:text-[#8b7355] transition-all"
                 >
@@ -263,12 +255,11 @@ export default function AuthModal({ isOpen, onClose }) {
                 <h2 className="text-3xl font-serif font-bold mb-4">
                   Hello, Friend
                 </h2>
-
                 <p className="text-white/80 text-sm mb-10 leading-relaxed font-light">
                   Start your journey with us today.
                 </p>
-
                 <button
+                  type="button"
                   onClick={() => setIsSignUp(true)}
                   className="px-12 py-3 border border-white/40 rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-[#F5F2ED] hover:text-[#8b7355] transition-all"
                 >
@@ -284,7 +275,7 @@ export default function AuthModal({ isOpen, onClose }) {
 }
 
 const SocialIcon = ({ Icon }) => (
-  <button className="w-12 h-12 flex items-center justify-center border border-[#8b7355]/20 rounded-2xl text-[#8b7355] hover:bg-white hover:border-[#8b7355] transition-all shadow-sm">
+  <button type="button" className="w-12 h-12 flex items-center justify-center border border-[#8b7355]/20 rounded-2xl text-[#8b7355] hover:bg-white hover:border-[#8b7355] transition-all shadow-sm">
     <Icon size={18} />
   </button>
 );
@@ -295,7 +286,6 @@ const AuthInput = ({ icon: Icon, ...props }) => (
       className="absolute left-4 top-1/2 -translate-y-1/2 text-[#8b7355]/50 group-focus-within:text-[#8b7355]"
       size={18}
     />
-
     <input
       {...props}
       className="w-full pl-12 pr-4 py-4 bg-[#EAE3D8]/50 border-2 border-transparent rounded-2xl text-sm outline-none focus:bg-white focus:border-[#8b7355]/30 transition-all placeholder:text-[#8b7355]/40 text-[#3d342b]"

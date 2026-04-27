@@ -15,7 +15,6 @@ import ContactUs from './pages/ContactUs';
 import ReviewPage from './pages/Review';
 import Profile from './pages/Profile';
 import WebsiteDetail from './pages/WebsiteDetail';
-import SellWebsite from './pages/SellWebsite';
 import Auctions from './pages/Auctions';
 
 const VIDEO_SRC = '/dewdrop.s3.mp4';
@@ -117,7 +116,6 @@ function AppContent() {
               <Route path="/review" element={<ReviewPage />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/website/:id" element={<WebsiteDetail />} />
-              <Route path="/sell" element={<SellWebsite />} />
               <Route path="/auctions" element={<Auctions />} />
 
               {/* Builder */}

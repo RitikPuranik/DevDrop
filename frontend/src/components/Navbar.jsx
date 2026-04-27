@@ -45,7 +45,6 @@ const Navbar = () => {
   const finalMenuItems = isLoggedIn 
     ? [
         ...menuItems,
-        { to: "/sell", label: "Sell", src: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=870" },
         { to: "/profile", label: "Profile", src: "https://images.unsplash.com/photo-1511367461989-f85a21fda167?q=80&w=1000" },
       ] 
     : menuItems;
@@ -188,7 +187,7 @@ const MenuItem = ({ label, to, onHover, close, isDimmed }) => (
     >
       <LinkTransition 
         to={to} 
-        className={`text-[5.2vw] leading-[1.0] font-serif italic tracking-tighter block transition-all duration-300 cursor-pointer ${isDimmed ? 'opacity-30 scale-95' : 'opacity-100 scale-100'} text-black hover:opacity-100`}
+        className={`text-[5.0vw] leading-[0.9] font-serif italic tracking-tighter block transition-all duration-300 cursor-pointer ${isDimmed ? 'opacity-30 scale-95' : 'opacity-100 scale-100'} text-black hover:opacity-100`}
       >
         {label}
       </LinkTransition>
