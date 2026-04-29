@@ -16,6 +16,7 @@ import ReviewPage from './pages/Review';
 import Profile from './pages/Profile';
 import WebsiteDetail from './pages/WebsiteDetail';
 import Auctions from './pages/Auctions';
+import VerifyEmail from './pages/VerifyEmail';
 
 const VIDEO_SRC = '/dewdrop.s3.mp4';
 
@@ -23,6 +24,13 @@ function AppContent() {
 
   const location = useLocation();
   const isBuilder = location.pathname === "/website";
+  const isVerifyEmail = location.pathname === "/verify-email";
+
+  // Suppress intro for verify-email — it opens in a fresh tab from an email
+  // link so sessionStorage is empty. Set synchronously before useState runs.
+  if (isVerifyEmail) {
+    sessionStorage.setItem('devdrop_intro_seen', 'true');
+  }
 
   const [showIntro, setShowIntro] = useState(false);
   const [appReady, setAppReady] = useState(false);
@@ -89,10 +97,10 @@ function AppContent() {
 
       {appReady && (
         <>
-          <Loader suppressOnce={suppressNextLoader} />
+          {!isVerifyEmail && <Loader suppressOnce={suppressNextLoader} />}
 
-          {/* Hide Navbar on Builder */}
-          {!isBuilder && <Navbar />}
+          {/* Hide Navbar on Builder and VerifyEmail */}
+          {!isBuilder && !isVerifyEmail && <Navbar />}
 
           <main className="bg-black min-h-screen">
 
@@ -117,6 +125,7 @@ function AppContent() {
               <Route path="/profile" element={<Profile />} />
               <Route path="/website/:id" element={<WebsiteDetail />} />
               <Route path="/auctions" element={<Auctions />} />
+              <Route path="/verify-email" element={<VerifyEmail />} />
 
               {/* Builder */}
               {/* <Route path="/website" element={<MakeYourOwn />} /> */}
@@ -136,8 +145,8 @@ function AppContent() {
 />
           </main>
 
-          {/* Hide Footer on Builder */}
-          {!isBuilder && <Footer />}
+          {/* Hide Footer on Builder and VerifyEmail */}
+          {!isBuilder && !isVerifyEmail && <Footer />}
         </>
       )}
     </>

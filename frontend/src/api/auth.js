@@ -20,6 +20,10 @@ export const authAPI = {
       phone: data.phone,
       email: data.email,
       password: data.password
-    })
+    }),
+
+  // VERIFY EMAIL
+  verifyEmail: (token) =>
+    API.post("/verify-email", { token })
 
 };
