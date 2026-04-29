@@ -71,7 +71,12 @@ export default function VerifyEmail() {
   const [errMsg, setErrMsg] = useState("");
   const [countdown, setCountdown] = useState(REDIRECT_SECONDS);
 
+  const calledRef = useRef(false);
+
   useEffect(() => {
+    if (calledRef.current) return;
+    calledRef.current = true;
+
     const token = searchParams.get("token");
     if (!token) { setStatus("error"); setErrMsg("No verification token found. Please request a new link."); return; }
     api.post("/auth/verify-email", { token })

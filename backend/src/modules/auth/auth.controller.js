@@ -67,12 +67,17 @@ const verifyEmail = async (req, res) => {
     const user = await User.findOne({ verificationToken: hashedToken, verificationTokenExpiry: { $gt: Date.now() } });
     if (!user) return res.status(400).json({ success: false, message: 'Invalid or expired verification token' });
 
+    const wasAlreadyVerified = user.isVerified;
+
     user.isVerified = true;
     user.verificationToken = undefined;
     user.verificationTokenExpiry = undefined;
     await user.save();
 
-    try { await emailService.sendWelcomeEmail(user); } catch (e) { console.error('Welcome email failed:', e); }
+    // Only send welcome email once — skip if user was already verified (guards against duplicate calls)
+    if (!wasAlreadyVerified) {
+      try { await emailService.sendWelcomeEmail(user); } catch (e) { console.error('Welcome email failed:', e); }
+    }
 
     res.json({ success: true, message: 'Email verified successfully' });
   } catch (error) {
@@ -137,4 +142,13 @@ const resetPassword = async (req, res) => {
   }
 };
 
-module.exports = { signup, login, sendVerificationEmail, verifyEmail, resendVerification, getMe, forgotPassword, resetPassword };
+module.exports = { 
+  signup, 
+  login, 
+  sendVerificationEmail, 
+  verifyEmail, 
+  resendVerification, 
+  getMe, 
+  forgotPassword, 
+  resetPassword 
+};
