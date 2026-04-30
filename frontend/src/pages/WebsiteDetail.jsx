@@ -62,54 +62,86 @@ export default function WebsiteDetail() {
   };
 
   const handlePurchase = async () => {
-    if (!isLoggedIn) { toast.error('Please login first'); return; }
-    if (purchased) { toast.info('Already purchased!'); return; }
+  if (!isLoggedIn) {
+    toast.error('Please login first');
+    return;
+  }
 
-    try {
-      setBuying(true);
-      if (website.category === 'free') {
-        await buyerAPI.purchaseFree(id);
-        toast.success('Website acquired successfully!');
-        setPurchased(true);
-      } else {
-        // Paid flow — create Razorpay order
-        const orderRes = await paymentAPI.createOrder({ websiteId: id });
-        const order = orderRes.data?.data;
+  if (purchased) {
+    toast.info('Already purchased!');
+    return;
+  }
 
-        const options = {
-          key: import.meta.env.VITE_RAZORPAY_KEY_ID,
-          amount: order.amount,
-          currency: order.currency,
-          name: 'DevDrop',
-          description: `Purchase: ${website.name}`,
-          order_id: order.id,
-          handler: async (response) => {
-            try {
-              await paymentAPI.verifyPayment({
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-                websiteId: id,
-              });
-              toast.success('Payment successful! Website purchased.');
-              setPurchased(true);
-            } catch {
-              toast.error('Payment verification failed');
-            }
-          },
-          prefill: { email: '' },
-          theme: { color: '#8b7355' },
-        };
+  try {
+    setBuying(true);
 
-        const razorpay = new window.Razorpay(options);
-        razorpay.open();
-      }
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Purchase failed');
-    } finally {
-      setBuying(false);
+    if (website.category === 'free') {
+      await buyerAPI.purchaseFree(id);
+      toast.success('Website acquired successfully!');
+      setPurchased(true);
+      return;
     }
-  };
+
+    // 1. Create order
+    const orderRes = await paymentAPI.createOrder({ websiteId: id });
+    const order = orderRes.data?.data;
+
+    console.log("ORDER:", order);
+
+    // 2. CHECK Razorpay script
+    if (!window.Razorpay) {
+      toast.error("Razorpay SDK not loaded");
+      return;
+    }
+
+    const options = {
+      key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+      amount: order.amount,
+      currency: order.currency,
+      name: 'DevDrop',
+      description: `Purchase: ${website.name}`,
+      order_id: order.id,
+
+      handler: async (response) => {
+        console.log("RAZORPAY RESPONSE:", response);
+
+        try {
+          const verifyRes = await paymentAPI.verifyPayment({
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+            websiteId: id,
+          });
+
+          console.log("VERIFY RESPONSE:", verifyRes.data);
+
+          toast.success('Payment successful! Website purchased.');
+          setPurchased(true);
+        } catch (err) {
+          console.log("VERIFY ERROR:", err);
+          toast.error('Payment verification failed');
+        }
+      },
+
+      theme: { color: '#8b7355' },
+    };
+
+    const rzp = new window.Razorpay(options);
+
+    rzp.on('payment.failed', function (response) {
+      console.log("PAYMENT FAILED:", response);
+      toast.error("Payment failed");
+    });
+
+    rzp.open();
+
+  } catch (err) {
+    console.log("PURCHASE ERROR:", err);
+    toast.error(err.response?.data?.message || 'Purchase failed');
+  } finally {
+    setBuying(false);
+  }
+};
 
   if (loading) {
     return (
@@ -133,17 +165,6 @@ export default function WebsiteDetail() {
   return (
     <div className="min-h-screen bg-[#050505] text-[#e8e2d6] pt-24 pb-20 px-6 antialiased">
       <div className="max-w-6xl mx-auto">
-
-        {/* ── BACK ── */}
-        <motion.button
-          initial={{ opacity: 0, x: -10 }}
-          animate={{ opacity: 1, x: 0 }}
-          onClick={() => navigate('/template')}
-          className="flex items-center gap-2 text-white/30 hover:text-white text-xs font-bold uppercase tracking-[0.2em] mb-10 transition-colors"
-        >
-          <ArrowLeft size={14} /> Back to gallery
-        </motion.button>
-
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-10">
 
           {/* ── LEFT: PREVIEW ── */}
@@ -214,7 +235,7 @@ export default function WebsiteDetail() {
               </div>
 
               {/* Title */}
-              <h1 className="text-4xl font-black tracking-tight mb-2">{website.name}</h1>
+              <h1 className="text-4xl font-black font-bold tracking-tight mb-2">{website.name}</h1>
 
               {/* Stats line */}
               <div className="flex items-center gap-4 text-white/20 text-xs mb-8">
@@ -223,8 +244,8 @@ export default function WebsiteDetail() {
               </div>
 
               {/* Price card */}
-              <div className="bg-[#111] border border-white/5 rounded-3xl p-8 mb-4">
-                <p className="text-4xl font-black tracking-tight mb-6">
+              <div className="bg-[#111] border border-white/5 rounded-3xl p-4 mb-4">
+                <p className="text-3xl font-black tracking-tight mb-6">
                   {website.category === 'free' ? (
                     <span className="text-emerald-400">FREE</span>
                   ) : (

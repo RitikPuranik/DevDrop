@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Play, ShoppingCart, Zap, Search, Loader2 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom'; // Added for working navigation
+import { X, Play, ShoppingCart, Zap, Search, Loader2, Gavel } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { websiteAPI } from "../api/website";
 
 // Elite physics: Higher mass for "height" and weight in transitions
@@ -13,7 +13,7 @@ const transition = {
 };
 
 export default function SmoothEliteGallery() {
-  const navigate = useNavigate(); // Added for working navigation
+  const navigate = useNavigate();
   const [templates, setTemplates] = useState([]); 
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState(null);
@@ -56,7 +56,7 @@ export default function SmoothEliteGallery() {
       
       {/* --- NAV DOCK --- */}
       <nav className="top-0 z-40 flex justify-center mb-12 px-7">
-        <motion.div className="flex flex-row items-center mt-20 justify-between bg-white/[0.03] border border-white/10 p-1.5 rounded-[32px] backdrop-blur-2xl shadow-2xl w-full max-w-5xl focus-within:border-orange-500/30 transition-all duration-500">
+        <motion.div className="flex flex-row items-center mt-20 justify-between bg-white/[0.03] border border-white/10 p-1.5 rounded-[32px] backdrop-blur-2xl shadow-2xl w-full max-w-5xl focus-within:border-[#e8e2d6] transition-all duration-500">
           <div className="relative flex items-center max-w-xs w-full ml-2">
             <Search className="absolute left-3 text-gray-500" size={16} />
             <input 
@@ -68,26 +68,36 @@ export default function SmoothEliteGallery() {
             />
           </div>
 
-          <div className="flex items-center gap-1 bg-black/40 rounded-[26px] p-1">
-            {['all', 'free', 'exclusive'].map((filter) => (
-              <motion.button
-                key={filter}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setActiveFilter(filter)}
-                className={`relative px-6 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 z-10 ${
-                  activeFilter === filter ? 'text-black' : 'text-gray-500 hover:text-white'
-                }`}
-              >
-                {activeFilter === filter && (
-                  <motion.div 
-                    layoutId="activeFilter"
-                    className="absolute inset-0 bg-white rounded-[22px] -z-10"
-                    transition={transition}
-                  />
-                )}
-                {filter}
-              </motion.button>
-            ))}
+          <div className="flex items-center gap-2 pr-1">
+            <div className="flex items-center gap-1 bg-black/40 rounded-[26px] p-1">
+              {/* Added 'paid' to the category list */}
+              {['all', 'free', 'paid', 'exclusive'].map((filter) => (
+                <motion.button
+                  key={filter}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setActiveFilter(filter)}
+                  className={`relative px-6 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 z-10 ${
+                    activeFilter === filter ? 'text-black' : 'text-gray-500 hover:text-white'
+                  }`}
+                >
+                  {activeFilter === filter && (
+                    <motion.div 
+                      layoutId="activeFilter"
+                      className="absolute inset-0 bg-white rounded-[22px] -z-10"
+                      transition={transition}
+                    />
+                  )}
+                  {filter}
+                </motion.button>
+              ))}
+            </div>
+
+            <button 
+              onClick={() => navigate('/auctions')}
+              className="bg-gray-200/10 border border-orange-200/20 text-[#e8e2d6] px-4 py-2 rounded-[22px] text-[9px] font-black uppercase tracking-widest hover:bg-[#8b7355] hover:text-white transition-all flex items-center gap-2"
+            >
+              <Gavel size={14} /> Auctions
+            </button>
           </div>
         </motion.div>
       </nav>
@@ -96,7 +106,7 @@ export default function SmoothEliteGallery() {
       <main className="max-w-7xl mx-auto px-7">
         {loading ? (
           <div className="flex flex-col justify-center items-center py-40 gap-4">
-            <Loader2 className="animate-spin text-orange-500" size={40} />
+            <Loader2 className="animate-spin text-amber-100" size={40} />
             <span className="text-xs font-bold uppercase tracking-[0.3em] text-gray-500">Syncing Assets</span>
           </div>
         ) : (
@@ -116,7 +126,7 @@ export default function SmoothEliteGallery() {
                     whileHover={{ y: -8 }}
                     whileTap={{ scale: 0.98 }}
                     transition={transition}
-                    className="group cursor-pointer bg-[#111] rounded-[40px] p-4 border border-white/5 hover:border-orange-500/20 transition-colors duration-500"
+                    className="group cursor-pointer bg-[#111] rounded-[40px] p-4 border border-white/5 hover:border-orange-100/20 transition-colors duration-500"
                   >
                     <motion.div 
                       layoutId={`image-box-${itemId}`}
@@ -124,16 +134,12 @@ export default function SmoothEliteGallery() {
                       style={{ backgroundColor: item.color || '#1a1a1a' }}
                       className="aspect-[12/11] rounded-[32px] mb-6 relative overflow-hidden flex items-center justify-center border border-white/5"
                     >
-                      <div className="w-24 h-24 bg-white/5 blur-3xl rounded-full group-hover:bg-orange-500/10 transition-colors duration-700" />
-                      {(item.type === 'exclusive' || item.category === 'exclusive') && (
-                        <Zap size={20} className="absolute top-6 right-6 text-orange-500 fill-orange-500" />
-                      )}
                     </motion.div>
 
                     <div className="px-2">
                       <motion.h3 layoutId={`title-${itemId}`} transition={transition} className="font-black text-xl tracking-tight">{item.title || item.name}</motion.h3>
                       <motion.p layoutId={`price-${itemId}`} transition={transition} className="text-[#8b7355] font-bold text-sm tracking-widest uppercase">
-                        {item.category === 'free' ? 'FREE' : item.price ? (typeof item.price === 'number' ? `₹${item.price}` : item.price) : ''}
+                        {item.category === 'exclusive' ? 'Exclusive' : item.category === 'free' ? 'FREE' : item.price ? `₹${item.price}` : 'Paid'}
                       </motion.p>
                     </div>
                   </motion.div>
@@ -163,7 +169,7 @@ export default function SmoothEliteGallery() {
             >
               <button 
                 onClick={(e) => { e.stopPropagation(); setSelectedId(null); }}
-                className="absolute top-8 right-8 z-[110] p-4 bg-white/5 text-white hover:bg-orange-500 rounded-full transition-all active:scale-90"
+                className="absolute top-8 right-8 z-[110] p-4 bg-white/5 text-white hover:bg-[#8b7355] rounded-full transition-all active:scale-90"
               >
                 <X size={24} />
               </button>
@@ -186,25 +192,40 @@ export default function SmoothEliteGallery() {
                    exit={{ opacity: 0, x: 30 }}
                    transition={{ duration: 0.4 }}
                 >
-                  <div className="flex items-center gap-2 text-orange-500 mb-6 font-black uppercase tracking-[0.4em] text-[10px]">
-                    <Zap size={14} fill="currentColor" /> {selectedId.type || selectedId.category || 'Premium'} Asset
-                  </div>
-                  <motion.h2 layoutId={`title-${selectedId._id || selectedId.id}`} transition={transition} className="text-6xl font-black tracking-tighter mb-4">
+                  
+                  <motion.h2 layoutId={`title-${selectedId._id || selectedId.id}`} transition={transition} className="text-6xl font-black tracking-tighter mb-4 leading-none">
                     {selectedId.title || selectedId.name}
                   </motion.h2>
                   <motion.div layoutId={`price-${selectedId._id || selectedId.id}`} transition={transition} className="text-3xl font-light italic text-gray-500 mb-10">
-                    {selectedId.category === 'free' ? 'FREE' : selectedId.price ? (typeof selectedId.price === 'number' ? `₹${selectedId.price}` : selectedId.price) : ''}
+                    {selectedId.category === 'exclusive' ? 'Live Auction' : selectedId.category === 'free' ? 'FREE' : `₹${selectedId.price || 'Price on request'}`}
                   </motion.div>
-                  <div className="flex gap-4">
-                    <button 
-                      onClick={() => navigate(`/website/${selectedId._id || selectedId.id}`)}
-                      className="flex-1 bg-white text-black py-6 rounded-[28px] font-black text-xl hover:bg-orange-500 hover:text-white transition-all active:scale-95"
-                    >
-                      View Detail
-                    </button>
-                    <button className="w-24 bg-white/5 border border-white/10 rounded-[28px] flex items-center justify-center text-white hover:bg-white/10 transition-colors">
-                      <ShoppingCart size={28} />
-                    </button>
+                  
+                  <div className="flex flex-col gap-4">
+                    <div className="flex gap-4">
+                      <button 
+                        onClick={() => navigate(`/website/${selectedId._id || selectedId.id}`)}
+                        className="flex-1 bg-white text-black py-6 rounded-[28px] font-black text-xl hover:bg-[#8b7355] hover:text-white transition-all active:scale-95"
+                      >
+                        View Detail
+                      </button>
+
+                      {(selectedId.category === 'exclusive') && (
+                        <button 
+                          onClick={() => navigate('/auctions')} 
+                          className="flex-1 bg-[#8b7353] text-white py-6 rounded-[28px] font-black text-xl hover:bg-slate-600 transition-all active:scale-95 flex items-center justify-center gap-3"
+                        >
+                          <Gavel size={24} />
+                          Bid Now
+                        </button>
+                      )}
+
+                      {/* Optional Add to Cart for Paid items */}
+                      {selectedId.category === 'paid' && (
+                        <button className="w-24 bg-white/5 border border-white/10 rounded-[28px] flex items-center justify-center text-white hover:bg-white/10 transition-colors active:scale-95">
+                          <ShoppingCart size={28} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </motion.div>
               </div>
