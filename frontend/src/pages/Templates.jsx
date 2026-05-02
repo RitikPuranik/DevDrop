@@ -5,16 +5,16 @@ import { useNavigate } from 'react-router-dom';
 import { websiteAPI } from "../api/website";
 
 // Elite physics: Higher mass for "height" and weight in transitions
-const transition = { 
-  type: "spring", 
-  stiffness: 220, 
-  damping: 28, 
-  mass: 1.2 
+const transition = {
+  type: "spring",
+  stiffness: 220,
+  damping: 28,
+  mass: 1.2
 };
 
 export default function SmoothEliteGallery() {
   const navigate = useNavigate();
-  const [templates, setTemplates] = useState([]); 
+  const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -53,13 +53,13 @@ export default function SmoothEliteGallery() {
 
   return (
     <div className="min-h-screen bg-[#080808] text-white selection:bg-orange-500 font-sans antialiased pb-20">
-      
+
       {/* --- NAV DOCK --- */}
       <nav className="top-0 z-40 flex justify-center mb-12 px-7">
         <motion.div className="flex flex-row items-center mt-20 justify-between bg-white/[0.03] border border-white/10 p-1.5 rounded-[32px] backdrop-blur-2xl shadow-2xl w-full max-w-5xl focus-within:border-[#e8e2d6] transition-all duration-500">
           <div className="relative flex items-center max-w-xs w-full ml-2">
             <Search className="absolute left-3 text-gray-500" size={16} />
-            <input 
+            <input
               type="text"
               placeholder="Search library..."
               value={searchQuery}
@@ -76,12 +76,11 @@ export default function SmoothEliteGallery() {
                   key={filter}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => setActiveFilter(filter)}
-                  className={`relative px-6 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 z-10 ${
-                    activeFilter === filter ? 'text-black' : 'text-gray-500 hover:text-white'
-                  }`}
+                  className={`relative px-6 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 z-10 ${activeFilter === filter ? 'text-black' : 'text-gray-500 hover:text-white'
+                    }`}
                 >
                   {activeFilter === filter && (
-                    <motion.div 
+                    <motion.div
                       layoutId="activeFilter"
                       className="absolute inset-0 bg-white rounded-[22px] -z-10"
                       transition={transition}
@@ -92,7 +91,7 @@ export default function SmoothEliteGallery() {
               ))}
             </div>
 
-            <button 
+            <button
               onClick={() => navigate('/auctions')}
               className="bg-gray-200/10 border border-orange-200/20 text-[#e8e2d6] px-4 py-2 rounded-[22px] text-[9px] font-black uppercase tracking-widest hover:bg-[#8b7355] hover:text-white transition-all flex items-center gap-2"
             >
@@ -128,7 +127,7 @@ export default function SmoothEliteGallery() {
                     transition={transition}
                     className="group cursor-pointer bg-[#111] rounded-[40px] p-4 border border-white/5 hover:border-orange-100/20 transition-colors duration-500"
                   >
-                    <motion.div 
+                    <motion.div
                       layoutId={`image-box-${itemId}`}
                       transition={transition}
                       style={{ backgroundColor: item.color || '#1a1a1a' }}
@@ -167,7 +166,7 @@ export default function SmoothEliteGallery() {
               transition={transition}
               className="relative w-full max-w-6xl bg-[#0F0F0F] rounded-[50px] border border-white/10 shadow-2xl overflow-hidden grid grid-cols-1 lg:grid-cols-2 z-50 h-fit"
             >
-              <button 
+              <button
                 onClick={(e) => { e.stopPropagation(); setSelectedId(null); }}
                 className="absolute top-8 right-8 z-[110] p-4 bg-white/5 text-white hover:bg-[#8b7355] rounded-full transition-all active:scale-90"
               >
@@ -186,23 +185,23 @@ export default function SmoothEliteGallery() {
               </div>
 
               <div className="p-12 md:p-20 flex flex-col justify-center">
-                <motion.div 
-                   initial={{ opacity: 0, x: 30 }}
-                   animate={{ opacity: 1, x: 0 }}
-                   exit={{ opacity: 0, x: 30 }}
-                   transition={{ duration: 0.4 }}
+                <motion.div
+                  initial={{ opacity: 0, x: 30 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 30 }}
+                  transition={{ duration: 0.4 }}
                 >
-                  
+
                   <motion.h2 layoutId={`title-${selectedId._id || selectedId.id}`} transition={transition} className="text-6xl font-black tracking-tighter mb-4 leading-none">
                     {selectedId.title || selectedId.name}
                   </motion.h2>
                   <motion.div layoutId={`price-${selectedId._id || selectedId.id}`} transition={transition} className="text-3xl font-light italic text-gray-500 mb-10">
                     {selectedId.category === 'exclusive' ? 'Live Auction' : selectedId.category === 'free' ? 'FREE' : `₹${selectedId.price || 'Price on request'}`}
                   </motion.div>
-                  
+
                   <div className="flex flex-col gap-4">
                     <div className="flex gap-4">
-                      <button 
+                      <button
                         onClick={() => navigate(`/website/${selectedId._id || selectedId.id}`)}
                         className="flex-1 bg-white text-black py-6 rounded-[28px] font-black text-xl hover:bg-[#8b7355] hover:text-white transition-all active:scale-95"
                       >
@@ -210,8 +209,8 @@ export default function SmoothEliteGallery() {
                       </button>
 
                       {(selectedId.category === 'exclusive') && (
-                        <button 
-                          onClick={() => navigate('/auctions')} 
+                        <button
+                          onClick={() => navigate('/auctions')}
                           className="flex-1 bg-[#8b7353] text-white py-6 rounded-[28px] font-black text-xl hover:bg-slate-600 transition-all active:scale-95 flex items-center justify-center gap-3"
                         >
                           <Gavel size={24} />

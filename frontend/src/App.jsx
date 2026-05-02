@@ -80,7 +80,7 @@ function AppContent() {
 
     if (vid) {
       vid.currentTime = 0;
-      vid.play().catch(() => {});
+      vid.play().catch(() => { });
     }
 
     setShowIntro(false);
@@ -132,17 +132,17 @@ function AppContent() {
 
             </Routes>
             <Toaster
-  position="top-right"
-  richColors
-  toastOptions={{
-    style: {
-      backdropFilter: "blur(10px)",
-      background: "rgba(30,30,30,0.8)",
-      color: "#fff",
-      border: "1px solid rgba(255,255,255,0.1)"
-    }
-  }}
-/>
+              position="top-right"
+              richColors
+              toastOptions={{
+                style: {
+                  backdropFilter: "blur(10px)",
+                  background: "rgba(30,30,30,0.8)",
+                  color: "#fff",
+                  border: "1px solid rgba(255,255,255,0.1)"
+                }
+              }}
+            />
           </main>
 
           {/* Hide Footer on Builder and VerifyEmail */}

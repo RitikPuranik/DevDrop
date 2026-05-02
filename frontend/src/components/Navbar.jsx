@@ -2,8 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import LinkTransition from './TransitionLink';
-import AuthModal from './Login'; 
-import img from '../assets/image.png'; 
+import AuthModal from './Login';
+import img from '../assets/image.png';
 import { LogOut } from "lucide-react";
 
 const Navbar = () => {
@@ -40,11 +40,11 @@ const Navbar = () => {
   ];
 
   // 2. Conditionally add Sell & Profile for logged-in users
-  const finalMenuItems = isLoggedIn 
+  const finalMenuItems = isLoggedIn
     ? [
-        ...menuItems,
-        { to: "/profile", label: "Profile", src: "https://images.unsplash.com/photo-1511367461989-f85a21fda167?q=80&w=1000" },
-      ] 
+      ...menuItems,
+      { to: "/profile", label: "Profile", src: "https://images.unsplash.com/photo-1511367461989-f85a21fda167?q=80&w=1000" },
+    ]
     : menuItems;
 
   const fastEase = [0.19, 1, 0.22, 1];
@@ -57,12 +57,12 @@ const Navbar = () => {
   return (
     <>
       {/* AUTH MODAL */}
-      <AuthModal 
-        isOpen={showAuthModal} 
+      <AuthModal
+        isOpen={showAuthModal}
         onClose={() => {
-            setShowAuthModal(false);
-            checkLoginStatus(); // Re-check status when modal closes
-        }} 
+          setShowAuthModal(false);
+          checkLoginStatus(); // Re-check status when modal closes
+        }}
       />
 
       {/* NAVBAR TOP STRIP */}
@@ -71,13 +71,13 @@ const Navbar = () => {
           devdrop
         </LinkTransition>
 
-        <button 
+        <button
           onClick={() => setIsOpen(!isOpen)}
           className="w-12 h-12 flex flex-col justify-center items-center gap-1.5 cursor-pointer relative group"
         >
           <AnimatePresence>
             {isOpen && (
-              <motion.div 
+              <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 exit={{ scale: 0 }}
@@ -85,15 +85,15 @@ const Navbar = () => {
               />
             )}
           </AnimatePresence>
-          
-          <motion.div 
+
+          <motion.div
             animate={isOpen ? { rotate: 45, y: 4, backgroundColor: "#000" } : { rotate: 0, y: 0, backgroundColor: "#e8e2d6" }}
-            transition={{ duration: 0.9, ease: fastEase }} 
+            transition={{ duration: 0.9, ease: fastEase }}
             className="w-8 h-[2px]"
           />
-          <motion.div 
+          <motion.div
             animate={isOpen ? { rotate: -45, y: -4, backgroundColor: "#000" } : { rotate: 0, y: 0, backgroundColor: "#e8e2d6" }}
-            transition={{ duration: 0.9, ease: fastEase }} 
+            transition={{ duration: 0.9, ease: fastEase }}
             className="w-8 h-[2px]"
           />
         </button>
@@ -107,39 +107,39 @@ const Navbar = () => {
             animate={{ y: 0 }}
             exit={{ y: "-100%" }}
             transition={{ duration: 0.6, ease: fastEase }}
-            className="fixed inset-0 z-[100] flex bg-[#e8e2d6] overflow-hidden" 
+            className="fixed inset-0 z-[100] flex bg-[#e8e2d6] overflow-hidden"
           >
             {/* LEFT SIDE: Navigation Links */}
             <div className="mt-12 w-1/2 h-full flex flex-col justify-center text-center pb-12 px-24">
               <div className="flex flex-col -ml-5 mb-8">
                 {finalMenuItems.map((item, index) => (
-                  <MenuItem 
+                  <MenuItem
                     key={`${isLoggedIn}-${index}`} // Key change triggers re-render on login
-                    label={item.label} 
+                    label={item.label}
                     to={item.to}
                     isDimmed={hoveredIndex !== index}
                     onHover={() => setHoveredIndex(index)}
-                    close={() => setIsOpen(false)} 
+                    close={() => setIsOpen(false)}
                   />
                 ))}
               </div>
 
               {/* ACTION BUTTONS (Login/Logout) */}
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3, duration: 0.6, ease: fastEase }}
                 className="flex flex-col items-center -ml-5"
               >
                 {!isLoggedIn ? (
-                  <button 
+                  <button
                     onClick={openLogin}
                     className="px-12 py-4 bg-[#8b7355] text-white rounded-full font-bold tracking-widest uppercase text-[10px] hover:bg-black transition-all duration-500 shadow-lg active:scale-95"
                   >
                     Login
                   </button>
                 ) : (
-                  <button 
+                  <button
                     onClick={handleLogout}
                     className="flex items-center gap-2 px-8 py-3 bg-[#8b7355] text-white rounded-full text-[10px] uppercase tracking-[0.2em] font-bold hover:bg-black transition-all duration-500 shadow-lg active:scale-95"
                   >
@@ -183,8 +183,8 @@ const MenuItem = ({ label, to, onHover, close, isDimmed }) => (
       animate={{ y: 0 }}
       transition={{ duration: 0.5, ease: [0.19, 1, 0.22, 1] }}
     >
-      <LinkTransition 
-        to={to} 
+      <LinkTransition
+        to={to}
         className={`text-[5.0vw] leading-[0.9] font-serif italic tracking-tighter block transition-all duration-300 cursor-pointer ${isDimmed ? 'opacity-30 scale-95' : 'opacity-100 scale-100'} text-black hover:opacity-100`}
       >
         {label}

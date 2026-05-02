@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useSearchParams, useNavigate, useLocation } from "react-router-dom";
 import api from "../api/axios";
 
 const REDIRECT_SECONDS = 3;
@@ -67,9 +67,16 @@ export default function VerifyEmail() {
   useStyles();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [status, setStatus] = useState("loading");
   const [errMsg, setErrMsg] = useState("");
   const [countdown, setCountdown] = useState(REDIRECT_SECONDS);
+
+  // Priority: state.from (in-app redirect) → sessionStorage (stored before leaving for email) → "/"
+  const redirectTo =
+    location.state?.from ||
+    sessionStorage.getItem("dd_verify_return") ||
+    "/";
 
   const calledRef = useRef(false);
 
@@ -78,17 +85,47 @@ export default function VerifyEmail() {
     calledRef.current = true;
 
     const token = searchParams.get("token");
-    if (!token) { setStatus("error"); setErrMsg("No verification token found. Please request a new link."); return; }
+    if (!token) {
+      setStatus("error");
+      setErrMsg("No verification token found. Please request a new link.");
+      return;
+    }
     api.post("/auth/verify-email", { token })
-      .then(r => { if (r.data.success) setStatus("success"); else { setStatus("error"); setErrMsg(r.data.message || "Verification failed."); }})
-      .catch(e => { setStatus("error"); setErrMsg(e.response?.data?.message || "Invalid or expired verification link."); });
+      .then(r => {
+        if (r.data.success) setStatus("success");
+        else { setStatus("error"); setErrMsg(r.data.message || "Verification failed."); }
+      })
+      .catch(e => {
+        setStatus("error");
+        setErrMsg(e.response?.data?.message || "Invalid or expired verification link.");
+      });
   }, []);
 
   useEffect(() => {
     if (status !== "success") return;
-    const id = setInterval(() => setCountdown(p => { if (p <= 1) { clearInterval(id); navigate("/"); return 0; } return p - 1; }), 1000);
+    const id = setInterval(() => {
+      setCountdown(p => {
+        if (p <= 1) {
+          clearInterval(id);
+          sessionStorage.removeItem("dd_verify_return");
+          navigate(redirectTo, { replace: true });
+          return 0;
+        }
+        return p - 1;
+      });
+    }, 1000);
     return () => clearInterval(id);
   }, [status]);
+
+  const handleSkip = () => {
+    sessionStorage.removeItem("dd_verify_return");
+    navigate(redirectTo, { replace: true });
+  };
+
+  const handleBack = () => {
+    sessionStorage.removeItem("dd_verify_return");
+    navigate(redirectTo, { replace: true });
+  };
 
   const err = status === "error";
 
@@ -107,8 +144,8 @@ export default function VerifyEmail() {
       <div className="dd-in" style={{ position:"fixed", top:32, left:40, zIndex:20, fontFamily:"'Space Mono',monospace", fontSize:12, letterSpacing:"0.28em", color:"rgba(139,115,85,0.4)", textTransform:"uppercase" }}>devdrop</div>
 
       {status === "loading" && <LoadingView/>}
-      {status === "success" && <SuccessView countdown={countdown} total={REDIRECT_SECONDS} onSkip={()=>navigate("/")}/>}
-      {status === "error"   && <ErrorView msg={errMsg} onBack={()=>navigate("/")}/>}
+      {status === "success" && <SuccessView countdown={countdown} total={REDIRECT_SECONDS} onSkip={handleSkip}/>}
+      {status === "error"   && <ErrorView msg={errMsg} onBack={handleBack}/>}
     </div>
   );
 }
