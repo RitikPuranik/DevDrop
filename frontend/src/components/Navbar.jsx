@@ -1,18 +1,19 @@
-
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import LinkTransition from './TransitionLink';
 import AuthModal from './Login';
-import img from '../assets/image.png';
 import { LogOut } from "lucide-react";
+import { useNavigate } from 'react-router-dom';
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const [hoveredIndex, setHoveredIndex] = useState(0);
+  const [hoveredIndex, setHoveredIndex] = useState(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [websitesExpanded, setWebsitesExpanded] = useState(false);
+  const [hoveredSubIndex, setHoveredSubIndex] = useState(null);
+  const navigate = useNavigate();
 
-  // Sync login state
   const checkLoginStatus = () => {
     const token = localStorage.getItem("token");
     setIsLoggedIn(!!token);
@@ -20,7 +21,6 @@ const Navbar = () => {
 
   useEffect(() => {
     checkLoginStatus();
-    // Listen for storage changes (in case of login in another tab)
     window.addEventListener('storage', checkLoginStatus);
     return () => window.removeEventListener('storage', checkLoginStatus);
   }, []);
@@ -31,20 +31,48 @@ const Navbar = () => {
     setIsOpen(false);
   };
 
-  // 1. Define your menu items
   const menuItems = [
-    { to: "/", label: "Home", src: "https://images.unsplash.com/photo-1642543349642-0d04e91511c9?q=80&w=871" },
-    { to: "/template", label: "Websites", src: "https://images.unsplash.com/photo-1467232004584-a241de8bcf5d?q=80&w=869" },
-    { to: "/review", label: "People's Love", src: "https://plus.unsplash.com/premium_photo-1739436074076-3c6d73478d59?q=80&w=812" },
-    { to: "/contact", label: "Contact Us", src: "https://images.unsplash.com/photo-1534536281715-e28d76689b4d?q=80&w=870" },
+    {
+      to: "/",
+      label: "Home",
+      src: "https://images.unsplash.com/photo-1642543349642-0d04e91511c9?q=80&w=871",
+      hasSubMenu: false,
+    },
+    {
+      to: "/template",
+      label: "Websites",
+      src: "https://images.unsplash.com/photo-1467232004584-a241de8bcf5d?q=80&w=869",
+      hasSubMenu: true,
+      subItems: [
+        { label: "Free", filter: "free" },
+        { label: "Paid", filter: "paid" },
+        { label: "Exclusive", filter: "exclusive" },
+      ],
+    },
+    {
+      to: "/review",
+      label: "People's Love",
+      src: "https://plus.unsplash.com/premium_photo-1739436074076-3c6d73478d59?q=80&w=812",
+      hasSubMenu: false,
+    },
+    {
+      to: "/contact",
+      label: "Contact Us",
+      src: "https://images.unsplash.com/photo-1534536281715-e28d76689b4d?q=80&w=870",
+      hasSubMenu: false,
+    },
   ];
 
-  // 2. Conditionally add Sell & Profile for logged-in users
   const finalMenuItems = isLoggedIn
     ? [
-      ...menuItems,
-      { to: "/profile", label: "Profile", src: "https://images.unsplash.com/photo-1511367461989-f85a21fda167?q=80&w=1000" },
-    ]
+        ...menuItems,
+        {
+          to: "/profile",
+          label: "Profile",
+          src: "https://images.unsplash.com/photo-1511367461989-f85a21fda167?q=80&w=1000",
+          hasSubMenu: false,
+        },
+      ]
     : menuItems;
 
   const fastEase = [0.19, 1, 0.22, 1];
@@ -54,14 +82,42 @@ const Navbar = () => {
     setShowAuthModal(true);
   };
 
+  const closeMenu = () => {
+    setIsOpen(false);
+    setWebsitesExpanded(false);
+    setHoveredIndex(null);
+    setHoveredSubIndex(null);
+  };
+
+  const handleMenuItemClick = (item) => {
+    if (item.hasSubMenu) {
+      setWebsitesExpanded((prev) => !prev);
+      setHoveredSubIndex(null);
+    } else {
+      closeMenu();
+    }
+  };
+
+  const handleSubItemClick = (filter) => {
+    closeMenu();
+    navigate(`/template?filter=${filter}`);
+  };
+
+  // Which image index to show on the right panel
+  const activeImageIndex =
+    websitesExpanded
+      ? finalMenuItems.findIndex((m) => m.hasSubMenu)
+      : hoveredIndex !== null
+      ? hoveredIndex
+      : 0;
+
   return (
     <>
-      {/* AUTH MODAL */}
       <AuthModal
         isOpen={showAuthModal}
         onClose={() => {
           setShowAuthModal(false);
-          checkLoginStatus(); // Re-check status when modal closes
+          checkLoginStatus();
         }}
       />
 
@@ -72,7 +128,16 @@ const Navbar = () => {
         </LinkTransition>
 
         <button
-          onClick={() => setIsOpen(!isOpen)}
+          onClick={() => {
+            if (isOpen) {
+              setIsOpen(false);
+              setWebsitesExpanded(false);
+              setHoveredIndex(null);
+              setHoveredSubIndex(null);
+            } else {
+              setIsOpen(true);
+            }
+          }}
           className="w-12 h-12 flex flex-col justify-center items-center gap-1.5 cursor-pointer relative group"
         >
           <AnimatePresence>
@@ -109,22 +174,32 @@ const Navbar = () => {
             transition={{ duration: 0.6, ease: fastEase }}
             className="fixed inset-0 z-[100] flex bg-[#e8e2d6] overflow-hidden"
           >
-            {/* LEFT SIDE: Navigation Links */}
+            {/* LEFT SIDE */}
             <div className="mt-12 w-1/2 h-full flex flex-col justify-center text-center pb-12 px-24">
               <div className="flex flex-col -ml-5 mb-8">
-                {finalMenuItems.map((item, index) => (
-                  <MenuItem
-                    key={`${isLoggedIn}-${index}`} // Key change triggers re-render on login
-                    label={item.label}
-                    to={item.to}
-                    isDimmed={hoveredIndex !== index}
-                    onHover={() => setHoveredIndex(index)}
-                    close={() => setIsOpen(false)}
-                  />
-                ))}
+                {finalMenuItems.map((item, index) => {
+                  const anyHovered = hoveredIndex !== null;
+                  const isDimmed = anyHovered
+                    ? hoveredIndex !== index
+                    : websitesExpanded
+                    ? !item.hasSubMenu
+                    : false;
+
+                  return (
+                    <MenuItem
+                      key={`${isLoggedIn}-${index}`}
+                      item={item}
+                      isDimmed={isDimmed}
+                      onHover={() => setHoveredIndex(index)}
+                      onLeave={() => setHoveredIndex(null)}
+                      onClick={() => handleMenuItemClick(item)}
+                      closeMenu={closeMenu}
+                      isExpanded={item.hasSubMenu && websitesExpanded}
+                    />
+                  );
+                })}
               </div>
 
-              {/* ACTION BUTTONS (Login/Logout) */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -150,23 +225,66 @@ const Navbar = () => {
               </motion.div>
             </div>
 
-            {/* RIGHT SIDE: Hover Images */}
-            <div className="w-1/2 h-full relative bg-black">
+            {/* RIGHT SIDE */}
+            <div className="w-1/2 h-full relative bg-black overflow-hidden">
+              {/* Background image — dims when sub-menu is open */}
               <AnimatePresence initial={false}>
                 <motion.div
-                  key={hoveredIndex}
+                  key={activeImageIndex}
                   initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
+                  animate={{ opacity: websitesExpanded ? 0.3 : 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.3, ease: "linear" }}
                   className="absolute inset-0 w-full h-full"
                 >
                   <img
-                    src={finalMenuItems[hoveredIndex]?.src || menuItems[0].src}
+                    src={finalMenuItems[activeImageIndex]?.src || finalMenuItems[0].src}
                     className="w-full h-full object-cover"
                     alt="Menu Preview"
                   />
                 </motion.div>
+              </AnimatePresence>
+
+              {/* Sub-options panel overlay */}
+              <AnimatePresence>
+                {websitesExpanded && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.25, ease: fastEase }}
+                    className="absolute inset-0 flex flex-col justify-center px-16 z-10"
+                  >
+                    <motion.p
+                      initial={{ opacity: 0, y: -8 }}
+                      animate={{ opacity: 0.55, y: 0 }}
+                      transition={{ delay: 0.05, duration: 0.35 }}
+                      className="text-[#e8e2d6] text-sm font-sans uppercase tracking-[0.3em] mb-6"
+                    >
+                      Websites
+                    </motion.p>
+
+                    <div className="flex flex-col">
+                      {finalMenuItems
+                        .find((m) => m.hasSubMenu)
+                        ?.subItems.map((sub, si) => {
+                          const isSubDimmed =
+                            hoveredSubIndex !== null && hoveredSubIndex !== si;
+                          return (
+                            <SubMenuItem
+                              key={sub.filter}
+                              label={sub.label}
+                              index={si}
+                              isDimmed={isSubDimmed}
+                              onHover={() => setHoveredSubIndex(si)}
+                              onLeave={() => setHoveredSubIndex(null)}
+                              onClick={() => handleSubItemClick(sub.filter)}
+                            />
+                          );
+                        })}
+                    </div>
+                  </motion.div>
+                )}
               </AnimatePresence>
             </div>
           </motion.div>
@@ -176,21 +294,66 @@ const Navbar = () => {
   );
 };
 
-const MenuItem = ({ label, to, onHover, close, isDimmed }) => (
-  <div className="overflow-hidden py-1" onMouseEnter={onHover} onClick={close}>
+const MenuItem = ({ item, onHover, onLeave, onClick, closeMenu, isDimmed, isExpanded }) => (
+  <div
+    className="overflow-hidden py-1"
+    onMouseEnter={onHover}
+    onMouseLeave={onLeave}
+    onClick={onClick}
+  >
     <motion.div
       initial={{ y: "100%" }}
       animate={{ y: 0 }}
       transition={{ duration: 0.5, ease: [0.19, 1, 0.22, 1] }}
     >
-      <LinkTransition
-        to={to}
-        className={`text-[5.0vw] leading-[0.9] font-serif italic tracking-tighter block transition-all duration-300 cursor-pointer ${isDimmed ? 'opacity-30 scale-95' : 'opacity-100 scale-100'} text-black hover:opacity-100`}
-      >
-        {label}
-      </LinkTransition>
+      {item.hasSubMenu ? (
+        <span
+          className={`text-[5.0vw] leading-[0.9] font-serif italic tracking-tighter block transition-all duration-300 cursor-pointer select-none text-black ${
+            isDimmed ? 'opacity-20' : 'opacity-100'
+          }`}
+        >
+          {item.label}
+          <motion.span
+            animate={{ x: isExpanded ? 6 : 0, opacity: isExpanded ? 1 : 0.4 }}
+            transition={{ duration: 0.3 }}
+            className="inline-block ml-2 text-[2.8vw] align-middle"
+          >
+            ›
+          </motion.span>
+        </span>
+      ) : (
+        <LinkTransition
+          to={item.to}
+          onClick={closeMenu}
+          className={`text-[5.0vw] leading-[0.9] font-serif italic tracking-tighter block transition-all duration-300 cursor-pointer text-black ${
+            isDimmed ? 'opacity-20' : 'opacity-100'
+          }`}
+        >
+          {item.label}
+        </LinkTransition>
+      )}
     </motion.div>
   </div>
+);
+
+const SubMenuItem = ({ label, index, isDimmed, onHover, onLeave, onClick }) => (
+  <motion.div
+    initial={{ opacity: 0, x: 24 }}
+    animate={{ opacity: 1, x: 0 }}
+    transition={{ delay: index * 0.08 + 0.08, duration: 0.45, ease: [0.19, 1, 0.22, 1] }}
+    className="overflow-hidden py-0.5"
+    onMouseEnter={onHover}
+    onMouseLeave={onLeave}
+    onClick={onClick}
+  >
+    <span
+      className={`text-[5.0vw] leading-[0.9] font-serif italic tracking-tighter block transition-all duration-300 cursor-pointer select-none text-[#e8e2d6] ${
+        isDimmed ? 'opacity-20' : 'opacity-100'
+      }`}
+    >
+      {label}
+    </span>
+  </motion.div>
 );
 
 export default Navbar;

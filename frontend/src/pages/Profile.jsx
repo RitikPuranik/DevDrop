@@ -340,15 +340,40 @@ export default function Profile() {
                 <EmptyState icon={ShoppingBag} title="No purchases yet" description="Browse templates to find your next project" action="Browse" onAction={() => navigate('/template')} />
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {purchases.map((p) => (
-                    <div key={p._id} className="bg-[#111] border border-white/5 rounded-3xl p-6">
-                      <h3 className="font-bold text-lg mb-1">{p.websiteId?.name || 'Item'}</h3>
-                      <p className="text-white/30 text-xs mb-4">Transaction ID: {p._id}</p>
-                      <button onClick={() => window.open(p.websiteId?.deployedUrl, '_blank')} className="text-[#8b7355] text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
-                        Open Project <ExternalLink size={12} />
-                      </button>
-                    </div>
-                  ))}
+                  {purchases.map((p) => {
+                    const web = p.websiteId || {};
+                    const cat = web.category || 'paid';
+                    return (
+                      <div key={p._id} className="bg-[#111] border border-white/5 rounded-3xl p-6 hover:border-white/15 transition-all group">
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1">
+                            <h3 className="font-bold text-lg tracking-tight">{web.name || 'Template'}</h3>
+                            <p className="text-white/20 text-[10px] mt-1">
+                              {p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Recently'}
+                            </p>
+                          </div>
+                          <span className={`text-[8px] font-bold uppercase tracking-[0.2em] px-3 py-1 rounded-full ${
+                            cat === 'free' ? 'text-emerald-400 bg-emerald-500/10' :
+                            cat === 'exclusive' ? 'text-orange-400 bg-orange-500/10' :
+                            'text-[#8b7355] bg-[#8b7355]/10'
+                          }`}>
+                            {cat}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between pt-4 border-t border-white/5">
+                          <span className="text-[#8b7355] font-bold text-sm">
+                            {p.amount ? `₹${p.amount}` : cat === 'free' ? 'FREE' : `₹${web.price || 0}`}
+                          </span>
+                          <button
+                            onClick={() => navigate(`/website/${web._id || p.websiteId}`)}
+                            className="flex items-center gap-2 px-4 py-2 bg-white/5 rounded-xl text-[10px] font-bold uppercase tracking-widest text-white/50 hover:text-white hover:bg-white/10 transition-all"
+                          >
+                            View Details <ExternalLink size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </motion.div>

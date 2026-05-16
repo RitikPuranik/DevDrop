@@ -12,7 +12,7 @@ const browseWebsites = async (req, res) => {
     if (category) query.category = category;
     if (minPrice || maxPrice) { query.price = {}; if (minPrice) query.price.$gte = parseFloat(minPrice); if (maxPrice) query.price.$lte = parseFloat(maxPrice); }
 
-    const websites = await Website.find(query).select('-adminComment -files -isDeleted').populate('sellerId', 'email').sort({ [sortBy]: order === 'asc' ? 1 : -1 }).skip(skip).limit(parseInt(limit));
+    const websites = await Website.find(query).select('-adminComment -files -isDeleted').populate('sellerId', 'name email').sort({ [sortBy]: order === 'asc' ? 1 : -1 }).skip(skip).limit(parseInt(limit));
     const total = await Website.countDocuments(query);
 
     let result = websites;
@@ -29,7 +29,7 @@ const browseWebsites = async (req, res) => {
 
 const getWebsiteDetails = async (req, res) => {
   try {
-    const website = await Website.findOne({ _id: req.params.id, status: WEBSITE_STATUS.APPROVED, isDeleted: false }).select('-adminComment -isDeleted').populate('sellerId', 'email');
+    const website = await Website.findOne({ _id: req.params.id, status: WEBSITE_STATUS.APPROVED, isDeleted: false }).select('-adminComment -isDeleted').populate('sellerId', 'name email');
     if (!website) return res.status(404).json({ success: false, message: 'Website not found' });
 
     await Website.findByIdAndUpdate(req.params.id, { $inc: { viewCount: 1 } });
@@ -52,7 +52,7 @@ const getByCategory = async (req, res) => {
     const query = { category, status: WEBSITE_STATUS.APPROVED, isDeleted: false };
     if (category === 'exclusive') query.status = { $ne: WEBSITE_STATUS.SOLD };
 
-    const websites = await Website.find(query).select('-adminComment -files -isDeleted').populate('sellerId', 'email').sort({ createdAt: -1 }).skip((page - 1) * limit).limit(parseInt(limit));
+    const websites = await Website.find(query).select('-adminComment -files -isDeleted').populate('sellerId', 'name email').sort({ createdAt: -1 }).skip((page - 1) * limit).limit(parseInt(limit));
     const total = await Website.countDocuments(query);
 
     res.json({ success: true, data: websites, pagination: getPaginationMetadata(parseInt(page), parseInt(limit), total) });
@@ -73,7 +73,7 @@ const searchWebsites = async (req, res) => {
     };
     if (category) query.category = category;
 
-    const websites = await Website.find(query).select('-adminComment -files -isDeleted').populate('sellerId', 'email').sort({ viewCount: -1, createdAt: -1 }).skip((page - 1) * limit).limit(parseInt(limit));
+    const websites = await Website.find(query).select('-adminComment -files -isDeleted').populate('sellerId', 'name email').sort({ viewCount: -1, createdAt: -1 }).skip((page - 1) * limit).limit(parseInt(limit));
     const total = await Website.countDocuments(query);
 
     res.json({ success: true, data: websites, pagination: getPaginationMetadata(parseInt(page), parseInt(limit), total), searchQuery: q });

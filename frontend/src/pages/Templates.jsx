@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Play, ShoppingCart, Zap, Search, Loader2, Gavel } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { X, Search, Loader2, Eye, Heart, User, ChevronRight } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { websiteAPI } from "../api/website";
 
-// Elite physics: Higher mass for "height" and weight in transitions
 const transition = {
   type: "spring",
   stiffness: 220,
@@ -14,11 +13,15 @@ const transition = {
 
 export default function SmoothEliteGallery() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeFilter, setActiveFilter] = useState("all");
+  const [activeFilter, setActiveFilter] = useState(() => {
+    const urlFilter = searchParams.get('filter');
+    return ['free', 'paid', 'exclusive'].includes(urlFilter) ? urlFilter : 'all';
+  });
 
   useEffect(() => {
     const fetchTemplates = async () => {
@@ -39,6 +42,7 @@ export default function SmoothEliteGallery() {
 
   useEffect(() => {
     document.body.style.overflow = selectedId ? 'hidden' : 'unset';
+    return () => { document.body.style.overflow = 'unset'; };
   }, [selectedId]);
 
   const filteredItems = useMemo(() => {
@@ -70,7 +74,6 @@ export default function SmoothEliteGallery() {
 
           <div className="flex items-center gap-2 pr-1">
             <div className="flex items-center gap-1 bg-black/40 rounded-[26px] p-1">
-              {/* Added 'paid' to the category list */}
               {['all', 'free', 'paid', 'exclusive'].map((filter) => (
                 <motion.button
                   key={filter}
@@ -90,13 +93,6 @@ export default function SmoothEliteGallery() {
                 </motion.button>
               ))}
             </div>
-
-            <button
-              onClick={() => navigate('/auctions')}
-              className="bg-gray-200/10 border border-orange-200/20 text-[#e8e2d6] px-4 py-2 rounded-[22px] text-[9px] font-black uppercase tracking-widest hover:bg-[#8b7355] hover:text-white transition-all flex items-center gap-2"
-            >
-              <Gavel size={14} /> Auctions
-            </button>
           </div>
         </motion.div>
       </nav>
@@ -108,11 +104,17 @@ export default function SmoothEliteGallery() {
             <Loader2 className="animate-spin text-amber-100" size={40} />
             <span className="text-xs font-bold uppercase tracking-[0.3em] text-gray-500">Syncing Assets</span>
           </div>
+        ) : filteredItems.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-40 gap-3">
+            <Search size={40} className="text-white/10" />
+            <p className="text-sm text-white/30 font-bold">No templates found</p>
+          </div>
         ) : (
           <motion.div layout className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             <AnimatePresence mode="popLayout">
               {filteredItems.map((item) => {
                 const itemId = item._id || item.id;
+                const sellerName = item.sellerId?.name || 'Creator';
                 return (
                   <motion.div
                     layout
@@ -133,13 +135,42 @@ export default function SmoothEliteGallery() {
                       style={{ backgroundColor: item.color || '#1a1a1a' }}
                       className="aspect-[12/11] rounded-[32px] mb-6 relative overflow-hidden flex items-center justify-center border border-white/5"
                     >
+                      {/* Stats overlay */}
+                      <div className="absolute top-3 right-3 flex items-center gap-2 z-10">
+                        {(item.wishlistCount > 0) && (
+                          <span className="flex items-center gap-1 bg-black/60 backdrop-blur-md text-[9px] font-bold text-white/70 px-2.5 py-1 rounded-full">
+                            <Heart size={9} className="text-red-400 fill-red-400" /> {item.wishlistCount}
+                          </span>
+                        )}
+                        {(item.viewCount > 0) && (
+                          <span className="flex items-center gap-1 bg-black/60 backdrop-blur-md text-[9px] font-bold text-white/70 px-2.5 py-1 rounded-full">
+                            <Eye size={9} /> {item.viewCount}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Category badge */}
+                      <div className="absolute top-3 left-3 z-10">
+                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                          item.category === 'exclusive' ? 'bg-orange-500/80 text-white' :
+                          item.category === 'paid' ? 'bg-[#8b7355]/80 text-white' :
+                          'bg-emerald-500/80 text-white'
+                        }`}>
+                          {item.category}
+                        </span>
+                      </div>
                     </motion.div>
 
                     <div className="px-2">
                       <motion.h3 layoutId={`title-${itemId}`} transition={transition} className="font-black text-xl tracking-tight">{item.title || item.name}</motion.h3>
-                      <motion.p layoutId={`price-${itemId}`} transition={transition} className="text-[#8b7355] font-bold text-sm tracking-widest uppercase">
-                        {item.category === 'exclusive' ? 'Exclusive' : item.category === 'free' ? 'FREE' : item.price ? `₹${item.price}` : 'Paid'}
-                      </motion.p>
+                      <div className="flex items-center justify-between mt-1">
+                        <motion.p layoutId={`price-${itemId}`} transition={transition} className="text-[#8b7355] font-bold text-sm tracking-widest uppercase">
+                          {item.category === 'exclusive' ? 'Auction' : item.category === 'free' ? 'FREE' : item.price ? `₹${item.price}` : 'Paid'}
+                        </motion.p>
+                        <span className="flex items-center gap-1.5 text-[10px] text-white/20">
+                          <User size={10} /> {sellerName}
+                        </span>
+                      </div>
                     </div>
                   </motion.div>
                 );
@@ -149,7 +180,7 @@ export default function SmoothEliteGallery() {
         )}
       </main>
 
-      {/* --- MODAL --- */}
+      {/* --- MODAL (View Details only) --- */}
       <AnimatePresence>
         {selectedId && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-12">
@@ -180,7 +211,7 @@ export default function SmoothEliteGallery() {
                   style={{ backgroundColor: selectedId.color || '#1a1a1a' }}
                   className="h-full min-h-[450px] rounded-[40px] relative flex items-center justify-center overflow-hidden border border-white/5"
                 >
-                  <Play className="text-white/20" size={100} />
+                  <Eye className="text-white/10" size={80} />
                 </motion.div>
               </div>
 
@@ -191,41 +222,42 @@ export default function SmoothEliteGallery() {
                   exit={{ opacity: 0, x: 30 }}
                   transition={{ duration: 0.4 }}
                 >
-
                   <motion.h2 layoutId={`title-${selectedId._id || selectedId.id}`} transition={transition} className="text-6xl font-black tracking-tighter mb-4 leading-none">
                     {selectedId.title || selectedId.name}
                   </motion.h2>
-                  <motion.div layoutId={`price-${selectedId._id || selectedId.id}`} transition={transition} className="text-3xl font-light italic text-gray-500 mb-10">
+
+                  <motion.div layoutId={`price-${selectedId._id || selectedId.id}`} transition={transition} className="text-3xl font-light italic text-gray-500 mb-4">
                     {selectedId.category === 'exclusive' ? 'Live Auction' : selectedId.category === 'free' ? 'FREE' : `₹${selectedId.price || 'Price on request'}`}
                   </motion.div>
 
-                  <div className="flex flex-col gap-4">
-                    <div className="flex gap-4">
-                      <button
-                        onClick={() => navigate(`/website/${selectedId._id || selectedId.id}`)}
-                        className="flex-1 bg-white text-black py-6 rounded-[28px] font-black text-xl hover:bg-[#8b7355] hover:text-white transition-all active:scale-95"
-                      >
-                        View Detail
-                      </button>
-
-                      {(selectedId.category === 'exclusive') && (
-                        <button
-                          onClick={() => navigate('/auctions')}
-                          className="flex-1 bg-[#8b7353] text-white py-6 rounded-[28px] font-black text-xl hover:bg-slate-600 transition-all active:scale-95 flex items-center justify-center gap-3"
-                        >
-                          <Gavel size={24} />
-                          Bid Now
-                        </button>
-                      )}
-
-                      {/* Optional Add to Cart for Paid items */}
-                      {selectedId.category === 'paid' && (
-                        <button className="w-24 bg-white/5 border border-white/10 rounded-[28px] flex items-center justify-center text-white hover:bg-white/10 transition-colors active:scale-95">
-                          <ShoppingCart size={28} />
-                        </button>
+                  {/* Seller info */}
+                  {selectedId.sellerId && (
+                    <div className="flex items-center gap-3 mb-8">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#8b7355] to-[#5a4a38] flex items-center justify-center text-xs font-serif italic text-white">
+                        {(selectedId.sellerId?.name || 'C')[0]?.toUpperCase()}
+                      </div>
+                      <p className="text-sm font-bold text-white/60">{selectedId.sellerId?.name || 'Creator'}</p>
+                      {(selectedId.viewCount > 0) && (
+                        <span className="ml-auto flex items-center gap-1 text-[10px] text-white/20">
+                          <Eye size={10} /> {selectedId.viewCount} views
+                        </span>
                       )}
                     </div>
-                  </div>
+                  )}
+
+                  {/* Description preview */}
+                  {selectedId.description && (
+                    <p className="text-white/30 text-sm mb-8 leading-relaxed line-clamp-3">{selectedId.description}</p>
+                  )}
+
+                  {/* Single View Details button */}
+                  <button
+                    onClick={() => navigate(`/website/${selectedId._id || selectedId.id}`)}
+                    className="w-full bg-white text-black py-6 rounded-[28px] font-black text-xl hover:bg-[#8b7355] hover:text-white transition-all active:scale-95 flex items-center justify-center gap-3 group"
+                  >
+                    View Details
+                    <ChevronRight size={20} className="group-hover:translate-x-1 transition-transform" />
+                  </button>
                 </motion.div>
               </div>
             </motion.div>
