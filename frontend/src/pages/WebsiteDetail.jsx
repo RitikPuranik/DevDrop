@@ -208,8 +208,8 @@ export default function WebsiteDetail() {
       </AnimatePresence>
 
       <div className="max-w-6xl mx-auto">
-        <motion.button initial={{opacity:0,x:-10}} animate={{opacity:1,x:0}} onClick={() => navigate('/template')}
-          className="flex items-center gap-2 text-white/20 text-[10px] font-bold uppercase tracking-[0.2em] mb-8 hover:text-white transition-colors">
+        <motion.button initial={{opacity:0,x:-10}} animate={{opacity:1,x:0}} onClick={() => { window.scrollTo(0, 0); navigate('/template'); }}
+          className="relative z-10 flex items-center gap-2 text-white/20 text-[10px] font-bold uppercase tracking-[0.2em] mb-8 hover:text-white transition-colors cursor-pointer">
           <ArrowLeft size={12} /> Back to Templates
         </motion.button>
 
@@ -320,8 +320,7 @@ export default function WebsiteDetail() {
               <h1 className="text-4xl font-black tracking-tight mb-2">{website.name}</h1>
 
               <div className="flex items-center gap-4 text-white/20 text-xs mb-8">
-                <span className="flex items-center gap-1"><Eye size={12} /> {website.viewCount || 0} views</span>
-                <span className="flex items-center gap-1"><Heart size={12} /> {website.wishlistCount || 0}</span>
+                <span className="flex items-center gap-1"><Heart size={12} className="text-red-400 fill-red-400" /> {website.wishlistCount || 0} wishlisted</span>
               </div>
 
               {/* ═══ EXCLUSIVE AUCTION PANEL ═══ */}

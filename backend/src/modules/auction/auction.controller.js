@@ -17,7 +17,7 @@ const startAuction = async (req, res) => {
       startingPrice, 
       minimumBidIncrement = 100, 
       reservePrice = 0,
-      firstBidWaitingPeriodHours = 72 // 3 days default
+      firstBidWaitingPeriodHours = parseInt(process.env.AUCTION_BID_WAIT_HOURS) || 72
     } = req.body;
 
     // Find website
@@ -543,9 +543,10 @@ const endAuction = async (req, res) => {
       });
     }
 
+    const paymentHours = parseInt(process.env.AUCTION_PAYMENT_HOURS) || 72;
     auction.status = "awaiting_payment";
     auction.paymentDeadline = new Date(
-      Date.now() + 72 * 60 * 60 * 1000
+      Date.now() + paymentHours * 60 * 60 * 1000
     );
 
     await auction.save();

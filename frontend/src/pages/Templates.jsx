@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Search, Loader2, Eye, Heart, User, ChevronRight } from 'lucide-react';
+import { X, Search, Loader2, Heart, User, ChevronRight, ShoppingBag, Gavel, Sparkles, CheckCircle } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { websiteAPI } from "../api/website";
+import { buyerAPI } from "../api/buyer";
+import { paymentAPI } from "../api/payment";
+import { toast } from 'sonner';
 
 const transition = {
   type: "spring",
@@ -22,6 +25,60 @@ export default function SmoothEliteGallery() {
     const urlFilter = searchParams.get('filter');
     return ['free', 'paid', 'exclusive'].includes(urlFilter) ? urlFilter : 'all';
   });
+
+  // Purchase state for modal
+  const [purchased, setPurchased] = useState(false);
+  const [buying, setBuying] = useState(false);
+  const [checkingPurchase, setCheckingPurchase] = useState(false);
+  const isLoggedIn = !!localStorage.getItem('token');
+
+  // Check purchase status when modal opens
+  useEffect(() => {
+    if (!selectedId || !isLoggedIn) { setPurchased(false); return; }
+    const itemId = selectedId._id || selectedId.id;
+    setCheckingPurchase(true);
+    buyerAPI.checkPurchase(itemId)
+      .then(res => setPurchased(res.data?.data?.hasPurchased || false))
+      .catch(() => setPurchased(false))
+      .finally(() => setCheckingPurchase(false));
+  }, [selectedId]);
+
+  const handleQuickPurchase = async () => {
+    if (!isLoggedIn) { toast.error('Please login first'); return; }
+    if (!selectedId || purchased) return;
+    const itemId = selectedId._id || selectedId.id;
+    try {
+      setBuying(true);
+      if (selectedId.category === 'free') {
+        await buyerAPI.purchaseFree(itemId);
+        toast.success('Template acquired! View downloads on the detail page.');
+        setPurchased(true);
+        return;
+      }
+      // Paid: create Razorpay order
+      const orderRes = await paymentAPI.createOrder({ websiteId: itemId });
+      const order = orderRes.data?.data;
+      if (!window.Razorpay) { toast.error("Payment gateway not loaded. Try the detail page."); return; }
+      const rzp = new window.Razorpay({
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+        amount: order.amount, currency: order.currency,
+        name: 'DevDrop', description: `Purchase: ${selectedId.name || selectedId.title}`,
+        order_id: order.razorpayOrderId,
+        handler: async (response) => {
+          try {
+            await paymentAPI.verifyPayment({ ...response, websiteId: itemId });
+            toast.success('Payment successful! View downloads on the detail page.');
+            setPurchased(true);
+          } catch { toast.error('Verification failed'); }
+        },
+        theme: { color: '#8b7355' },
+      });
+      rzp.on('payment.failed', () => toast.error("Payment failed"));
+      rzp.open();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Purchase failed');
+    } finally { setBuying(false); }
+  };
 
   useEffect(() => {
     const fetchTemplates = async () => {
@@ -135,16 +192,11 @@ export default function SmoothEliteGallery() {
                       style={{ backgroundColor: item.color || '#1a1a1a' }}
                       className="aspect-[12/11] rounded-[32px] mb-6 relative overflow-hidden flex items-center justify-center border border-white/5"
                     >
-                      {/* Stats overlay */}
+                      {/* Wishlist overlay */}
                       <div className="absolute top-3 right-3 flex items-center gap-2 z-10">
                         {(item.wishlistCount > 0) && (
                           <span className="flex items-center gap-1 bg-black/60 backdrop-blur-md text-[9px] font-bold text-white/70 px-2.5 py-1 rounded-full">
                             <Heart size={9} className="text-red-400 fill-red-400" /> {item.wishlistCount}
-                          </span>
-                        )}
-                        {(item.viewCount > 0) && (
-                          <span className="flex items-center gap-1 bg-black/60 backdrop-blur-md text-[9px] font-bold text-white/70 px-2.5 py-1 rounded-full">
-                            <Eye size={9} /> {item.viewCount}
                           </span>
                         )}
                       </div>
@@ -211,7 +263,7 @@ export default function SmoothEliteGallery() {
                   style={{ backgroundColor: selectedId.color || '#1a1a1a' }}
                   className="h-full min-h-[450px] rounded-[40px] relative flex items-center justify-center overflow-hidden border border-white/5"
                 >
-                  <Eye className="text-white/10" size={80} />
+                  <Sparkles className="text-white/10" size={80} />
                 </motion.div>
               </div>
 
@@ -237,9 +289,9 @@ export default function SmoothEliteGallery() {
                         {(selectedId.sellerId?.name || 'C')[0]?.toUpperCase()}
                       </div>
                       <p className="text-sm font-bold text-white/60">{selectedId.sellerId?.name || 'Creator'}</p>
-                      {(selectedId.viewCount > 0) && (
+                      {(selectedId.wishlistCount > 0) && (
                         <span className="ml-auto flex items-center gap-1 text-[10px] text-white/20">
-                          <Eye size={10} /> {selectedId.viewCount} views
+                          <Heart size={10} className="text-red-400 fill-red-400" /> {selectedId.wishlistCount} wishlisted
                         </span>
                       )}
                     </div>
@@ -250,14 +302,55 @@ export default function SmoothEliteGallery() {
                     <p className="text-white/30 text-sm mb-8 leading-relaxed line-clamp-3">{selectedId.description}</p>
                   )}
 
-                  {/* Single View Details button */}
-                  <button
-                    onClick={() => navigate(`/website/${selectedId._id || selectedId.id}`)}
-                    className="w-full bg-white text-black py-6 rounded-[28px] font-black text-xl hover:bg-[#8b7355] hover:text-white transition-all active:scale-95 flex items-center justify-center gap-3 group"
-                  >
-                    View Details
-                    <ChevronRight size={20} className="group-hover:translate-x-1 transition-transform" />
-                  </button>
+                  {/* Action Buttons */}
+                  <div className="space-y-3">
+                    {checkingPurchase ? (
+                      <div className="w-full py-5 flex items-center justify-center gap-2 text-white/30 text-sm">
+                        <Loader2 size={16} className="animate-spin" /> Checking…
+                      </div>
+                    ) : purchased ? (
+                      /* Already purchased — go to downloads */
+                      <button
+                        onClick={() => navigate(`/website/${selectedId._id || selectedId.id}`)}
+                        className="w-full py-5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-[28px] font-bold text-sm uppercase tracking-[0.15em] flex items-center justify-center gap-2 hover:bg-emerald-500/20 transition-all active:scale-[0.98]"
+                      >
+                        <CheckCircle size={16} /> Purchased — View Downloads
+                      </button>
+                    ) : selectedId.category === 'exclusive' ? (
+                      /* Exclusive → Bid (navigate to detail for full auction UI) */
+                      <button
+                        onClick={() => navigate(`/website/${selectedId._id || selectedId.id}`)}
+                        className="w-full py-5 bg-orange-500 text-white rounded-[28px] font-bold text-sm uppercase tracking-[0.15em] flex items-center justify-center gap-2 hover:bg-orange-600 transition-all active:scale-[0.98]"
+                      >
+                        <Gavel size={16} /> Place a Bid
+                      </button>
+                    ) : (
+                      /* Free / Paid → Buy directly */
+                      <button
+                        onClick={handleQuickPurchase}
+                        disabled={buying}
+                        className="w-full py-5 bg-white text-black rounded-[28px] font-black text-lg uppercase tracking-wide flex items-center justify-center gap-2 hover:bg-[#8b7355] hover:text-white transition-all active:scale-[0.98] disabled:opacity-50"
+                      >
+                        {buying ? (
+                          <><Loader2 size={16} className="animate-spin" /> Processing…</>
+                        ) : selectedId.category === 'free' ? (
+                          <><Sparkles size={16} /> Get for Free</>
+                        ) : (
+                          <><ShoppingBag size={16} /> Buy Now — ₹{selectedId.price}</>
+                        )}
+                      </button>
+                    )}
+
+                    {/* View Details (secondary) */}
+                    {!purchased && (
+                      <button
+                        onClick={() => navigate(`/website/${selectedId._id || selectedId.id}`)}
+                        className="w-full py-4 bg-white/5 border border-white/10 text-white/50 rounded-[28px] font-bold text-xs uppercase tracking-[0.15em] flex items-center justify-center gap-2 hover:text-white hover:bg-white/10 transition-all"
+                      >
+                        View Full Details <ChevronRight size={14} />
+                      </button>
+                    )}
+                  </div>
                 </motion.div>
               </div>
             </motion.div>

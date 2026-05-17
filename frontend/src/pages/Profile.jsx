@@ -3,12 +3,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   User, Package, Heart, DollarSign, Upload, ShoppingBag, 
   ExternalLink, Trash2, Loader2, LogOut, Plus, 
-  ArrowLeft, ChevronDown, X 
+  ArrowLeft, ChevronDown, X, Download, FileCode, CheckCircle 
 } from 'lucide-react';
 import { userAPI } from '../api/user';
 import { sellerAPI } from '../api/seller';
 import { buyerAPI } from '../api/buyer';
 import { wishlistAPI } from '../api/wishlist';
+import { assetAPI } from '../api/asset';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 
@@ -343,6 +344,7 @@ export default function Profile() {
                   {purchases.map((p) => {
                     const web = p.websiteId || {};
                     const cat = web.category || 'paid';
+                    const webId = web._id || (typeof p.websiteId === 'string' ? p.websiteId : null);
                     return (
                       <div key={p._id} className="bg-[#111] border border-white/5 rounded-3xl p-6 hover:border-white/15 transition-all group">
                         <div className="flex items-start justify-between mb-3">
@@ -352,24 +354,37 @@ export default function Profile() {
                               {p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Recently'}
                             </p>
                           </div>
-                          <span className={`text-[8px] font-bold uppercase tracking-[0.2em] px-3 py-1 rounded-full ${
-                            cat === 'free' ? 'text-emerald-400 bg-emerald-500/10' :
-                            cat === 'exclusive' ? 'text-orange-400 bg-orange-500/10' :
-                            'text-[#8b7355] bg-[#8b7355]/10'
-                          }`}>
-                            {cat}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-[0.15em] px-2.5 py-1 rounded-full text-emerald-400 bg-emerald-500/10">
+                              <CheckCircle size={8} /> Owned
+                            </span>
+                            <span className={`text-[8px] font-bold uppercase tracking-[0.2em] px-3 py-1 rounded-full ${
+                              cat === 'free' ? 'text-emerald-400 bg-emerald-500/10' :
+                              cat === 'exclusive' ? 'text-orange-400 bg-orange-500/10' :
+                              'text-[#8b7355] bg-[#8b7355]/10'
+                            }`}>
+                              {cat}
+                            </span>
+                          </div>
                         </div>
                         <div className="flex items-center justify-between pt-4 border-t border-white/5">
                           <span className="text-[#8b7355] font-bold text-sm">
                             {p.amount ? `₹${p.amount}` : cat === 'free' ? 'FREE' : `₹${web.price || 0}`}
                           </span>
-                          <button
-                            onClick={() => navigate(`/website/${web._id || p.websiteId}`)}
-                            className="flex items-center gap-2 px-4 py-2 bg-white/5 rounded-xl text-[10px] font-bold uppercase tracking-widest text-white/50 hover:text-white hover:bg-white/10 transition-all"
-                          >
-                            View Details <ExternalLink size={12} />
-                          </button>
+                          <div className="flex gap-2">
+                            {web.deployedUrl && (
+                              <a href={web.deployedUrl} target="_blank" rel="noreferrer"
+                                className="flex items-center gap-1.5 px-3 py-2 bg-white/5 rounded-xl text-[10px] font-bold text-white/40 hover:text-white hover:bg-white/10 transition-all">
+                                <ExternalLink size={11} /> Preview
+                              </a>
+                            )}
+                            <button
+                              onClick={() => navigate(`/website/${webId}`)}
+                              className="flex items-center gap-1.5 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-[10px] font-bold uppercase tracking-widest text-emerald-400 hover:bg-emerald-500/20 transition-all"
+                            >
+                              <Download size={11} /> Downloads
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );

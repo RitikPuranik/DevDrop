@@ -33,7 +33,7 @@ export default function Auctions() {
 
   const openBidModal = async (auction) => {
     try {
-      const res = await auctionAPI.getAuction(auction.websiteId?._id || auction.websiteId);
+      const res = await auctionAPI.getByWebsite(auction.websiteId?._id || auction.websiteId);
       setSelectedAuction(res.data?.data);
       setBidAmount(res.data?.data?.minimumNextBid || '');
     } catch {

@@ -122,8 +122,8 @@ const Navbar = () => {
       />
 
       {/* NAVBAR TOP STRIP */}
-      <nav className="fixed top-0 w-full px-12 py-8 flex justify-between items-center z-[110] mix-blend-difference">
-        <LinkTransition to="/" className="text-blue-50 font-serif italic text-3xl tracking-tighter">
+      <nav className="fixed top-0 w-full px-12 py-8 flex justify-between items-center z-[110] mix-blend-difference pointer-events-none">
+        <LinkTransition to="/" className="text-blue-50 font-serif italic text-3xl tracking-tighter pointer-events-auto">
           devdrop
         </LinkTransition>
 
@@ -138,7 +138,7 @@ const Navbar = () => {
               setIsOpen(true);
             }
           }}
-          className="w-12 h-12 flex flex-col justify-center items-center gap-1.5 cursor-pointer relative group"
+          className="w-12 h-12 flex flex-col justify-center items-center gap-1.5 cursor-pointer relative group pointer-events-auto"
         >
           <AnimatePresence>
             {isOpen && (

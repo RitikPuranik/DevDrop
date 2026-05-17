@@ -5,6 +5,7 @@ const Wishlist = require('../wishlist/wishlist.model');
 const DownloadLog = require('../asset/downloadLog.model');
 const Payment = require('../payment/payment.model');
 const User = require('../user/user.model');
+const Auction = require('../auction/auction.model');
 const { WEBSITE_STATUS, PAYOUT_STATUS } = require('../../shared/utils/constants');
 const { getPaginationMetadata } = require('../../shared/utils/helpers');
 const supabaseService = require('../../services/supabase.service');
@@ -262,6 +263,28 @@ const approveWebsite = async (req, res) => {
     website.adminComment = undefined;
 
     await website.save();
+
+    // Auto-create auction for exclusive websites
+    if (website.category === 'exclusive') {
+      const existingAuction = await Auction.findOne({
+        websiteId: website._id,
+        status: { $in: ['active', 'first_bid_waiting', 'awaiting_payment'] },
+      });
+
+      if (!existingAuction) {
+        const auction = new Auction({
+          websiteId: website._id,
+          startTime: new Date(),
+          startingPrice: website.price,
+          minimumBidIncrement: 100,
+          reservePrice: 0,
+          firstBidWaitingPeriodHours: 72,
+          status: 'active',
+        });
+        await auction.save();
+        console.log(`🎯 Auto-created auction for exclusive website: ${website.name}`);
+      }
+    }
 
     // Send email to seller
     try {
