@@ -16,6 +16,7 @@ import ReviewPage from './pages/Review';
 import Profile from './pages/Profile';
 import WebsiteDetail from './pages/WebsiteDetail';
 import Auctions from './pages/Auctions';
+import Checkout from './pages/Checkout';
 
 import VerifyEmail from './pages/VerifyEmail';
 
@@ -125,6 +126,7 @@ function AppContent() {
               <Route path="/review" element={<ReviewPage />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/website/:id" element={<WebsiteDetail />} />
+              <Route path="/checkout/:id" element={<Checkout />} />
               <Route path="/auctions" element={<Auctions />} />
 
               <Route path="/verify-email" element={<VerifyEmail />} />

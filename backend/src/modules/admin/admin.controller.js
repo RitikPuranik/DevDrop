@@ -6,10 +6,33 @@ const DownloadLog = require('../asset/downloadLog.model');
 const Payment = require('../payment/payment.model');
 const User = require('../user/user.model');
 const Auction = require('../auction/auction.model');
+const Bid = require('../auction/bid.model');
 const { WEBSITE_STATUS, PAYOUT_STATUS } = require('../../shared/utils/constants');
 const { getPaginationMetadata } = require('../../shared/utils/helpers');
 const supabaseService = require('../../services/supabase.service');
 const emailService = require('../../services/email.service');
+
+const createExclusiveAuctionIfNeeded = async (website) => {
+  const existingAuction = await Auction.findOne({
+    websiteId: website._id,
+    status: { $in: ['active', 'first_bid_waiting', 'awaiting_payment'] },
+  });
+
+  if (existingAuction) return existingAuction;
+
+  const auction = new Auction({
+    websiteId: website._id,
+    startTime: new Date(),
+    startingPrice: website.price,
+    minimumBidIncrement: 100,
+    reservePrice: 0,
+    firstBidWaitingPeriodHours: require('../../shared/utils/envHelper').getAuctionTimings().bidWaitHours,
+    status: 'active',
+  });
+
+  await auction.save();
+  return auction;
+};
 
 /**
  * @route   GET /api/admin/websites/pending
@@ -266,22 +289,8 @@ const approveWebsite = async (req, res) => {
 
     // Auto-create auction for exclusive websites
     if (website.category === 'exclusive') {
-      const existingAuction = await Auction.findOne({
-        websiteId: website._id,
-        status: { $in: ['active', 'first_bid_waiting', 'awaiting_payment'] },
-      });
-
-      if (!existingAuction) {
-        const auction = new Auction({
-          websiteId: website._id,
-          startTime: new Date(),
-          startingPrice: website.price,
-          minimumBidIncrement: 100,
-          reservePrice: 0,
-          firstBidWaitingPeriodHours: require('../../shared/utils/envHelper').getAuctionTimings().bidWaitHours,
-          status: 'active',
-        });
-        await auction.save();
+      const auction = await createExclusiveAuctionIfNeeded(website);
+      if (auction) {
         console.log(`🎯 Auto-created auction for exclusive website: ${website.name}`);
       }
     }
@@ -307,6 +316,103 @@ const approveWebsite = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error approving website',
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * @route   POST /api/admin/websites/:id/relist
+ * @desc    Relist an exclusive website back to the marketplace
+ * @access  Admin only
+ */
+const relistWebsite = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const website = await Website.findById(id).populate('sellerId');
+
+    if (!website) {
+      return res.status(404).json({
+        success: false,
+        message: 'Website not found',
+      });
+    }
+
+    if (website.category !== 'exclusive') {
+      return res.status(400).json({
+        success: false,
+        message: 'Only exclusive websites can be relisted through this endpoint',
+      });
+    }
+
+    const auction = await Auction.findOne({ websiteId: website._id });
+
+    website.status = WEBSITE_STATUS.APPROVED;
+    website.soldTo = null;
+    website.soldAt = null;
+    website.adminComment = undefined;
+
+    if (auction) {
+      if (auction.currentBidderId || auction.currentBidAmount > 0) {
+        auction.previousAttempts = auction.previousAttempts || [];
+        auction.previousAttempts.push({
+          bidderId: auction.currentBidderId,
+          bidAmount: auction.currentBidAmount,
+          failedAt: new Date(),
+          failureReason: 'Auction reset for relist',
+        });
+      }
+
+      auction.attemptNumber = (auction.attemptNumber || 1) + 1;
+      auction.startTime = new Date();
+      auction.firstBidPlacedAt = null;
+      auction.firstBidDeadline = null;
+      auction.currentBidId = null;
+      auction.currentBidderId = null;
+      auction.currentBidAmount = 0;
+      auction.lastBidPlacedAt = null;
+      auction.totalBids = 0;
+      auction.uniqueBidders = 0;
+      auction.reserveMet = false;
+      auction.status = 'active';
+      auction.paymentDeadline = null;
+      auction.paymentReminderSent = false;
+      await auction.save();
+    }
+
+    await website.save();
+
+    await Bid.updateMany(
+      { websiteId: website._id, status: { $ne: 'expired' } },
+      { $set: { status: 'expired' } }
+    );
+
+    const relistedAuction = auction || await createExclusiveAuctionIfNeeded(website);
+
+    try {
+      await emailService.sendStatusUpdateEmail(
+        website.sellerId,
+        website,
+        WEBSITE_STATUS.APPROVED
+      );
+    } catch (emailError) {
+      console.error('Failed to send relist email:', emailError);
+    }
+
+    res.json({
+      success: true,
+      message: 'Exclusive website relisted successfully',
+      data: {
+        website,
+        auction: relistedAuction,
+      },
+    });
+  } catch (error) {
+    console.error('Relist website error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error relisting website',
       error: error.message,
     });
   }
@@ -581,6 +687,7 @@ module.exports = {
   requestChanges,
   rejectWebsite,
   approveWebsite,
+  relistWebsite,
   deleteWebsite,
   getDashboard,
   getPendingPayouts,

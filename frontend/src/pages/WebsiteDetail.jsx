@@ -48,7 +48,11 @@ export default function WebsiteDetail() {
           .join('')
       );
       loggedInUserId = JSON.parse(jsonPayload).userId;
-      console.log('Logged in user ID:', loggedInUserId);
+      // Debug: only log once in development to avoid spamming console
+      if (process.env.NODE_ENV === 'development' && !window.__loggedWebsiteDetailUser) {
+        console.log('Logged in user ID:', loggedInUserId);
+        window.__loggedWebsiteDetailUser = true;
+      }
     } catch (e) {
       console.error("Error decoding token", e);
     }
@@ -58,11 +62,18 @@ export default function WebsiteDetail() {
 
   // Auction timer
   useEffect(() => {
-    let deadline = null;
-    if (auction?.status === 'first_bid_waiting') deadline = auction?.firstBidDeadline;
-    else if (auction?.status === 'awaiting_payment') deadline = auction?.paymentDeadline;
+    // Prefer server-provided timeInfo.deadline, then any model deadline present
+    let deadline = auction?.timeInfo?.deadline || auction?.firstBidDeadline || null;
+    if (!deadline) {
+      if (auction?.status === 'awaiting_payment') deadline = auction?.paymentDeadline;
+    }
 
-    if (!deadline) { setTimeLeft(auction ? 'Waiting for bids' : ''); return; }
+    if (!deadline) {
+      // If server supplied a human message, show it; otherwise a sensible default
+      const msg = auction?.timeInfo?.message || (auction ? 'Waiting for bids' : '');
+      setTimeLeft(msg);
+      return;
+    }
     const tick = () => {
       const diff = new Date(deadline) - Date.now();
       if (diff <= 0) {
@@ -165,28 +176,7 @@ export default function WebsiteDetail() {
         fetchAssets();
         return;
       }
-      const orderRes = await paymentAPI.createOrder({ websiteId: id });
-      const order = orderRes.data?.data;
-      if (!window.Razorpay) { toast.error("Razorpay not loaded"); return; }
-      const rzp = new window.Razorpay({
-        key: import.meta.env.VITE_RAZORPAY_KEY_ID,
-        amount: order.amount, currency: order.currency,
-        name: 'DevDrop', description: `Purchase: ${website.name}`,
-        order_id: order.razorpayOrderId,
-        handler: async (response) => {
-          try {
-            await paymentAPI.verifyPayment({ ...response, websiteId: id });
-            toast.success('Payment successful!');
-            setPurchased(true);
-            setShowCelebration(true);
-            setTimeout(() => setShowCelebration(false), 3000);
-            fetchAssets();
-          } catch { toast.error('Verification failed'); }
-        },
-        theme: { color: '#8b7355' },
-      });
-      rzp.on('payment.failed', () => toast.error("Payment failed"));
-      rzp.open();
+      navigate(`/checkout/${id}`);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Purchase failed');
     } finally { setBuying(false); }
@@ -199,6 +189,27 @@ export default function WebsiteDetail() {
       setPlacingBid(true);
       const res = await auctionAPI.placeBid(website._id, parseFloat(bidAmount));
       toast.success(res.data?.message || 'Bid placed!');
+      // Use returned auction data immediately to show timer without waiting for refetch
+      const returnedAuction = res.data?.data?.auction;
+      if (returnedAuction) {
+        setAuction(prev => ({ ...(prev || {}), ...returnedAuction }));
+        // compute immediate timeLeft from returnedAuction
+        const deadline = returnedAuction.timeInfo?.deadline || returnedAuction.firstBidDeadline || returnedAuction.paymentDeadline;
+        if (deadline) {
+          const diff = new Date(deadline) - Date.now();
+          if (diff > 0) {
+            const d = Math.floor(diff / 86400000);
+            const h = Math.floor((diff % 86400000) / 3600000);
+            const m = Math.floor((diff % 3600000) / 60000);
+            const s = Math.floor((diff % 60000) / 1000);
+            setTimeLeft(d > 0 ? `${d}d ${h}h ${m}m` : `${h}h ${m}m ${s}s`);
+          } else {
+            setTimeLeft('Ended');
+            setTimeout(() => fetchAuction(id), 1000);
+          }
+        }
+      }
+      // still refetch to ensure full state sync
       fetchAuction(website._id);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to place bid');
@@ -247,7 +258,54 @@ export default function WebsiteDetail() {
           <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} className="lg:col-span-3">
             <div className="aspect-video rounded-[32px] bg-[#111] border border-white/5 overflow-hidden relative group">
               {website.deployedUrl ? (
-                <iframe src={website.deployedUrl} title={website.name} className="w-full h-full border-0" sandbox="allow-scripts allow-same-origin" />
+                (() => {
+                  // Avoid embedding remote sites that send X-Frame-Options: deny.
+                  // Fallback to an 'Open Live' CTA for cross-origin URLs.
+                  let isSameOrigin = false;
+                  try {
+                    const d = new URL(website.deployedUrl);
+                    isSameOrigin = (d.host === window.location.host && d.protocol === window.location.protocol);
+                  } catch (e) { isSameOrigin = false; }
+
+                  if (isSameOrigin) {
+                    return <iframe src={website.deployedUrl} title={website.name} className="w-full h-full border-0" sandbox="allow-scripts allow-same-origin" />;
+                  }
+
+                  // Use only admin-provided preview video stored at `website.files.previewVideo.url`
+                  const previewVideo = website.files?.previewVideo?.url || null;
+                  const thumb = website.files?.previewImage ? website.files.previewImage.url : null;
+
+                  if (previewVideo) {
+                    return (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <video
+                          src={previewVideo}
+                          autoPlay
+                          muted
+                          loop
+                          playsInline
+                          controls
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    );
+                  }
+
+                  // Fallback to thumbnail + Open Live CTA
+                  return (
+                    <div className="w-full h-full flex flex-col items-center justify-center gap-4 p-6 text-center">
+                      {thumb ? (
+                        <img src={thumb} alt="Preview" className="max-h-full max-w-full object-cover rounded-md" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center"><Eye size={60} className="text-white/5" /></div>
+                      )}
+                      <div className="mt-4">
+                        <p className="text-sm text-white/40 mb-3">Live preview is blocked from embedding by the remote host (X-Frame-Options).</p>
+                        <a href={website.deployedUrl} target="_blank" rel="noreferrer" className="inline-block px-5 py-3 bg-white text-black rounded-2xl font-bold text-xs uppercase tracking-widest">Open Live</a>
+                      </div>
+                    </div>
+                  );
+                })()
               ) : (
                 <div className="w-full h-full flex items-center justify-center"><Eye size={60} className="text-white/5" /></div>
               )}
@@ -425,7 +483,7 @@ export default function WebsiteDetail() {
                         </div>
                       )}
 
-                      {timeLeft !== 'Ended' && auction.status !== 'awaiting_payment' && auction.status !== 'completed' && (
+                      {auction && auction.status !== 'awaiting_payment' && auction.status !== 'completed' && (
                         <div className="space-y-3">
                           <div className="relative">
                             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30 font-bold">₹</span>

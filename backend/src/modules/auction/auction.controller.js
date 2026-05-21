@@ -281,7 +281,53 @@ const getAuction = async (req, res) => {
       const baseDate = auction.lastBidPlacedAt || auction.firstBidPlacedAt;
       if (baseDate) auction.firstBidDeadline = new Date(baseDate.getTime() + timings.bidWaitHours * 60 * 60 * 1000);
     } else if (auction.status === 'awaiting_payment') {
-      if (auction.updatedAt) auction.paymentDeadline = new Date(auction.updatedAt.getTime() + timings.paymentHours * 60 * 60 * 1000);
+      // Ensure paymentDeadline is always set for awaiting_payment auctions.
+      if (!auction.paymentDeadline) {
+        if (auction.updatedAt) {
+          auction.paymentDeadline = new Date(auction.updatedAt.getTime() + timings.paymentHours * 60 * 60 * 1000);
+        } else {
+          // Fallback: set from now
+          auction.paymentDeadline = new Date(Date.now() + timings.paymentHours * 60 * 60 * 1000);
+        }
+      }
+      // Auto-transition to awaiting_payment if deadline has passed
+      if (auction.status === 'first_bid_waiting' && auction.hasFirstBidWaitingPassed && auction.hasFirstBidWaitingPassed()) {
+        const paymentHours = timings.paymentHours;
+        auction.status = 'awaiting_payment';
+        auction.paymentDeadline = new Date(Date.now() + paymentHours * 60 * 60 * 1000);
+        await auction.save();
+      } else if (
+        (auction.status === 'awaiting_payment' && auction.hasPaymentDeadlinePassed && auction.hasPaymentDeadlinePassed()) ||
+        auction.status === 'payment_failed'
+      ) {
+        // Store previous attempt data
+        auction.previousAttempts.push({
+          bidderId: auction.currentBidderId,
+          bidAmount: auction.currentBidAmount,
+          failedAt: new Date(),
+          failureReason: 'Payment not received within deadline',
+        });
+        // Reset auction
+        auction.attemptNumber += 1;
+        auction.startTime = new Date();
+        auction.firstBidPlacedAt = null;
+        auction.firstBidDeadline = null;
+        auction.currentBidId = null;
+        auction.currentBidderId = null;
+        auction.currentBidAmount = 0;
+        auction.lastBidPlacedAt = null;
+        auction.totalBids = 0;
+        auction.uniqueBidders = 0;
+        auction.status = 'active';
+        auction.paymentDeadline = null;
+        auction.paymentReminderSent = false;
+        await auction.save();
+        // Mark all previous bids as expired
+        await Bid.updateMany(
+          { websiteId: auction.websiteId._id || auction.websiteId },
+          { $set: { status: 'expired' } }
+        );
+      }
     }
 
     // Auto-transition to awaiting_payment if deadline has passed
@@ -290,13 +336,44 @@ const getAuction = async (req, res) => {
       auction.status = 'awaiting_payment';
       auction.paymentDeadline = new Date(Date.now() + paymentHours * 60 * 60 * 1000);
       await auction.save();
-    } else if (auction.status === 'awaiting_payment' && auction.hasPaymentDeadlinePassed && auction.hasPaymentDeadlinePassed()) {
-      auction.status = 'payment_failed';
+    } else if (
+      (auction.status === 'awaiting_payment' && auction.hasPaymentDeadlinePassed && auction.hasPaymentDeadlinePassed()) ||
+      auction.status === 'payment_failed'
+    ) {
+      // Store previous attempt data
+      auction.previousAttempts.push({
+        bidderId: auction.currentBidderId,
+        bidAmount: auction.currentBidAmount,
+        failedAt: new Date(),
+        failureReason: 'Payment not received within deadline',
+      });
+
+      // Reset auction
+      auction.attemptNumber += 1;
+      auction.startTime = new Date();
+      auction.firstBidPlacedAt = null;
+      auction.firstBidDeadline = null;
+      auction.currentBidId = null;
+      auction.currentBidderId = null;
+      auction.currentBidAmount = 0;
+      auction.lastBidPlacedAt = null;
+      auction.totalBids = 0;
+      auction.uniqueBidders = 0;
+      auction.status = 'active';
+      auction.paymentDeadline = null;
+      auction.paymentReminderSent = false;
+
       await auction.save();
+
+      // Mark all previous bids as expired
+      await Bid.updateMany(
+        { websiteId: auction.websiteId._id || auction.websiteId },
+        { $set: { status: 'expired' } }
+      );
     }
 
     // Get bid history (without showing bidder names for privacy)
-    const bids = await Bid.find({ websiteId })
+    const bids = await Bid.find({ websiteId, status: { $ne: 'expired' } })
       .sort({ bidAmount: -1, createdAt: -1 })
       .limit(20)
       .select('bidAmount bidPlacedAt status');

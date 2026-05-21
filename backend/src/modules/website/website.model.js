@@ -73,7 +73,7 @@ const websiteSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['pending_review', 'changes_requested', 'rejected', 'approved', 'sold'],
+      enum: ['pending_review', 'changes_requested', 'rejected', 'approved', 'in_auction', 'sold'],
       default: 'pending_review',
     },
     adminComment: {

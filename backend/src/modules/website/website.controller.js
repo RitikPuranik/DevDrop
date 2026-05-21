@@ -8,7 +8,7 @@ const browseWebsites = async (req, res) => {
     const { page = PAGINATION.DEFAULT_PAGE, limit = PAGINATION.DEFAULT_LIMIT, category, minPrice, maxPrice, sortBy = 'createdAt', order = 'desc' } = req.query;
     const skip = (page - 1) * limit;
 
-    const query = { status: WEBSITE_STATUS.APPROVED, isDeleted: false, $or: [{ category: { $ne: 'exclusive' } }, { category: 'exclusive', status: { $ne: WEBSITE_STATUS.SOLD } }] };
+    const query = { status: { $in: [WEBSITE_STATUS.APPROVED, WEBSITE_STATUS.IN_AUCTION] }, isDeleted: false, $or: [{ category: { $ne: 'exclusive' } }, { category: 'exclusive', status: { $ne: WEBSITE_STATUS.SOLD } }] };
     if (category) query.category = category;
     if (minPrice || maxPrice) { query.price = {}; if (minPrice) query.price.$gte = parseFloat(minPrice); if (maxPrice) query.price.$lte = parseFloat(maxPrice); }
 
@@ -29,8 +29,16 @@ const browseWebsites = async (req, res) => {
 
 const getWebsiteDetails = async (req, res) => {
   try {
-    const website = await Website.findOne({ _id: req.params.id, status: WEBSITE_STATUS.APPROVED, isDeleted: false }).select('-adminComment -isDeleted').populate('sellerId', 'name email');
+    const website = await Website.findOne({ 
+      _id: req.params.id, 
+      status: { $in: [WEBSITE_STATUS.APPROVED, WEBSITE_STATUS.SOLD, WEBSITE_STATUS.IN_AUCTION] }, 
+      isDeleted: false 
+    }).select('-adminComment -isDeleted').populate('sellerId', 'name email');
     if (!website) return res.status(404).json({ success: false, message: 'Website not found' });
+
+    if (website.category === 'exclusive' && website.status === WEBSITE_STATUS.SOLD) {
+      return res.status(404).json({ success: false, message: 'Website not found' });
+    }
 
     await Website.findByIdAndUpdate(req.params.id, { $inc: { viewCount: 1 } });
 

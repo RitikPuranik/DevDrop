@@ -15,7 +15,8 @@ const purchaseSchema = new mongoose.Schema(
     sellerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
+      // Seller may be deleted or missing; make optional to allow purchases to persist
+      required: false,
     },
     category: {
       type: String,
