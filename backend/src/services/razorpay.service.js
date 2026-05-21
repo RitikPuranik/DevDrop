@@ -16,8 +16,14 @@ const razorpay = new Razorpay({
  */
 const createOrder = async (orderId, amount, currency = 'INR') => {
   try {
+    let finalAmount = Math.round(amount * 100);
+    // Razorpay test mode limit is 500,000 INR (50,000,000 paise)
+    if (process.env.NODE_ENV !== 'production' && finalAmount > 50000000) {
+      finalAmount = 50000000;
+    }
+
     const options = {
-      amount: Math.round(amount * 100), // Razorpay expects paise (smallest currency unit)
+      amount: finalAmount, // Razorpay expects paise (smallest currency unit)
       currency,
       receipt: orderId,
     };

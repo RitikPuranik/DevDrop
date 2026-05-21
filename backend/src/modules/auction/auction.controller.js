@@ -4,6 +4,7 @@ const Website = require('../website/website.model');
 const User = require('../user/user.model');
 const emailService = require('../../services/email.service');
 const { WEBSITE_STATUS } = require('../../shared/utils/constants');
+const { getAuctionTimings } = require('../../shared/utils/envHelper');
 
 /**
  * @route   POST /api/auction/:websiteId/start
@@ -16,9 +17,10 @@ const startAuction = async (req, res) => {
     const { 
       startingPrice, 
       minimumBidIncrement = 100, 
-      reservePrice = 0,
-      firstBidWaitingPeriodHours = parseInt(process.env.AUCTION_BID_WAIT_HOURS) || 72
+      reservePrice = 0
     } = req.body;
+    
+    const { bidWaitHours: firstBidWaitingPeriodHours } = getAuctionTimings();
 
     // Find website
     const website = await Website.findById(websiteId);
@@ -78,8 +80,8 @@ const startAuction = async (req, res) => {
           step1: 'First person to bid gets the item',
           step2: `After first bid, ${firstBidWaitingPeriodHours} hours waiting period starts`,
           step3: 'If no one else bids in that time, first bidder wins',
-          step4: 'If someone outbids, new 3-day waiting period starts',
-          step5: 'Winner has 3 days to pay after winning',
+          step4: 'If someone outbids, new waiting period starts',
+          step5: 'Winner has limited time to pay after winning',
         },
       },
     });
@@ -176,22 +178,23 @@ const placeBid = async (req, res) => {
     auction.totalBids += 1;
 
     // If this is the FIRST bid
+    const { bidWaitHours: waitHours } = getAuctionTimings();
     if (isFirstBid) {
       auction.firstBidPlacedAt = new Date();
       auction.firstBidDeadline = new Date(
-        Date.now() + auction.firstBidWaitingPeriodHours * 60 * 60 * 1000
+        Date.now() + waitHours * 60 * 60 * 1000
       );
       auction.status = 'first_bid_waiting';
       
       console.log(`🎯 FIRST BID placed by user ${bidderId}`);
       console.log(`⏰ If no one bids higher by ${auction.firstBidDeadline}, this bidder wins!`);
     } else {
-      // New bid placed - reset 3-day timer
+      // New bid placed - reset timer
       auction.firstBidDeadline = new Date(
-        Date.now() + auction.firstBidWaitingPeriodHours * 60 * 60 * 1000
+        Date.now() + waitHours * 60 * 60 * 1000
       );
       
-      console.log(`🔥 New bid placed! 3-day timer RESET`);
+      console.log(`🔥 New bid placed! Timer RESET`);
       console.log(`⏰ New deadline: ${auction.firstBidDeadline}`);
     }
 
@@ -226,7 +229,7 @@ const placeBid = async (req, res) => {
       success: true,
       message: isFirstBid 
         ? `First bid placed! If no one bids higher in ${auction.firstBidWaitingPeriodHours} hours, you win!`
-        : `Bid placed successfully! 3-day timer reset.`,
+        : `Bid placed successfully! ${auction.firstBidWaitingPeriodHours}-hour timer reset.`,
       data: {
         bid,
         auction: {
@@ -270,6 +273,26 @@ const getAuction = async (req, res) => {
         success: false,
         message: 'No auction found for this website',
       });
+    }
+
+    // Dynamically recalculate deadlines from current .env settings (reads file fresh)
+    const timings = getAuctionTimings();
+    if (auction.status === 'first_bid_waiting') {
+      const baseDate = auction.lastBidPlacedAt || auction.firstBidPlacedAt;
+      if (baseDate) auction.firstBidDeadline = new Date(baseDate.getTime() + timings.bidWaitHours * 60 * 60 * 1000);
+    } else if (auction.status === 'awaiting_payment') {
+      if (auction.updatedAt) auction.paymentDeadline = new Date(auction.updatedAt.getTime() + timings.paymentHours * 60 * 60 * 1000);
+    }
+
+    // Auto-transition to awaiting_payment if deadline has passed
+    if (auction.status === 'first_bid_waiting' && auction.hasFirstBidWaitingPassed && auction.hasFirstBidWaitingPassed()) {
+      const paymentHours = timings.paymentHours;
+      auction.status = 'awaiting_payment';
+      auction.paymentDeadline = new Date(Date.now() + paymentHours * 60 * 60 * 1000);
+      await auction.save();
+    } else if (auction.status === 'awaiting_payment' && auction.hasPaymentDeadlinePassed && auction.hasPaymentDeadlinePassed()) {
+      auction.status = 'payment_failed';
+      await auction.save();
     }
 
     // Get bid history (without showing bidder names for privacy)
@@ -321,7 +344,7 @@ const getAuction = async (req, res) => {
             : auction.status === 'first_bid_waiting'
             ? `First bidder wins if no one outbids in ${Math.round((auction.firstBidDeadline - new Date()) / (1000 * 60 * 60))} hours`
             : auction.status === 'awaiting_payment'
-            ? 'Winner must pay within 3 days'
+            ? `Winner must pay within ${timings.paymentHours} hours`
             : auction.status,
         },
       },
@@ -490,12 +513,18 @@ const getActiveAuctions = async (req, res) => {
 
     const auctionsWithInfo = auctions.map(auction => {
       let timeInfo = 'No bids yet';
-      if (auction.status === 'first_bid_waiting' && auction.firstBidDeadline) {
-        const hoursRemaining = Math.max(
-          0,
-          Math.round((auction.firstBidDeadline - new Date()) / (1000 * 60 * 60))
-        );
-        timeInfo = `${hoursRemaining} hours left to outbid`;
+      if (auction.status === 'first_bid_waiting') {
+        const { bidWaitHours: waitHours } = getAuctionTimings();
+        const baseDate = auction.lastBidPlacedAt || auction.firstBidPlacedAt;
+        if (baseDate) auction.firstBidDeadline = new Date(baseDate.getTime() + waitHours * 60 * 60 * 1000);
+
+        if (auction.firstBidDeadline) {
+          const hoursRemaining = Math.max(
+            0,
+            Math.round((auction.firstBidDeadline - new Date()) / (1000 * 60 * 60))
+          );
+          timeInfo = `${hoursRemaining} hours left to outbid`;
+        }
       }
 
       return {
@@ -543,7 +572,7 @@ const endAuction = async (req, res) => {
       });
     }
 
-    const paymentHours = parseInt(process.env.AUCTION_PAYMENT_HOURS) || 72;
+    const { paymentHours } = getAuctionTimings();
     auction.status = "awaiting_payment";
     auction.paymentDeadline = new Date(
       Date.now() + paymentHours * 60 * 60 * 1000

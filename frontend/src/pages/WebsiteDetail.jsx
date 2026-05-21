@@ -34,17 +34,46 @@ export default function WebsiteDetail() {
   const [auctionLoading, setAuctionLoading] = useState(false);
   const [timeLeft, setTimeLeft] = useState('');
 
-  const isLoggedIn = !!localStorage.getItem('token');
+  const token = localStorage.getItem('token');
+  const isLoggedIn = !!token;
+  let loggedInUserId = null;
+  if (token) {
+    try {
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(
+        window.atob(base64)
+          .split('')
+          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      loggedInUserId = JSON.parse(jsonPayload).userId;
+      console.log('Logged in user ID:', loggedInUserId);
+    } catch (e) {
+      console.error("Error decoding token", e);
+    }
+  }
 
   useEffect(() => { fetchWebsite(); }, [id]);
 
   // Auction timer
   useEffect(() => {
-    const deadline = auction?.firstBidDeadline || auction?.paymentDeadline;
+    let deadline = null;
+    if (auction?.status === 'first_bid_waiting') deadline = auction?.firstBidDeadline;
+    else if (auction?.status === 'awaiting_payment') deadline = auction?.paymentDeadline;
+
     if (!deadline) { setTimeLeft(auction ? 'Waiting for bids' : ''); return; }
     const tick = () => {
       const diff = new Date(deadline) - Date.now();
-      if (diff <= 0) { setTimeLeft('Ended'); return; }
+      if (diff <= 0) {
+        setTimeLeft(prev => {
+          if (prev !== 'Ended') {
+            setTimeout(() => fetchAuction(id), 1000);
+          }
+          return 'Ended';
+        });
+        return;
+      }
       const d = Math.floor(diff / 86400000);
       const h = Math.floor((diff % 86400000) / 3600000);
       const m = Math.floor((diff % 3600000) / 60000);
@@ -143,7 +172,7 @@ export default function WebsiteDetail() {
         key: import.meta.env.VITE_RAZORPAY_KEY_ID,
         amount: order.amount, currency: order.currency,
         name: 'DevDrop', description: `Purchase: ${website.name}`,
-        order_id: order.id,
+        order_id: order.razorpayOrderId,
         handler: async (response) => {
           try {
             await paymentAPI.verifyPayment({ ...response, websiteId: id });
@@ -337,24 +366,27 @@ export default function WebsiteDetail() {
                     <>
                       {/* Status */}
                       <div className="flex items-center gap-2 mb-4">
-                        <span className={`w-2 h-2 rounded-full ${auction.status === 'active' ? 'bg-emerald-400 animate-pulse' : auction.status === 'first_bid_waiting' ? 'bg-orange-400 animate-pulse' : 'bg-red-400'}`} />
+                        <span className={`w-2 h-2 rounded-full ${auction.status === 'active' ? 'bg-emerald-400 animate-pulse' : auction.status === 'first_bid_waiting' ? 'bg-orange-400 animate-pulse' : auction.status === 'completed' ? 'bg-blue-400' : 'bg-red-400'}`} />
                         <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">
                           {auction.status === 'active' ? 'Waiting for first bid' :
                            auction.status === 'first_bid_waiting' ? 'Bidding active' :
-                           auction.status === 'awaiting_payment' ? 'Winner must pay' : auction.status}
+                           auction.status === 'awaiting_payment' ? 'Pending Payment' :
+                           auction.status === 'completed' ? 'Auction Ended' : auction.status}
                         </span>
                       </div>
 
                       {/* Timer */}
-                      <div className="flex items-center gap-3 bg-orange-500/5 border border-orange-500/10 rounded-2xl px-4 py-3 mb-4">
-                        <Timer size={14} className="text-orange-400" />
-                        <div>
-                          <p className="text-[9px] font-bold uppercase tracking-widest text-white/30">
-                            {auction.status === 'active' ? 'Status' : 'Time Remaining'}
-                          </p>
-                          <p className="text-lg font-black text-orange-400 tracking-tight">{timeLeft}</p>
+                      {auction.status !== 'completed' && (
+                        <div className="flex items-center gap-3 bg-orange-500/5 border border-orange-500/10 rounded-2xl px-4 py-3 mb-4">
+                          <Timer size={14} className="text-orange-400" />
+                          <div>
+                            <p className="text-[9px] font-bold uppercase tracking-widest text-white/30">
+                              {auction.status === 'active' ? 'Status' : 'Time Remaining'}
+                            </p>
+                            <p className="text-lg font-black text-orange-400 tracking-tight">{timeLeft}</p>
+                          </div>
                         </div>
-                      </div>
+                      )}
 
                       {/* Current price */}
                       <div className="flex items-center justify-between mb-4">
@@ -370,8 +402,30 @@ export default function WebsiteDetail() {
                         </div>
                       </div>
 
-                      {/* Bid input */}
-                      {timeLeft !== 'Ended' && auction.status !== 'awaiting_payment' && (
+                      {/* Bid input or Winner Checkout */}
+                      {auction.status === 'awaiting_payment' && (
+                        <div className="space-y-3">
+                          {((auction.currentBidderId?._id || auction.currentBidderId) === loggedInUserId) ? (
+                            <>
+                              <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl mb-2">
+                                <p className="text-xs text-emerald-400 font-bold mb-1">🎉 You won this auction!</p>
+                                <p className="text-[10px] text-emerald-400/70">Complete your payment before the timer expires to secure this template.</p>
+                              </div>
+                              <button onClick={handlePurchase} disabled={buying}
+                                className="w-full py-4 bg-emerald-500 text-black rounded-2xl font-bold text-xs uppercase tracking-[0.2em] hover:bg-emerald-400 transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-50">
+                                {buying ? <><Loader2 size={14} className="animate-spin" /> Processing...</> : <><ShoppingBag size={14} /> Buy Now — ₹{auction.currentBidAmount}</>}
+                              </button>
+                            </>
+                          ) : (
+                            <div className="p-4 bg-white/5 border border-white/10 rounded-2xl text-center">
+                              <p className="text-xs text-white/60 font-bold">Assigned to Winner</p>
+                              <p className="text-[10px] text-white/40 mt-1">If the winner doesn't pay in time, the template will return to open auction.</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {timeLeft !== 'Ended' && auction.status !== 'awaiting_payment' && auction.status !== 'completed' && (
                         <div className="space-y-3">
                           <div className="relative">
                             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30 font-bold">₹</span>
@@ -412,10 +466,10 @@ export default function WebsiteDetail() {
                         <p className="text-[9px] font-bold uppercase tracking-widest text-white/20 mb-3">How It Works</p>
                         <div className="space-y-2">
                           {['Place a bid at or above the minimum price',
-                            'After first bid, a 3-day waiting period starts',
-                            'If outbid, the 3-day timer resets',
-                            'If no one outbids within 3 days, highest bidder wins',
-                            'Winner has 3 days to complete payment',
+                            `After first bid, a waiting period starts`,
+                            `If outbid, the timer resets`,
+                            `If no one outbids within the time limit, highest bidder wins`,
+                            `Winner has limited time to complete payment`,
                             "If winner doesn't pay, template goes back to auction"
                           ].map((text, i) => (
                             <div key={i} className="flex items-start gap-2">

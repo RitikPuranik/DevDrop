@@ -278,7 +278,7 @@ const approveWebsite = async (req, res) => {
           startingPrice: website.price,
           minimumBidIncrement: 100,
           reservePrice: 0,
-          firstBidWaitingPeriodHours: 72,
+          firstBidWaitingPeriodHours: require('../../shared/utils/envHelper').getAuctionTimings().bidWaitHours,
           status: 'active',
         });
         await auction.save();

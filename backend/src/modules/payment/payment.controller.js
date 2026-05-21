@@ -4,6 +4,7 @@ const Payment  = require('./payment.model');
 const Payout   = require('../payout/payout.model');
 const User     = require('../user/user.model');
 const BankDetails = require('../user/bankDetails.model');
+const Auction = require('../auction/auction.model');
 const razorpayService = require('../../services/razorpay.service');
 const { calculatePricing } = require('../../shared/utils/helpers');
 const { WEBSITE_STATUS, PAYMENT_STATUS, PAYOUT_STATUS } = require('../../shared/utils/constants');
@@ -22,13 +23,46 @@ const createOrder = async (req, res) => {
     const website = await Website.findOne({ _id: websiteId, isDeleted: false }).populate('sellerId');
     if (!website) return res.status(404).json({ success: false, message: 'Website not found' });
 
-    if (website.status !== WEBSITE_STATUS.APPROVED) {
-      return res.status(400).json({
-        success: false,
-        message: website.status === WEBSITE_STATUS.SOLD
-          ? 'This exclusive website has already been sold'
-          : 'This website is not available for purchase',
-      });
+    let priceToUse = website.price;
+
+    if (website.category === 'exclusive') {
+      if (website.status === WEBSITE_STATUS.SOLD) {
+        return res.status(400).json({
+          success: false,
+          message: 'This exclusive website has already been sold',
+        });
+      }
+
+      const auction = await Auction.findOne({ websiteId: website._id, status: 'awaiting_payment' });
+      if (!auction) {
+        return res.status(400).json({
+          success: false,
+          message: 'There is no pending payment for this auction',
+        });
+      }
+
+      if (auction.currentBidderId.toString() !== buyer._id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'You are not the winner of this auction',
+        });
+      }
+
+      if (auction.hasPaymentDeadlinePassed && auction.hasPaymentDeadlinePassed()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Payment deadline has passed',
+        });
+      }
+
+      priceToUse = auction.currentBidAmount;
+    } else {
+      if (website.status !== WEBSITE_STATUS.APPROVED) {
+        return res.status(400).json({
+          success: false,
+          message: 'This website is not available for purchase',
+        });
+      }
     }
 
     if (website.category === 'free')
@@ -38,7 +72,7 @@ const createOrder = async (req, res) => {
     if (existingPurchase)
       return res.status(400).json({ success: false, message: 'You have already purchased this website' });
 
-    const pricing = calculatePricing(website.price);
+    const pricing = calculatePricing(priceToUse);
 
     // Internal receipt ID — unique per order attempt
     const receiptId = `rcpt_${Date.now()}_${websiteId.toString().slice(-6)}`;
@@ -121,7 +155,17 @@ const verifyPayment = async (req, res) => {
     const website = await Website.findById(paymentRecord.websiteId).populate('sellerId');
     if (!website) return res.status(404).json({ success: false, message: 'Website not found' });
 
-    const pricing = calculatePricing(website.price);
+    let priceToUse = website.price;
+    if (website.category === 'exclusive') {
+      const auction = await Auction.findOne({ websiteId: website._id, status: 'awaiting_payment' });
+      if (auction) {
+        priceToUse = auction.currentBidAmount;
+        auction.status = 'completed';
+        await auction.save();
+      }
+    }
+
+    const pricing = calculatePricing(priceToUse);
 
     // Update payment record
     paymentRecord.status = 'succeeded';
