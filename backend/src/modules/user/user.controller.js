@@ -4,6 +4,28 @@ const Website = require('../website/website.model');
 const Purchase = require('../payment/purchase.model');
 const Payout = require('../payout/payout.model');
 const Wishlist = require('../wishlist/wishlist.model');
+const supabaseService = require('../../services/supabase.service');
+
+const getPublicAssetUrl = (filePath) => {
+  if (!filePath) return null;
+  if (/^https?:\/\//.test(filePath)) return filePath;
+  return supabaseService.getPublicUrl(filePath);
+};
+
+const hydratePurchaseWebsite = (purchaseDoc) => {
+  const purchase = purchaseDoc.toObject();
+  const website = purchase.websiteId;
+
+  if (website?.previewVideoUrl) {
+    website.files = website.files || {};
+    website.files.previewVideo = {
+      ...(website.files.previewVideo || {}),
+      url: getPublicAssetUrl(website.previewVideoUrl),
+    };
+  }
+
+  return purchase;
+};
 
 const getProfile = async (req, res) => {
   try {
@@ -73,14 +95,25 @@ const getPurchases = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const purchases = await Purchase.find({ buyerId: req.userId, paymentStatus: 'completed' })
-      .populate('websiteId', 'name description techStack category price deployedUrl')
+      .populate({
+        path: 'websiteId',
+        select: 'name description techStack category price deployedUrl githubUrl previewUrl files previewVideoUrl sellerId',
+        populate: {
+          path: 'sellerId',
+          select: 'name email',
+        },
+      })
       .sort({ purchaseDate: -1 })
       .skip(skip)
       .limit(parseInt(limit));
 
     const total = await Purchase.countDocuments({ buyerId: req.userId, paymentStatus: 'completed' });
 
-    res.json({ success: true, data: purchases, pagination: { currentPage: parseInt(page), totalPages: Math.ceil(total / limit), totalItems: total } });
+    res.json({
+      success: true,
+      data: purchases.map(hydratePurchaseWebsite),
+      pagination: { currentPage: parseInt(page), totalPages: Math.ceil(total / limit), totalItems: total },
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error fetching purchases', error: error.message });
   }

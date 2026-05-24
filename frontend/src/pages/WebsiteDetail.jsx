@@ -229,6 +229,11 @@ export default function WebsiteDetail() {
   const allTech = [...(techStack.frontend||[]),...(techStack.backend||[]),...(techStack.database||[]),...(techStack.devops||[]),...(techStack.other||[])];
   const sellerName = website.sellerId?.name || 'Creator';
   const isExclusive = website.category === 'exclusive';
+  const previewTarget = website.previewUrl || website.deployedUrl;
+  const previewVideo = website.files?.previewVideo?.url || null;
+  const sellerGithub = purchased ? (assets?.githubRepo?.url || website.githubUrl || null) : null;
+  const liveDeployment = assets?.deployedPreview?.url || website.deployedUrl || null;
+  const shortPreviewAccess = purchased ? (assets?.previewVideo?.url || previewVideo || null) : null;
 
   return (
     <div className="min-h-screen bg-[#050505] text-[#e8e2d6] pt-24 pb-20 px-6 antialiased">
@@ -257,43 +262,35 @@ export default function WebsiteDetail() {
           {/* LEFT: Preview + Info */}
           <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} className="lg:col-span-3">
             <div className="aspect-video rounded-[32px] bg-[#111] border border-white/5 overflow-hidden relative group">
-              {website.deployedUrl ? (
+              {previewVideo ? (
+                <video
+                  src={previewVideo}
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  preload="metadata"
+                  className="w-full h-full object-cover transition-all duration-500 group-hover:scale-[1.03] group-hover:blur-sm group-hover:brightness-[0.45]"
+                />
+              ) : previewTarget ? (
                 (() => {
                   // Avoid embedding remote sites that send X-Frame-Options: deny.
                   // Fallback to an 'Open Live' CTA for cross-origin URLs.
                   let isSameOrigin = false;
                   try {
-                    const d = new URL(website.deployedUrl);
+                    const d = new URL(previewTarget);
                     isSameOrigin = (d.host === window.location.host && d.protocol === window.location.protocol);
                   } catch (e) { isSameOrigin = false; }
 
                   if (isSameOrigin) {
-                    return <iframe src={website.deployedUrl} title={website.name} className="w-full h-full border-0" sandbox="allow-scripts allow-same-origin" />;
+                    return <iframe src={previewTarget} title={website.name} className="w-full h-full border-0 transition-all duration-500 group-hover:scale-[1.03] group-hover:blur-sm group-hover:brightness-[0.7]" sandbox="allow-scripts allow-same-origin" />;
                   }
 
-                  // Use only admin-provided preview video stored at `website.files.previewVideo.url`
-                  const previewVideo = website.files?.previewVideo?.url || null;
                   const thumb = website.files?.previewImage ? website.files.previewImage.url : null;
-
-                  if (previewVideo) {
-                    return (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <video
-                          src={previewVideo}
-                          autoPlay
-                          muted
-                          loop
-                          playsInline
-                          controls
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    );
-                  }
 
                   // Fallback to thumbnail + Open Live CTA
                   return (
-                    <div className="w-full h-full flex flex-col items-center justify-center gap-4 p-6 text-center">
+                    <div className="w-full h-full flex flex-col items-center justify-center gap-4 p-6 text-center transition-all duration-500 group-hover:scale-[1.03] group-hover:blur-sm group-hover:brightness-[0.7]">
                       {thumb ? (
                         <img src={thumb} alt="Preview" className="max-h-full max-w-full object-cover rounded-md" />
                       ) : (
@@ -301,7 +298,7 @@ export default function WebsiteDetail() {
                       )}
                       <div className="mt-4">
                         <p className="text-sm text-white/40 mb-3">Live preview is blocked from embedding by the remote host (X-Frame-Options).</p>
-                        <a href={website.deployedUrl} target="_blank" rel="noreferrer" className="inline-block px-5 py-3 bg-white text-black rounded-2xl font-bold text-xs uppercase tracking-widest">Open Live</a>
+                        <a href={previewTarget} target="_blank" rel="noreferrer" className="inline-block px-5 py-3 bg-white text-black rounded-2xl font-bold text-xs uppercase tracking-widest">Open Live</a>
                       </div>
                     </div>
                   );
@@ -309,9 +306,9 @@ export default function WebsiteDetail() {
               ) : (
                 <div className="w-full h-full flex items-center justify-center"><Eye size={60} className="text-white/5" /></div>
               )}
-              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                {website.deployedUrl && (
-                  <a href={website.deployedUrl} target="_blank" rel="noreferrer"
+              <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-all duration-500 flex items-center justify-center backdrop-blur-[2px]">
+                {previewTarget && (
+                  <a href={previewTarget} target="_blank" rel="noreferrer"
                     className="flex items-center gap-2 px-6 py-3 bg-white text-black rounded-2xl font-bold text-xs uppercase tracking-widest">
                     <ExternalLink size={14} /> Open Live
                   </a>
@@ -343,10 +340,42 @@ export default function WebsiteDetail() {
                 <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} transition={{delay:0.2}} className="mt-10">
                   <div className="flex items-center gap-2 mb-6">
                     <CheckCircle size={14} className="text-emerald-400" />
-                    <h3 className="text-[10px] font-bold uppercase tracking-[0.3em] text-emerald-400">Download Center</h3>
+                    <h3 className="text-[10px] font-bold uppercase tracking-[0.3em] text-emerald-400">Purchase Access</h3>
+                  </div>
+                  <div className="grid gap-3 mb-4">
+                    {sellerGithub && (
+                      <a href={sellerGithub} target="_blank" rel="noreferrer"
+                        className="flex items-center justify-between px-6 py-5 bg-[#111] border border-emerald-500/10 rounded-2xl hover:border-emerald-500/30 transition-all group">
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center"><FileCode size={18} className="text-emerald-400" /></div>
+                          <div><p className="text-sm font-bold">Seller GitHub Repo</p><p className="text-[10px] text-white/25 mt-0.5">Provided by the creator after purchase</p></div>
+                        </div>
+                        <ExternalLink size={16} className="text-white/20 group-hover:text-emerald-400 transition-colors" />
+                      </a>
+                    )}
+                    {liveDeployment && (
+                      <a href={liveDeployment} target="_blank" rel="noreferrer"
+                        className="flex items-center justify-between px-6 py-5 bg-[#111] border border-white/5 rounded-2xl hover:border-white/15 transition-all group">
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center"><ExternalLink size={18} className="text-white/70" /></div>
+                          <div><p className="text-sm font-bold">Live Deployment</p><p className="text-[10px] text-white/25 mt-0.5">Open the deployed build anytime</p></div>
+                        </div>
+                        <ExternalLink size={16} className="text-white/20 group-hover:text-white transition-colors" />
+                      </a>
+                    )}
+                    {shortPreviewAccess && (
+                      <a href={shortPreviewAccess} target="_blank" rel="noreferrer"
+                        className="flex items-center justify-between px-6 py-5 bg-[#111] border border-amber-500/10 rounded-2xl hover:border-amber-500/30 transition-all group">
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 bg-amber-500/10 rounded-xl flex items-center justify-center"><Film size={18} className="text-amber-300" /></div>
+                          <div><p className="text-sm font-bold">Short Preview Video</p><p className="text-[10px] text-white/25 mt-0.5">Optional teaser uploaded during approval</p></div>
+                        </div>
+                        <ExternalLink size={16} className="text-white/20 group-hover:text-amber-300 transition-colors" />
+                      </a>
+                    )}
                   </div>
                   {loadingAssets ? (
-                    <div className="flex items-center gap-3 py-8"><Loader2 size={16} className="animate-spin text-white/30" /><span className="text-xs text-white/30">Loading...</span></div>
+                    <div className="flex items-center gap-3 py-8"><Loader2 size={16} className="animate-spin text-white/30" /><span className="text-xs text-white/30">Loading secure files...</span></div>
                   ) : assets ? (
                     <div className="space-y-3">
                       {assets.sourceCode?.url && (
@@ -354,7 +383,7 @@ export default function WebsiteDetail() {
                           className="flex items-center justify-between px-6 py-5 bg-[#111] border border-white/5 rounded-2xl hover:border-emerald-500/20 transition-all group">
                           <div className="flex items-center gap-4">
                             <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center"><FileCode size={18} className="text-emerald-400" /></div>
-                            <div><p className="text-sm font-bold">Source Code</p><p className="text-[10px] text-white/25 mt-0.5">{assets.sourceCode.fileName || 'source.zip'}</p></div>
+                            <div><p className="text-sm font-bold">Source ZIP</p><p className="text-[10px] text-white/25 mt-0.5">{assets.sourceCode.fileName || 'source.zip'}</p></div>
                           </div>
                           <Download size={16} className="text-white/20 group-hover:text-emerald-400 transition-colors" />
                         </a>
@@ -381,13 +410,13 @@ export default function WebsiteDetail() {
                       )}
                       <div className="flex items-start gap-3 pt-4">
                         <Clock size={12} className="text-white/15 mt-0.5 shrink-0" />
-                        <p className="text-[10px] text-white/15 leading-relaxed">Links expire in 7 days. Return anytime for fresh links.</p>
+                        <p className="text-[10px] text-white/15 leading-relaxed">ZIP, PDF, and private video links refresh every 7 days. Seller GitHub and live deployment stay attached to your purchase.</p>
                       </div>
                     </div>
                   ) : (
                     <div className="bg-[#111] border border-white/5 rounded-2xl p-6 text-center">
                       <Shield size={24} className="text-white/10 mx-auto mb-3" />
-                      <p className="text-sm text-white/30">Files not uploaded yet</p>
+                      <p className="text-sm text-white/30">Secure ZIP or PDF files are not uploaded yet</p>
                     </div>
                   )}
                 </motion.div>
@@ -589,7 +618,7 @@ export default function WebsiteDetail() {
                 {website.githubUrl && purchased ? (
                   <a href={website.githubUrl} target="_blank" rel="noreferrer"
                     className="flex items-center justify-between px-5 py-3.5 bg-[#111] border border-emerald-500/10 rounded-2xl text-xs font-bold text-emerald-400/60 hover:text-emerald-400 transition-all group">
-                    <span className="flex items-center gap-2"><FileCode size={14} /> GitHub Repo</span>
+                    <span className="flex items-center gap-2"><FileCode size={14} /> Seller GitHub Repo</span>
                     <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
                   </a>
                 ) : website.githubUrl ? (

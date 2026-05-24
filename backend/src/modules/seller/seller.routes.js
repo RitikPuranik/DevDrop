@@ -7,7 +7,7 @@ const sellerController = require('./seller.controller');
 
 router.use(auth);
 
-router.post('/websites', verifyEmail, [validators.websiteName(), validators.description(), validators.category(), validators.price(), validators.url('deployedUrl'), handleValidationErrors], sellerController.submitWebsite);
+router.post('/websites', verifyEmail, [validators.websiteName(), validators.description(), validators.category(), validators.price(), validators.url('deployedUrl'), validators.githubUrl(), handleValidationErrors], sellerController.submitWebsite);
 router.get('/websites', sellerController.getMyWebsites);
 router.put('/websites/:id', sellerController.updateWebsite);
 router.delete('/websites/:id', sellerController.deleteOwnWebsite);

@@ -8,7 +8,7 @@ const { generalLimiter } = require('./shared/middleware/rateLimit');
 const app = express();
 
 // Security
-app.use(helmet());
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 const allowedOrigins = [
   process.env.FRONTEND_URL,
   "http://localhost:5173",

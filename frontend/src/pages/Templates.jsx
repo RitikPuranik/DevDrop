@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Search, Loader2, Heart, User, ChevronRight, ShoppingBag, Gavel, Sparkles, CheckCircle } from 'lucide-react';
+import { X, Search, Loader2, Heart, User, ChevronRight, ShoppingBag, Gavel, Sparkles, CheckCircle, ExternalLink, Eye } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { websiteAPI } from "../api/website";
 import { buyerAPI } from "../api/buyer";
@@ -112,6 +112,74 @@ export default function SmoothEliteGallery() {
     });
   }, [searchQuery, activeFilter, templates]);
 
+  const renderPreviewPane = (item, mode = 'card') => {
+    const previewVideo = item.files?.previewVideo?.url || null;
+    const previewTarget = item.previewUrl || item.deployedUrl || null;
+    const isCard = mode === 'card';
+    const containerClasses = isCard
+      ? 'group/preview aspect-[12/11] rounded-[32px] mb-6 relative overflow-hidden flex items-center justify-center border border-white/5'
+      : 'group/preview h-full min-h-[450px] rounded-[40px] relative flex items-center justify-center overflow-hidden border border-white/5';
+
+    return (
+      <motion.div
+        layoutId={`image-box-${item._id || item.id}`}
+        transition={transition}
+        style={{ backgroundColor: item.color || '#1a1a1a' }}
+        className={containerClasses}
+      >
+        {previewVideo ? (
+          <video
+            src={previewVideo}
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="metadata"
+            className="absolute inset-0 h-full w-full object-cover transition-all duration-500 group-hover/preview:scale-[1.03] group-hover/preview:blur-sm group-hover/preview:brightness-[0.45]"
+          />
+        ) : (
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.08),_transparent_42%),linear-gradient(180deg,_rgba(255,255,255,0.03),_rgba(0,0,0,0.35))]" />
+        )}
+
+        {!previewVideo && <Eye className="text-white/10" size={isCard ? 54 : 80} />}
+
+        {previewTarget && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/10 opacity-0 transition-all duration-500 group-hover/preview:opacity-100 backdrop-blur-[2px]">
+            <a
+              href={previewTarget}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-xs font-black uppercase tracking-[0.22em] text-black transition-transform duration-300 hover:scale-[1.03]"
+            >
+              <ExternalLink size={14} /> Open Live
+            </a>
+          </div>
+        )}
+
+        {/* Wishlist overlay */}
+        <div className="absolute top-3 right-3 flex items-center gap-2 z-30">
+          {(item.wishlistCount > 0) && (
+            <span className="flex items-center gap-1 bg-black/60 backdrop-blur-md text-[9px] font-bold text-white/70 px-2.5 py-1 rounded-full">
+              <Heart size={9} className="text-red-400 fill-red-400" /> {item.wishlistCount}
+            </span>
+          )}
+        </div>
+
+        {/* Category badge */}
+        <div className="absolute top-3 left-3 z-30">
+          <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${
+            item.category === 'exclusive' ? 'bg-orange-500/80 text-white' :
+            item.category === 'paid' ? 'bg-[#8b7355]/80 text-white' :
+            'bg-emerald-500/80 text-white'
+          }`}>
+            {item.category}
+          </span>
+        </div>
+      </motion.div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-[#080808] text-white selection:bg-orange-500 font-sans antialiased pb-20">
 
@@ -186,32 +254,7 @@ export default function SmoothEliteGallery() {
                     transition={transition}
                     className="group cursor-pointer bg-[#111] rounded-[40px] p-4 border border-white/5 hover:border-orange-100/20 transition-colors duration-500"
                   >
-                    <motion.div
-                      layoutId={`image-box-${itemId}`}
-                      transition={transition}
-                      style={{ backgroundColor: item.color || '#1a1a1a' }}
-                      className="aspect-[12/11] rounded-[32px] mb-6 relative overflow-hidden flex items-center justify-center border border-white/5"
-                    >
-                      {/* Wishlist overlay */}
-                      <div className="absolute top-3 right-3 flex items-center gap-2 z-10">
-                        {(item.wishlistCount > 0) && (
-                          <span className="flex items-center gap-1 bg-black/60 backdrop-blur-md text-[9px] font-bold text-white/70 px-2.5 py-1 rounded-full">
-                            <Heart size={9} className="text-red-400 fill-red-400" /> {item.wishlistCount}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Category badge */}
-                      <div className="absolute top-3 left-3 z-10">
-                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${
-                          item.category === 'exclusive' ? 'bg-orange-500/80 text-white' :
-                          item.category === 'paid' ? 'bg-[#8b7355]/80 text-white' :
-                          'bg-emerald-500/80 text-white'
-                        }`}>
-                          {item.category}
-                        </span>
-                      </div>
-                    </motion.div>
+                    {renderPreviewPane(item, 'card')}
 
                     <div className="px-2">
                       <motion.h3 layoutId={`title-${itemId}`} transition={transition} className="font-black text-xl tracking-tight">{item.title || item.name}</motion.h3>
@@ -257,14 +300,7 @@ export default function SmoothEliteGallery() {
               </button>
 
               <div className="p-4">
-                <motion.div
-                  layoutId={`image-box-${selectedId._id || selectedId.id}`}
-                  transition={transition}
-                  style={{ backgroundColor: selectedId.color || '#1a1a1a' }}
-                  className="h-full min-h-[450px] rounded-[40px] relative flex items-center justify-center overflow-hidden border border-white/5"
-                >
-                  <Sparkles className="text-white/10" size={80} />
-                </motion.div>
+                {renderPreviewPane(selectedId, 'modal')}
               </div>
 
               <div className="p-12 md:p-20 flex flex-col justify-center">

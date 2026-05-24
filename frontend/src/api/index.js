@@ -10,3 +10,4 @@ export { auctionAPI } from "./auction";
 export { assetAPI } from "./asset";
 export { analyticsAPI } from "./analytics";
 export { payoutAPI } from "./payout";
+export { adminAPI } from "./admin";

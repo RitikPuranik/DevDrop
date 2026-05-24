@@ -87,6 +87,13 @@ const validators = {
       .isURL({ protocols: ['http', 'https'] })
       .withMessage('Please provide a valid URL'),
 
+  // GitHub URL validation
+  githubUrl: (field = 'githubUrl') =>
+    body(field)
+      .optional({ checkFalsy: true })
+      .matches(/^https?:\/\/(www\.)?github\.com\/.+/)
+      .withMessage('Please provide a valid GitHub URL'),
+
   // Bank account validation
   accountNumber: () =>
     body('accountNumber')

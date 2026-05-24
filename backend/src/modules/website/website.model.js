@@ -61,6 +61,11 @@ const websiteSchema = new mongoose.Schema(
       trim: true,
       match: [/^https?:\/\/.+/, 'Please provide a valid URL'],
     },
+    previewUrl: {
+      type: String,
+      trim: true,
+      match: [/^https?:\/\/.+/, 'Please provide a valid preview URL'],
+    },
     githubUrl: {
       type: String,
       trim: true,

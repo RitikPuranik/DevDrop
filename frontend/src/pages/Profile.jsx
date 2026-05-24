@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   User, Package, Heart, DollarSign, Upload, ShoppingBag, 
   ExternalLink, Trash2, Loader2, LogOut, Plus, 
-  ArrowLeft, ChevronDown, X, Download, FileCode, CheckCircle 
+  ArrowLeft, ChevronDown, X, Download, FileCode, FileText, Film, CheckCircle 
 } from 'lucide-react';
 import { userAPI } from '../api/user';
 import { sellerAPI } from '../api/seller';
@@ -306,6 +306,12 @@ export default function Profile() {
                       </div>
 
                       <div className="bg-[#111] border border-white/5 rounded-3xl p-6">
+                        <label className="text-[9px] uppercase tracking-widest text-[#8b7355] block mb-2 font-bold">GitHub URL</label>
+                        <input className="w-full bg-transparent text-sm outline-none" placeholder="https://github.com/..."
+                          value={form.githubUrl} onChange={(e) => setForm({...form, githubUrl: e.target.value})} />
+                      </div>
+
+                      <div className="bg-[#111] border border-white/5 rounded-3xl p-6">
                          <label className="text-[9px] uppercase tracking-widest text-[#8b7355] block mb-4 font-bold">Tech Stack Selection</label>
                          {Object.entries(TECH_OPTIONS).map(([section, options]) => (
                             <div key={section} className="mb-4">
@@ -347,6 +353,12 @@ export default function Profile() {
                           </div>
                           <StatusBadge status={item.status} />
                         </div>
+                        {item.adminComment && (
+                          <div className="mb-4 rounded-2xl border border-white/5 bg-black/20 px-4 py-3">
+                            <p className="text-[9px] uppercase tracking-[0.2em] text-white/35 font-bold mb-2">Admin Note</p>
+                            <p className="text-xs text-white/55 leading-relaxed">{item.adminComment}</p>
+                          </div>
+                        )}
                         <div className="flex items-center justify-between pt-4 border-t border-white/5">
                           <span className="text-[#8b7355] font-bold text-sm">{item.price === 0 ? 'FREE' : `₹${item.price}`}</span>
                           <div className="flex gap-2">
@@ -503,16 +515,34 @@ export default function Profile() {
                     <div className="bg-[#111] border border-white/5 rounded-2xl p-4">
                       <p className="text-[10px] text-white/30">Files</p>
                       <div className="mt-2 space-y-2">
+                        {selectedWebsiteDetail.githubUrl && (
+                          <a href={selectedWebsiteDetail.githubUrl} target="_blank" rel="noreferrer"
+                            className="flex items-center justify-center gap-2 w-full py-2 bg-emerald-500/10 text-emerald-300 rounded-lg font-bold">
+                            <FileCode size={14} /> Open Seller GitHub
+                          </a>
+                        )}
+                        {selectedWebsiteDetail.deployedUrl && (
+                          <a href={selectedWebsiteDetail.deployedUrl} target="_blank" rel="noreferrer"
+                            className="flex items-center justify-center gap-2 w-full py-2 bg-white/5 text-white rounded-lg font-bold">
+                            <ExternalLink size={14} /> Open Live Site
+                          </a>
+                        )}
+                        {selectedWebsiteDetail.files?.previewVideo?.url && (
+                          <a href={selectedWebsiteDetail.files.previewVideo.url} target="_blank" rel="noreferrer"
+                            className="flex items-center justify-center gap-2 w-full py-2 bg-amber-500/10 text-amber-200 rounded-lg font-bold">
+                            <Film size={14} /> Open Short Preview
+                          </a>
+                        )}
                         <div className="space-y-2">
                           <button onClick={() => downloadAsset(selectedWebsiteDetail._id || selectedWebsiteDetail, 'source')}
-                            className="w-full py-2 bg-emerald-500 text-black rounded-lg font-bold">Download Source</button>
+                            className="w-full py-2 bg-emerald-500 text-black rounded-lg font-bold">Download Source ZIP</button>
                           <button onClick={() => downloadAsset(selectedWebsiteDetail._id || selectedWebsiteDetail, 'docs')}
-                            className="w-full py-2 bg-blue-500 text-black rounded-lg font-bold">Download Docs</button>
+                            className="w-full py-2 bg-blue-500 text-black rounded-lg font-bold">Download Docs PDF</button>
                           {selectedWebsiteDetail.files?.video && (
                             <button onClick={() => downloadAsset(selectedWebsiteDetail._id || selectedWebsiteDetail, 'video')}
-                              className="w-full py-2 bg-purple-500 text-black rounded-lg font-bold">Download Video</button>
+                              className="w-full py-2 bg-purple-500 text-black rounded-lg font-bold">Download Walkthrough Video</button>
                           )}
-                          <p className="text-[10px] text-white/30">Links open in a new tab and are generated when you click a specific download.</p>
+                          <p className="text-[10px] text-white/30">Seller GitHub and deployed links stay visible here. ZIP, PDF, and private videos open in a new tab when generated.</p>
                         </div>
                       </div>
                     </div>
@@ -545,20 +575,40 @@ export default function Profile() {
                 </div>
 
                 <div className="space-y-4">
-                  <p className="text-sm text-white/30">Choose which file to download — links are generated on demand and open in a new tab.</p>
+                  <p className="text-sm text-white/30">Open the seller links directly, or generate ZIP, PDF, and video downloads on demand.</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {downloadsWebsite?.githubUrl && (
+                      <a href={downloadsWebsite.githubUrl} target="_blank" rel="noreferrer"
+                        className="py-3 bg-emerald-500/10 text-emerald-300 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-emerald-500/20 transition-all">
+                        <FileCode size={16} /> Seller GitHub Repo
+                      </a>
+                    )}
+                    {downloadsWebsite?.deployedUrl && (
+                      <a href={downloadsWebsite.deployedUrl} target="_blank" rel="noreferrer"
+                        className="py-3 bg-white/5 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-white/10 transition-all">
+                        <ExternalLink size={16} /> Live Deployment
+                      </a>
+                    )}
+                    {downloadsWebsite?.files?.previewVideo?.url && (
+                      <a href={downloadsWebsite.files.previewVideo.url} target="_blank" rel="noreferrer"
+                        className="py-3 bg-amber-500/10 text-amber-200 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-amber-500/20 transition-all sm:col-span-2">
+                        <Film size={16} /> Short Preview Video
+                      </a>
+                    )}
+                  </div>
                   <div className="flex flex-col sm:flex-row gap-3 mt-3">
                     <button onClick={() => downloadAsset(downloadsWebsite._id || downloadsWebsite, 'source')}
                       className="flex-1 py-3 bg-emerald-500 text-black rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-emerald-600 transition-all">
-                      <FileCode size={16} /> Download Source
+                      <FileCode size={16} /> Download Source ZIP
                     </button>
                     <button onClick={() => downloadAsset(downloadsWebsite._id || downloadsWebsite, 'docs')}
                       className="flex-1 py-3 bg-blue-500 text-black rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-blue-600 transition-all">
-                      <FileCode size={16} /> Download Docs
+                      <FileText size={16} /> Download Docs PDF
                     </button>
-                    {downloadsWebsite?.files?.video?.url && (
+                    {downloadsWebsite?.files?.video && (
                       <button onClick={() => downloadAsset(downloadsWebsite._id || downloadsWebsite, 'video')}
                         className="flex-1 py-3 bg-purple-500 text-black rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-purple-600 transition-all">
-                        <FileCode size={16} /> Download Video
+                        <Film size={16} /> Download Walkthrough
                       </button>
                     )}
                   </div>
@@ -600,6 +650,7 @@ function StatusBadge({ status }) {
   const config = {
     approved: { label: 'Live', color: 'text-emerald-400 bg-emerald-500/10' },
     pending_review: { label: 'Pending', color: 'text-amber-400 bg-amber-500/10' },
+    changes_requested: { label: 'Changes', color: 'text-sky-300 bg-sky-500/10' },
     rejected: { label: 'Rejected', color: 'text-red-400 bg-red-500/10' },
   };
   const c = config[status] || { label: status, color: 'text-white/40 bg-white/5' };

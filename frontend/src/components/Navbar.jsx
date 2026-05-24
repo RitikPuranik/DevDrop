@@ -4,19 +4,33 @@ import LinkTransition from './TransitionLink';
 import AuthModal from './Login';
 import { LogOut } from "lucide-react";
 import { useNavigate } from 'react-router-dom';
+import { userAPI } from '../api/user';
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [hoveredIndex, setHoveredIndex] = useState(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [websitesExpanded, setWebsitesExpanded] = useState(false);
   const [hoveredSubIndex, setHoveredSubIndex] = useState(null);
   const navigate = useNavigate();
 
-  const checkLoginStatus = () => {
+  const checkLoginStatus = async () => {
     const token = localStorage.getItem("token");
     setIsLoggedIn(!!token);
+    if (!token) {
+      setIsAdmin(false);
+      return;
+    }
+
+    try {
+      const res = await userAPI.getProfile();
+      const role = res.data?.data?.user?.role;
+      setIsAdmin(role === 'admin');
+    } catch {
+      setIsAdmin(false);
+    }
   };
 
   useEffect(() => {
@@ -72,6 +86,7 @@ const Navbar = () => {
           src: "https://images.unsplash.com/photo-1511367461989-f85a21fda167?q=80&w=1000",
           hasSubMenu: false,
         },
+        ...(isAdmin ? [{ to: "/admin", label: "Admin", src: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?q=80&w=1000", hasSubMenu: false }] : []),
       ]
     : menuItems;
 

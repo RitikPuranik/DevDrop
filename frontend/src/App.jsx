@@ -14,6 +14,7 @@ import Template from './pages/Templates';
 import ContactUs from './pages/ContactUs';
 import ReviewPage from './pages/Review';
 import Profile from './pages/Profile';
+import Admin from './pages/Admin';
 import WebsiteDetail from './pages/WebsiteDetail';
 import Auctions from './pages/Auctions';
 import Checkout from './pages/Checkout';
@@ -125,6 +126,7 @@ function AppContent() {
               <Route path="/contact" element={<ContactUs />} />
               <Route path="/review" element={<ReviewPage />} />
               <Route path="/profile" element={<Profile />} />
+              <Route path="/admin" element={<Admin />} />
               <Route path="/website/:id" element={<WebsiteDetail />} />
               <Route path="/checkout/:id" element={<Checkout />} />
               <Route path="/auctions" element={<Auctions />} />

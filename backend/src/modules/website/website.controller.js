@@ -1,7 +1,28 @@
 const Website = require('./website.model');
 const Wishlist = require('../wishlist/wishlist.model');
+const supabaseService = require('../../services/supabase.service');
 const { getPaginationMetadata } = require('../../shared/utils/helpers');
 const { PAGINATION, WEBSITE_STATUS } = require('../../shared/utils/constants');
+
+const getPublicAssetUrl = (filePath) => {
+  if (!filePath) return null;
+  if (/^https?:\/\//.test(filePath)) return filePath;
+  return supabaseService.getPublicUrl(filePath);
+};
+
+const hydrateWebsitePreview = (websiteDoc) => {
+  const data = websiteDoc.toObject ? websiteDoc.toObject() : websiteDoc;
+
+  if (data.previewVideoUrl) {
+    data.files = data.files || {};
+    data.files.previewVideo = {
+      ...(data.files.previewVideo || {}),
+      url: getPublicAssetUrl(data.previewVideoUrl),
+    };
+  }
+
+  return data;
+};
 
 const browseWebsites = async (req, res) => {
   try {
@@ -12,13 +33,13 @@ const browseWebsites = async (req, res) => {
     if (category) query.category = category;
     if (minPrice || maxPrice) { query.price = {}; if (minPrice) query.price.$gte = parseFloat(minPrice); if (maxPrice) query.price.$lte = parseFloat(maxPrice); }
 
-    const websites = await Website.find(query).select('-adminComment -files -isDeleted').populate('sellerId', 'name email').sort({ [sortBy]: order === 'asc' ? 1 : -1 }).skip(skip).limit(parseInt(limit));
+    const websites = await Website.find(query).select('-adminComment -isDeleted').populate('sellerId', 'name email').sort({ [sortBy]: order === 'asc' ? 1 : -1 }).skip(skip).limit(parseInt(limit));
     const total = await Website.countDocuments(query);
 
-    let result = websites;
+    let result = websites.map(hydrateWebsitePreview);
     if (req.userId) {
       const wishlistSet = new Set((await Wishlist.find({ userId: req.userId, websiteId: { $in: websites.map(w => w._id) } })).map(w => w.websiteId.toString()));
-      result = websites.map(w => ({ ...w.toObject(), isWishlisted: wishlistSet.has(w._id.toString()) }));
+      result = result.map(w => ({ ...w, isWishlisted: wishlistSet.has(w._id.toString()) }));
     }
 
     res.json({ success: true, data: result, pagination: getPaginationMetadata(parseInt(page), parseInt(limit), total) });
@@ -45,7 +66,9 @@ const getWebsiteDetails = async (req, res) => {
     let isWishlisted = false;
     if (req.userId) { isWishlisted = !!(await Wishlist.findOne({ userId: req.userId, websiteId: req.params.id })); }
 
-    res.json({ success: true, data: { ...website.toObject(), isWishlisted } });
+    const data = { ...hydrateWebsitePreview(website), isWishlisted };
+
+    res.json({ success: true, data });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error fetching website', error: error.message });
   }
@@ -60,10 +83,10 @@ const getByCategory = async (req, res) => {
     const query = { category, status: WEBSITE_STATUS.APPROVED, isDeleted: false };
     if (category === 'exclusive') query.status = { $ne: WEBSITE_STATUS.SOLD };
 
-    const websites = await Website.find(query).select('-adminComment -files -isDeleted').populate('sellerId', 'name email').sort({ createdAt: -1 }).skip((page - 1) * limit).limit(parseInt(limit));
+    const websites = await Website.find(query).select('-adminComment -isDeleted').populate('sellerId', 'name email').sort({ createdAt: -1 }).skip((page - 1) * limit).limit(parseInt(limit));
     const total = await Website.countDocuments(query);
 
-    res.json({ success: true, data: websites, pagination: getPaginationMetadata(parseInt(page), parseInt(limit), total) });
+    res.json({ success: true, data: websites.map(hydrateWebsitePreview), pagination: getPaginationMetadata(parseInt(page), parseInt(limit), total) });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error fetching websites', error: error.message });
   }
@@ -81,10 +104,10 @@ const searchWebsites = async (req, res) => {
     };
     if (category) query.category = category;
 
-    const websites = await Website.find(query).select('-adminComment -files -isDeleted').populate('sellerId', 'name email').sort({ viewCount: -1, createdAt: -1 }).skip((page - 1) * limit).limit(parseInt(limit));
+    const websites = await Website.find(query).select('-adminComment -isDeleted').populate('sellerId', 'name email').sort({ viewCount: -1, createdAt: -1 }).skip((page - 1) * limit).limit(parseInt(limit));
     const total = await Website.countDocuments(query);
 
-    res.json({ success: true, data: websites, pagination: getPaginationMetadata(parseInt(page), parseInt(limit), total), searchQuery: q });
+    res.json({ success: true, data: websites.map(hydrateWebsitePreview), pagination: getPaginationMetadata(parseInt(page), parseInt(limit), total), searchQuery: q });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error searching websites', error: error.message });
   }
