@@ -272,48 +272,19 @@ export default function WebsiteDetail() {
                   preload="metadata"
                   className="w-full h-full object-cover transition-all duration-500 group-hover:scale-[1.03] group-hover:blur-sm group-hover:brightness-[0.45]"
                 />
-              ) : previewTarget ? (
-                (() => {
-                  // Avoid embedding remote sites that send X-Frame-Options: deny.
-                  // Fallback to an 'Open Live' CTA for cross-origin URLs.
-                  let isSameOrigin = false;
-                  try {
-                    const d = new URL(previewTarget);
-                    isSameOrigin = (d.host === window.location.host && d.protocol === window.location.protocol);
-                  } catch (e) { isSameOrigin = false; }
-
-                  if (isSameOrigin) {
-                    return <iframe src={previewTarget} title={website.name} className="w-full h-full border-0 transition-all duration-500 group-hover:scale-[1.03] group-hover:blur-sm group-hover:brightness-[0.7]" sandbox="allow-scripts allow-same-origin" />;
-                  }
-
-                  const thumb = website.files?.previewImage ? website.files.previewImage.url : null;
-
-                  // Fallback to thumbnail + Open Live CTA
-                  return (
-                    <div className="w-full h-full flex flex-col items-center justify-center gap-4 p-6 text-center transition-all duration-500 group-hover:scale-[1.03] group-hover:blur-sm group-hover:brightness-[0.7]">
-                      {thumb ? (
-                        <img src={thumb} alt="Preview" className="max-h-full max-w-full object-cover rounded-md" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center"><Eye size={60} className="text-white/5" /></div>
-                      )}
-                      <div className="mt-4">
-                        <p className="text-sm text-white/40 mb-3">Live preview is blocked from embedding by the remote host (X-Frame-Options).</p>
-                        <a href={previewTarget} target="_blank" rel="noreferrer" className="inline-block px-5 py-3 bg-white text-black rounded-2xl font-bold text-xs uppercase tracking-widest">Open Live</a>
-                      </div>
-                    </div>
-                  );
-                })()
               ) : (
-                <div className="w-full h-full flex items-center justify-center"><Eye size={60} className="text-white/5" /></div>
+                <div className="w-full h-full flex items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.06),_transparent_50%)] transition-all duration-500 group-hover:blur-sm group-hover:brightness-[0.45]">
+                  <Eye size={60} className="text-white/10 transition-all duration-500 group-hover:opacity-0" />
+                </div>
               )}
-              <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-all duration-500 flex items-center justify-center backdrop-blur-[2px]">
-                {previewTarget && (
+              {previewTarget && (
+                <div className="absolute inset-0 z-20 bg-black/30 opacity-0 group-hover:opacity-100 transition-all duration-500 flex items-center justify-center backdrop-blur-[6px]">
                   <a href={previewTarget} target="_blank" rel="noreferrer"
-                    className="flex items-center gap-2 px-6 py-3 bg-white text-black rounded-2xl font-bold text-xs uppercase tracking-widest">
+                    className="flex items-center gap-2 px-6 py-3 bg-white text-black rounded-2xl font-bold text-xs uppercase tracking-widest shadow-xl transition-transform duration-300 hover:scale-[1.06]">
                     <ExternalLink size={14} /> Open Live
                   </a>
-                )}
-              </div>
+                </div>
+              )}
             </div>
 
             {/* Description */}
@@ -615,18 +586,7 @@ export default function WebsiteDetail() {
                     <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
                   </a>
                 )}
-                {website.githubUrl && purchased ? (
-                  <a href={website.githubUrl} target="_blank" rel="noreferrer"
-                    className="flex items-center justify-between px-5 py-3.5 bg-[#111] border border-emerald-500/10 rounded-2xl text-xs font-bold text-emerald-400/60 hover:text-emerald-400 transition-all group">
-                    <span className="flex items-center gap-2"><FileCode size={14} /> Seller GitHub Repo</span>
-                    <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </a>
-                ) : website.githubUrl ? (
-                  <div className="flex items-center justify-between px-5 py-3.5 bg-[#111] border border-white/5 rounded-2xl text-xs font-bold text-white/15">
-                    <span className="flex items-center gap-2"><Lock size={14} /> Source Code</span>
-                    <span className="text-[9px] tracking-wide">After purchase</span>
-                  </div>
-                ) : null}
+
               </div>
 
               {/* Seller */}
@@ -639,7 +599,6 @@ export default function WebsiteDetail() {
                     </div>
                     <div>
                       <p className="text-sm font-bold">{sellerName}</p>
-                      <p className="text-[10px] text-white/20">{website.sellerId.email}</p>
                     </div>
                   </div>
                 </div>

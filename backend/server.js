@@ -9,7 +9,8 @@ const startServer = async () => {
   await connectDB();
 
   try {
-    await seedDemoMarketplace();
+    // await seedDemoMarketplace();
+    console.log('Demo marketplace seed disabled to prevent dummy data.');
   } catch (e) {
     console.warn('⚠️  Demo marketplace seed skipped:', e.message);
   }

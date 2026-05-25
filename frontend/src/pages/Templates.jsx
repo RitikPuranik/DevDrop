@@ -135,22 +135,22 @@ export default function SmoothEliteGallery() {
             loop
             playsInline
             preload="metadata"
-            className="absolute inset-0 h-full w-full object-cover transition-all duration-500 group-hover/preview:scale-[1.03] group-hover/preview:blur-sm group-hover/preview:brightness-[0.45]"
+            className="absolute inset-0 h-full w-full object-contain transition-all duration-500 group-hover/preview:scale-[1.03] group-hover/preview:blur-sm group-hover/preview:brightness-[0.45]"
           />
         ) : (
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.08),_transparent_42%),linear-gradient(180deg,_rgba(255,255,255,0.03),_rgba(0,0,0,0.35))]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.08),_transparent_42%),linear-gradient(180deg,_rgba(255,255,255,0.03),_rgba(0,0,0,0.35))] transition-all duration-500 group-hover/preview:blur-sm group-hover/preview:brightness-[0.45]" />
         )}
 
-        {!previewVideo && <Eye className="text-white/10" size={isCard ? 54 : 80} />}
+        {!previewVideo && <Eye className="text-white/10 transition-all duration-500 group-hover/preview:opacity-0" size={isCard ? 54 : 80} />}
 
         {previewTarget && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/10 opacity-0 transition-all duration-500 group-hover/preview:opacity-100 backdrop-blur-[2px]">
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/30 opacity-0 transition-all duration-500 group-hover/preview:opacity-100 backdrop-blur-[6px]">
             <a
               href={previewTarget}
               target="_blank"
               rel="noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-xs font-black uppercase tracking-[0.22em] text-black transition-transform duration-300 hover:scale-[1.03]"
+              className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-xs font-black uppercase tracking-[0.22em] text-black shadow-xl transition-transform duration-300 hover:scale-[1.06]"
             >
               <ExternalLink size={14} /> Open Live
             </a>
@@ -168,11 +168,10 @@ export default function SmoothEliteGallery() {
 
         {/* Category badge */}
         <div className="absolute top-3 left-3 z-30">
-          <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${
-            item.category === 'exclusive' ? 'bg-orange-500/80 text-white' :
-            item.category === 'paid' ? 'bg-[#8b7355]/80 text-white' :
-            'bg-emerald-500/80 text-white'
-          }`}>
+          <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${item.category === 'exclusive' ? 'bg-orange-500/80 text-white' :
+              item.category === 'paid' ? 'bg-[#8b7355]/80 text-white' :
+                'bg-emerald-500/80 text-white'
+            }`}>
             {item.category}
           </span>
         </div>

@@ -480,8 +480,16 @@ const approveWebsite = async (req, res) => {
       website.githubUrl = resolvedGithubUrl;
     }
 
+    // Build clean files object — strip any undefined sub-docs from the existing record
+    const existingFiles = website.files ? website.files.toObject?.() || website.files : {};
+    const cleanExisting = {};
+    for (const [k, v] of Object.entries(existingFiles)) {
+      if (v !== undefined && v !== null && typeof v === 'object' && Object.keys(v).length > 0) {
+        cleanExisting[k] = v;
+      }
+    }
     website.files = {
-      ...(website.files || {}),
+      ...cleanExisting,
       sourceCode: sourceCodeData,
       docs: docsData,
       ...(videoData && { video: videoData }),
@@ -889,6 +897,7 @@ const processPayout = async (req, res) => {
 };
 
 module.exports = {
+  createWebsite,
   getPendingWebsites,
   requestChanges,
   rejectWebsite,

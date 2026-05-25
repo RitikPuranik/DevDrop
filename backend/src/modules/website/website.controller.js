@@ -10,18 +10,52 @@ const getPublicAssetUrl = (filePath) => {
   return supabaseService.getPublicUrl(filePath);
 };
 
-const hydrateWebsitePreview = (websiteDoc) => {
-  const data = websiteDoc.toObject ? websiteDoc.toObject() : websiteDoc;
+const hydrateWebsitePreviewsAsync = async (websites) => {
+  const result = websites.map(w => (w.toObject ? w.toObject() : w));
+  
+  // Find all websites that have a previewVideoUrl that needs signing
+  const pathsToSign = [];
+  result.forEach(w => {
+    if (w.previewVideoUrl && !/^https?:\/\//.test(w.previewVideoUrl)) {
+      pathsToSign.push(w.previewVideoUrl);
+    }
+  });
 
-  if (data.previewVideoUrl) {
-    data.files = data.files || {};
-    data.files.previewVideo = {
-      ...(data.files.previewVideo || {}),
-      url: getPublicAssetUrl(data.previewVideoUrl),
-    };
+  if (pathsToSign.length > 0) {
+    try {
+      // Create signed URLs valid for 2 hours
+      const signedUrls = await supabaseService.createSignedUrls(pathsToSign, 7200);
+      const urlMap = {};
+      signedUrls.forEach(item => {
+        if (!item.error) urlMap[item.path] = item.signedUrl;
+      });
+
+      result.forEach(w => {
+        if (w.previewVideoUrl && urlMap[w.previewVideoUrl]) {
+          w.files = w.files || {};
+          w.files.previewVideo = {
+            ...(w.files.previewVideo || {}),
+            url: urlMap[w.previewVideoUrl],
+          };
+        } else if (w.previewVideoUrl && /^https?:\/\//.test(w.previewVideoUrl)) {
+          w.files = w.files || {};
+          w.files.previewVideo = { ...(w.files.previewVideo || {}), url: w.previewVideoUrl };
+        }
+      });
+    } catch (err) {
+      console.error('Failed to generate signed URLs for previews:', err);
+    }
+  } else {
+    // Just map external URLs
+    result.forEach(w => {
+      if (w.previewVideoUrl && /^https?:\/\//.test(w.previewVideoUrl)) {
+        w.files = w.files || {};
+        w.files.previewVideo = { ...(w.files.previewVideo || {}), url: w.previewVideoUrl };
+      }
+    });
   }
-
-  return data;
+  
+  return result;
 };
 
 const browseWebsites = async (req, res) => {
@@ -36,7 +70,8 @@ const browseWebsites = async (req, res) => {
     const websites = await Website.find(query).select('-adminComment -isDeleted').populate('sellerId', 'name email').sort({ [sortBy]: order === 'asc' ? 1 : -1 }).skip(skip).limit(parseInt(limit));
     const total = await Website.countDocuments(query);
 
-    let result = websites.map(hydrateWebsitePreview);
+    let result = await hydrateWebsitePreviewsAsync(websites);
+    
     if (req.userId) {
       const wishlistSet = new Set((await Wishlist.find({ userId: req.userId, websiteId: { $in: websites.map(w => w._id) } })).map(w => w.websiteId.toString()));
       result = result.map(w => ({ ...w, isWishlisted: wishlistSet.has(w._id.toString()) }));
@@ -66,7 +101,8 @@ const getWebsiteDetails = async (req, res) => {
     let isWishlisted = false;
     if (req.userId) { isWishlisted = !!(await Wishlist.findOne({ userId: req.userId, websiteId: req.params.id })); }
 
-    const data = { ...hydrateWebsitePreview(website), isWishlisted };
+    const hydrated = await hydrateWebsitePreviewsAsync([website]);
+    const data = { ...hydrated[0], isWishlisted };
 
     res.json({ success: true, data });
   } catch (error) {
@@ -80,34 +116,38 @@ const getByCategory = async (req, res) => {
     const { page = 1, limit = 20 } = req.query;
     if (!['free', 'paid', 'exclusive'].includes(category)) return res.status(400).json({ success: false, message: 'Invalid category' });
 
-    const query = { category, status: WEBSITE_STATUS.APPROVED, isDeleted: false };
+    const skip = (page - 1) * limit;
+    const query = { category, status: { $in: [WEBSITE_STATUS.APPROVED, WEBSITE_STATUS.IN_AUCTION] }, isDeleted: false };
     if (category === 'exclusive') query.status = { $ne: WEBSITE_STATUS.SOLD };
 
-    const websites = await Website.find(query).select('-adminComment -isDeleted').populate('sellerId', 'name email').sort({ createdAt: -1 }).skip((page - 1) * limit).limit(parseInt(limit));
+    const websites = await Website.find(query).select('-adminComment -isDeleted').populate('sellerId', 'name email').sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit));
     const total = await Website.countDocuments(query);
 
-    res.json({ success: true, data: websites.map(hydrateWebsitePreview), pagination: getPaginationMetadata(parseInt(page), parseInt(limit), total) });
+    const result = await hydrateWebsitePreviewsAsync(websites);
+    res.json({ success: true, data: result, pagination: getPaginationMetadata(parseInt(page), parseInt(limit), total) });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Error fetching websites', error: error.message });
+    res.status(500).json({ success: false, message: 'Error fetching category', error: error.message });
   }
 };
 
 const searchWebsites = async (req, res) => {
   try {
-    const { q, page = 1, limit = 20, category } = req.query;
-    if (!q || q.trim().length < 2) return res.status(400).json({ success: false, message: 'Search query must be at least 2 characters' });
+    const { q, page = 1, limit = 20 } = req.query;
+    if (!q) return res.status(400).json({ success: false, message: 'Search query is required' });
 
+    const skip = (page - 1) * limit;
     const query = {
-      status: WEBSITE_STATUS.APPROVED, isDeleted: false,
-      $or: [{ name: { $regex: q, $options: 'i' } }, { description: { $regex: q, $options: 'i' } }, { 'techStack.frontend': { $regex: q, $options: 'i' } }, { 'techStack.backend': { $regex: q, $options: 'i' } }, { 'techStack.database': { $regex: q, $options: 'i' } }],
-      $and: [{ $or: [{ category: { $ne: 'exclusive' } }, { category: 'exclusive', status: { $ne: WEBSITE_STATUS.SOLD } }] }],
+      $text: { $search: q },
+      status: { $in: [WEBSITE_STATUS.APPROVED, WEBSITE_STATUS.IN_AUCTION] },
+      isDeleted: false,
+      $or: [{ category: { $ne: 'exclusive' } }, { category: 'exclusive', status: { $ne: WEBSITE_STATUS.SOLD } }]
     };
-    if (category) query.category = category;
 
-    const websites = await Website.find(query).select('-adminComment -isDeleted').populate('sellerId', 'name email').sort({ viewCount: -1, createdAt: -1 }).skip((page - 1) * limit).limit(parseInt(limit));
+    const websites = await Website.find(query).select('-adminComment -isDeleted').populate('sellerId', 'name email').sort({ score: { $meta: 'textScore' } }).skip(skip).limit(parseInt(limit));
     const total = await Website.countDocuments(query);
 
-    res.json({ success: true, data: websites.map(hydrateWebsitePreview), pagination: getPaginationMetadata(parseInt(page), parseInt(limit), total), searchQuery: q });
+    const result = await hydrateWebsitePreviewsAsync(websites);
+    res.json({ success: true, data: result, pagination: getPaginationMetadata(parseInt(page), parseInt(limit), total), searchQuery: q });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error searching websites', error: error.message });
   }

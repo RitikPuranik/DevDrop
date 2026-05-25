@@ -18,7 +18,7 @@ export default function AuthModal({ isOpen, onClose }) {
   const [shouldRender, setShouldRender] = useState(false);
 
   const [loginData, setLoginData] = useState({
-    email: "",
+    emailOrPhone: "",
     password: "",
   });
 
@@ -197,8 +197,8 @@ export default function AuthModal({ isOpen, onClose }) {
               icon={Mail}
               type="text"
               placeholder="Email or Phone"
-              name="email"
-              value={loginData.email}
+              name="emailOrPhone"
+              value={loginData.emailOrPhone}
               onChange={handleLoginChange}
             />
 
