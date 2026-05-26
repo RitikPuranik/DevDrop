@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js",
+    "dev": "nodemon --ext js,json,env server.js",
+    "seed:demo": "node scripts/import-demo-data.js",
     "test": "jest"
   },
   "dependencies": {

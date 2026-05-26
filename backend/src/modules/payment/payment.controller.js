@@ -4,6 +4,7 @@ const Payment  = require('./payment.model');
 const Payout   = require('../payout/payout.model');
 const User     = require('../user/user.model');
 const BankDetails = require('../user/bankDetails.model');
+const Auction = require('../auction/auction.model');
 const razorpayService = require('../../services/razorpay.service');
 const { calculatePricing } = require('../../shared/utils/helpers');
 const { WEBSITE_STATUS, PAYMENT_STATUS, PAYOUT_STATUS } = require('../../shared/utils/constants');
@@ -22,13 +23,46 @@ const createOrder = async (req, res) => {
     const website = await Website.findOne({ _id: websiteId, isDeleted: false }).populate('sellerId');
     if (!website) return res.status(404).json({ success: false, message: 'Website not found' });
 
-    if (website.status !== WEBSITE_STATUS.APPROVED) {
-      return res.status(400).json({
-        success: false,
-        message: website.status === WEBSITE_STATUS.SOLD
-          ? 'This exclusive website has already been sold'
-          : 'This website is not available for purchase',
-      });
+    let priceToUse = website.price;
+
+    if (website.category === 'exclusive') {
+      if (website.status === WEBSITE_STATUS.SOLD) {
+        return res.status(400).json({
+          success: false,
+          message: 'This exclusive website has already been sold',
+        });
+      }
+
+      const auction = await Auction.findOne({ websiteId: website._id, status: 'awaiting_payment' });
+      if (!auction) {
+        return res.status(400).json({
+          success: false,
+          message: 'There is no pending payment for this auction',
+        });
+      }
+
+      if (auction.currentBidderId.toString() !== buyer._id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'You are not the winner of this auction',
+        });
+      }
+
+      if (auction.hasPaymentDeadlinePassed && auction.hasPaymentDeadlinePassed()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Payment deadline has passed',
+        });
+      }
+
+      priceToUse = auction.currentBidAmount;
+    } else {
+      if (website.status !== WEBSITE_STATUS.APPROVED) {
+        return res.status(400).json({
+          success: false,
+          message: 'This website is not available for purchase',
+        });
+      }
     }
 
     if (website.category === 'free')
@@ -38,7 +72,7 @@ const createOrder = async (req, res) => {
     if (existingPurchase)
       return res.status(400).json({ success: false, message: 'You have already purchased this website' });
 
-    const pricing = calculatePricing(website.price);
+    const pricing = calculatePricing(priceToUse);
 
     // Internal receipt ID — unique per order attempt
     const receiptId = `rcpt_${Date.now()}_${websiteId.toString().slice(-6)}`;
@@ -89,9 +123,16 @@ const createOrder = async (req, res) => {
  */
 const verifyPayment = async (req, res) => {
   try {
-    const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
+    const { 
+      razorpayOrderId, razorpayPaymentId, razorpaySignature,
+      razorpay_order_id, razorpay_payment_id, razorpay_signature 
+    } = req.body;
 
-    if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+    const orderId = razorpayOrderId || razorpay_order_id;
+    const paymentId = razorpayPaymentId || razorpay_payment_id;
+    const signature = razorpaySignature || razorpay_signature;
+
+    if (!orderId || !paymentId || !signature) {
       return res.status(400).json({
         success: false,
         message: 'razorpayOrderId, razorpayPaymentId, and razorpaySignature are all required',
@@ -99,18 +140,31 @@ const verifyPayment = async (req, res) => {
     }
 
     // Verify signature authenticity
-    const isValid = razorpayService.verifyPaymentSignature(razorpayOrderId, razorpayPaymentId, razorpaySignature);
+    const isValid = razorpayService.verifyPaymentSignature(orderId, paymentId, signature);
     if (!isValid) {
       return res.status(400).json({ success: false, message: 'Invalid payment signature — possible tampering detected' });
     }
 
     // Fetch payment record
-    const paymentRecord = await Payment.findOne({ razorpayOrderId });
+    const paymentRecord = await Payment.findOne({ razorpayOrderId: orderId });
     if (!paymentRecord) return res.status(404).json({ success: false, message: 'Payment record not found' });
     if (paymentRecord.status === 'succeeded') return res.status(400).json({ success: false, message: 'Payment already processed' });
 
     // Fetch payment details from Razorpay to double-check status
-    const rzpPayment = await razorpayService.fetchPayment(razorpayPaymentId);
+    let rzpPayment;
+    try {
+      // Log incoming verify request in development to aid debugging (one-liner)
+      if (process.env.NODE_ENV === 'development') {
+        console.log('verifyPayment request body:', { orderId, paymentId, signature, websiteId: req.body.websiteId });
+      }
+
+      rzpPayment = await razorpayService.fetchPayment(paymentId);
+    } catch (rzErr) {
+      console.error('Razorpay fetchPayment error:', rzErr);
+      // Return a 502 to indicate upstream payment provider error instead of 500
+      return res.status(502).json({ success: false, message: 'Payment provider error. Please try again later.' });
+    }
+
     if (rzpPayment.status !== 'captured' && rzpPayment.status !== 'authorized') {
       return res.status(400).json({
         success: false,
@@ -121,79 +175,190 @@ const verifyPayment = async (req, res) => {
     const website = await Website.findById(paymentRecord.websiteId).populate('sellerId');
     if (!website) return res.status(404).json({ success: false, message: 'Website not found' });
 
-    const pricing = calculatePricing(website.price);
+    let priceToUse = website.price;
+    if (website.category === 'exclusive') {
+      const auction = await Auction.findOne({ websiteId: website._id, status: 'awaiting_payment' });
+      if (auction) {
+        priceToUse = auction.currentBidAmount;
+        auction.status = 'completed';
+        await auction.save();
+      }
+    }
+
+    const pricing = calculatePricing(priceToUse);
+
+    const existingPurchase = paymentRecord.purchaseId
+      ? await Purchase.findById(paymentRecord.purchaseId)
+      : await Purchase.findOne({
+          websiteId: paymentRecord.websiteId,
+          buyerId: paymentRecord.buyerId,
+        });
+
+    if (existingPurchase) {
+      paymentRecord.status = 'succeeded';
+      paymentRecord.razorpayPaymentId = paymentId;
+      paymentRecord.razorpaySignature = signature;
+      paymentRecord.gatewayResponse = rzpPayment;
+      paymentRecord.purchaseId = existingPurchase._id;
+      await paymentRecord.save();
+
+      if (website.category === 'exclusive' && website.status !== WEBSITE_STATUS.SOLD) {
+        website.status = WEBSITE_STATUS.SOLD;
+        website.soldTo = paymentRecord.buyerId;
+        website.soldAt = new Date();
+        try {
+          await website.save();
+        } catch (websiteError) {
+          console.error('Failed to mark exclusive website as sold:', websiteError);
+        }
+      }
+
+      return res.json({
+        success: true,
+        message: 'Payment verified successfully! The seller will be paid by the admin shortly.',
+        data: {
+          purchase: existingPurchase,
+          website: { id: website._id, name: website.name, category: website.category },
+          payout: {
+            status: 'pending',
+            amount: existingPurchase.sellerPrice,
+            message: 'Payout will be processed by admin',
+            id: existingPurchase._id,
+          },
+          breakdown: {
+            sellerPrice: existingPurchase.sellerPrice,
+            platformFee: existingPurchase.platformFee,
+            tax: existingPurchase.tax,
+            totalPaid: existingPurchase.totalPaid,
+          },
+        },
+      });
+    }
 
     // Update payment record
     paymentRecord.status = 'succeeded';
-    paymentRecord.razorpayPaymentId = razorpayPaymentId;
-    paymentRecord.razorpaySignature = razorpaySignature;
+    paymentRecord.razorpayPaymentId = paymentId;
+    paymentRecord.razorpaySignature = signature;
     paymentRecord.gatewayResponse = rzpPayment;
     await paymentRecord.save();
 
+    const sellerId = website.sellerId ? website.sellerId._id : null;
+
     // Create purchase record
-    const purchase = new Purchase({
-      websiteId: paymentRecord.websiteId,
-      buyerId: paymentRecord.buyerId,
-      sellerId: website.sellerId._id,
-      category: website.category,
-      sellerPrice: pricing.sellerPrice,
-      platformFee: pricing.platformFee,
-      tax: pricing.tax,
-      totalPaid: pricing.totalPaid,
-      razorpayOrderId,
-      razorpayPaymentId,
-      paymentStatus: PAYMENT_STATUS.COMPLETED,
-      purchaseDate: new Date(),
-    });
-    await purchase.save();
+    let purchase;
+    try {
+      purchase = new Purchase({
+        websiteId: paymentRecord.websiteId,
+        buyerId: paymentRecord.buyerId,
+        sellerId: sellerId,
+        category: website.category,
+        sellerPrice: pricing.sellerPrice,
+        platformFee: pricing.platformFee,
+        tax: pricing.tax,
+        totalPaid: pricing.totalPaid,
+        razorpayOrderId: orderId,
+        razorpayPaymentId: paymentId,
+        paymentStatus: PAYMENT_STATUS.COMPLETED,
+        purchaseDate: new Date(),
+      });
+      await purchase.save();
+    } catch (error) {
+      if (error?.code === 11000) {
+        const recoveredPurchase = await Purchase.findOne({
+          websiteId: paymentRecord.websiteId,
+          buyerId: paymentRecord.buyerId,
+        });
+
+        if (recoveredPurchase) {
+          paymentRecord.purchaseId = recoveredPurchase._id;
+          await paymentRecord.save();
+
+          return res.json({
+            success: true,
+            message: 'Payment verified successfully! The seller will be paid by the admin shortly.',
+            data: {
+              purchase: recoveredPurchase,
+              website: { id: website._id, name: website.name, category: website.category },
+              payout: {
+                status: 'pending',
+                amount: recoveredPurchase.sellerPrice,
+                message: 'Payout will be processed by admin',
+                id: recoveredPurchase._id,
+              },
+              breakdown: {
+                sellerPrice: recoveredPurchase.sellerPrice,
+                platformFee: recoveredPurchase.platformFee,
+                tax: recoveredPurchase.tax,
+                totalPaid: recoveredPurchase.totalPaid,
+              },
+            },
+          });
+        }
+      }
+
+      throw error;
+    }
 
     paymentRecord.purchaseId = purchase._id;
     await paymentRecord.save();
 
-    // ========== MANUAL PAYOUT — Create pending record for admin to process ==========
-    const sellerBankDetails = await BankDetails.findOne({ userId: website.sellerId._id });
+    const sellerBankDetails = sellerId ? await BankDetails.findOne({ userId: sellerId }) : null;
+    let payoutRecord = null;
 
-    const payoutRecord = new Payout({
-      sellerId: website.sellerId._id,
-      purchaseId: purchase._id,
-      websiteId: website._id,
-      amount: pricing.sellerPrice,
-      bankDetails: sellerBankDetails ? {
-        accountHolderName: sellerBankDetails.accountHolderName,
-        accountNumber: sellerBankDetails.accountNumber,
-        ifscCode: sellerBankDetails.ifscCode,
-        bankName: sellerBankDetails.bankName,
-        upiId: sellerBankDetails.upiId,
-      } : null,
-      status: PAYOUT_STATUS.PENDING,
-      isAutomatic: false,
-      failureReason: sellerBankDetails ? null : 'Seller has no bank details on file',
-    });
-    await payoutRecord.save();
-
-    // Notify admin of pending payout
     try {
-      await emailService.sendAdminAlert({
-        subject: `New Payout Pending — ${website.name}`,
-        message: `A new purchase was made. Please process the seller payout manually.`,
-        details: `Seller: ${website.sellerId.email}\nWebsite: ${website.name}\nAmount: ₹${pricing.sellerPrice}\nPurchase ID: ${purchase._id}\nPayout ID: ${payoutRecord._id}${!sellerBankDetails ? '\n\n⚠️ WARNING: Seller has no bank details saved!' : ''}`,
-      });
-    } catch (e) { console.error('Admin alert email error:', e); }
-    // ========== END PAYOUT HANDLING ==========
+      // ========== MANUAL PAYOUT — Create pending record for admin to process ==========
+      if (sellerId) {
+        payoutRecord = new Payout({
+          sellerId: sellerId,
+          purchaseId: purchase._id,
+          websiteId: website._id,
+          amount: pricing.sellerPrice,
+          bankDetails: sellerBankDetails ? {
+            accountHolderName: sellerBankDetails.accountHolderName,
+            accountNumber: sellerBankDetails.accountNumber,
+            ifscCode: sellerBankDetails.ifscCode,
+            bankName: sellerBankDetails.bankName,
+            upiId: sellerBankDetails.upiId,
+          } : null,
+          status: PAYOUT_STATUS.PENDING,
+          isAutomatic: false,
+          failureReason: sellerBankDetails ? null : 'Seller has no bank details on file or seller deleted',
+        });
+        await payoutRecord.save();
 
-    // Mark exclusive website as sold
-    if (website.category === 'exclusive') {
-      website.status = WEBSITE_STATUS.SOLD;
-      website.soldTo = paymentRecord.buyerId;
-      website.soldAt = new Date();
-      await website.save();
+        try {
+          const sellerEmail = website.sellerId ? website.sellerId.email : 'Unknown/Deleted';
+          await emailService.sendAdminAlert({
+            subject: `New Payout Pending — ${website.name}`,
+            message: `A new purchase was made. Please process the seller payout manually.`,
+            details: `Seller: ${sellerEmail}\nWebsite: ${website.name}\nAmount: ₹${pricing.sellerPrice}\nPurchase ID: ${purchase._id}\nPayout ID: ${payoutRecord._id}${!sellerBankDetails ? '\n\n⚠️ WARNING: Seller has no bank details saved!' : ''}`,
+          });
+        } catch (e) { console.error('Admin alert email error:', e); }
+      } else {
+        console.warn('Skipping payout creation: sellerId missing for purchase', purchase._id.toString());
+      }
+    } catch (payoutError) {
+      console.error('Payout creation error:', payoutError);
     }
 
-    // Send confirmation emails
-    const buyer = await User.findById(paymentRecord.buyerId);
+    if (website.category === 'exclusive') {
+      try {
+        website.status = WEBSITE_STATUS.SOLD;
+        website.soldTo = paymentRecord.buyerId;
+        website.soldAt = new Date();
+        await website.save();
+      } catch (websiteError) {
+        console.error('Failed to mark exclusive website as sold:', websiteError);
+      }
+    }
+
     try {
+      // Send confirmation emails
+      const buyer = await User.findById(paymentRecord.buyerId);
       await emailService.sendPurchaseConfirmation(buyer, website, purchase);
-      await emailService.sendSellerNotification(website.sellerId, website, purchase);
+      if (website.sellerId) {
+        await emailService.sendSellerNotification(website.sellerId, website, purchase);
+      }
     } catch (e) { console.error('Confirmation email error:', e); }
 
     res.json({
@@ -206,7 +371,7 @@ const verifyPayment = async (req, res) => {
           status: 'pending',
           amount: pricing.sellerPrice,
           message: 'Payout will be processed by admin',
-          id: payoutRecord._id,
+          id: payoutRecord?._id || null,
         },
         breakdown: pricing,
       },

@@ -33,7 +33,7 @@ export default function Auctions() {
 
   const openBidModal = async (auction) => {
     try {
-      const res = await auctionAPI.getAuction(auction.websiteId?._id || auction.websiteId);
+      const res = await auctionAPI.getByWebsite(auction.websiteId?._id || auction.websiteId);
       setSelectedAuction(res.data?.data);
       setBidAmount(res.data?.data?.minimumNextBid || '');
     } catch {
@@ -253,8 +253,8 @@ export default function Auctions() {
               {/* How it works */}
               <div className="mt-6 pt-4 border-t border-white/5">
                 <p className="text-[9px] uppercase tracking-[0.2em] text-white/15 mb-2">How it works</p>
-                <p className="text-[11px] text-white/20 leading-relaxed">
-                  First bidder gets priority. After a bid, others have 72 hours to outbid. If no one does, you win. Winner must pay within 3 days.
+                <p className="text-white/40 text-[10px] leading-relaxed">
+                  First bidder gets priority. After a bid, others have limited time to outbid. If no one does, you win. Winner must pay within the time limit.
                 </p>
               </div>
             </motion.div>

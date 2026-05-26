@@ -4,6 +4,28 @@ const User = require('../user/user.model');
 const { WEBSITE_STATUS, PAYMENT_STATUS } = require('../../shared/utils/constants');
 const emailService = require('../../services/email.service');
 const { getPaginationMetadata } = require('../../shared/utils/helpers');
+const supabaseService = require('../../services/supabase.service');
+
+const getPublicAssetUrl = (filePath) => {
+  if (!filePath) return null;
+  if (/^https?:\/\//.test(filePath)) return filePath;
+  return supabaseService.getPublicUrl(filePath);
+};
+
+const hydratePurchaseWebsite = (purchaseDoc) => {
+  const purchase = purchaseDoc.toObject();
+  const website = purchase.websiteId;
+
+  if (website?.previewVideoUrl) {
+    website.files = website.files || {};
+    website.files.previewVideo = {
+      ...(website.files.previewVideo || {}),
+      url: getPublicAssetUrl(website.previewVideoUrl),
+    };
+  }
+
+  return purchase;
+};
 
 const purchaseFreeWebsite = async (req, res) => {
   try {
@@ -46,14 +68,25 @@ const getMyPurchases = async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
     const purchases = await Purchase.find({ buyerId: req.userId, paymentStatus: PAYMENT_STATUS.COMPLETED })
-      .populate('websiteId', 'name description techStack category price deployedUrl')
-      .populate('sellerId', 'email')
+      .populate({
+        path: 'websiteId',
+        select: 'name description techStack category price deployedUrl githubUrl previewUrl files previewVideoUrl sellerId',
+        populate: {
+          path: 'sellerId',
+          select: 'name email',
+        },
+      })
+      .populate('sellerId', 'name email')
       .sort({ purchaseDate: -1 })
       .skip((page - 1) * limit)
       .limit(parseInt(limit));
 
     const total = await Purchase.countDocuments({ buyerId: req.userId, paymentStatus: PAYMENT_STATUS.COMPLETED });
-    res.json({ success: true, data: purchases, pagination: { currentPage: parseInt(page), totalPages: Math.ceil(total / limit), totalItems: total } });
+    res.json({
+      success: true,
+      data: purchases.map(hydratePurchaseWebsite),
+      pagination: { currentPage: parseInt(page), totalPages: Math.ceil(total / limit), totalItems: total },
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error fetching purchases', error: error.message });
   }

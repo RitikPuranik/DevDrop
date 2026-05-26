@@ -14,8 +14,11 @@ import Template from './pages/Templates';
 import ContactUs from './pages/ContactUs';
 import ReviewPage from './pages/Review';
 import Profile from './pages/Profile';
+import Admin from './pages/Admin';
 import WebsiteDetail from './pages/WebsiteDetail';
 import Auctions from './pages/Auctions';
+import Checkout from './pages/Checkout';
+
 import VerifyEmail from './pages/VerifyEmail';
 import AdminDashboard from "./pages/admin/Dashboard";
 import PendingWebsites from "./pages/admin/Pending_Web";
@@ -84,7 +87,7 @@ function AppContent() {
 
     if (vid) {
       vid.currentTime = 0;
-      vid.play().catch(() => {});
+      vid.play().catch(() => { });
     }
 
     setShowIntro(false);
@@ -127,8 +130,11 @@ function AppContent() {
               <Route path="/contact" element={<ContactUs />} />
               <Route path="/review" element={<ReviewPage />} />
               <Route path="/profile" element={<Profile />} />
+              <Route path="/admin" element={<Admin />} />
               <Route path="/website/:id" element={<WebsiteDetail />} />
+              <Route path="/checkout/:id" element={<Checkout />} />
               <Route path="/auctions" element={<Auctions />} />
+
               <Route path="/verify-email" element={<VerifyEmail />} />
               <Route path="/admin/dashboard" element={<AdminDashboard />} />
               <Route path="/admin/websites/pending" element={<PendingWebsites />} />
@@ -138,17 +144,17 @@ function AppContent() {
 
             </Routes>
             <Toaster
-  position="top-right"
-  richColors
-  toastOptions={{
-    style: {
-      backdropFilter: "blur(10px)",
-      background: "rgba(30,30,30,0.8)",
-      color: "#fff",
-      border: "1px solid rgba(255,255,255,0.1)"
-    }
-  }}
-/>
+              position="top-right"
+              richColors
+              toastOptions={{
+                style: {
+                  backdropFilter: "blur(10px)",
+                  background: "rgba(30,30,30,0.8)",
+                  color: "#fff",
+                  border: "1px solid rgba(255,255,255,0.1)"
+                }
+              }}
+            />
           </main>
 
           {/* Hide Footer on Builder and VerifyEmail */}

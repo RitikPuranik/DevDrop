@@ -37,5 +37,20 @@ const getAllUser =async (req, res) => {
     res.status(500).json({success: false, message: 'andi mandi sandi priyal pagalu ',  error: error.message})
   }
 }
+const getPublicStats = async (req, res) => {
+  try {
+    const stats = await analyticsService.getPlatformStats();
+    res.json({
+      success: true,
+      data: {
+        totalTemplates: stats.totalWebsites || 0,
+        totalCreators: stats.totalUsers || 0,
+        totalDownloads: stats.totalPurchases || 0,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error fetching public stats', error: error.message });
+  }
+};
 
-module.exports = { getPlatformStats, getWebsiteStats, getSalesStats, getAllUser };
+module.exports = { getPlatformStats, getWebsiteStats, getSalesStats, getAllUser, getPublicStats };

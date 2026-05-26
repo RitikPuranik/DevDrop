@@ -4,6 +4,9 @@ const { auth } = require('../../shared/middleware/auth');
 const adminOnly = require('../../shared/middleware/adminOnly');
 const analyticsController = require('./analytics.controller');
 
+// Public (no auth)
+router.get('/public-stats', analyticsController.getPublicStats);
+
 router.get('/platform', auth, adminOnly, analyticsController.getPlatformStats);
 router.get('/websites', auth, adminOnly, analyticsController.getWebsiteStats);
 router.get('/sales', auth, adminOnly, analyticsController.getSalesStats);

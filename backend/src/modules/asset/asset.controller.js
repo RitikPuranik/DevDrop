@@ -4,6 +4,13 @@ const DownloadLog = require('./downloadLog.model');
 const supabaseService = require('../../services/supabase.service');
 const { PAYMENT_STATUS, SIGNED_URL_EXPIRY } = require('../../shared/utils/constants');
 
+const isPublicUrl = (filePath) => /^https?:\/\//.test(filePath || '');
+const getPublicAssetUrl = (filePath) => {
+  if (!filePath) return null;
+  if (isPublicUrl(filePath)) return filePath;
+  return supabaseService.getPublicUrl(filePath);
+};
+
 /**
  * @route   GET /api/assets/website/:websiteId
  * @desc    Get signed URLs for purchased website files
@@ -57,7 +64,15 @@ const getAssetUrls = async (req, res) => {
       filePaths.push(website.videoUrl);
     }
 
-    const signedUrls = await supabaseService.createSignedUrls(filePaths, SIGNED_URL_EXPIRY);
+    const storagePaths = filePaths.filter((filePath) => !isPublicUrl(filePath));
+    const signedUrls = storagePaths.length > 0
+      ? await supabaseService.createSignedUrls(storagePaths, SIGNED_URL_EXPIRY)
+      : [];
+    let signedIndex = 0;
+    const getDownloadUrl = (filePath) => {
+      if (isPublicUrl(filePath)) return filePath;
+      return signedUrls[signedIndex++]?.signedUrl;
+    };
 
     // Log downloads
     const ipAddress = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
@@ -117,32 +132,51 @@ const getAssetUrls = async (req, res) => {
 
     const responseData = {
       sourceCode: {
-        url: signedUrls[0].signedUrl,
+        url: getDownloadUrl(website.sourceCodeUrl),
         fileName: website.files?.sourceCode?.fileName,
         size: website.files?.sourceCode?.size,
       },
       docs: {
-        url: signedUrls[1].signedUrl,
+        url: getDownloadUrl(website.docsUrl),
         fileName: website.files?.docs?.fileName,
         size: website.files?.docs?.size,
       },
+      deployedPreview: website.deployedUrl
+        ? {
+            url: website.deployedUrl,
+          }
+        : null,
+      githubRepo: website.githubUrl
+        ? {
+            url: website.githubUrl,
+            providedBy: 'seller',
+          }
+        : null,
       expiresAt: expiryTime,
-      note: 'These links expire in 7 days. You can always return to your dashboard to generate fresh links — your purchase is permanent.',
+      note: 'ZIP/PDF/video links expire in 7 days. Seller GitHub and deployed links remain available from this purchase view.',
     };
 
     // Add video if available
     if (website.videoUrl) {
       responseData.video = {
-        url: signedUrls[2].signedUrl,
+        url: getDownloadUrl(website.videoUrl),
         fileName: website.files?.video?.fileName,
         size: website.files?.video?.size,
+      };
+    }
+
+    if (website.previewVideoUrl) {
+      responseData.previewVideo = {
+        url: getPublicAssetUrl(website.previewVideoUrl),
+        fileName: website.files?.previewVideo?.fileName,
+        size: website.files?.previewVideo?.size,
       };
     }
 
     res.json({
       success: true,
       data: responseData,
-      message: 'Download links generated. Links are valid for 7 days — you can always get fresh ones from your dashboard.',
+      message: 'Project access generated, including seller links plus admin-uploaded files.',
     });
   } catch (error) {
     console.error('Get asset URLs error:', error);

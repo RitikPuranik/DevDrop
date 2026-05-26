@@ -1,20 +1,12 @@
 /**
- * Template.jsx  —  devdrop page that renders WebCraft full-screen
+ * Template.jsx  —  devdrop page placeholder
  *
- * Place this file at:
- *   frontend/src/pages/Template.jsx   (or wherever your devdrop pages live)
- *
- * Then in your devdrop router/App.jsx, add:
- *   import Template from "./pages/Template";
- *   <Route path="/builder" element={<Template />} />
- *
- * IMPORTANT: This route must be OUTSIDE any layout wrapper
- * that renders the devdrop navbar/sidebar.
+ * This route is currently unused (builder feature not yet implemented).
+ * It redirects to the Templates gallery page.
  */
 
-import React from "react";
-import WebcraftApp from "./webcraft/src/App.jsx";
+import { Navigate } from "react-router-dom";
 
 export default function Template() {
-  return <WebcraftApp />;
+  return <Navigate to="/template" replace />;
 }

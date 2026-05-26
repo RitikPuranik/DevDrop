@@ -5,10 +5,54 @@ const Wishlist = require('../wishlist/wishlist.model');
 const DownloadLog = require('../asset/downloadLog.model');
 const Payment = require('../payment/payment.model');
 const User = require('../user/user.model');
-const { WEBSITE_STATUS, PAYOUT_STATUS } = require('../../shared/utils/constants');
+const Auction = require('../auction/auction.model');
+const Bid = require('../auction/bid.model');
+const { WEBSITE_STATUS, WEBSITE_CATEGORIES, PAYOUT_STATUS } = require('../../shared/utils/constants');
 const { getPaginationMetadata } = require('../../shared/utils/helpers');
 const supabaseService = require('../../services/supabase.service');
 const emailService = require('../../services/email.service');
+
+const isGitHubUrl = (value) => /^https?:\/\/(www\.)?github\.com\/.+/.test(value || '');
+const isHttpUrl = (value) => /^https?:\/\/.+/.test(value || '');
+
+const createExclusiveAuctionIfNeeded = async (website) => {
+  const existingAuction = await Auction.findOne({
+    websiteId: website._id,
+    status: { $in: ['active', 'first_bid_waiting', 'awaiting_payment'] },
+  });
+
+  if (existingAuction) return existingAuction;
+
+  const auction = new Auction({
+    websiteId: website._id,
+    startTime: new Date(),
+    startingPrice: website.price,
+    minimumBidIncrement: 100,
+    reservePrice: 0,
+    firstBidWaitingPeriodHours: require('../../shared/utils/envHelper').getAuctionTimings().bidWaitHours,
+    status: 'active',
+  });
+
+  await auction.save();
+  return auction;
+};
+
+const uploadAdminWebsiteFiles = async (files) => {
+  let sourceCodeData, docsData, videoData, previewVideoData;
+
+  sourceCodeData = await supabaseService.uploadSourceCode(files.sourceCode[0]);
+  docsData = await supabaseService.uploadDocs(files.docs[0]);
+
+  if (files.video && files.video[0]) {
+    videoData = await supabaseService.uploadVideo(files.video[0]);
+  }
+
+  if (files.previewVideo && files.previewVideo[0]) {
+    previewVideoData = await supabaseService.uploadPreviewVideo(files.previewVideo[0]);
+  }
+
+  return { sourceCodeData, docsData, videoData, previewVideoData };
+};
 
 /**
  * @route   GET /api/admin/websites/pending
@@ -24,7 +68,7 @@ const getPendingWebsites = async (req, res) => {
       status: WEBSITE_STATUS.PENDING_REVIEW,
       isDeleted: false,
     })
-      .populate('sellerId', 'email createdAt')
+      .populate('sellerId', 'name email createdAt')
       .sort({ createdAt: 1 }) // Oldest first
       .skip(skip)
       .limit(parseInt(limit));
@@ -46,6 +90,132 @@ const getPendingWebsites = async (req, res) => {
       message: 'Error fetching pending websites',
       error: error.message,
     });
+  }
+};
+
+/**
+ * @route   POST /api/admin/websites
+ * @desc    Create or publish a website listing as admin
+ * @access  Admin only
+ */
+const createWebsite = async (req, res) => {
+  try {
+    const files = req.files;
+    const { sellerEmail, sellerId, name, description, techStack, category, price, deployedLink, previewUrl, githubUrl } = req.body;
+    const normalizedCategory = category || WEBSITE_CATEGORIES.PAID;
+    let parsedTechStack = techStack;
+
+    if (typeof techStack === 'string' && techStack.trim().length > 0) {
+      try {
+        parsedTechStack = JSON.parse(techStack);
+      } catch (parseError) {
+        return res.status(400).json({ success: false, message: 'Tech stack must be valid JSON' });
+      }
+    }
+
+    if (!sellerEmail && !sellerId) {
+      return res.status(400).json({ success: false, message: 'sellerEmail or sellerId is required' });
+    }
+
+    if (!name || !description || !deployedLink) {
+      return res.status(400).json({ success: false, message: 'name, description, and deployedLink are required' });
+    }
+
+    if (!files || !files.sourceCode || !files.docs) {
+      return res.status(400).json({ success: false, message: 'Source code and documentation files are required' });
+    }
+
+    const resolvedSeller = sellerId
+      ? await User.findById(sellerId)
+      : await User.findOne({ email: sellerEmail.toLowerCase().trim() });
+
+    if (!resolvedSeller) {
+      return res.status(404).json({ success: false, message: 'Seller not found' });
+    }
+
+    if (!Object.values(WEBSITE_CATEGORIES).includes(normalizedCategory)) {
+      return res.status(400).json({ success: false, message: 'Invalid category' });
+    }
+
+    if (normalizedCategory === WEBSITE_CATEGORIES.FREE && Number(price) !== 0) {
+      return res.status(400).json({ success: false, message: 'Free websites must have price 0' });
+    }
+
+    if ((normalizedCategory === WEBSITE_CATEGORIES.PAID || normalizedCategory === WEBSITE_CATEGORIES.EXCLUSIVE) && Number(price) <= 0) {
+      return res.status(400).json({ success: false, message: 'Paid/exclusive websites must have price > 0' });
+    }
+
+    if (githubUrl && !/^https?:\/\/(www\.)?github\.com\/.+/.test(githubUrl)) {
+      return res.status(400).json({ success: false, message: 'Please provide a valid GitHub URL' });
+    }
+
+    if (previewUrl && !/^https?:\/\/.+/.test(previewUrl)) {
+      return res.status(400).json({ success: false, message: 'Please provide a valid preview URL' });
+    }
+
+    let sourceCodeData, docsData, videoData, previewVideoData;
+    try {
+      ({ sourceCodeData, docsData, videoData, previewVideoData } = await uploadAdminWebsiteFiles(files));
+    } catch (uploadError) {
+      console.error('File upload error:', uploadError);
+      return res.status(500).json({ success: false, message: 'Error uploading files to storage', error: uploadError.message });
+    }
+
+    const websiteQuery = { name, sellerId: resolvedSeller._id, isDeleted: false };
+    let website = await Website.findOne(websiteQuery);
+
+    if (!website) {
+      website = new Website({ sellerId: resolvedSeller._id });
+    }
+
+    website.name = name;
+    website.description = description;
+    website.techStack = parsedTechStack || website.techStack || {};
+    website.category = normalizedCategory;
+    website.price = normalizedCategory === WEBSITE_CATEGORIES.FREE ? 0 : Number(price);
+    website.deployedUrl = deployedLink;
+    if (previewUrl && previewUrl.trim().length > 0) {
+      website.previewUrl = previewUrl.trim();
+    }
+    if (githubUrl && githubUrl.trim().length > 0) {
+      website.githubUrl = githubUrl.trim();
+    }
+    website.sourceCodeUrl = sourceCodeData.path;
+    website.docsUrl = docsData.path;
+    if (videoData) {
+      website.videoUrl = videoData.path;
+    }
+    if (previewVideoData) {
+      website.previewVideoUrl = previewVideoData.path;
+    }
+    website.files = {
+      sourceCode: sourceCodeData,
+      docs: docsData,
+      ...(videoData && { video: videoData }),
+      ...(previewVideoData && { previewVideo: previewVideoData }),
+    };
+    website.status = WEBSITE_STATUS.APPROVED;
+    website.adminComment = undefined;
+
+    await website.save();
+
+    if (website.category === 'exclusive') {
+      const auction = await createExclusiveAuctionIfNeeded(website);
+      if (auction) {
+        console.log(`🎯 Auto-created auction for exclusive website: ${website.name}`);
+      }
+    }
+
+    try {
+      await emailService.sendStatusUpdateEmail(resolvedSeller, website, WEBSITE_STATUS.APPROVED);
+    } catch (emailError) {
+      console.error('Failed to send email:', emailError);
+    }
+
+    res.status(201).json({ success: true, message: 'Website created and published successfully', data: website });
+  } catch (error) {
+    console.error('Create website error:', error);
+    res.status(500).json({ success: false, message: 'Error creating website', error: error.message });
   }
 };
 
@@ -174,31 +344,32 @@ const approveWebsite = async (req, res) => {
   try {
     const { id } = req.params;
     const files = req.files;
-    const { deployedLink } = req.body; // Get deployed link from request body
+    const {
+      name,
+      description,
+      category,
+      price,
+      deployedLink,
+      previewUrl,
+      githubUrl,
+      techStack,
+    } = req.body; // Allow admin to override listing metadata during approval
 
-    // Validate deployed link
-    if (!deployedLink || deployedLink.trim().length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Deployed link is required',
-      });
+    let parsedTechStack = techStack;
+    if (typeof techStack === 'string' && techStack.trim().length > 0) {
+      try {
+        parsedTechStack = JSON.parse(techStack);
+      } catch (parseError) {
+        return res.status(400).json({ success: false, message: 'Tech stack must be valid JSON' });
+      }
     }
 
-    // Validate URL format
-    const urlPattern = /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/;
-    if (!urlPattern.test(deployedLink)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide a valid URL for deployed link',
-      });
+    if (category && !['free', 'paid', 'exclusive'].includes(category)) {
+      return res.status(400).json({ success: false, message: 'Invalid category' });
     }
 
-    // Validate files (video is optional)
-    if (!files || !files.sourceCode || !files.docs) {
-      return res.status(400).json({
-        success: false,
-        message: 'Source code and documentation files are required',
-      });
+    if (price !== undefined && Number.isNaN(Number(price))) {
+      return res.status(400).json({ success: false, message: 'Price must be a number' });
     }
 
     const website = await Website.findById(id).populate('sellerId');
@@ -207,6 +378,45 @@ const approveWebsite = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Website not found',
+      });
+    }
+
+    const resolvedDeployedLink = deployedLink?.trim() || website.deployedUrl;
+    const resolvedPreviewUrl = previewUrl?.trim() || website.previewUrl || resolvedDeployedLink;
+    const resolvedGithubUrl = githubUrl?.trim() || website.githubUrl;
+
+    if (!resolvedDeployedLink || resolvedDeployedLink.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Deployed link is required',
+      });
+    }
+
+    if (!isHttpUrl(resolvedDeployedLink)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid URL for deployed link',
+      });
+    }
+
+    if (resolvedGithubUrl && !isGitHubUrl(resolvedGithubUrl)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid GitHub URL',
+      });
+    }
+
+    if (resolvedPreviewUrl && !isHttpUrl(resolvedPreviewUrl)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid preview URL',
+      });
+    }
+
+    if (!files || !files.sourceCode || !files.docs) {
+      return res.status(400).json({
+        success: false,
+        message: 'Source code ZIP and documentation PDF are required for approval',
       });
     }
 
@@ -239,6 +449,22 @@ const approveWebsite = async (req, res) => {
     }
 
     // Update website with file details
+    if (name && name.trim().length > 0) {
+      website.name = name.trim();
+    }
+    if (description && description.trim().length > 0) {
+      website.description = description.trim();
+    }
+    if (category) {
+      website.category = category;
+    }
+    if (price !== undefined) {
+      website.price = Number(price);
+    }
+    if (parsedTechStack) {
+      website.techStack = parsedTechStack;
+    }
+
     website.sourceCodeUrl = sourceCodeData.path;
     website.docsUrl = docsData.path;
     if (videoData) {
@@ -248,10 +474,22 @@ const approveWebsite = async (req, res) => {
       website.previewVideoUrl = previewVideoData.path;
     }
 
-    // Update deployed link
-    website.deployedUrl = deployedLink;
+    website.deployedUrl = resolvedDeployedLink;
+    website.previewUrl = resolvedPreviewUrl;
+    if (resolvedGithubUrl) {
+      website.githubUrl = resolvedGithubUrl;
+    }
 
+    // Build clean files object — strip any undefined sub-docs from the existing record
+    const existingFiles = website.files ? website.files.toObject?.() || website.files : {};
+    const cleanExisting = {};
+    for (const [k, v] of Object.entries(existingFiles)) {
+      if (v !== undefined && v !== null && typeof v === 'object' && Object.keys(v).length > 0) {
+        cleanExisting[k] = v;
+      }
+    }
     website.files = {
+      ...cleanExisting,
       sourceCode: sourceCodeData,
       docs: docsData,
       ...(videoData && { video: videoData }),
@@ -262,6 +500,14 @@ const approveWebsite = async (req, res) => {
     website.adminComment = undefined;
 
     await website.save();
+
+    // Auto-create auction for exclusive websites
+    if (website.category === 'exclusive') {
+      const auction = await createExclusiveAuctionIfNeeded(website);
+      if (auction) {
+        console.log(`🎯 Auto-created auction for exclusive website: ${website.name}`);
+      }
+    }
 
     // Send email to seller
     try {
@@ -276,7 +522,7 @@ const approveWebsite = async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Website approved and files uploaded successfully',
+      message: 'Website approved with seller links and delivery assets',
       data: website,
     });
   } catch (error) {
@@ -284,6 +530,103 @@ const approveWebsite = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error approving website',
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * @route   POST /api/admin/websites/:id/relist
+ * @desc    Relist an exclusive website back to the marketplace
+ * @access  Admin only
+ */
+const relistWebsite = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const website = await Website.findById(id).populate('sellerId');
+
+    if (!website) {
+      return res.status(404).json({
+        success: false,
+        message: 'Website not found',
+      });
+    }
+
+    if (website.category !== 'exclusive') {
+      return res.status(400).json({
+        success: false,
+        message: 'Only exclusive websites can be relisted through this endpoint',
+      });
+    }
+
+    const auction = await Auction.findOne({ websiteId: website._id });
+
+    website.status = WEBSITE_STATUS.APPROVED;
+    website.soldTo = null;
+    website.soldAt = null;
+    website.adminComment = undefined;
+
+    if (auction) {
+      if (auction.currentBidderId || auction.currentBidAmount > 0) {
+        auction.previousAttempts = auction.previousAttempts || [];
+        auction.previousAttempts.push({
+          bidderId: auction.currentBidderId,
+          bidAmount: auction.currentBidAmount,
+          failedAt: new Date(),
+          failureReason: 'Auction reset for relist',
+        });
+      }
+
+      auction.attemptNumber = (auction.attemptNumber || 1) + 1;
+      auction.startTime = new Date();
+      auction.firstBidPlacedAt = null;
+      auction.firstBidDeadline = null;
+      auction.currentBidId = null;
+      auction.currentBidderId = null;
+      auction.currentBidAmount = 0;
+      auction.lastBidPlacedAt = null;
+      auction.totalBids = 0;
+      auction.uniqueBidders = 0;
+      auction.reserveMet = false;
+      auction.status = 'active';
+      auction.paymentDeadline = null;
+      auction.paymentReminderSent = false;
+      await auction.save();
+    }
+
+    await website.save();
+
+    await Bid.updateMany(
+      { websiteId: website._id, status: { $ne: 'expired' } },
+      { $set: { status: 'expired' } }
+    );
+
+    const relistedAuction = auction || await createExclusiveAuctionIfNeeded(website);
+
+    try {
+      await emailService.sendStatusUpdateEmail(
+        website.sellerId,
+        website,
+        WEBSITE_STATUS.APPROVED
+      );
+    } catch (emailError) {
+      console.error('Failed to send relist email:', emailError);
+    }
+
+    res.json({
+      success: true,
+      message: 'Exclusive website relisted successfully',
+      data: {
+        website,
+        auction: relistedAuction,
+      },
+    });
+  } catch (error) {
+    console.error('Relist website error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error relisting website',
       error: error.message,
     });
   }
@@ -554,10 +897,12 @@ const processPayout = async (req, res) => {
 };
 
 module.exports = {
+  createWebsite,
   getPendingWebsites,
   requestChanges,
   rejectWebsite,
   approveWebsite,
+  relistWebsite,
   deleteWebsite,
   getDashboard,
   getPendingPayouts,

@@ -61,6 +61,11 @@ const websiteSchema = new mongoose.Schema(
       trim: true,
       match: [/^https?:\/\/.+/, 'Please provide a valid URL'],
     },
+    previewUrl: {
+      type: String,
+      trim: true,
+      match: [/^https?:\/\/.+/, 'Please provide a valid preview URL'],
+    },
     githubUrl: {
       type: String,
       trim: true,
@@ -73,7 +78,7 @@ const websiteSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['pending_review', 'changes_requested', 'rejected', 'approved', 'sold'],
+      enum: ['pending_review', 'changes_requested', 'rejected', 'approved', 'in_auction', 'sold'],
       default: 'pending_review',
     },
     adminComment: {

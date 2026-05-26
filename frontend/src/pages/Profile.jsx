@@ -3,12 +3,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   User, Package, Heart, DollarSign, Upload, ShoppingBag, 
   ExternalLink, Trash2, Loader2, LogOut, Plus, 
-  ArrowLeft, ChevronDown, X 
+  ArrowLeft, ChevronDown, X, Download, FileCode, FileText, Film, CheckCircle 
 } from 'lucide-react';
 import { userAPI } from '../api/user';
 import { sellerAPI } from '../api/seller';
 import { buyerAPI } from '../api/buyer';
 import { wishlistAPI } from '../api/wishlist';
+import { assetAPI } from '../api/asset';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 
@@ -35,6 +36,16 @@ export default function Profile() {
   const [purchases, setPurchases] = useState([]);
   const [wishlist, setWishlist] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [downloadsModalOpen, setDownloadsModalOpen] = useState(false);
+  const [downloadsLoading, setDownloadsLoading] = useState(false);
+  const [downloadsAssets, setDownloadsAssets] = useState(null);
+  const [downloadsWebsite, setDownloadsWebsite] = useState(null);
+  const [downloadsPurchase, setDownloadsPurchase] = useState(null);
+  const [purchaseDetailsOpen, setPurchaseDetailsOpen] = useState(false);
+  const [selectedPurchase, setSelectedPurchase] = useState(null);
+  const [selectedWebsiteDetail, setSelectedWebsiteDetail] = useState(null);
+  const [detailDownloadsLoading, setDetailDownloadsLoading] = useState(false);
+  const [detailDownloadsAssets, setDetailDownloadsAssets] = useState(null);
 
   // --- SELLING FORM STATE ---
   const [isAddingListing, setIsAddingListing] = useState(false);
@@ -99,6 +110,29 @@ export default function Profile() {
       const res = await wishlistAPI.getWishlist();
       setWishlist(res.data?.data || []);
     } catch { setWishlist([]); }
+  };
+
+  // Download a specific asset by requesting signed URLs and opening the chosen file only
+  const downloadAsset = async (websiteId, fileType) => {
+    try {
+      setDownloadsLoading(true);
+      // backend returns all signed urls, we only open the requested one
+      const res = await assetAPI.getAssetUrls(websiteId);
+      const data = res.data?.data;
+      const map = {
+        source: data?.sourceCode?.url,
+        docs: data?.docs?.url,
+        video: data?.video?.url,
+      };
+      const url = map[fileType];
+      if (!url) return toast.error('Requested file not available');
+      window.open(url, '_blank');
+      toast.success('Download opened in a new tab');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to get download link');
+    } finally {
+      setDownloadsLoading(false);
+    }
   };
 
   // --- ACTIONS ---
@@ -272,6 +306,12 @@ export default function Profile() {
                       </div>
 
                       <div className="bg-[#111] border border-white/5 rounded-3xl p-6">
+                        <label className="text-[9px] uppercase tracking-widest text-[#8b7355] block mb-2 font-bold">GitHub URL</label>
+                        <input className="w-full bg-transparent text-sm outline-none" placeholder="https://github.com/..."
+                          value={form.githubUrl} onChange={(e) => setForm({...form, githubUrl: e.target.value})} />
+                      </div>
+
+                      <div className="bg-[#111] border border-white/5 rounded-3xl p-6">
                          <label className="text-[9px] uppercase tracking-widest text-[#8b7355] block mb-4 font-bold">Tech Stack Selection</label>
                          {Object.entries(TECH_OPTIONS).map(([section, options]) => (
                             <div key={section} className="mb-4">
@@ -313,6 +353,12 @@ export default function Profile() {
                           </div>
                           <StatusBadge status={item.status} />
                         </div>
+                        {item.adminComment && (
+                          <div className="mb-4 rounded-2xl border border-white/5 bg-black/20 px-4 py-3">
+                            <p className="text-[9px] uppercase tracking-[0.2em] text-white/35 font-bold mb-2">Admin Note</p>
+                            <p className="text-xs text-white/55 leading-relaxed">{item.adminComment}</p>
+                          </div>
+                        )}
                         <div className="flex items-center justify-between pt-4 border-t border-white/5">
                           <span className="text-[#8b7355] font-bold text-sm">{item.price === 0 ? 'FREE' : `₹${item.price}`}</span>
                           <div className="flex gap-2">
@@ -340,18 +386,238 @@ export default function Profile() {
                 <EmptyState icon={ShoppingBag} title="No purchases yet" description="Browse templates to find your next project" action="Browse" onAction={() => navigate('/template')} />
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {purchases.map((p) => (
-                    <div key={p._id} className="bg-[#111] border border-white/5 rounded-3xl p-6">
-                      <h3 className="font-bold text-lg mb-1">{p.websiteId?.name || 'Item'}</h3>
-                      <p className="text-white/30 text-xs mb-4">Transaction ID: {p._id}</p>
-                      <button onClick={() => window.open(p.websiteId?.deployedUrl, '_blank')} className="text-[#8b7355] text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
-                        Open Project <ExternalLink size={12} />
-                      </button>
-                    </div>
-                  ))}
+                  {purchases.map((p) => {
+                    const web = p.websiteId || {};
+                    const cat = web.category || 'paid';
+                    const webId = web._id || (typeof p.websiteId === 'string' ? p.websiteId : null);
+                    return (
+                      <div key={p._id} onClick={() => {
+                        setSelectedPurchase(p);
+                        setSelectedWebsiteDetail(web);
+                        setPurchaseDetailsOpen(true);
+                      }} className="bg-[#111] border border-white/5 rounded-3xl p-6 hover:border-white/15 transition-all group cursor-pointer">
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1">
+                            <h3 className="font-bold text-lg tracking-tight">{web.name || 'Template'}</h3>
+                            <p className="text-white/20 text-[10px] mt-1">
+                              {p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Recently'}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-[0.15em] px-2.5 py-1 rounded-full text-emerald-400 bg-emerald-500/10">
+                              <CheckCircle size={8} /> Owned
+                            </span>
+                            <span className={`text-[8px] font-bold uppercase tracking-[0.2em] px-3 py-1 rounded-full ${
+                              cat === 'free' ? 'text-emerald-400 bg-emerald-500/10' :
+                              cat === 'exclusive' ? 'text-orange-400 bg-orange-500/10' :
+                              'text-[#8b7355] bg-[#8b7355]/10'
+                            }`}>
+                              {cat}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between pt-4 border-t border-white/5">
+                          <span className="text-[#8b7355] font-bold text-sm">
+                            {p.amount ? `₹${p.amount}` : cat === 'free' ? 'FREE' : `₹${web.price || 0}`}
+                          </span>
+                          <div className="flex gap-2">
+                            {web.deployedUrl && (
+                              <a onClick={(e) => e.stopPropagation()} href={web.deployedUrl} target="_blank" rel="noreferrer"
+                                className="flex items-center gap-1.5 px-3 py-2 bg-white/5 rounded-xl text-[10px] font-bold text-white/40 hover:text-white hover:bg-white/10 transition-all">
+                                <ExternalLink size={11} /> Preview
+                              </a>
+                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                // Open modal; don't fetch links until user chooses a file
+                                setDownloadsModalOpen(true);
+                                setDownloadsLoading(false);
+                                setDownloadsAssets(null);
+                                setDownloadsWebsite(web);
+                                setDownloadsPurchase(p);
+                              }}
+                              className="flex items-center gap-1.5 px-4 py-2 bg-emerald-500 text-black rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-emerald-600 transition-all"
+                            >
+                              <Download size={11} /> Downloads
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </motion.div>
+          )}
+
+          {/* Purchase Details Modal */}
+          {purchaseDetailsOpen && selectedPurchase && selectedWebsiteDetail && (
+            <div className="fixed inset-0 z-[110] flex items-center justify-center">
+              <div className="absolute inset-0 bg-black/60" onClick={() => setPurchaseDetailsOpen(false)} />
+              <div className="relative bg-[#0b0b0b] border border-white/5 rounded-2xl p-6 max-w-3xl w-full mx-4 overflow-auto max-h-[80vh]">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h3 className="text-xl font-bold">{selectedWebsiteDetail.name}</h3>
+                    <p className="text-[10px] text-white/30">{selectedWebsiteDetail.category?.toUpperCase() || 'PAID'}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <p className="text-[12px] text-white/30">Paid</p>
+                      <p className="text-lg font-black text-emerald-300">₹{selectedPurchase.totalPaid ?? selectedPurchase.amount ?? selectedWebsiteDetail.price ?? 0}</p>
+                    </div>
+                    <button onClick={() => setPurchaseDetailsOpen(false)} className="p-2 text-white/30 hover:text-white">
+                      <X size={16} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="md:col-span-2">
+                    {/* Preview area */}
+                    <div className="aspect-video rounded-lg bg-[#111] overflow-hidden mb-4">
+                      {selectedWebsiteDetail.files?.previewVideo?.url ? (
+                        <video src={selectedWebsiteDetail.files.previewVideo.url} controls className="w-full h-full object-cover" />
+                      ) : selectedWebsiteDetail.deployedUrl ? (
+                        <a href={selectedWebsiteDetail.deployedUrl} target="_blank" rel="noreferrer" className="flex items-center justify-center h-full">Open Live Preview</a>
+                      ) : (
+                        <div className="flex items-center justify-center h-full text-white/20">No preview available</div>
+                      )}
+                    </div>
+
+                    <div className="bg-[#111] border border-white/5 rounded-2xl p-4 mb-4">
+                      <h4 className="font-bold mb-2">About this template</h4>
+                      <p className="text-white/40 text-sm">{selectedWebsiteDetail.description}</p>
+                    </div>
+
+                    <div className="bg-[#111] border border-white/5 rounded-2xl p-4">
+                      <h4 className="font-bold mb-2">Tech Stack</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {((selectedWebsiteDetail.techStack?.frontend||[]).concat(selectedWebsiteDetail.techStack?.backend||[], selectedWebsiteDetail.techStack?.database||[], selectedWebsiteDetail.techStack?.devops||[], selectedWebsiteDetail.techStack?.other||[])||[]).map((t,i)=>(
+                          <span key={i} className="px-3 py-1 bg-white/5 rounded-full text-[11px] text-white/40">{t}</span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="md:col-span-1 space-y-4">
+                    <div className="bg-[#111] border border-white/5 rounded-2xl p-4">
+                      <p className="text-[10px] text-white/30">Seller</p>
+                      <p className="font-bold mt-1">{selectedWebsiteDetail.sellerId?.name || 'Creator'}</p>
+                      {selectedWebsiteDetail.sellerId?.email && <p className="text-[10px] text-white/30">{selectedWebsiteDetail.sellerId.email}</p>}
+                    </div>
+
+                    <div className="bg-[#111] border border-white/5 rounded-2xl p-4">
+                      <p className="text-[10px] text-white/30">Purchase Date</p>
+                      <p className="font-bold mt-1">{new Date(selectedPurchase.purchaseDate || selectedPurchase.createdAt).toLocaleString()}</p>
+                    </div>
+
+                    <div className="bg-[#111] border border-white/5 rounded-2xl p-4">
+                      <p className="text-[10px] text-white/30">Files</p>
+                      <div className="mt-2 space-y-2">
+                        {selectedWebsiteDetail.githubUrl && (
+                          <a href={selectedWebsiteDetail.githubUrl} target="_blank" rel="noreferrer"
+                            className="flex items-center justify-center gap-2 w-full py-2 bg-emerald-500/10 text-emerald-300 rounded-lg font-bold">
+                            <FileCode size={14} /> Open Seller GitHub
+                          </a>
+                        )}
+                        {selectedWebsiteDetail.deployedUrl && (
+                          <a href={selectedWebsiteDetail.deployedUrl} target="_blank" rel="noreferrer"
+                            className="flex items-center justify-center gap-2 w-full py-2 bg-white/5 text-white rounded-lg font-bold">
+                            <ExternalLink size={14} /> Open Live Site
+                          </a>
+                        )}
+                        {selectedWebsiteDetail.files?.previewVideo?.url && (
+                          <a href={selectedWebsiteDetail.files.previewVideo.url} target="_blank" rel="noreferrer"
+                            className="flex items-center justify-center gap-2 w-full py-2 bg-amber-500/10 text-amber-200 rounded-lg font-bold">
+                            <Film size={14} /> Open Short Preview
+                          </a>
+                        )}
+                        <div className="space-y-2">
+                          <button onClick={() => downloadAsset(selectedWebsiteDetail._id || selectedWebsiteDetail, 'source')}
+                            className="w-full py-2 bg-emerald-500 text-black rounded-lg font-bold">Download Source ZIP</button>
+                          <button onClick={() => downloadAsset(selectedWebsiteDetail._id || selectedWebsiteDetail, 'docs')}
+                            className="w-full py-2 bg-blue-500 text-black rounded-lg font-bold">Download Docs PDF</button>
+                          {selectedWebsiteDetail.files?.video && (
+                            <button onClick={() => downloadAsset(selectedWebsiteDetail._id || selectedWebsiteDetail, 'video')}
+                              className="w-full py-2 bg-purple-500 text-black rounded-lg font-bold">Download Walkthrough Video</button>
+                          )}
+                          <p className="text-[10px] text-white/30">Seller GitHub and deployed links stay visible here. ZIP, PDF, and private videos open in a new tab when generated.</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Downloads Modal */}
+          {downloadsModalOpen && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center">
+              <div className="absolute inset-0 bg-black/60" onClick={() => setDownloadsModalOpen(false)} />
+              <div className="relative bg-[#0b0b0b] border border-white/5 rounded-2xl p-6 max-w-xl w-full mx-4">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-bold">Downloads — {downloadsWebsite?.name || 'Template'}</h3>
+                    <p className="text-[10px] text-white/30">Generate fresh links anytime from your dashboard.</p>
+                    {downloadsPurchase && (
+                      <div className="text-[12px] text-white/30 mt-2">
+                        <div>Paid: <span className="text-emerald-300 font-bold">₹{downloadsPurchase.totalPaid ?? downloadsPurchase.amount ?? downloadsWebsite?.price ?? 0}</span></div>
+                        <div>Purchased: <span className="text-white/40">{new Date(downloadsPurchase.purchaseDate || downloadsPurchase.createdAt).toLocaleString()}</span></div>
+                        {downloadsPurchase.razorpayOrderId && <div>Order: <span className="text-white/40">{downloadsPurchase.razorpayOrderId}</span></div>}
+                      </div>
+                    )}
+                  </div>
+                  <button onClick={() => setDownloadsModalOpen(false)} className="p-2 text-white/30 hover:text-white">
+                    <X size={16} />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <p className="text-sm text-white/30">Open the seller links directly, or generate ZIP, PDF, and video downloads on demand.</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {downloadsWebsite?.githubUrl && (
+                      <a href={downloadsWebsite.githubUrl} target="_blank" rel="noreferrer"
+                        className="py-3 bg-emerald-500/10 text-emerald-300 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-emerald-500/20 transition-all">
+                        <FileCode size={16} /> Seller GitHub Repo
+                      </a>
+                    )}
+                    {downloadsWebsite?.deployedUrl && (
+                      <a href={downloadsWebsite.deployedUrl} target="_blank" rel="noreferrer"
+                        className="py-3 bg-white/5 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-white/10 transition-all">
+                        <ExternalLink size={16} /> Live Deployment
+                      </a>
+                    )}
+                    {downloadsWebsite?.files?.previewVideo?.url && (
+                      <a href={downloadsWebsite.files.previewVideo.url} target="_blank" rel="noreferrer"
+                        className="py-3 bg-amber-500/10 text-amber-200 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-amber-500/20 transition-all sm:col-span-2">
+                        <Film size={16} /> Short Preview Video
+                      </a>
+                    )}
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-3 mt-3">
+                    <button onClick={() => downloadAsset(downloadsWebsite._id || downloadsWebsite, 'source')}
+                      className="flex-1 py-3 bg-emerald-500 text-black rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-emerald-600 transition-all">
+                      <FileCode size={16} /> Download Source ZIP
+                    </button>
+                    <button onClick={() => downloadAsset(downloadsWebsite._id || downloadsWebsite, 'docs')}
+                      className="flex-1 py-3 bg-blue-500 text-black rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-blue-600 transition-all">
+                      <FileText size={16} /> Download Docs PDF
+                    </button>
+                    {downloadsWebsite?.files?.video && (
+                      <button onClick={() => downloadAsset(downloadsWebsite._id || downloadsWebsite, 'video')}
+                        className="flex-1 py-3 bg-purple-500 text-black rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-purple-600 transition-all">
+                        <Film size={16} /> Download Walkthrough
+                      </button>
+                    )}
+                  </div>
+                  <div className="pt-4 border-t border-white/5 flex items-center justify-end gap-2">
+                    <button onClick={() => setDownloadsModalOpen(false)} className="px-4 py-2 bg-white/5 rounded-xl">Close</button>
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
 
           {activeTab === 'wishlist' && (
@@ -384,6 +650,7 @@ function StatusBadge({ status }) {
   const config = {
     approved: { label: 'Live', color: 'text-emerald-400 bg-emerald-500/10' },
     pending_review: { label: 'Pending', color: 'text-amber-400 bg-amber-500/10' },
+    changes_requested: { label: 'Changes', color: 'text-sky-300 bg-sky-500/10' },
     rejected: { label: 'Rejected', color: 'text-red-400 bg-red-500/10' },
   };
   const c = config[status] || { label: status, color: 'text-white/40 bg-white/5' };

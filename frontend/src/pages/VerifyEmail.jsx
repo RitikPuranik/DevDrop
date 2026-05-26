@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useSearchParams, useNavigate, useLocation } from "react-router-dom";
 import api from "../api/axios";
 import { motion, AnimatePresence } from "framer-motion"; // Assuming you have framer-motion, otherwise use standard divs
 
@@ -77,9 +77,20 @@ const CSS = `
 export default function VerifyEmail() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [status, setStatus] = useState("loading");
   const [errMsg, setErrMsg] = useState("");
   const [countdown, setCountdown] = useState(REDIRECT_SECONDS);
+<<<<<<< HEAD
+=======
+
+  // Priority: state.from (in-app redirect) → sessionStorage (stored before leaving for email) → "/"
+  const redirectTo =
+    location.state?.from ||
+    sessionStorage.getItem("dd_verify_return") ||
+    "/";
+
+>>>>>>> ad1656fb7a3510b266c270979522e49076f97b72
   const calledRef = useRef(false);
 
   useEffect(() => {
@@ -93,6 +104,7 @@ export default function VerifyEmail() {
     const token = searchParams.get("token");
     if (!token) {
       setStatus("error");
+<<<<<<< HEAD
       setErrMsg("Verification token missing.");
       return;
     }
@@ -102,11 +114,25 @@ export default function VerifyEmail() {
       .catch(e => {
         setStatus("error");
         setErrMsg(e.response?.data?.message || "Invalid or expired link.");
+=======
+      setErrMsg("No verification token found. Please request a new link.");
+      return;
+    }
+    api.post("/auth/verify-email", { token })
+      .then(r => {
+        if (r.data.success) setStatus("success");
+        else { setStatus("error"); setErrMsg(r.data.message || "Verification failed."); }
+      })
+      .catch(e => {
+        setStatus("error");
+        setErrMsg(e.response?.data?.message || "Invalid or expired verification link.");
+>>>>>>> ad1656fb7a3510b266c270979522e49076f97b72
       });
   }, []);
 
   useEffect(() => {
     if (status !== "success") return;
+<<<<<<< HEAD
     const timer = setInterval(() => {
       setCountdown(prev => {
         if (prev <= 1) {
@@ -119,6 +145,33 @@ export default function VerifyEmail() {
     }, 1000);
     return () => clearInterval(timer);
   }, [status, navigate]);
+=======
+    const id = setInterval(() => {
+      setCountdown(p => {
+        if (p <= 1) {
+          clearInterval(id);
+          sessionStorage.removeItem("dd_verify_return");
+          navigate(redirectTo, { replace: true });
+          return 0;
+        }
+        return p - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [status]);
+
+  const handleSkip = () => {
+    sessionStorage.removeItem("dd_verify_return");
+    navigate(redirectTo, { replace: true });
+  };
+
+  const handleBack = () => {
+    sessionStorage.removeItem("dd_verify_return");
+    navigate(redirectTo, { replace: true });
+  };
+
+  const err = status === "error";
+>>>>>>> ad1656fb7a3510b266c270979522e49076f97b72
 
   return (
     <div className="elite-container">
@@ -132,6 +185,7 @@ export default function VerifyEmail() {
         maskImage: 'radial-gradient(ellipse at center, black, transparent 80%)'
       }} />
 
+<<<<<<< HEAD
       <div className="glass-card">
         {status === "loading" && <LoadingState />}
         {status === "success" && <SuccessState countdown={countdown} onAction={() => navigate("/")} />}
@@ -142,6 +196,11 @@ export default function VerifyEmail() {
       <div className="mono" style={{ position: 'fixed', bottom: 40, opacity: 0.3, fontSize: 10, letterSpacing: 4, width: '100%', textAlign: 'center' }}>
         DEV DROP // SYSTEM AUTH
       </div>
+=======
+      {status === "loading" && <LoadingView/>}
+      {status === "success" && <SuccessView countdown={countdown} total={REDIRECT_SECONDS} onSkip={handleSkip}/>}
+      {status === "error"   && <ErrorView msg={errMsg} onBack={handleBack}/>}
+>>>>>>> ad1656fb7a3510b266c270979522e49076f97b72
     </div>
   );
 }
