@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate, Link, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { adminAPI } from '../api/admin';
 import { userAPI } from '../api/user';
 import { toast } from 'sonner';
-import { CheckCircle, ChevronDown, ChevronUp, Loader2, ShieldCheck, Upload, LayoutDashboard, Globe, DollarSign, ListTodo } from 'lucide-react';
+import { CheckCircle, ChevronDown, ChevronUp, Loader2, ShieldCheck, Upload } from 'lucide-react';
+import AdminNav from '../components/AdminNav';
 
 const emptyPendingForm = () => ({ name: '', description: '', category: 'paid', price: '', deployedLink: '', previewUrl: '', githubUrl: '', techStackText: '', rejectionReason: '', sourceCode: null, docs: null, video: null, previewVideo: null });
 
@@ -21,7 +22,6 @@ function techStackFromText(text) {
 
 export default function Admin() {
   const navigate = useNavigate();
-  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [pendingLoading, setPendingLoading] = useState(false);
@@ -129,37 +129,12 @@ export default function Admin() {
     );
   }
 
-  const navLinks = [
-    { name: "Review Queue", path: "/admin", icon: <ListTodo size={16} /> },
-    { name: "Dashboard", path: "/admin/dashboard", icon: <LayoutDashboard size={16} /> },
-    { name: "Websites", path: "/admin/websites/pending", icon: <Globe size={16} /> },
-    { name: "Payouts", path: "/admin/payouts/pending", icon: <DollarSign size={16} /> },
-  ];
-
   return (
     <div className="min-h-screen bg-[#080808] text-white pt-32 pb-16 px-6">
       <div className="max-w-4xl mx-auto space-y-8">
         
         {/* Admin Navigation */}
-        <div className="flex flex-wrap items-center gap-2 p-2 rounded-[24px] bg-white/[0.03] border border-white/10 backdrop-blur-md">
-          {navLinks.map((link) => {
-            const isActive = location.pathname === link.path;
-            return (
-              <Link
-                key={link.name}
-                to={link.path}
-                className={`flex items-center gap-2 px-5 py-3 rounded-[16px] text-xs font-bold uppercase tracking-[0.1em] transition-all ${
-                  isActive 
-                    ? 'bg-[#8b7355] text-white' 
-                    : 'text-white/40 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                {link.icon}
-                {link.name}
-              </Link>
-            );
-          })}
-        </div>
+        <AdminNav />
 
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-[36px] border border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(139,115,85,0.28),_transparent_38%),linear-gradient(180deg,_rgba(255,255,255,0.04),_rgba(255,255,255,0.02))] p-8 md:p-10 backdrop-blur-2xl">
           <div className="max-w-3xl">

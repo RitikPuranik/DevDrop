@@ -1,446 +1,334 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
+import { adminAPI } from "../../api/admin";
+import { userAPI } from "../../api/user";
+import { toast } from "sonner";
+import { Loader2, ShieldCheck, Search, RefreshCw, DollarSign, TrendingUp, ArrowUpRight, X } from "lucide-react";
+import AdminNav from "../../components/AdminNav";
 
-const API_BASE = "/api/admin";
-const getToken = () => localStorage.getItem("adminToken") || "";
-const apiFetch = (url, options = {}) =>
-  fetch(`${API_BASE}${url}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${getToken()}`,
-      ...(options.headers || {}),
-    },
-  });
-
-// ─── Reusable UI ──────────────────────────────────────────────────────────────
-function Avatar({ initials }) {
-  const COLORS = [
-    "bg-indigo-100 text-indigo-700",
-    "bg-teal-100   text-teal-700",
-    "bg-rose-100   text-rose-700",
-    "bg-amber-100  text-amber-700",
-    "bg-violet-100 text-violet-700",
-    "bg-sky-100    text-sky-700",
-  ];
-  const idx = (initials.charCodeAt(0) + (initials.charCodeAt(1) || 0)) % COLORS.length;
+function StatCard({ label, value, sub, icon, accentColor = "rgba(139,115,85,0.5)" }) {
   return (
-    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold shrink-0 ${COLORS[idx]}`}>
-      {initials}
-    </div>
-  );
-}
-
-function StatCard({ label, value, sub, accent = "slate" }) {
-  const accents = {
-    slate:   "text-slate-800",
-    emerald: "text-emerald-600",
-    amber:   "text-amber-600",
-    indigo:  "text-indigo-600",
-  };
-  return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-      <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-2">{label}</p>
-      <p className={`text-3xl font-semibold ${accents[accent]}`}>{value}</p>
-      {sub && <p className="text-xs text-slate-400 mt-1">{sub}</p>}
-    </div>
-  );
-}
-
-function Spinner() {
-  return (
-    <div className="flex items-center justify-center py-24">
-      <div className="w-8 h-8 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
-    </div>
-  );
-}
-
-function useToast() {
-  const [toasts, setToasts] = useState([]);
-  const show = (message, type = "success") => {
-    const id = Date.now();
-    setToasts((p) => [...p, { id, message, type }]);
-    setTimeout(() => setToasts((p) => p.filter((t) => t.id !== id)), 3500);
-  };
-  const remove = (id) => setToasts((p) => p.filter((t) => t.id !== id));
-  return { toasts, show, remove };
-}
-
-function Toast({ toasts, remove }) {
-  const colors = { success: "bg-emerald-600", error: "bg-red-500", info: "bg-indigo-600", warning: "bg-amber-500" };
-  return (
-    <div className="fixed bottom-5 right-5 z-50 flex flex-col gap-2">
-      {toasts.map((t) => (
-        <div key={t.id} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-white text-sm font-medium shadow-lg ${colors[t.type]}`}>
-          <span>{t.message}</span>
-          <button onClick={() => remove(t.id)} className="text-white/70 hover:text-white text-lg leading-none">×</button>
+    <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-6 backdrop-blur-md hover:border-white/20 transition-all group">
+      <div className="flex items-start justify-between mb-4">
+        <p className="text-[10px] uppercase tracking-[0.25em] text-white/40 font-bold">{label}</p>
+        <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-white/60 group-hover:text-white transition-colors" style={{ background: `linear-gradient(135deg, ${accentColor}, transparent)` }}>
+          {icon}
         </div>
-      ))}
+      </div>
+      <p className="text-3xl font-black tracking-tight text-white mb-1">{value}</p>
+      {sub && <p className="text-xs text-white/35">{sub}</p>}
     </div>
   );
 }
 
 // ─── Process Payout Modal ─────────────────────────────────────────────────────
 function ProcessModal({ open, payout, onClose, onConfirm, loading }) {
-  const [note, setNote] = useState("");
-  const [txRef, setTxRef] = useState("");
+  const [utr, setUtr] = useState("");
+  const [adminNotes, setAdminNotes] = useState("");
 
   if (!open || !payout) return null;
 
-  const handleSubmit = () => onConfirm({ note, txRef });
+  const sellerEmail = payout.sellerId?.email || "Unknown";
+  const websiteName = payout.websiteId?.name || "Unknown";
+
+  const handleSubmit = () => {
+    if (!utr.trim()) {
+      toast.error("UTR (transaction reference) is required");
+      return;
+    }
+    onConfirm({ utr: utr.trim(), adminNotes: adminNotes.trim() });
+  };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6">
-        {/* Header */}
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-[#141414] rounded-[28px] border border-white/10 shadow-2xl w-full max-w-md mx-4 p-7">
         <div className="flex items-center justify-between mb-5">
           <div>
-            <h3 className="text-base font-semibold text-slate-800">Process payout</h3>
-            <p className="text-xs text-slate-400 mt-0.5">Confirm before marking as processed</p>
+            <h3 className="text-lg font-black tracking-tight text-white">Process Payout</h3>
+            <p className="text-xs text-white/35 mt-1">Confirm before marking as processed</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl leading-none">×</button>
+          <button onClick={onClose} className="text-white/30 hover:text-white transition-colors"><X size={20} /></button>
         </div>
 
         {/* Payout summary */}
-        <div className="bg-slate-50 rounded-xl p-4 mb-5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Avatar initials={payout.initials || payout.name?.slice(0, 2).toUpperCase() || "??"} />
+        <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-5 mb-6">
+          <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-semibold text-slate-800">{payout.name}</p>
-              <p className="text-xs text-slate-400">{payout.email}</p>
-              <p className="text-xs text-slate-400">{payout.method}</p>
+              <p className="text-sm font-bold text-white">{sellerEmail}</p>
+              <p className="text-xs text-white/35 mt-1">Website: {websiteName}</p>
+              {payout.bankDetails?.bankName && (
+                <p className="text-xs text-white/35 mt-0.5">Bank: {payout.bankDetails.bankName}</p>
+              )}
+              {payout.bankDetails?.upiId && (
+                <p className="text-xs text-white/35 mt-0.5">UPI: {payout.bankDetails.upiId}</p>
+              )}
             </div>
-          </div>
-          <div className="text-right">
-            <p className="text-2xl font-bold text-slate-800">${(payout.amount || 0).toLocaleString()}</p>
-            <p className="text-xs text-slate-400">Requested {payout.requestedAt}</p>
+            <p className="text-3xl font-black text-emerald-400">₹{(payout.amount || 0).toLocaleString()}</p>
           </div>
         </div>
 
         {/* Fields */}
-        <div className="flex flex-col gap-3 mb-5">
+        <div className="space-y-4 mb-6">
           <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">Transaction reference (optional)</label>
+            <label className="block text-[10px] font-bold text-white/40 uppercase tracking-[0.2em] mb-2">
+              UTR / Transaction Reference <span className="text-red-400">*</span>
+            </label>
             <input
               type="text"
               placeholder="e.g. TXN-20260526-001"
-              value={txRef}
-              onChange={(e) => setTxRef(e.target.value)}
-              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+              value={utr}
+              onChange={(e) => setUtr(e.target.value)}
+              className="w-full border border-white/10 bg-white/[0.03] rounded-2xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40 placeholder:text-white/20"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">Admin note (optional)</label>
+            <label className="block text-[10px] font-bold text-white/40 uppercase tracking-[0.2em] mb-2">Admin Notes (optional)</label>
             <textarea
               rows={3}
-              placeholder="Internal notes about this payout…"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+              placeholder="Internal notes..."
+              value={adminNotes}
+              onChange={(e) => setAdminNotes(e.target.value)}
+              className="w-full border border-white/10 bg-white/[0.03] rounded-2xl px-4 py-3 text-sm text-white resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/40 placeholder:text-white/20"
             />
           </div>
         </div>
 
         <div className="flex gap-3 justify-end">
-          <button onClick={onClose} className="px-4 py-2 text-sm rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">
+          <button onClick={onClose} className="px-5 py-2.5 text-xs rounded-xl border border-white/10 text-white/50 hover:bg-white/5 transition-colors font-bold uppercase tracking-[0.1em]">
             Cancel
           </button>
           <button
             onClick={handleSubmit}
             disabled={loading}
-            className="px-5 py-2 text-sm rounded-xl bg-emerald-600 text-white font-medium hover:bg-emerald-700 transition-colors disabled:opacity-60"
+            className="px-5 py-2.5 text-xs rounded-xl bg-emerald-500 text-black font-black uppercase tracking-[0.1em] hover:bg-emerald-400 transition-colors disabled:opacity-60"
           >
-            {loading ? "Processing…" : "💸 Confirm & process"}
+            {loading ? "Processing…" : "💸 Confirm & Process"}
           </button>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }
 
-// ─── Payout Detail Drawer ─────────────────────────────────────────────────────
-function PayoutDrawer({ payout, onClose, onProcess }) {
-  if (!payout) return null;
-  return (
-    <>
-      <div className="fixed inset-0 z-30 bg-black/20" onClick={onClose} />
-      <div className="fixed right-0 top-0 bottom-0 z-30 w-80 bg-white shadow-2xl border-l border-slate-200 flex flex-col">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <h3 className="text-sm font-semibold text-slate-800">Payout details</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
-          <div className="flex items-center gap-3">
-            <Avatar initials={payout.initials || payout.name?.slice(0, 2).toUpperCase() || "??"} />
-            <div>
-              <p className="text-base font-semibold text-slate-800">{payout.name}</p>
-              <p className="text-sm text-slate-400">{payout.email}</p>
-            </div>
-          </div>
-
-          <div className="bg-emerald-50 rounded-xl p-4 text-center">
-            <p className="text-3xl font-bold text-emerald-700">${(payout.amount || 0).toLocaleString()}</p>
-            <p className="text-xs text-emerald-600 mt-1">Requested amount</p>
-          </div>
-
-          <div className="flex flex-col gap-2 text-sm">
-            {[
-              ["Method",    payout.method],
-              ["Requested", payout.requestedAt],
-              ["Account",   payout.accountDetails],
-              ["Bank",      payout.bankName],
-            ].filter(([, v]) => v).map(([label, value]) => (
-              <div key={label} className="flex justify-between gap-2">
-                <span className="text-slate-400">{label}</span>
-                <span className="text-slate-700 text-right font-medium">{value}</span>
-              </div>
-            ))}
-          </div>
-
-          {payout.websiteEarnings && (
-            <div>
-              <p className="text-xs font-medium text-slate-400 mb-2 uppercase tracking-wide">Earnings breakdown</p>
-              <div className="flex flex-col gap-1.5">
-                {payout.websiteEarnings.map((e, i) => (
-                  <div key={i} className="flex justify-between text-sm">
-                    <span className="text-slate-500">{e.website}</span>
-                    <span className="text-slate-700 font-medium">${e.amount.toLocaleString()}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="p-4 border-t border-slate-100">
-          <button
-            onClick={() => { onClose(); onProcess(payout); }}
-            className="w-full py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition-colors"
-          >
-            💸 Process payout
-          </button>
-        </div>
-      </div>
-    </>
-  );
-}
-
-// ─── Main Page Component ──────────────────────────────────────────────────────
+// ─── Main Page ───────────────────────────────────────────────────────────────
 export default function PendingPayouts() {
-  const [payouts, setPayouts]       = useState([]);
-  const [loading, setLoading]       = useState(true);
-  const [search, setSearch]         = useState("");
-  const [selected, setSelected]     = useState(null);
+  const navigate = useNavigate();
+  const [payouts, setPayouts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [search, setSearch] = useState("");
   const [processTarget, setProcessTarget] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
-  const [sortBy, setSortBy]         = useState("date");  // "date" | "amount"
-  const [processed, setProcessed]   = useState([]);      // recently processed (history)
-  const { toasts, show: showToast, remove: removeToast } = useToast();
+  const [sortBy, setSortBy] = useState("date");
 
-  // ── Fetch ──────────────────────────────────────────────────────────────────
+  // ── Auth + Fetch ─────────────────────────────────────────────────────────
   const fetchPayouts = async () => {
-    setLoading(true);
     try {
-      const res  = await apiFetch("/payouts/pending");
-      if (!res.ok) throw new Error("Failed to load");
-      const data = await res.json();
-      setPayouts(data.payouts || data);
-    } catch {
-      showToast("Failed to load payouts, showing demo data", "warning");
-      // Fallback mock
-      setPayouts([
-        { _id: "1", name: "Jake Durden", email: "jake@example.com", initials: "JD", method: "Bank transfer", requestedAt: "May 25, 2026", amount: 840,  bankName: "HDFC Bank",    accountDetails: "XXXX-1234", websiteEarnings: [{ website: "DevBlog Pro", amount: 840 }] },
-        { _id: "2", name: "Sara Reyes",  email: "sara@example.com", initials: "SR", method: "PayPal",        requestedAt: "May 24, 2026", amount: 1200, bankName: "PayPal",       accountDetails: "sara@example.com", websiteEarnings: [{ website: "ShopLaunch", amount: 1200 }] },
-        { _id: "3", name: "Ming Tao",    email: "ming@example.com", initials: "MT", method: "Bank transfer", requestedAt: "May 23, 2026", amount: 300,  bankName: "Axis Bank",    accountDetails: "XXXX-5678", websiteEarnings: [{ website: "PortfolioX", amount: 300 }] },
-        { _id: "4", name: "Priya Nair",  email: "priya@example.com",initials: "PN", method: "UPI",           requestedAt: "May 22, 2026", amount: 650,  bankName: "UPI",          accountDetails: "priya@upi", websiteEarnings: [{ website: "NewsDaily", amount: 650 }] },
-      ]);
-    } finally {
-      setLoading(false);
+      const res = await adminAPI.getPendingPayouts();
+      setPayouts(res.data?.data || []);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to load payouts");
+      setPayouts([]);
     }
   };
 
-  useEffect(() => { fetchPayouts(); }, []);
+  useEffect(() => {
+    const init = async () => {
+      try {
+        const profileRes = await userAPI.getProfile();
+        const role = profileRes.data?.data?.user?.role;
+        setIsAdmin(role === "admin");
+        if (role === "admin") await fetchPayouts();
+      } catch {
+        setIsAdmin(false);
+      } finally {
+        setLoading(false);
+      }
+    };
+    init();
+  }, []);
 
-  // ── Process payout ─────────────────────────────────────────────────────────
-  const handleProcess = async ({ note, txRef }) => {
+  // ── Process payout ────────────────────────────────────────────────────────
+  const handleProcess = async ({ utr, adminNotes }) => {
     setActionLoading(true);
     try {
-      const res = await apiFetch(`/payouts/${processTarget._id}/process`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ note, txRef }),
-      });
-      if (!res.ok) throw new Error();
-      const done = { ...processTarget, processedAt: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }), txRef };
-      setPayouts((p) => p.filter((x) => x._id !== processTarget._id));
-      setProcessed((p) => [done, ...p]);
-      showToast(`💸 $${processTarget.amount.toLocaleString()} sent to ${processTarget.name}`, "success");
+      await adminAPI.processPayout(processTarget._id, { utr, adminNotes });
+      toast.success(`💸 ₹${processTarget.amount.toLocaleString()} payout processed`);
       setProcessTarget(null);
-    } catch {
-      showToast("Failed to process payout", "error");
+      await fetchPayouts();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to process payout");
     } finally {
       setActionLoading(false);
     }
   };
 
-  // ── Filter + sort ──────────────────────────────────────────────────────────
+  // ── Filter + sort ─────────────────────────────────────────────────────────
   const filtered = payouts
     .filter((p) =>
       !search ||
-      p.name?.toLowerCase().includes(search.toLowerCase()) ||
-      p.email?.toLowerCase().includes(search.toLowerCase()) ||
-      p.method?.toLowerCase().includes(search.toLowerCase())
+      p.sellerId?.email?.toLowerCase().includes(search.toLowerCase()) ||
+      p.websiteId?.name?.toLowerCase().includes(search.toLowerCase())
     )
-    .sort((a, b) => sortBy === "amount" ? b.amount - a.amount : 0);
+    .sort((a, b) => sortBy === "amount" ? (b.amount || 0) - (a.amount || 0) : 0);
 
-  const total    = payouts.reduce((s, p) => s + (p.amount || 0), 0);
-  const highest  = payouts.reduce((m, p) => Math.max(m, p.amount || 0), 0);
+  const total = payouts.reduce((s, p) => s + (p.amount || 0), 0);
+  const highest = payouts.reduce((m, p) => Math.max(m, p.amount || 0), 0);
   const avgAmount = payouts.length ? Math.round(total / payouts.length) : 0;
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Loading / Auth Guard ──────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#080808] flex items-center justify-center text-white">
+        <Loader2 className="animate-spin text-[#8b7355]" size={36} />
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-[#080808] text-white flex items-center justify-center px-6">
+        <div className="max-w-lg w-full rounded-[32px] border border-white/10 bg-white/[0.03] p-8 text-center backdrop-blur-2xl">
+          <ShieldCheck className="mx-auto mb-5 text-[#8b7355]" size={44} />
+          <h1 className="text-3xl font-black tracking-tight mb-3">Admin access required</h1>
+          <p className="text-white/40 text-sm leading-relaxed mb-8">Sign in with an admin account.</p>
+          <button onClick={() => navigate("/")} className="px-6 py-3 rounded-full bg-[#8b7355] text-white font-bold uppercase tracking-[0.15em] text-xs">Back Home</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-slate-50 p-6">
-      <div className="max-w-6xl mx-auto flex flex-col gap-6">
+    <div className="min-h-screen bg-[#080808] text-white pt-32 pb-16 px-6">
+      <div className="max-w-6xl mx-auto space-y-8">
+
+        <AdminNav />
 
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-slate-800">Pending payouts</h1>
-            <p className="text-sm text-slate-400 mt-1">{payouts.length} requests waiting to be processed</p>
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-[36px] border border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(139,115,85,0.28),_transparent_38%),linear-gradient(180deg,_rgba(255,255,255,0.04),_rgba(255,255,255,0.02))] p-8 md:p-10 backdrop-blur-2xl">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] uppercase tracking-[0.25em] text-white/40 mb-5">
+                <ShieldCheck size={12} /> Payout Management
+              </div>
+              <h1 className="text-4xl md:text-5xl font-black tracking-tight leading-none mb-3">Pending Payouts</h1>
+              <p className="text-white/45 max-w-lg leading-relaxed text-sm">{payouts.length} payout requests waiting to be processed</p>
+            </div>
+            <button onClick={fetchPayouts} className="flex items-center gap-2 px-5 py-3 rounded-2xl border border-white/10 text-xs text-white/50 hover:text-white hover:bg-white/5 font-bold uppercase tracking-[0.1em] transition-all">
+              <RefreshCw size={14} /> Refresh
+            </button>
           </div>
-          <button
-            onClick={fetchPayouts}
-            className="flex items-center gap-2 text-sm text-slate-600 border border-slate-200 bg-white rounded-xl px-4 py-2 hover:bg-slate-50 transition-colors shadow-sm"
-          >
-            <span>↻</span> Refresh
-          </button>
+        </motion.div>
+
+        {/* Stat Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          <StatCard label="Total Pending" value={`₹${total.toLocaleString()}`} sub={`${payouts.length} requests`} icon={<DollarSign size={18} />} accentColor="rgba(16,185,129,0.5)" />
+          <StatCard label="Largest Request" value={`₹${highest.toLocaleString()}`} sub="Single payout" icon={<ArrowUpRight size={18} />} accentColor="rgba(245,158,11,0.5)" />
+          <StatCard label="Average Amount" value={`₹${avgAmount.toLocaleString()}`} sub="Per request" icon={<TrendingUp size={18} />} accentColor="rgba(99,102,241,0.5)" />
         </div>
 
-        {/* Stat cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard label="Total pending"   value={`$${total.toLocaleString()}`}    sub={`${payouts.length} requests`}         accent="emerald" />
-          <StatCard label="Largest request" value={`$${highest.toLocaleString()}`}  sub="single payout"                        accent="amber" />
-          <StatCard label="Average amount"  value={`$${avgAmount.toLocaleString()}`} sub="per request"                         accent="indigo" />
-          <StatCard label="Processed today" value={processed.length}                 sub={`$${processed.reduce((s,p)=>s+p.amount,0).toLocaleString()} released`} accent="slate" />
-        </div>
-
-        {/* Main table card */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        {/* Table Card */}
+        <div className="rounded-[32px] border border-white/10 bg-[#0f0f0f] shadow-2xl shadow-black/30 overflow-hidden">
           {/* Toolbar */}
-          <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 flex-wrap gap-3">
-            <h2 className="text-sm font-semibold text-slate-700">Payout requests</h2>
+          <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 flex-wrap gap-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.3em] text-[#8b7355] font-bold mb-1">Queue</p>
+              <h2 className="text-xl font-black tracking-tight">Payout Requests</h2>
+            </div>
             <div className="flex items-center gap-3">
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/25" />
                 <input
                   type="text"
-                  placeholder="Search payouts…"
+                  placeholder="Search..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="pl-8 pr-4 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 w-44"
+                  className="pl-8 pr-4 py-2 text-sm bg-white/[0.03] border border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8b7355]/40 text-white placeholder:text-white/20 w-44"
                 />
               </div>
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                className="text-xs bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-white/50 focus:outline-none focus:ring-2 focus:ring-[#8b7355]/40"
               >
-                <option value="date">Sort: Date</option>
-                <option value="amount">Sort: Amount</option>
+                <option value="date" className="bg-black">Sort: Date</option>
+                <option value="amount" className="bg-black">Sort: Amount</option>
               </select>
             </div>
           </div>
 
-          {loading ? <Spinner /> : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-100">
-                    {["User", "Method", "Account", "Requested", "Amount", "Action"].map((h) => (
-                      <th key={h} className="text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">
-                        {h}
-                      </th>
-                    ))}
+          {/* Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-white/5">
+                  {["Seller", "Website", "Bank Details", "Amount", "Requested", "Action"].map((h) => (
+                    <th key={h} className="text-left text-[10px] font-bold text-white/25 uppercase tracking-[0.2em] px-6 py-4">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="text-center py-20">
+                      <div className="flex flex-col items-center gap-3 text-white/20">
+                        <DollarSign size={36} />
+                        <span className="text-sm">No pending payouts — all clear!</span>
+                      </div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filtered.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="text-center py-16 text-sm text-slate-400">
-                        <div className="flex flex-col items-center gap-2">
-                          <span className="text-3xl">🎉</span>
-                          <span>No pending payouts — all clear!</span>
-                        </div>
+                )}
+                {filtered.map((p) => {
+                  const sellerEmail = p.sellerId?.email || "Unknown";
+                  const websiteName = p.websiteId?.name || "—";
+                  const websiteCategory = p.websiteId?.category || "";
+                  const bankInfo = p.bankDetails?.bankName || p.bankDetails?.upiId || "—";
+                  const accountInfo = p.bankDetails?.accountNumber
+                    ? `****${p.bankDetails.accountNumber.slice(-4)}`
+                    : p.bankDetails?.upiId || "—";
+                  const requestedDate = p.createdAt
+                    ? new Date(p.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                    : "—";
+
+                  return (
+                    <tr key={p._id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                      <td className="px-6 py-5">
+                        <p className="text-sm font-bold text-white">{sellerEmail}</p>
                       </td>
-                    </tr>
-                  )}
-                  {filtered.map((p) => (
-                    <tr
-                      key={p._id}
-                      className="hover:bg-slate-50 transition-colors cursor-pointer"
-                      onClick={() => setSelected(p)}
-                    >
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-3">
-                          <Avatar initials={p.initials || p.name?.slice(0, 2).toUpperCase() || "??"} />
-                          <div>
-                            <p className="text-sm font-semibold text-slate-800">{p.name}</p>
-                            <p className="text-xs text-slate-400">{p.email}</p>
-                          </div>
-                        </div>
+                      <td className="px-6 py-5">
+                        <p className="text-sm text-white/70">{websiteName}</p>
+                        {websiteCategory && (
+                          <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-[8px] font-bold uppercase tracking-[0.15em] ${
+                            websiteCategory === 'exclusive' ? 'bg-purple-500/15 text-purple-400' :
+                            websiteCategory === 'paid' ? 'bg-amber-500/15 text-amber-400' :
+                            'bg-emerald-500/15 text-emerald-400'
+                          }`}>{websiteCategory}</span>
+                        )}
                       </td>
-                      <td className="px-5 py-4">
-                        <span className="inline-flex items-center gap-1.5 text-sm text-slate-600">
-                          <span>{p.method === "PayPal" ? "🅿" : p.method === "UPI" ? "🇮🇳" : "🏦"}</span>
-                          {p.method}
-                        </span>
+                      <td className="px-6 py-5">
+                        <p className="text-sm text-white/60">{bankInfo}</p>
+                        <p className="text-xs text-white/30 mt-0.5">{accountInfo}</p>
                       </td>
-                      <td className="px-5 py-4 text-sm text-slate-500">{p.accountDetails || "—"}</td>
-                      <td className="px-5 py-4 text-sm text-slate-500 whitespace-nowrap">{p.requestedAt}</td>
-                      <td className="px-5 py-4">
-                        <span className="text-base font-bold text-slate-800">${(p.amount || 0).toLocaleString()}</span>
+                      <td className="px-6 py-5">
+                        <span className="text-lg font-black text-emerald-400">₹{(p.amount || 0).toLocaleString()}</span>
                       </td>
-                      <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-6 py-5 text-sm text-white/40 whitespace-nowrap">{requestedDate}</td>
+                      <td className="px-6 py-5">
                         <button
                           onClick={() => setProcessTarget(p)}
-                          className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors whitespace-nowrap"
+                          className="flex items-center gap-2 text-xs font-black px-5 py-2.5 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25 transition-all uppercase tracking-[0.1em] whitespace-nowrap"
                         >
                           💸 Process
                         </button>
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* Recently processed section */}
-        {processed.length > 0 && (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-slate-100">
-              <h2 className="text-sm font-semibold text-slate-700">✅ Processed this session</h2>
-            </div>
-            <div className="divide-y divide-slate-100">
-              {processed.map((p) => (
-                <div key={p._id} className="flex items-center justify-between px-5 py-3.5">
-                  <div className="flex items-center gap-3">
-                    <Avatar initials={p.initials || p.name?.slice(0, 2).toUpperCase() || "??"} />
-                    <div>
-                      <p className="text-sm font-medium text-slate-700">{p.name}</p>
-                      <p className="text-xs text-slate-400">{p.method} · Processed {p.processedAt}</p>
-                      {p.txRef && <p className="text-xs text-indigo-500 font-mono mt-0.5">{p.txRef}</p>}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-bold text-emerald-600">${(p.amount || 0).toLocaleString()}</span>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200">
-                      Processed
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Process Modal */}
@@ -451,15 +339,6 @@ export default function PendingPayouts() {
         onConfirm={handleProcess}
         loading={actionLoading}
       />
-
-      {/* Detail Drawer */}
-      <PayoutDrawer
-        payout={selected}
-        onClose={() => setSelected(null)}
-        onProcess={(p) => { setSelected(null); setProcessTarget(p); }}
-      />
-
-      <Toast toasts={toasts} remove={removeToast} />
     </div>
   );
 }
