@@ -21,7 +21,7 @@ import Checkout from './pages/Checkout';
 
 import VerifyEmail from './pages/VerifyEmail';
 import AdminDashboard from "./pages/admin/Dashboard";
-import PendingWebsites from "./pages/admin/Pending_Web";
+import PendingWebsites from "./pages/admin/Pending_web";
 import ProcessPayouts from "./pages/admin/Pending_payout";
 
 
