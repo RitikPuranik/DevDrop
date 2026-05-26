@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useSearchParams, useNavigate, useLocation } from "react-router-dom";
 import api from "../api/axios";
-import { motion, AnimatePresence } from "framer-motion"; // Assuming you have framer-motion, otherwise use standard divs
 
 const REDIRECT_SECONDS = 5;
 
@@ -9,7 +8,7 @@ const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap');
   
   :root {
-    --accent: #f97316; /* Orange-500 */
+    --accent: #f97316;
     --bg: #050505;
   }
 
@@ -81,8 +80,6 @@ export default function VerifyEmail() {
   const [status, setStatus] = useState("loading");
   const [errMsg, setErrMsg] = useState("");
   const [countdown, setCountdown] = useState(REDIRECT_SECONDS);
-<<<<<<< HEAD
-=======
 
   // Priority: state.from (in-app redirect) → sessionStorage (stored before leaving for email) → "/"
   const redirectTo =
@@ -90,34 +87,23 @@ export default function VerifyEmail() {
     sessionStorage.getItem("dd_verify_return") ||
     "/";
 
->>>>>>> ad1656fb7a3510b266c270979522e49076f97b72
   const calledRef = useRef(false);
 
   useEffect(() => {
     const styleEl = document.createElement("style");
     styleEl.textContent = CSS;
     document.head.appendChild(styleEl);
-    
+
     if (calledRef.current) return;
     calledRef.current = true;
 
     const token = searchParams.get("token");
     if (!token) {
       setStatus("error");
-<<<<<<< HEAD
-      setErrMsg("Verification token missing.");
-      return;
-    }
-
-    api.post("/auth/verify-email", { token })
-      .then(r => setStatus(r.data.success ? "success" : "error"))
-      .catch(e => {
-        setStatus("error");
-        setErrMsg(e.response?.data?.message || "Invalid or expired link.");
-=======
       setErrMsg("No verification token found. Please request a new link.");
       return;
     }
+
     api.post("/auth/verify-email", { token })
       .then(r => {
         if (r.data.success) setStatus("success");
@@ -126,26 +112,11 @@ export default function VerifyEmail() {
       .catch(e => {
         setStatus("error");
         setErrMsg(e.response?.data?.message || "Invalid or expired verification link.");
->>>>>>> ad1656fb7a3510b266c270979522e49076f97b72
       });
   }, []);
 
   useEffect(() => {
     if (status !== "success") return;
-<<<<<<< HEAD
-    const timer = setInterval(() => {
-      setCountdown(prev => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          navigate("/");
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [status, navigate]);
-=======
     const id = setInterval(() => {
       setCountdown(p => {
         if (p <= 1) {
@@ -170,37 +141,28 @@ export default function VerifyEmail() {
     navigate(redirectTo, { replace: true });
   };
 
-  const err = status === "error";
->>>>>>> ad1656fb7a3510b266c270979522e49076f97b72
-
   return (
     <div className="elite-container">
       <div className="mesh-gradient" />
-      
+
       {/* Decorative Grid */}
-      <div style={{ 
-        position: 'absolute', inset: 0, 
+      <div style={{
+        position: 'absolute', inset: 0,
         backgroundImage: `linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px)`,
         backgroundSize: '40px 40px',
         maskImage: 'radial-gradient(ellipse at center, black, transparent 80%)'
       }} />
 
-<<<<<<< HEAD
       <div className="glass-card">
         {status === "loading" && <LoadingState />}
-        {status === "success" && <SuccessState countdown={countdown} onAction={() => navigate("/")} />}
-        {status === "error" && <ErrorState msg={errMsg} onAction={() => navigate("/")} />}
+        {status === "success" && <SuccessState countdown={countdown} onAction={handleSkip} />}
+        {status === "error"   && <ErrorState msg={errMsg} onAction={handleBack} />}
       </div>
-      
+
       {/* Brand Watermark */}
       <div className="mono" style={{ position: 'fixed', bottom: 40, opacity: 0.3, fontSize: 10, letterSpacing: 4, width: '100%', textAlign: 'center' }}>
         DEV DROP // SYSTEM AUTH
       </div>
-=======
-      {status === "loading" && <LoadingView/>}
-      {status === "success" && <SuccessView countdown={countdown} total={REDIRECT_SECONDS} onSkip={handleSkip}/>}
-      {status === "error"   && <ErrorView msg={errMsg} onBack={handleBack}/>}
->>>>>>> ad1656fb7a3510b266c270979522e49076f97b72
     </div>
   );
 }
@@ -223,8 +185,8 @@ function LoadingState() {
 function SuccessState({ countdown, onAction }) {
   return (
     <div>
-      <div style={{ 
-        width: 80, height: 80, background: '#f97316', borderRadius: '24px', 
+      <div style={{
+        width: 80, height: 80, background: '#f97316', borderRadius: '24px',
         margin: '0 auto 40px', display: 'flex', alignItems: 'center', justifyContent: 'center',
         boxShadow: '0 20px 40px rgba(249, 115, 22, 0.3)'
       }}>
@@ -236,11 +198,11 @@ function SuccessState({ countdown, onAction }) {
       <p style={{ color: 'rgba(255,255,255,0.5)', marginBottom: 40, lineHeight: 1.6 }}>
         Your email is confirmed. Welcome to the premium marketplace for developers.
       </p>
-      
+
       <button className="btn-primary" onClick={onAction}>
         Enter Dashboard
       </button>
-      
+
       <div className="mono" style={{ marginTop: 24, fontSize: 10, color: '#f97316', opacity: 0.8 }}>
         Auto-redirecting in {countdown}s...
       </div>
@@ -251,8 +213,8 @@ function SuccessState({ countdown, onAction }) {
 function ErrorState({ msg, onAction }) {
   return (
     <div>
-      <div style={{ 
-        width: 80, height: 80, background: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', 
+      <div style={{
+        width: 80, height: 80, background: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444',
         borderRadius: '24px', margin: '0 auto 40px', display: 'flex', alignItems: 'center', justifyContent: 'center'
       }}>
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -261,8 +223,12 @@ function ErrorState({ msg, onAction }) {
       </div>
       <h2 style={{ fontSize: 32, fontWeight: 800, marginBottom: 16 }}>Verification Failed</h2>
       <p style={{ color: 'rgba(255,255,255,0.5)', marginBottom: 40, lineHeight: 1.6 }}>{msg}</p>
-      
-      <button className="btn-primary" style={{ background: 'rgba(255,255,255,0.05)', color: 'white', border: '1px solid rgba(255,255,255,0.1)' }} onClick={onAction}>
+
+      <button
+        className="btn-primary"
+        style={{ background: 'rgba(255,255,255,0.05)', color: 'white', border: '1px solid rgba(255,255,255,0.1)' }}
+        onClick={onAction}
+      >
         Go Back Home
       </button>
     </div>

@@ -5,17 +5,19 @@ import {
   User,
   Phone,
   X,
-  Code2, // Replacement for Github (guaranteed to exist)
-  Globe, // Replacement for Chrome (guaranteed to exist)
-  Share2, // Replacement for Linkedin (guaranteed to exist)
+  Code2,
+  Globe,
+  Share2,
   ArrowRight,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { authAPI } from "../api/auth";
 import { toast } from "sonner";
 
 export default function AuthModal({ isOpen, onClose }) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
+  const navigate = useNavigate();
 
   const [loginData, setLoginData] = useState({
     emailOrPhone: "",
@@ -30,17 +32,11 @@ export default function AuthModal({ isOpen, onClose }) {
   });
 
   const handleLoginChange = (e) => {
-    setLoginData({
-      ...loginData,
-      [e.target.name]: e.target.value,
-    });
+    setLoginData({ ...loginData, [e.target.name]: e.target.value });
   };
 
   const handleSignupChange = (e) => {
-    setSignupData({
-      ...signupData,
-      [e.target.name]: e.target.value,
-    });
+    setSignupData({ ...signupData, [e.target.name]: e.target.value });
   };
 
   const handleLogin = async (e) => {
@@ -48,14 +44,22 @@ export default function AuthModal({ isOpen, onClose }) {
 
     try {
       const res = await authAPI.login(loginData);
-      console.log("LOGIN RESPONSE:", res.data);
+      const { token, user } = res.data.data;
 
-      // store token
-      localStorage.setItem("token", res.data.data.token);
+      // ✅ Persist both token AND user (role lives here)
+      localStorage.setItem("token", token);
+      localStorage.setItem("user", JSON.stringify(user));
+
       toast.success("Login successful!");
       onClose();
+
+      // ✅ Role-based redirect
+      if (user.role === "admin") {
+        navigate("/admin/dashboard");
+      } else {
+        navigate("/dashboard");
+      }
     } catch (err) {
-      console.log("LOGIN ERROR:", err.response?.data);
       toast.error(err.response?.data?.message || "Login failed");
     }
   };
@@ -64,15 +68,17 @@ export default function AuthModal({ isOpen, onClose }) {
     e.preventDefault();
 
     try {
-      console.log("Signup data:", signupData);
       const res = await authAPI.register(signupData);
-      console.log("SIGNUP RESPONSE:", res.data);
+      const { token, user } = res.data.data;
 
-      toast.success("Account created successfully");
+      // ✅ Persist after signup too
+      localStorage.setItem("token", token);
+      localStorage.setItem("user", JSON.stringify(user));
+
+      toast.success("Account created! Please verify your email.");
       setIsSignUp(false);
     } catch (err) {
-      console.log("SIGNUP ERROR:", err.response?.data);
-      toast.error(err.response?.data?.message || "Signup Failed");
+      toast.error(err.response?.data?.message || "Signup failed");
     }
   };
 
@@ -114,7 +120,7 @@ export default function AuthModal({ isOpen, onClose }) {
             className="flex flex-col items-center justify-center h-full px-12 text-center"
             onSubmit={handleSignup}
           >
-            <h2 className=" mt-5 text-4xl font-serif font-bold text-[#3d342b] mb-2">
+            <h2 className="mt-5 text-4xl font-serif font-bold text-[#3d342b] mb-2">
               Create Account
             </h2>
 
@@ -132,7 +138,6 @@ export default function AuthModal({ isOpen, onClose }) {
               value={signupData.name}
               onChange={handleSignupChange}
             />
-
             <AuthInput
               icon={Phone}
               type="text"
@@ -141,7 +146,6 @@ export default function AuthModal({ isOpen, onClose }) {
               value={signupData.phone}
               onChange={handleSignupChange}
             />
-
             <AuthInput
               icon={Mail}
               type="email"
@@ -150,7 +154,6 @@ export default function AuthModal({ isOpen, onClose }) {
               value={signupData.email}
               onChange={handleSignupChange}
             />
-
             <AuthInput
               icon={Lock}
               type="password"
@@ -160,12 +163,12 @@ export default function AuthModal({ isOpen, onClose }) {
               onChange={handleSignupChange}
             />
 
-            <button className="group w-full py-4 bg-[#8b7355] text-white rounded-2xl text-xs font-bold uppercase tracking-[0.2em] hover:bg-[#725e46] active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+            <button
+              type="submit"
+              className="group w-full py-4 bg-[#8b7355] text-white rounded-2xl text-xs font-bold uppercase tracking-[0.2em] hover:bg-[#725e46] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+            >
               Sign Up
-              <ArrowRight
-                size={14}
-                className="group-hover:translate-x-1 transition-transform"
-              />
+              <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
             </button>
           </form>
         </div>
@@ -193,6 +196,7 @@ export default function AuthModal({ isOpen, onClose }) {
               <SocialIcon Icon={Share2} />
             </div>
 
+            {/* ✅ name="emailOrPhone" matches loginData key and backend field */}
             <AuthInput
               icon={Mail}
               type="text"
@@ -201,7 +205,6 @@ export default function AuthModal({ isOpen, onClose }) {
               value={loginData.emailOrPhone}
               onChange={handleLoginChange}
             />
-
             <AuthInput
               icon={Lock}
               type="password"
@@ -211,16 +214,19 @@ export default function AuthModal({ isOpen, onClose }) {
               onChange={handleLoginChange}
             />
 
-            <button type="button" className="text-xs text-[#8b7355] mt-4 hover:text-[#3d342b] underline underline-offset-4 transition-colors">
+            <button
+              type="button"
+              className="text-xs text-[#8b7355] mt-4 hover:text-[#3d342b] underline underline-offset-4 transition-colors"
+            >
               Forgot your password?
             </button>
 
-            <button className="group mt-8 w-full py-4 bg-[#8b7355] text-white rounded-2xl text-xs font-bold uppercase tracking-[0.2em] hover:bg-[#725e46] active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+            <button
+              type="submit"
+              className="group mt-8 w-full py-4 bg-[#8b7355] text-white rounded-2xl text-xs font-bold uppercase tracking-[0.2em] hover:bg-[#725e46] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+            >
               Login
-              <ArrowRight
-                size={14}
-                className="group-hover:translate-x-1 transition-transform"
-              />
+              <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
             </button>
           </form>
         </div>
@@ -236,9 +242,7 @@ export default function AuthModal({ isOpen, onClose }) {
           >
             <div className="flex h-full w-full text-[#F5F2ED]">
               <div className="flex flex-col items-center justify-center w-1/2 px-12 text-center">
-                <h2 className="text-3xl font-serif font-bold mb-4">
-                  One of us?
-                </h2>
+                <h2 className="text-3xl font-serif font-bold mb-4">One of us?</h2>
                 <p className="text-white/80 text-sm mb-10 leading-relaxed font-light">
                   If you already have an account, just sign in.
                 </p>
@@ -252,9 +256,7 @@ export default function AuthModal({ isOpen, onClose }) {
               </div>
 
               <div className="flex flex-col items-center justify-center w-1/2 px-12 text-center">
-                <h2 className="text-3xl font-serif font-bold mb-4">
-                  Hello, Friend
-                </h2>
+                <h2 className="text-3xl font-serif font-bold mb-4">Hello, Friend</h2>
                 <p className="text-white/80 text-sm mb-10 leading-relaxed font-light">
                   Start your journey with us today.
                 </p>
@@ -275,7 +277,10 @@ export default function AuthModal({ isOpen, onClose }) {
 }
 
 const SocialIcon = ({ Icon }) => (
-  <button type="button" className="w-12 h-12 flex items-center justify-center border border-[#8b7355]/20 rounded-2xl text-[#8b7355] hover:bg-white hover:border-[#8b7355] transition-all shadow-sm">
+  <button
+    type="button"
+    className="w-12 h-12 flex items-center justify-center border border-[#8b7355]/20 rounded-2xl text-[#8b7355] hover:bg-white hover:border-[#8b7355] transition-all shadow-sm"
+  >
     <Icon size={18} />
   </button>
 );

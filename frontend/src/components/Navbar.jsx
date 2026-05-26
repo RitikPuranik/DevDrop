@@ -41,18 +41,13 @@ const Navbar = () => {
 
   const handleLogout = () => {
     localStorage.removeItem("token");
+    localStorage.removeItem("user");
     setIsLoggedIn(false);
+    setIsAdmin(false);
     setIsOpen(false);
   };
 
   const menuItems = [
-<<<<<<< HEAD
-    { to: "/", label: "Home", src: "https://images.unsplash.com/photo-1642543349642-0d04e91511c9?q=80&w=871" },
-    { to: "/template", label: "Websites", src: "https://images.unsplash.com/photo-1467232004584-a241de8bcf5d?q=80&w=869" },
-    { to: "/review", label: "People's Love", src: "https://plus.unsplash.com/premium_photo-1739436074076-3c6d73478d59?q=80&w=812" },
-    { to: "/contact", label: "Contact Us", src: "https://images.unsplash.com/photo-1534536281715-e28d76689b4d?q=80&w=870" },
-  
-=======
     {
       to: "/",
       label: "Home",
@@ -82,7 +77,6 @@ const Navbar = () => {
       src: "https://images.unsplash.com/photo-1534536281715-e28d76689b4d?q=80&w=870",
       hasSubMenu: false,
     },
->>>>>>> ad1656fb7a3510b266c270979522e49076f97b72
   ];
 
   const finalMenuItems = isLoggedIn
@@ -126,7 +120,6 @@ const Navbar = () => {
     navigate(`/template?filter=${filter}`);
   };
 
-  // Which image index to show on the right panel
   const activeImageIndex =
     websitesExpanded
       ? finalMenuItems.findIndex((m) => m.hasSubMenu)
@@ -250,7 +243,6 @@ const Navbar = () => {
 
             {/* RIGHT SIDE */}
             <div className="w-1/2 h-full relative bg-black overflow-hidden">
-              {/* Background image — dims when sub-menu is open */}
               <AnimatePresence initial={false}>
                 <motion.div
                   key={activeImageIndex}
@@ -268,7 +260,6 @@ const Navbar = () => {
                 </motion.div>
               </AnimatePresence>
 
-              {/* Sub-options panel overlay */}
               <AnimatePresence>
                 {websitesExpanded && (
                   <motion.div
@@ -329,14 +320,6 @@ const MenuItem = ({ item, onHover, onLeave, onClick, closeMenu, isDimmed, isExpa
       animate={{ y: 0 }}
       transition={{ duration: 0.5, ease: [0.19, 1, 0.22, 1] }}
     >
-<<<<<<< HEAD
-      <LinkTransition 
-        to={to} 
-        className={`text-[6.0vw] leading-[0.9] font-serif italic tracking-tighter block transition-all duration-300 cursor-pointer ${isDimmed ? 'opacity-30 scale-95' : 'opacity-100 scale-100'} text-black hover:opacity-100`}
-      >
-        {label}
-      </LinkTransition>
-=======
       {item.hasSubMenu ? (
         <span
           className={`text-[5.0vw] leading-[0.9] font-serif italic tracking-tighter block transition-all duration-300 cursor-pointer select-none text-black ${
@@ -363,7 +346,6 @@ const MenuItem = ({ item, onHover, onLeave, onClick, closeMenu, isDimmed, isExpa
           {item.label}
         </LinkTransition>
       )}
->>>>>>> ad1656fb7a3510b266c270979522e49076f97b72
     </motion.div>
   </div>
 );
