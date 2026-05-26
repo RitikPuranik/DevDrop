@@ -37,6 +37,7 @@ const Navbar = () => {
     { to: "/template", label: "Websites", src: "https://images.unsplash.com/photo-1467232004584-a241de8bcf5d?q=80&w=869" },
     { to: "/review", label: "People's Love", src: "https://plus.unsplash.com/premium_photo-1739436074076-3c6d73478d59?q=80&w=812" },
     { to: "/contact", label: "Contact Us", src: "https://images.unsplash.com/photo-1534536281715-e28d76689b4d?q=80&w=870" },
+  
   ];
 
   // 2. Conditionally add Sell & Profile for logged-in users
@@ -185,7 +186,7 @@ const MenuItem = ({ label, to, onHover, close, isDimmed }) => (
     >
       <LinkTransition 
         to={to} 
-        className={`text-[5.0vw] leading-[0.9] font-serif italic tracking-tighter block transition-all duration-300 cursor-pointer ${isDimmed ? 'opacity-30 scale-95' : 'opacity-100 scale-100'} text-black hover:opacity-100`}
+        className={`text-[6.0vw] leading-[0.9] font-serif italic tracking-tighter block transition-all duration-300 cursor-pointer ${isDimmed ? 'opacity-30 scale-95' : 'opacity-100 scale-100'} text-black hover:opacity-100`}
       >
         {label}
       </LinkTransition>
