@@ -1,4 +1,4 @@
-const resend = require('../shared/config/email');
+const transporter = require('../shared/config/email');
 const { EMAIL_SUBJECTS } = require('../shared/utils/constants');
 
 /**
@@ -6,25 +6,22 @@ const { EMAIL_SUBJECTS } = require('../shared/utils/constants');
  */
 const sendEmail = async ({ to, subject, html, from }) => {
   try {
-    const domain = process.env.EMAIL_DOMAIN || 'resend.dev';
-    const defaultFrom = domain === 'resend.dev' ? 'onboarding@resend.dev' : `hello@${domain}`;
-    const sender = from ? (domain === 'resend.dev' ? 'onboarding@resend.dev' : `${from}@${domain}`) : defaultFrom;
+    const defaultEmail = process.env.BREVO_USER || 'hello@yourdomain.com';
+    
+    // Capitalize the 'from' parameter and use it as the display name (e.g. "Sales <myemail@gmail.com>")
+    const displayName = from ? (from.charAt(0).toUpperCase() + from.slice(1)) : 'DevDrop';
+    const sender = `${displayName} <${defaultEmail}>`;
 
-    const data = await resend.emails.send({
+    const info = await transporter.sendMail({
       from: sender,
-      to: Array.isArray(to) ? to : [to],
+      to: Array.isArray(to) ? to.join(',') : to,
       subject,
       html,
     });
     
-    if (data.error) {
-      console.error('Resend error:', data.error);
-      throw new Error(data.error.message);
-    }
-    
-    return data;
+    return info;
   } catch (error) {
-    console.error('Failed to send email with Resend:', error);
+    console.error('Failed to send email with Brevo:', error);
     throw error;
   }
 };
