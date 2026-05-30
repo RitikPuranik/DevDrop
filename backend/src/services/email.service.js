@@ -1,17 +1,32 @@
-const transporter = require('../shared/config/email');
+const resend = require('../shared/config/email');
 const { EMAIL_SUBJECTS } = require('../shared/utils/constants');
 
 /**
  * Central send helper
  */
-const sendEmail = async ({ to, subject, html }) => {
-  const info = await transporter.sendMail({
-    from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
-    to: Array.isArray(to) ? to.join(',') : to,
-    subject,
-    html,
-  });
-  return info;
+const sendEmail = async ({ to, subject, html, from }) => {
+  try {
+    const domain = process.env.EMAIL_DOMAIN || 'resend.dev';
+    const defaultFrom = domain === 'resend.dev' ? 'onboarding@resend.dev' : `hello@${domain}`;
+    const sender = from ? (domain === 'resend.dev' ? 'onboarding@resend.dev' : `${from}@${domain}`) : defaultFrom;
+
+    const data = await resend.emails.send({
+      from: sender,
+      to: Array.isArray(to) ? to : [to],
+      subject,
+      html,
+    });
+    
+    if (data.error) {
+      console.error('Resend error:', data.error);
+      throw new Error(data.error.message);
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Failed to send email with Resend:', error);
+    throw error;
+  }
 };
 
 const sendVerificationEmail = async (user) => {
@@ -22,6 +37,7 @@ const sendVerificationEmail = async (user) => {
 
     await sendEmail({
       to: user.email,
+      from: 'accounts',
       subject: EMAIL_SUBJECTS.VERIFICATION,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -51,6 +67,7 @@ const sendWelcomeEmail = async (user) => {
   try {
     await sendEmail({
       to: user.email,
+      from: 'hello',
       subject: EMAIL_SUBJECTS.WELCOME,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -80,6 +97,7 @@ const sendPurchaseConfirmation = async (buyer, website, purchase) => {
   try {
     await sendEmail({
       to: buyer.email,
+      from: 'receipts',
       subject: EMAIL_SUBJECTS.PURCHASE_CONFIRMATION,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -111,6 +129,7 @@ const sendSellerNotification = async (seller, website, purchase) => {
   try {
     await sendEmail({
       to: seller.email,
+      from: 'sales',
       subject: EMAIL_SUBJECTS.SELLER_NOTIFICATION,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -149,6 +168,7 @@ const sendStatusUpdateEmail = async (seller, website, status, comment = '') => {
 
     await sendEmail({
       to: seller.email,
+      from: 'review',
       subject: EMAIL_SUBJECTS.STATUS_UPDATE,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -178,6 +198,7 @@ const sendPayoutNotification = async (seller, payout) => {
   try {
     await sendEmail({
       to: seller.email,
+      from: 'finance',
       subject: EMAIL_SUBJECTS.PAYOUT_NOTIFICATION,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -207,6 +228,7 @@ const sendPasswordResetEmail = async (user, token) => {
     const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
     await sendEmail({
       to: user.email,
+      from: 'security',
       subject: EMAIL_SUBJECTS.PASSWORD_RESET,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -238,6 +260,7 @@ const sendAdminAlert = async ({ subject, message, error, details }) => {
 
     await sendEmail({
       to: adminEmails,
+      from: 'system',
       subject: `🚨 ${subject}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px;">
