@@ -55,28 +55,27 @@ const uploadAdminWebsiteFiles = async (files) => {
 };
 
 /**
- * @route   GET /api/admin/websites/pending
- * @desc    Get pending websites for review
+ * @route   GET /api/admin/websites
+ * @desc    Get websites for admin (can filter by status)
  * @access  Admin only
  */
-const getPendingWebsites = async (req, res) => {
+const getAllWebsites = async (req, res) => {
   try {
-    const { page = 1, limit = 20 } = req.query;
+    const { page = 1, limit = 20, status } = req.query;
     const skip = (page - 1) * limit;
 
-    const websites = await Website.find({
-      status: WEBSITE_STATUS.PENDING_REVIEW,
-      isDeleted: false,
-    })
+    const query = { isDeleted: false };
+    if (status && status !== 'all') {
+      query.status = status;
+    }
+
+    const websites = await Website.find(query)
       .populate('sellerId', 'name email createdAt')
-      .sort({ createdAt: 1 }) // Oldest first
+      .sort({ createdAt: -1 }) // Newest first
       .skip(skip)
       .limit(parseInt(limit));
 
-    const total = await Website.countDocuments({
-      status: WEBSITE_STATUS.PENDING_REVIEW,
-      isDeleted: false,
-    });
+    const total = await Website.countDocuments(query);
 
     res.json({
       success: true,
@@ -84,10 +83,10 @@ const getPendingWebsites = async (req, res) => {
       pagination: getPaginationMetadata(parseInt(page), parseInt(limit), total),
     });
   } catch (error) {
-    console.error('Get pending websites error:', error);
+    console.error('Get websites error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error fetching pending websites',
+      message: 'Error fetching websites',
       error: error.message,
     });
   }
@@ -896,7 +895,7 @@ const processPayout = async (req, res) => {
 
 module.exports = {
   createWebsite,
-  getPendingWebsites,
+  getAllWebsites,
   requestChanges,
   rejectWebsite,
   approveWebsite,
