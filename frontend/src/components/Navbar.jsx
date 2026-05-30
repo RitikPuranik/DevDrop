@@ -14,23 +14,26 @@ const Navbar = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [websitesExpanded, setWebsitesExpanded] = useState(false);
   const [hoveredSubIndex, setHoveredSubIndex] = useState(null);
+  const [isMobile, setIsMobile] = useState(false);
+
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 1024);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const checkLoginStatus = async () => {
     const token = localStorage.getItem("token");
     setIsLoggedIn(!!token);
-    if (!token) {
-      setIsAdmin(false);
-      return;
-    }
-
+    if (!token) { setIsAdmin(false); return; }
     try {
       const res = await userAPI.getProfile();
       const role = res.data?.data?.user?.role;
       setIsAdmin(role === 'admin');
-    } catch {
-      setIsAdmin(false);
-    }
+    } catch { setIsAdmin(false); }
   };
 
   useEffect(() => {
@@ -88,16 +91,15 @@ const Navbar = () => {
           src: "https://images.unsplash.com/photo-1511367461989-f85a21fda167?q=80&w=1000",
           hasSubMenu: false,
         },
-        ...(isAdmin ? [{ to: "/admin", label: "Admin", src: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?q=80&w=1000", hasSubMenu: false }] : []),
+        ...(isAdmin
+          ? [{ to: "/admin", label: "Admin", src: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?q=80&w=1000", hasSubMenu: false }]
+          : []),
       ]
     : menuItems;
 
   const fastEase = [0.19, 1, 0.22, 1];
 
-  const openLogin = () => {
-    setIsOpen(false);
-    setShowAuthModal(true);
-  };
+  const openLogin = () => { setIsOpen(false); setShowAuthModal(true); };
 
   const closeMenu = () => {
     setIsOpen(false);
@@ -131,15 +133,15 @@ const Navbar = () => {
     <>
       <AuthModal
         isOpen={showAuthModal}
-        onClose={() => {
-          setShowAuthModal(false);
-          checkLoginStatus();
-        }}
+        onClose={() => { setShowAuthModal(false); checkLoginStatus(); }}
       />
 
       {/* NAVBAR TOP STRIP */}
-      <nav className="fixed top-0 w-full px-12 py-8 flex justify-between items-center z-[110] mix-blend-difference pointer-events-none">
-        <LinkTransition to="/" className="text-blue-50 font-serif italic text-3xl tracking-tighter pointer-events-auto">
+      <nav className="fixed top-0 w-full px-5 sm:px-8 lg:px-12 py-5 sm:py-6 lg:py-8 flex justify-between items-center z-[110] mix-blend-difference pointer-events-none">
+        <LinkTransition
+          to="/"
+          className="text-blue-50 font-serif italic text-2xl sm:text-3xl tracking-tighter pointer-events-auto"
+        >
           devdrop
         </LinkTransition>
 
@@ -154,7 +156,7 @@ const Navbar = () => {
               setIsOpen(true);
             }
           }}
-          className="w-12 h-12 flex flex-col justify-center items-center gap-1.5 cursor-pointer relative group pointer-events-auto"
+          className="w-10 h-10 sm:w-12 sm:h-12 flex flex-col justify-center items-center gap-1.5 cursor-pointer relative group pointer-events-auto"
         >
           <AnimatePresence>
             {isOpen && (
@@ -166,16 +168,15 @@ const Navbar = () => {
               />
             )}
           </AnimatePresence>
-
           <motion.div
             animate={isOpen ? { rotate: 45, y: 4, backgroundColor: "#000" } : { rotate: 0, y: 0, backgroundColor: "#e8e2d6" }}
             transition={{ duration: 0.9, ease: fastEase }}
-            className="w-8 h-[2px]"
+            className="w-7 sm:w-8 h-[2px]"
           />
           <motion.div
             animate={isOpen ? { rotate: -45, y: -4, backgroundColor: "#000" } : { rotate: 0, y: 0, backgroundColor: "#e8e2d6" }}
             transition={{ duration: 0.9, ease: fastEase }}
-            className="w-8 h-[2px]"
+            className="w-7 sm:w-8 h-[2px]"
           />
         </button>
       </nav>
@@ -188,11 +189,28 @@ const Navbar = () => {
             animate={{ y: 0 }}
             exit={{ y: "-100%" }}
             transition={{ duration: 0.6, ease: fastEase }}
-            className="fixed inset-0 z-[100] flex bg-[#e8e2d6] overflow-hidden"
+            className="fixed inset-0 z-[100] overflow-hidden
+                        flex flex-col lg:flex-row
+                        bg-[#e8e2d6]"
           >
-            {/* LEFT SIDE */}
-            <div className="mt-12 w-1/2 h-full flex flex-col justify-center text-center pb-12 px-24">
-              <div className="flex flex-col -ml-5 mb-8">
+
+            {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                LEFT / MENU PANEL
+                — Full width on mobile, half width on desktop
+                — On mobile: takes ~60% of screen height (flex-[3])
+                — On desktop: takes 50% width, full height (original)
+            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+            <div className="
+              flex-[3] lg:flex-none
+              w-full lg:w-1/2
+              lg:h-full
+              flex flex-col justify-center text-center
+              pt-24 pb-6 sm:pt-28 sm:pb-8 lg:pt-0 lg:pb-12
+              px-6 sm:px-14 md:px-20 lg:px-24
+              overflow-y-auto
+            ">
+              {/* Menu links */}
+              <div className="flex flex-col w-full mb-5 sm:mb-8 -ml-0 lg:-ml-5">
                 {finalMenuItems.map((item, index) => {
                   const anyHovered = hoveredIndex !== null;
                   const isDimmed = anyHovered
@@ -206,33 +224,58 @@ const Navbar = () => {
                       key={`${isLoggedIn}-${index}`}
                       item={item}
                       isDimmed={isDimmed}
-                      onHover={() => setHoveredIndex(index)}
-                      onLeave={() => setHoveredIndex(null)}
+                      onHover={() => !isMobile && setHoveredIndex(index)}
+                      onLeave={() => !isMobile && setHoveredIndex(null)}
                       onClick={() => handleMenuItemClick(item)}
                       closeMenu={closeMenu}
                       isExpanded={item.hasSubMenu && websitesExpanded}
                     />
                   );
                 })}
+
+                {/* Mobile inline sub-menu — expands below "Websites" */}
+                <AnimatePresence>
+                  {websitesExpanded && isMobile && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.35, ease: fastEase }}
+                      className="overflow-hidden pl-5"
+                    >
+                      {finalMenuItems
+                        .find((m) => m.hasSubMenu)
+                        ?.subItems.map((sub, si) => (
+                          <MobileSubMenuItem
+                            key={sub.filter}
+                            label={sub.label}
+                            index={si}
+                            onClick={() => handleSubItemClick(sub.filter)}
+                          />
+                        ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
+              {/* Auth button */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3, duration: 0.6, ease: fastEase }}
-                className="flex flex-col items-center -ml-5"
+                className="flex flex-col items-center w-full -ml-0 lg:-ml-5"
               >
                 {!isLoggedIn ? (
                   <button
                     onClick={openLogin}
-                    className="px-12 py-4 bg-[#8b7355] text-white rounded-full font-bold tracking-widest uppercase text-[10px] hover:bg-black transition-all duration-500 shadow-lg active:scale-95"
+                    className="px-10 sm:px-12 py-3 sm:py-4 bg-[#8b7355] text-white rounded-full font-bold tracking-widest uppercase text-[10px] hover:bg-black transition-all duration-500 shadow-lg active:scale-95"
                   >
                     Login
                   </button>
                 ) : (
                   <button
                     onClick={handleLogout}
-                    className="flex items-center gap-2 px-8 py-3 bg-[#8b7355] text-white rounded-full text-[10px] uppercase tracking-[0.2em] font-bold hover:bg-black transition-all duration-500 shadow-lg active:scale-95"
+                    className="flex items-center gap-2 px-7 sm:px-8 py-2.5 sm:py-3 bg-[#8b7355] text-white rounded-full text-[10px] uppercase tracking-[0.2em] font-bold hover:bg-black transition-all duration-500 shadow-lg active:scale-95"
                   >
                     <LogOut size={14} />
                     Logout
@@ -241,8 +284,19 @@ const Navbar = () => {
               </motion.div>
             </div>
 
-            {/* RIGHT SIDE */}
-            <div className="w-1/2 h-full relative bg-black overflow-hidden">
+            {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                RIGHT / IMAGE PANEL
+                — On desktop: right half, full height (original)
+                — On mobile: bottom strip, ~40% screen height (flex-[2])
+                  with the same crossfade image + sub-menu overlay
+            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+            <div className="
+              flex-[2] lg:flex-none
+              w-full lg:w-1/2
+              min-h-[38vh] sm:min-h-[40vh] lg:min-h-0 lg:h-full
+              relative bg-black overflow-hidden
+            ">
+              {/* Crossfading image — same logic on both mobile and desktop */}
               <AnimatePresence initial={false}>
                 <motion.div
                   key={activeImageIndex}
@@ -260,8 +314,11 @@ const Navbar = () => {
                 </motion.div>
               </AnimatePresence>
 
+              {/* Sub-menu overlay on image panel
+                  Desktop: shown when websitesExpanded (original behaviour)
+                  Mobile:  hidden — sub-menu renders inline in the menu panel above */}
               <AnimatePresence>
-                {websitesExpanded && (
+                {websitesExpanded && !isMobile && (
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
@@ -277,13 +334,11 @@ const Navbar = () => {
                     >
                       Websites
                     </motion.p>
-
                     <div className="flex flex-col">
                       {finalMenuItems
                         .find((m) => m.hasSubMenu)
                         ?.subItems.map((sub, si) => {
-                          const isSubDimmed =
-                            hoveredSubIndex !== null && hoveredSubIndex !== si;
+                          const isSubDimmed = hoveredSubIndex !== null && hoveredSubIndex !== si;
                           return (
                             <SubMenuItem
                               key={sub.filter}
@@ -301,6 +356,7 @@ const Navbar = () => {
                 )}
               </AnimatePresence>
             </div>
+
           </motion.div>
         )}
       </AnimatePresence>
@@ -308,9 +364,10 @@ const Navbar = () => {
   );
 };
 
+/* ─── Menu Item ──────────────────────────────────────────────────── */
 const MenuItem = ({ item, onHover, onLeave, onClick, closeMenu, isDimmed, isExpanded }) => (
   <div
-    className="overflow-hidden py-1"
+    className="overflow-hidden py-0.5 sm:py-1"
     onMouseEnter={onHover}
     onMouseLeave={onLeave}
     onClick={onClick}
@@ -322,15 +379,18 @@ const MenuItem = ({ item, onHover, onLeave, onClick, closeMenu, isDimmed, isExpa
     >
       {item.hasSubMenu ? (
         <span
-          className={`text-[5.0vw] leading-[0.9] font-serif italic tracking-tighter block transition-all duration-300 cursor-pointer select-none text-black ${
-            isDimmed ? 'opacity-20' : 'opacity-100'
-          }`}
+          className={`
+            text-[11vw] sm:text-[8vw] lg:text-[5.0vw]
+            leading-[0.9] font-serif italic tracking-tighter
+            block transition-all duration-300 cursor-pointer select-none text-black
+            ${isDimmed ? 'opacity-20' : 'opacity-100'}
+          `}
         >
           {item.label}
           <motion.span
             animate={{ x: isExpanded ? 6 : 0, opacity: isExpanded ? 1 : 0.4 }}
             transition={{ duration: 0.3 }}
-            className="inline-block ml-2 text-[2.8vw] align-middle"
+            className="inline-block ml-2 text-[5.5vw] sm:text-[4vw] lg:text-[2.8vw] align-middle"
           >
             ›
           </motion.span>
@@ -339,9 +399,12 @@ const MenuItem = ({ item, onHover, onLeave, onClick, closeMenu, isDimmed, isExpa
         <LinkTransition
           to={item.to}
           onClick={closeMenu}
-          className={`text-[5.0vw] leading-[0.9] font-serif italic tracking-tighter block transition-all duration-300 cursor-pointer text-black ${
-            isDimmed ? 'opacity-20' : 'opacity-100'
-          }`}
+          className={`
+            text-[11vw] sm:text-[8vw] lg:text-[5.0vw]
+            leading-[0.9] font-serif italic tracking-tighter
+            block transition-all duration-300 cursor-pointer text-black
+            ${isDimmed ? 'opacity-20' : 'opacity-100'}
+          `}
         >
           {item.label}
         </LinkTransition>
@@ -350,6 +413,7 @@ const MenuItem = ({ item, onHover, onLeave, onClick, closeMenu, isDimmed, isExpa
   </div>
 );
 
+/* ─── Desktop Sub-Menu Item (image panel overlay) ────────────────── */
 const SubMenuItem = ({ label, index, isDimmed, onHover, onLeave, onClick }) => (
   <motion.div
     initial={{ opacity: 0, x: 24 }}
@@ -361,10 +425,27 @@ const SubMenuItem = ({ label, index, isDimmed, onHover, onLeave, onClick }) => (
     onClick={onClick}
   >
     <span
-      className={`text-[5.0vw] leading-[0.9] font-serif italic tracking-tighter block transition-all duration-300 cursor-pointer select-none text-[#e8e2d6] ${
-        isDimmed ? 'opacity-20' : 'opacity-100'
-      }`}
+      className={`
+        text-[5.0vw] leading-[0.9] font-serif italic tracking-tighter
+        block transition-all duration-300 cursor-pointer select-none text-[#e8e2d6]
+        ${isDimmed ? 'opacity-20' : 'opacity-100'}
+      `}
     >
+      {label}
+    </span>
+  </motion.div>
+);
+
+/* ─── Mobile Sub-Menu Item (inline in menu panel) ────────────────── */
+const MobileSubMenuItem = ({ label, index, onClick }) => (
+  <motion.div
+    initial={{ opacity: 0, x: 16 }}
+    animate={{ opacity: 1, x: 0 }}
+    transition={{ delay: index * 0.07 + 0.05, duration: 0.4, ease: [0.19, 1, 0.22, 1] }}
+    className="overflow-hidden py-0.5"
+    onClick={onClick}
+  >
+    <span className="text-[8.5vw] sm:text-[6.5vw] leading-[0.95] font-serif italic tracking-tighter block cursor-pointer select-none text-[#8b7355]">
       {label}
     </span>
   </motion.div>
