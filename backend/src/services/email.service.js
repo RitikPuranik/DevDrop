@@ -1,4 +1,4 @@
-const SibApiV3Sdk = require('@getbrevo/brevo');
+const Brevo = require('@getbrevo/brevo');
 const apiInstance = require('../shared/config/email');
 const { EMAIL_SUBJECTS } = require('../shared/utils/constants');
 
@@ -12,7 +12,7 @@ const sendEmail = async ({ to, subject, html, from }) => {
       ? from.charAt(0).toUpperCase() + from.slice(1)
       : 'DevDrop';
 
-    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+    const sendSmtpEmail = new Brevo.SendSmtpEmail();
 
     sendSmtpEmail.sender = { name: displayName, email: defaultEmail };
     sendSmtpEmail.to = Array.isArray(to)
