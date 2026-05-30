@@ -350,7 +350,7 @@ export default function Profile() {
   }
 
   const stats = [
-    { label: 'Uploaded', value: dashboard?.uploadedWebsites || 0, icon: Upload, color: '#f97316' },
+    { label: 'Approved', value: dashboard?.uploadedWebsites || 0, icon: Upload, color: '#f97316' },
     { label: 'Purchased', value: dashboard?.purchases || 0, icon: ShoppingBag, color: '#a78bfa' },
     { label: 'Wishlisted', value: dashboard?.wishlistCount || 0, icon: Heart, color: '#fb7185' },
     { label: 'Earnings', value: `₹${dashboard?.totalEarnings || 0}`, icon: DollarSign, color: '#34d399' },

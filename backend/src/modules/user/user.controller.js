@@ -72,7 +72,7 @@ const getDashboard = async (req, res) => {
   try {
     const userId = req.userId;
     const [uploadedWebsites, purchases, wishlistCount, earnings, pendingPayouts] = await Promise.all([
-      Website.countDocuments({ sellerId: userId, isDeleted: false }),
+      Website.countDocuments({ sellerId: userId, status: 'approved', isDeleted: false }),
       Purchase.countDocuments({ buyerId: userId, paymentStatus: 'completed' }),
       Wishlist.countDocuments({ userId }),
       Purchase.aggregate([{ $match: { sellerId: userId, paymentStatus: 'completed' } }, { $group: { _id: null, total: { $sum: '$sellerPrice' } } }]),
