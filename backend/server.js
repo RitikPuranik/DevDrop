@@ -24,6 +24,14 @@ const startServer = async () => {
     console.warn('⚠️  Auction cron not started:', e.message);
   }
 
+  try {
+    const supabaseCleanupCron = require('./src/services/supabase.cleanup.cron.service');
+    supabaseCleanupCron.startSupabaseCleanupCron();
+    console.log('✅ Supabase cleanup cron jobs started');
+  } catch (e) {
+    console.warn('⚠️  Supabase cleanup cron not started:', e.message);
+  }
+
   app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
   });
