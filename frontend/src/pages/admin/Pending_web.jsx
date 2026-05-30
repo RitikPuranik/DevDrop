@@ -169,7 +169,7 @@ function ConfirmModal({ open, title, description, confirmLabel, confirmColor, on
 }
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
-function PendingWebsites() {
+export default function PendingWebsites() {
   const navigate = useNavigate();
   const [websites, setWebsites] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -457,6 +457,3 @@ function PendingWebsites() {
     </div>
   );
 }
-
-export { PendingWebsites };
-export default PendingWebsites;
