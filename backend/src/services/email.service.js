@@ -6,7 +6,7 @@ const { EMAIL_SUBJECTS } = require('../shared/utils/constants');
  */
 const sendEmail = async ({ to, subject, html, from }) => {
   try {
-    const defaultEmail = process.env.BREVO_USER || 'hello@yourdomain.com';
+    const defaultEmail = process.env.EMAIL_FROM || 'hello@yourdomain.com';
     
     // Capitalize the 'from' parameter and use it as the display name (e.g. "Sales <myemail@gmail.com>")
     const displayName = from ? (from.charAt(0).toUpperCase() + from.slice(1)) : 'DevDrop';
