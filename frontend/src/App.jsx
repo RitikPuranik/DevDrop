@@ -14,12 +14,14 @@ import Template from './pages/Templates';
 import ContactUs from './pages/ContactUs';
 import ReviewPage from './pages/Review';
 import Profile from './pages/Profile';
+import PurchaseAccess from './pages/PurchaseAccess';
 import Admin from './pages/Admin';
 import WebsiteDetail from './pages/WebsiteDetail';
 import Auctions from './pages/Auctions';
 import Checkout from './pages/Checkout';
 
 import VerifyEmail from './pages/VerifyEmail';
+import ResetPassword from './pages/ResetPassword';
 import AdminDashboard from "./pages/admin/Dashboard";
 import PendingWebsites from "./pages/admin/Pending_web";
 import ProcessPayouts from "./pages/admin/Pending_payout";
@@ -32,10 +34,12 @@ function AppContent() {
   const location = useLocation();
   const isBuilder = location.pathname === "/website";
   const isVerifyEmail = location.pathname === "/verify-email";
+  const isResetPassword = location.pathname === "/reset-password";
+  const isStandaloneAuthPage = isVerifyEmail || isResetPassword;
 
-  // Suppress intro for verify-email — it opens in a fresh tab from an email
+  // Suppress intro for email-driven auth pages since they open from links outside the app.
   // link so sessionStorage is empty. Set synchronously before useState runs.
-  if (isVerifyEmail) {
+  if (isStandaloneAuthPage) {
     sessionStorage.setItem('devdrop_intro_seen', 'true');
   }
 
@@ -104,10 +108,10 @@ function AppContent() {
 
       {appReady && (
         <>
-          {!isVerifyEmail && <Loader suppressOnce={suppressNextLoader} />}
+          {!isStandaloneAuthPage && <Loader suppressOnce={suppressNextLoader} />}
 
-          {/* Hide Navbar on Builder and VerifyEmail */}
-          {!isBuilder && !isVerifyEmail && <Navbar />}
+          {/* Hide Navbar on Builder and standalone auth pages */}
+          {!isBuilder && !isStandaloneAuthPage && <Navbar />}
 
           <main className="bg-black min-h-screen">
 
@@ -130,12 +134,14 @@ function AppContent() {
               <Route path="/contact" element={<ContactUs />} />
               <Route path="/review" element={<ReviewPage />} />
               <Route path="/profile" element={<Profile />} />
+              <Route path="/purchases/:purchaseId" element={<PurchaseAccess />} />
               <Route path="/admin" element={<Admin />} />
               <Route path="/website/:id" element={<WebsiteDetail />} />
               <Route path="/checkout/:id" element={<Checkout />} />
               <Route path="/auctions" element={<Auctions />} />
 
               <Route path="/verify-email" element={<VerifyEmail />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/admin/dashboard" element={<AdminDashboard />} />
               <Route path="/admin/websites/pending" element={<PendingWebsites />} />
               <Route path="/admin/payouts/pending" element={<ProcessPayouts />} />
@@ -157,8 +163,8 @@ function AppContent() {
             />
           </main>
 
-          {/* Hide Footer on Builder and VerifyEmail */}
-          {!isBuilder && !isVerifyEmail && <Footer />}
+          {/* Hide Footer on Builder and standalone auth pages */}
+          {!isBuilder && !isStandaloneAuthPage && <Footer />}
         </>
       )}
     </>

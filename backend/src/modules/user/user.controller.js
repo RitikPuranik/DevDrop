@@ -97,7 +97,7 @@ const getPurchases = async (req, res) => {
     const purchases = await Purchase.find({ buyerId: req.userId, paymentStatus: 'completed' })
       .populate({
         path: 'websiteId',
-        select: 'name description techStack category price deployedUrl githubUrl previewUrl files previewVideoUrl sellerId',
+        select: 'name description techStack category price deployedUrl previewUrl files previewVideoUrl sellerId',
         populate: {
           path: 'sellerId',
           select: 'name email',

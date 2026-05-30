@@ -18,30 +18,50 @@ const Navbar = () => {
 
   const checkLoginStatus = async () => {
     const token = localStorage.getItem("token");
+    const storedUser = localStorage.getItem("user");
+    let parsedUser = null;
+    try {
+      parsedUser = storedUser ? JSON.parse(storedUser) : null;
+    } catch {
+      parsedUser = null;
+    }
     setIsLoggedIn(!!token);
     if (!token) {
       setIsAdmin(false);
       return;
     }
 
+    if (parsedUser?.role) {
+      setIsAdmin(parsedUser.role === 'admin');
+    }
+
     try {
       const res = await userAPI.getProfile();
-      const role = res.data?.data?.user?.role;
+      const freshUser = res.data?.data?.user;
+      const role = freshUser?.role;
+      if (freshUser) {
+        localStorage.setItem("user", JSON.stringify(freshUser));
+      }
       setIsAdmin(role === 'admin');
     } catch {
-      setIsAdmin(false);
+      setIsAdmin(parsedUser?.role === 'admin');
     }
   };
 
   useEffect(() => {
     checkLoginStatus();
     window.addEventListener('storage', checkLoginStatus);
-    return () => window.removeEventListener('storage', checkLoginStatus);
+    window.addEventListener('auth-changed', checkLoginStatus);
+    return () => {
+      window.removeEventListener('storage', checkLoginStatus);
+      window.removeEventListener('auth-changed', checkLoginStatus);
+    };
   }, []);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
+    window.dispatchEvent(new Event("auth-changed"));
     setIsLoggedIn(false);
     setIsAdmin(false);
     setIsOpen(false);

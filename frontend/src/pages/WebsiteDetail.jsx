@@ -231,7 +231,6 @@ export default function WebsiteDetail() {
   const isExclusive = website.category === 'exclusive';
   const previewTarget = website.previewUrl || website.deployedUrl;
   const previewVideo = website.files?.previewVideo?.url || null;
-  const sellerGithub = purchased ? (assets?.githubRepo?.url || website.githubUrl || null) : null;
   const liveDeployment = assets?.deployedPreview?.url || website.deployedUrl || null;
   const shortPreviewAccess = purchased ? (assets?.previewVideo?.url || previewVideo || null) : null;
 
@@ -314,16 +313,6 @@ export default function WebsiteDetail() {
                     <h3 className="text-[10px] font-bold uppercase tracking-[0.3em] text-emerald-400">Purchase Access</h3>
                   </div>
                   <div className="grid gap-3 mb-4">
-                    {sellerGithub && (
-                      <a href={sellerGithub} target="_blank" rel="noreferrer"
-                        className="flex items-center justify-between px-6 py-5 bg-[#111] border border-emerald-500/10 rounded-2xl hover:border-emerald-500/30 transition-all group">
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center"><FileCode size={18} className="text-emerald-400" /></div>
-                          <div><p className="text-sm font-bold">Seller GitHub Repo</p><p className="text-[10px] text-white/25 mt-0.5">Provided by the creator after purchase</p></div>
-                        </div>
-                        <ExternalLink size={16} className="text-white/20 group-hover:text-emerald-400 transition-colors" />
-                      </a>
-                    )}
                     {liveDeployment && (
                       <a href={liveDeployment} target="_blank" rel="noreferrer"
                         className="flex items-center justify-between px-6 py-5 bg-[#111] border border-white/5 rounded-2xl hover:border-white/15 transition-all group">

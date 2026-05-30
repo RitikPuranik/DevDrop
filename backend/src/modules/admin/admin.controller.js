@@ -177,9 +177,8 @@ const createWebsite = async (req, res) => {
     if (previewUrl && previewUrl.trim().length > 0) {
       website.previewUrl = previewUrl.trim();
     }
-    if (githubUrl && githubUrl.trim().length > 0) {
-      website.githubUrl = githubUrl.trim();
-    }
+    // GitHub repo is only needed during admin review, not after publish.
+    website.githubUrl = undefined;
     website.sourceCodeUrl = sourceCodeData.path;
     website.docsUrl = docsData.path;
     if (videoData) {
@@ -476,9 +475,8 @@ const approveWebsite = async (req, res) => {
 
     website.deployedUrl = resolvedDeployedLink;
     website.previewUrl = resolvedPreviewUrl;
-    if (resolvedGithubUrl) {
-      website.githubUrl = resolvedGithubUrl;
-    }
+    // GitHub repo is only needed during admin review, not after approval.
+    website.githubUrl = undefined;
 
     // Build clean files object — strip any undefined sub-docs from the existing record
     const existingFiles = website.files ? website.files.toObject?.() || website.files : {};
