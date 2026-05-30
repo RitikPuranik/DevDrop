@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   User, Package, Heart, DollarSign, Upload, ShoppingBag, 
   ExternalLink, Trash2, Loader2, LogOut, Plus, AlertCircle,
-  ArrowLeft, Download, CheckCircle 
+  ArrowLeft, Download, CheckCircle, Landmark
 } from 'lucide-react';
 import { userAPI } from '../api/user';
 import { sellerAPI } from '../api/seller';
@@ -18,6 +18,7 @@ const TABS = [
   { id: 'listings', label: 'My Listings', icon: Upload },
   { id: 'purchases', label: 'Purchases', icon: ShoppingBag },
   { id: 'wishlist', label: 'Wishlist', icon: Heart },
+  { id: 'bankDetails', label: 'Payout Details', icon: Landmark },
 ];
 
 const TECH_OPTIONS = {
@@ -130,6 +131,14 @@ export default function Profile() {
   const [wishlist, setWishlist] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // --- BANK DETAILS STATE ---
+  const [bankDetails, setBankDetails] = useState({
+    upiId: '',
+    phoneNumber: ''
+  });
+  const [loadingBankDetails, setLoadingBankDetails] = useState(false);
+  const [savingBankDetails, setSavingBankDetails] = useState(false);
+
   // --- SELLING FORM STATE ---
   const [isAddingListing, setIsAddingListing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -157,6 +166,7 @@ export default function Profile() {
     if (activeTab === 'listings') fetchListings();
     else if (activeTab === 'purchases') fetchPurchases();
     else if (activeTab === 'wishlist') fetchWishlist();
+    else if (activeTab === 'bankDetails') fetchBankDetails();
   }, [activeTab]);
 
   const fetchProfile = async () => {
@@ -213,6 +223,36 @@ export default function Profile() {
       const res = await wishlistAPI.getWishlist();
       setWishlist(res.data?.data || []);
     } catch { setWishlist([]); }
+  };
+
+  const fetchBankDetails = async () => {
+    try {
+      setLoadingBankDetails(true);
+      const res = await userAPI.getBankDetails();
+      if (res.data?.data) {
+        setBankDetails(res.data.data);
+      }
+    } catch (err) {
+      if (err.response?.status !== 404) {
+        toast.error('Failed to load bank details');
+      }
+    } finally {
+      setLoadingBankDetails(false);
+    }
+  };
+
+  const handleSaveBankDetails = async (e) => {
+    e.preventDefault();
+    try {
+      setSavingBankDetails(true);
+      await userAPI.saveBankDetails(bankDetails);
+      toast.success('Payout details saved successfully');
+      setProfile(prev => ({ ...prev, hasBankDetails: true }));
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to save bank details');
+    } finally {
+      setSavingBankDetails(false);
+    }
   };
 
   // --- ACTIONS ---
@@ -662,6 +702,60 @@ export default function Profile() {
                   ))}
                 </div>
               )}
+            </motion.div>
+          )}
+
+          {activeTab === 'bankDetails' && (
+            <motion.div key="bankDetails" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+              <div className="max-w-2xl mx-auto">
+                <div className="mb-8">
+                  <h2 className="text-xl font-bold tracking-tight">Payout Details</h2>
+                  <p className="text-white/40 text-xs mt-1">Manage your payout account information. We use UPI and Phone Number for payments.</p>
+                </div>
+                
+                {loadingBankDetails ? (
+                  <div className="flex justify-center py-10">
+                    <Loader2 className="animate-spin text-[#8b7355]" size={32} />
+                  </div>
+                ) : (
+                  <form onSubmit={handleSaveBankDetails} className="space-y-6">
+                    <div className="bg-[#111] border border-white/5 rounded-3xl p-6 md:p-8 space-y-6 hover:border-white/10 transition-all">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <label className="text-[9px] uppercase tracking-widest text-[#8b7355] block font-bold">UPI ID</label>
+                          <input 
+                            required
+                            className="w-full bg-black/40 border border-white/5 rounded-2xl px-4 py-3 text-sm outline-none focus:border-[#8b7355]/50 transition-colors" 
+                            placeholder="username@upi"
+                            value={bankDetails.upiId || ''}
+                            onChange={(e) => setBankDetails({...bankDetails, upiId: e.target.value})}
+                          />
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <label className="text-[9px] uppercase tracking-widest text-[#8b7355] block font-bold">Phone Number</label>
+                          <input 
+                            required
+                            type="tel"
+                            className="w-full bg-black/40 border border-white/5 rounded-2xl px-4 py-3 text-sm outline-none focus:border-[#8b7355]/50 transition-colors" 
+                            placeholder="+91 9876543210"
+                            value={bankDetails.phoneNumber || ''}
+                            onChange={(e) => setBankDetails({...bankDetails, phoneNumber: e.target.value})}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <button 
+                      type="submit" 
+                      disabled={savingBankDetails} 
+                      className="w-full py-4 bg-[#8b7355] text-white rounded-3xl font-bold text-xs uppercase tracking-widest hover:bg-[#725e46] transition-all flex items-center justify-center gap-2"
+                    >
+                      {savingBankDetails ? <Loader2 className="animate-spin" size={16} /> : <><CheckCircle size={16} /> Save Payout Details</>}
+                    </button>
+                  </form>
+                )}
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
