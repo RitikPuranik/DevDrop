@@ -16,7 +16,10 @@ import { toast } from "sonner";
 
 export default function AuthModal({ isOpen, onClose }) {
   const [isSignUp, setIsSignUp] = useState(false);
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
   const navigate = useNavigate();
 
   const [loginData, setLoginData] = useState({
@@ -49,6 +52,7 @@ export default function AuthModal({ isOpen, onClose }) {
       // ✅ Persist both token AND user (role lives here)
       localStorage.setItem("token", token);
       localStorage.setItem("user", JSON.stringify(user));
+      window.dispatchEvent(new Event("auth-changed"));
 
       toast.success("Login successful!");
       onClose();
@@ -57,7 +61,7 @@ export default function AuthModal({ isOpen, onClose }) {
       if (user.role === "admin") {
         navigate("/admin/dashboard");
       } else {
-        navigate("/dashboard");
+        navigate("/profile");
       }
     } catch (err) {
       toast.error(err.response?.data?.message || "Login failed");
@@ -74,6 +78,7 @@ export default function AuthModal({ isOpen, onClose }) {
       // ✅ Persist after signup too
       localStorage.setItem("token", token);
       localStorage.setItem("user", JSON.stringify(user));
+      window.dispatchEvent(new Event("auth-changed"));
 
       toast.success("Account created! Please verify your email.");
       setIsSignUp(false);
@@ -82,8 +87,44 @@ export default function AuthModal({ isOpen, onClose }) {
     }
   };
 
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+
+    const email = forgotEmail.trim();
+    if (!email) {
+      toast.error("Please enter your email address");
+      return;
+    }
+
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(email)) {
+      toast.error("Please enter a valid email address");
+      return;
+    }
+
+    try {
+      setForgotLoading(true);
+      await authAPI.forgotPassword(email);
+      toast.success("If this email exists, a reset link has been sent");
+      setLoginData((prev) => ({ ...prev, emailOrPhone: email }));
+      setIsForgotPassword(false);
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to send reset link");
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
   useEffect(() => {
-    if (isOpen) setShouldRender(true);
+    if (isOpen) {
+      setShouldRender(true);
+      setIsForgotPassword(false);
+      return;
+    }
+
+    setIsForgotPassword(false);
+    setForgotEmail("");
+    setForgotLoading(false);
   }, [isOpen]);
 
   if (!shouldRender) return null;
@@ -178,57 +219,102 @@ export default function AuthModal({ isOpen, onClose }) {
           className={`absolute top-0 h-full w-1/2 transition-all duration-700 ease-in-out left-0 z-[2]
           ${isSignUp ? "translate-x-full opacity-0" : "opacity-100"}`}
         >
-          <form
-            className="flex flex-col items-center justify-center h-full px-12 text-center"
-            onSubmit={handleLogin}
-          >
-            <h2 className="text-4xl font-serif font-bold text-[#3d342b] mb-2">
-              Welcome
-            </h2>
-
-            <p className="text-[#8b7355] mb-6 text-sm">
-              Please enter your credentials
-            </p>
-
-            <div className="flex gap-3 mb-6">
-              <SocialIcon Icon={Globe} />
-              <SocialIcon Icon={Code2} />
-              <SocialIcon Icon={Share2} />
-            </div>
-
-            {/* ✅ name="emailOrPhone" matches loginData key and backend field */}
-            <AuthInput
-              icon={Mail}
-              type="text"
-              placeholder="Email or Phone"
-              name="emailOrPhone"
-              value={loginData.emailOrPhone}
-              onChange={handleLoginChange}
-            />
-            <AuthInput
-              icon={Lock}
-              type="password"
-              placeholder="Password"
-              name="password"
-              value={loginData.password}
-              onChange={handleLoginChange}
-            />
-
-            <button
-              type="button"
-              className="text-xs text-[#8b7355] mt-4 hover:text-[#3d342b] underline underline-offset-4 transition-colors"
+          {isForgotPassword ? (
+            <form
+              className="flex flex-col items-center justify-center h-full px-12 text-center"
+              onSubmit={handleForgotPassword}
             >
-              Forgot your password?
-            </button>
+              <h2 className="text-4xl font-serif font-bold text-[#3d342b] mb-2">
+                Reset Password
+              </h2>
 
-            <button
-              type="submit"
-              className="group mt-8 w-full py-4 bg-[#8b7355] text-white rounded-2xl text-xs font-bold uppercase tracking-[0.2em] hover:bg-[#725e46] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+              <p className="text-[#8b7355] mb-8 text-sm leading-relaxed">
+                Enter the email linked to your account and we&apos;ll send you a reset link.
+              </p>
+
+              <AuthInput
+                icon={Mail}
+                type="email"
+                placeholder="Email"
+                name="forgotEmail"
+                value={forgotEmail}
+                onChange={(e) => setForgotEmail(e.target.value)}
+              />
+
+              <button
+                type="submit"
+                disabled={forgotLoading}
+                className="group mt-4 w-full py-4 bg-[#8b7355] text-white rounded-2xl text-xs font-bold uppercase tracking-[0.2em] hover:bg-[#725e46] active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {forgotLoading ? "Sending..." : "Send Reset Link"}
+                <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsForgotPassword(false)}
+                className="text-xs text-[#8b7355] mt-5 hover:text-[#3d342b] underline underline-offset-4 transition-colors"
+              >
+                Back to login
+              </button>
+            </form>
+          ) : (
+            <form
+              className="flex flex-col items-center justify-center h-full px-12 text-center"
+              onSubmit={handleLogin}
             >
-              Login
-              <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
-            </button>
-          </form>
+              <h2 className="text-4xl font-serif font-bold text-[#3d342b] mb-2">
+                Welcome
+              </h2>
+
+              <p className="text-[#8b7355] mb-6 text-sm">
+                Please enter your credentials
+              </p>
+
+              <div className="flex gap-3 mb-6">
+                <SocialIcon Icon={Globe} />
+                <SocialIcon Icon={Code2} />
+                <SocialIcon Icon={Share2} />
+              </div>
+
+              {/* ✅ name="emailOrPhone" matches loginData key and backend field */}
+              <AuthInput
+                icon={Mail}
+                type="text"
+                placeholder="Email or Phone"
+                name="emailOrPhone"
+                value={loginData.emailOrPhone}
+                onChange={handleLoginChange}
+              />
+              <AuthInput
+                icon={Lock}
+                type="password"
+                placeholder="Password"
+                name="password"
+                value={loginData.password}
+                onChange={handleLoginChange}
+              />
+
+              <button
+                type="button"
+                onClick={() => {
+                  setForgotEmail(loginData.emailOrPhone.includes("@") ? loginData.emailOrPhone : "");
+                  setIsForgotPassword(true);
+                }}
+                className="text-xs text-[#8b7355] mt-4 hover:text-[#3d342b] underline underline-offset-4 transition-colors"
+              >
+                Forgot your password?
+              </button>
+
+              <button
+                type="submit"
+                className="group mt-8 w-full py-4 bg-[#8b7355] text-white rounded-2xl text-xs font-bold uppercase tracking-[0.2em] hover:bg-[#725e46] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+              >
+                Login
+                <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+              </button>
+            </form>
+          )}
         </div>
 
         {/* OVERLAY PANEL */}
@@ -248,7 +334,10 @@ export default function AuthModal({ isOpen, onClose }) {
                 </p>
                 <button
                   type="button"
-                  onClick={() => setIsSignUp(false)}
+                  onClick={() => {
+                    setIsSignUp(false);
+                    setIsForgotPassword(false);
+                  }}
                   className="px-12 py-3 border border-white/40 rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-[#F5F2ED] hover:text-[#8b7355] transition-all"
                 >
                   Login
@@ -262,7 +351,10 @@ export default function AuthModal({ isOpen, onClose }) {
                 </p>
                 <button
                   type="button"
-                  onClick={() => setIsSignUp(true)}
+                  onClick={() => {
+                    setIsSignUp(true);
+                    setIsForgotPassword(false);
+                  }}
                   className="px-12 py-3 border border-white/40 rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-[#F5F2ED] hover:text-[#8b7355] transition-all"
                 >
                   Sign Up

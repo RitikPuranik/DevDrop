@@ -11,6 +11,12 @@ const getPublicAssetUrl = (filePath) => {
   return supabaseService.getPublicUrl(filePath);
 };
 
+const getPreviewVideoAccessUrl = async (filePath) => {
+  if (!filePath) return null;
+  if (isPublicUrl(filePath)) return filePath;
+  return supabaseService.createSignedUrl(filePath, 7200);
+};
+
 /**
  * @route   GET /api/assets/website/:websiteId
  * @desc    Get signed URLs for purchased website files
@@ -146,14 +152,8 @@ const getAssetUrls = async (req, res) => {
             url: website.deployedUrl,
           }
         : null,
-      githubRepo: website.githubUrl
-        ? {
-            url: website.githubUrl,
-            providedBy: 'seller',
-          }
-        : null,
       expiresAt: expiryTime,
-      note: 'ZIP/PDF/video links expire in 7 days. Seller GitHub and deployed links remain available from this purchase view.',
+      note: 'ZIP/PDF/video links expire in 7 days. Deployed preview and admin-uploaded files remain available from this purchase view.',
     };
 
     // Add video if available
@@ -167,7 +167,7 @@ const getAssetUrls = async (req, res) => {
 
     if (website.previewVideoUrl) {
       responseData.previewVideo = {
-        url: getPublicAssetUrl(website.previewVideoUrl),
+        url: await getPreviewVideoAccessUrl(website.previewVideoUrl),
         fileName: website.files?.previewVideo?.fileName,
         size: website.files?.previewVideo?.size,
       };
@@ -176,7 +176,7 @@ const getAssetUrls = async (req, res) => {
     res.json({
       success: true,
       data: responseData,
-      message: 'Project access generated, including seller links plus admin-uploaded files.',
+      message: 'Project access generated successfully.',
     });
   } catch (error) {
     console.error('Get asset URLs error:', error);
@@ -217,13 +217,12 @@ const getPreviewUrl = async (req, res) => {
       });
     }
 
-    // Get public URL (preview videos are public)
-    const publicUrl = supabaseService.getPublicUrl(website.previewVideoUrl);
+    const previewUrl = await getPreviewVideoAccessUrl(website.previewVideoUrl);
 
     res.json({
       success: true,
       data: {
-        url: publicUrl,
+        url: previewUrl,
         fileName: website.files?.previewVideo?.fileName,
       },
     });

@@ -7,21 +7,16 @@ const bankDetailsSchema = new mongoose.Schema({
     required: true,
     unique: true,
   },
-  accountHolderName: { type: String, required: true, trim: true },
-  accountNumber:     { type: String, required: true, trim: true },
-  ifscCode: {
+  upiId: {
     type: String,
     required: true,
     trim: true,
-    uppercase: true,
-    match: [/^[A-Z]{4}0[A-Z0-9]{6}$/, 'Invalid IFSC code'],
-  },
-  bankName: { type: String, required: true, trim: true },
-  branch:   { type: String, required: true, trim: true },
-  upiId: {
-    type: String,
-    trim: true,
     match: [/^[\w.-]+@[\w.-]+$/, 'Invalid UPI ID'],
+  },
+  phoneNumber: {
+    type: String,
+    required: true,
+    trim: true,
   },
 
   isVerified:               { type: Boolean, default: false },

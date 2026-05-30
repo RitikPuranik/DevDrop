@@ -8,5 +8,6 @@ router.use(auth);
 router.post('/purchase/:websiteId', verifyEmail, buyerController.purchaseFreeWebsite);
 router.get('/check-purchase/:websiteId', buyerController.checkPurchase);
 router.get('/my-purchases', buyerController.getMyPurchases);
+router.get('/my-purchases/:purchaseId', buyerController.getPurchaseDetails);
 
 module.exports = router;

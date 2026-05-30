@@ -1,17 +1,32 @@
-const transporter = require('../shared/config/email');
+const Brevo = require('@getbrevo/brevo');
+const apiInstance = require('../shared/config/email');
 const { EMAIL_SUBJECTS } = require('../shared/utils/constants');
 
 /**
- * Central send helper
+ * Central send helper — uses Brevo HTTP API (works on Render/Vercel, no SMTP needed)
  */
-const sendEmail = async ({ to, subject, html }) => {
-  const info = await transporter.sendMail({
-    from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
-    to: Array.isArray(to) ? to.join(',') : to,
-    subject,
-    html,
-  });
-  return info;
+const sendEmail = async ({ to, subject, html, from }) => {
+  try {
+    const defaultEmail = process.env.EMAIL_FROM || 'hello@devdrop.com';
+    const displayName = from
+      ? from.charAt(0).toUpperCase() + from.slice(1)
+      : 'DevDrop';
+
+    const sendSmtpEmail = new Brevo.SendSmtpEmail();
+
+    sendSmtpEmail.sender = { name: displayName, email: defaultEmail };
+    sendSmtpEmail.to = Array.isArray(to)
+      ? to.map((email) => ({ email }))
+      : [{ email: to }];
+    sendSmtpEmail.subject = subject;
+    sendSmtpEmail.htmlContent = html;
+
+    const info = await apiInstance.sendTransacEmail(sendSmtpEmail);
+    return info;
+  } catch (error) {
+    console.error('Failed to send email with Brevo API:', error?.response?.body || error);
+    throw error;
+  }
 };
 
 const sendVerificationEmail = async (user) => {
@@ -22,6 +37,7 @@ const sendVerificationEmail = async (user) => {
 
     await sendEmail({
       to: user.email,
+      from: 'accounts',
       subject: EMAIL_SUBJECTS.VERIFICATION,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -51,10 +67,11 @@ const sendWelcomeEmail = async (user) => {
   try {
     await sendEmail({
       to: user.email,
+      from: 'hello',
       subject: EMAIL_SUBJECTS.WELCOME,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2>Welcome to Marketplace Platform! 🎉</h2>
+          <h2>Welcome to DevDrop! 🎉</h2>
           <p>Hi ${user.name || 'there'}!</p>
           <p>Your email has been verified. You can now:</p>
           <ul>
@@ -80,6 +97,7 @@ const sendPurchaseConfirmation = async (buyer, website, purchase) => {
   try {
     await sendEmail({
       to: buyer.email,
+      from: 'receipts',
       subject: EMAIL_SUBJECTS.PURCHASE_CONFIRMATION,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -111,6 +129,7 @@ const sendSellerNotification = async (seller, website, purchase) => {
   try {
     await sendEmail({
       to: seller.email,
+      from: 'sales',
       subject: EMAIL_SUBJECTS.SELLER_NOTIFICATION,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -145,10 +164,14 @@ const sendStatusUpdateEmail = async (seller, website, status, comment = '') => {
       rejected: { title: 'Website Submission Update', message: 'Unfortunately, your website submission was not approved.' },
     };
 
-    const statusInfo = statusMessages[status] || { title: 'Website Status Update', message: `Your website status updated to: ${status}` };
+    const statusInfo = statusMessages[status] || {
+      title: 'Website Status Update',
+      message: `Your website status updated to: ${status}`,
+    };
 
     await sendEmail({
       to: seller.email,
+      from: 'review',
       subject: EMAIL_SUBJECTS.STATUS_UPDATE,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -178,6 +201,7 @@ const sendPayoutNotification = async (seller, payout) => {
   try {
     await sendEmail({
       to: seller.email,
+      from: 'finance',
       subject: EMAIL_SUBJECTS.PAYOUT_NOTIFICATION,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -207,6 +231,7 @@ const sendPasswordResetEmail = async (user, token) => {
     const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
     await sendEmail({
       to: user.email,
+      from: 'security',
       subject: EMAIL_SUBJECTS.PASSWORD_RESET,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -233,11 +258,12 @@ const sendPasswordResetEmail = async (user, token) => {
 const sendAdminAlert = async ({ subject, message, error, details }) => {
   try {
     const adminEmails = process.env.ADMIN_EMAILS
-      ? process.env.ADMIN_EMAILS.split(',').map(e => e.trim())
-      : ['admin@yourplatform.com'];
+      ? process.env.ADMIN_EMAILS.split(',').map((e) => e.trim())
+      : ['admin@devdrop.com'];
 
     await sendEmail({
       to: adminEmails,
+      from: 'system',
       subject: `🚨 ${subject}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px;">
@@ -247,7 +273,7 @@ const sendAdminAlert = async ({ subject, message, error, details }) => {
           ${details ? `<div style="background-color: #f3f4f6; padding: 15px; border-radius: 5px; margin: 10px 0;"><p style="white-space: pre-line;"><strong>Details:</strong><br>${details}</p></div>` : ''}
           <p style="margin-top: 20px;">Please check the admin dashboard.</p>
           <hr>
-          <p style="color: #6b7280; font-size: 12px;">Automated message from your marketplace platform.</p>
+          <p style="color: #6b7280; font-size: 12px;">Automated message from DevDrop.</p>
         </div>
       `,
     });

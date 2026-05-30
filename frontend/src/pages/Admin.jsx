@@ -50,7 +50,7 @@ export default function Admin() {
   const loadPending = async () => {
     try {
       setPendingLoading(true);
-      const res = await adminAPI.getPendingWebsites();
+      const res = await adminAPI.getAllWebsites('pending_review');
       setPending(res.data?.data || []);
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to load pending websites');

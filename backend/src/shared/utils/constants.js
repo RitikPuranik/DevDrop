@@ -2,6 +2,11 @@
  * Application constants
  */
 
+const readEnvNumber = (key, fallback) => {
+  const value = Number.parseInt(process.env[key], 10);
+  return Number.isFinite(value) ? value : fallback;
+};
+
 // User roles
 const USER_ROLES = {
   USER: 'user',
@@ -100,20 +105,20 @@ const EMAIL_SUBJECTS = {
 // Rate limiting (requests per window)
 const RATE_LIMITS = {
   GENERAL: {
-    WINDOW_MS: 15 * 60 * 1000, // 15 minutes
-    MAX_REQUESTS: 100,
+    WINDOW_MS: readEnvNumber('RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000),
+    MAX_REQUESTS: readEnvNumber('RATE_LIMIT_MAX_REQUESTS', 100),
   },
   AUTH: {
-    WINDOW_MS: 15 * 60 * 1000, // 15 minutes
-    MAX_REQUESTS: 5,
+    WINDOW_MS: readEnvNumber('AUTH_RATE_LIMIT_WINDOW_MS', 5 * 60 * 1000),
+    MAX_REQUESTS: readEnvNumber('AUTH_RATE_LIMIT_MAX_REQUESTS', 5),
   },
   DOWNLOAD: {
-    WINDOW_MS: 60 * 60 * 1000, // 1 hour
-    MAX_REQUESTS: 50,
+    WINDOW_MS: readEnvNumber('DOWNLOAD_RATE_LIMIT_WINDOW_MS', 60 * 60 * 1000),
+    MAX_REQUESTS: readEnvNumber('DOWNLOAD_RATE_LIMIT_MAX_REQUESTS', 50),
   },
   PAYMENT: {
-    WINDOW_MS: 60 * 1000, // 1 minute
-    MAX_REQUESTS: 3,
+    WINDOW_MS: readEnvNumber('PAYMENT_RATE_LIMIT_WINDOW_MS', 60 * 1000),
+    MAX_REQUESTS: readEnvNumber('PAYMENT_RATE_LIMIT_MAX_REQUESTS', 3),
   },
 };
 

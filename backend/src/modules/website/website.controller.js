@@ -67,7 +67,7 @@ const browseWebsites = async (req, res) => {
     if (category) query.category = category;
     if (minPrice || maxPrice) { query.price = {}; if (minPrice) query.price.$gte = parseFloat(minPrice); if (maxPrice) query.price.$lte = parseFloat(maxPrice); }
 
-    const websites = await Website.find(query).select('-adminComment -isDeleted').populate('sellerId', 'name email').sort({ [sortBy]: order === 'asc' ? 1 : -1 }).skip(skip).limit(parseInt(limit));
+    const websites = await Website.find(query).select('-adminComment -isDeleted -githubUrl').populate('sellerId', 'name email').sort({ [sortBy]: order === 'asc' ? 1 : -1 }).skip(skip).limit(parseInt(limit));
     const total = await Website.countDocuments(query);
 
     let result = await hydrateWebsitePreviewsAsync(websites);
@@ -89,7 +89,7 @@ const getWebsiteDetails = async (req, res) => {
       _id: req.params.id, 
       status: { $in: [WEBSITE_STATUS.APPROVED, WEBSITE_STATUS.SOLD, WEBSITE_STATUS.IN_AUCTION] }, 
       isDeleted: false 
-    }).select('-adminComment -isDeleted').populate('sellerId', 'name email');
+    }).select('-adminComment -isDeleted -githubUrl').populate('sellerId', 'name email');
     if (!website) return res.status(404).json({ success: false, message: 'Website not found' });
 
     if (website.category === 'exclusive' && website.status === WEBSITE_STATUS.SOLD) {
@@ -120,7 +120,7 @@ const getByCategory = async (req, res) => {
     const query = { category, status: { $in: [WEBSITE_STATUS.APPROVED, WEBSITE_STATUS.IN_AUCTION] }, isDeleted: false };
     if (category === 'exclusive') query.status = { $ne: WEBSITE_STATUS.SOLD };
 
-    const websites = await Website.find(query).select('-adminComment -isDeleted').populate('sellerId', 'name email').sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit));
+    const websites = await Website.find(query).select('-adminComment -isDeleted -githubUrl').populate('sellerId', 'name email').sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit));
     const total = await Website.countDocuments(query);
 
     const result = await hydrateWebsitePreviewsAsync(websites);
@@ -143,7 +143,7 @@ const searchWebsites = async (req, res) => {
       $or: [{ category: { $ne: 'exclusive' } }, { category: 'exclusive', status: { $ne: WEBSITE_STATUS.SOLD } }]
     };
 
-    const websites = await Website.find(query).select('-adminComment -isDeleted').populate('sellerId', 'name email').sort({ score: { $meta: 'textScore' } }).skip(skip).limit(parseInt(limit));
+    const websites = await Website.find(query).select('-adminComment -isDeleted -githubUrl').populate('sellerId', 'name email').sort({ score: { $meta: 'textScore' } }).skip(skip).limit(parseInt(limit));
     const total = await Website.countDocuments(query);
 
     const result = await hydrateWebsitePreviewsAsync(websites);

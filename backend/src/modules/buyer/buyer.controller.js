@@ -12,7 +12,22 @@ const getPublicAssetUrl = (filePath) => {
   return supabaseService.getPublicUrl(filePath);
 };
 
-const hydratePurchaseWebsite = (purchaseDoc) => {
+const getPreviewVideoAccessUrl = async (filePath) => {
+  if (!filePath) return null;
+  if (/^https?:\/\//.test(filePath)) return filePath;
+  return supabaseService.createSignedUrl(filePath, 7200);
+};
+
+const purchaseWebsitePopulate = {
+  path: 'websiteId',
+  select: 'name description techStack category price deployedUrl previewUrl files previewVideoUrl sellerId',
+  populate: {
+    path: 'sellerId',
+    select: 'name email',
+  },
+};
+
+const hydratePurchaseWebsite = async (purchaseDoc) => {
   const purchase = purchaseDoc.toObject();
   const website = purchase.websiteId;
 
@@ -20,7 +35,7 @@ const hydratePurchaseWebsite = (purchaseDoc) => {
     website.files = website.files || {};
     website.files.previewVideo = {
       ...(website.files.previewVideo || {}),
-      url: getPublicAssetUrl(website.previewVideoUrl),
+      url: await getPreviewVideoAccessUrl(website.previewVideoUrl),
     };
   }
 
@@ -68,14 +83,7 @@ const getMyPurchases = async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
     const purchases = await Purchase.find({ buyerId: req.userId, paymentStatus: PAYMENT_STATUS.COMPLETED })
-      .populate({
-        path: 'websiteId',
-        select: 'name description techStack category price deployedUrl githubUrl previewUrl files previewVideoUrl sellerId',
-        populate: {
-          path: 'sellerId',
-          select: 'name email',
-        },
-      })
+      .populate(purchaseWebsitePopulate)
       .populate('sellerId', 'name email')
       .sort({ purchaseDate: -1 })
       .skip((page - 1) * limit)
@@ -84,7 +92,7 @@ const getMyPurchases = async (req, res) => {
     const total = await Purchase.countDocuments({ buyerId: req.userId, paymentStatus: PAYMENT_STATUS.COMPLETED });
     res.json({
       success: true,
-      data: purchases.map(hydratePurchaseWebsite),
+      data: await Promise.all(purchases.map(hydratePurchaseWebsite)),
       pagination: { currentPage: parseInt(page), totalPages: Math.ceil(total / limit), totalItems: total },
     });
   } catch (error) {
@@ -92,4 +100,27 @@ const getMyPurchases = async (req, res) => {
   }
 };
 
-module.exports = { purchaseFreeWebsite, checkPurchase, getMyPurchases };
+const getPurchaseDetails = async (req, res) => {
+  try {
+    const purchase = await Purchase.findOne({
+      _id: req.params.purchaseId,
+      buyerId: req.userId,
+      paymentStatus: PAYMENT_STATUS.COMPLETED,
+    })
+      .populate(purchaseWebsitePopulate)
+      .populate('sellerId', 'name email');
+
+    if (!purchase) {
+      return res.status(404).json({ success: false, message: 'Purchase not found' });
+    }
+
+    res.json({
+      success: true,
+      data: await hydratePurchaseWebsite(purchase),
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error fetching purchase details', error: error.message });
+  }
+};
+
+module.exports = { purchaseFreeWebsite, checkPurchase, getMyPurchases, getPurchaseDetails };

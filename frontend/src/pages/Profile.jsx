@@ -2,14 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   User, Package, Heart, DollarSign, Upload, ShoppingBag, 
-  ExternalLink, Trash2, Loader2, LogOut, Plus, 
-  ArrowLeft, ChevronDown, X, Download, FileCode, FileText, Film, CheckCircle 
+  ExternalLink, Trash2, Loader2, LogOut, Plus, AlertCircle,
+  ArrowLeft, Download, CheckCircle, Landmark
 } from 'lucide-react';
 import { userAPI } from '../api/user';
 import { sellerAPI } from '../api/seller';
 import { buyerAPI } from '../api/buyer';
 import { wishlistAPI } from '../api/wishlist';
-import { assetAPI } from '../api/asset';
+import { authAPI } from '../api/auth';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 
@@ -18,6 +18,7 @@ const TABS = [
   { id: 'listings', label: 'My Listings', icon: Upload },
   { id: 'purchases', label: 'Purchases', icon: ShoppingBag },
   { id: 'wishlist', label: 'Wishlist', icon: Heart },
+  { id: 'bankDetails', label: 'Payout Details', icon: Landmark },
 ];
 
 const TECH_OPTIONS = {
@@ -26,6 +27,99 @@ const TECH_OPTIONS = {
   database: ['MongoDB', 'PostgreSQL', 'MySQL', 'Firebase', 'Supabase'],
   devops: ['Docker', 'AWS', 'Vercel', 'Netlify'],
 };
+
+const LISTING_TYPES = [
+  {
+    id: 'free',
+    label: 'Free',
+    description: 'Good for open demos, lead generation, or portfolio exposure.',
+  },
+  {
+    id: 'paid',
+    label: 'Paid',
+    description: 'Sell the template multiple times at a fixed price.',
+  },
+  {
+    id: 'exclusive',
+    label: 'Exclusive',
+    description: 'Offer the project as a one-time premium sale.',
+  },
+];
+
+const LISTING_FIELD_LABELS = {
+  name: 'Project name',
+  description: 'Description',
+  category: 'Category',
+  price: 'Price',
+  deployedUrl: 'Live URL',
+  githubUrl: 'GitHub URL',
+};
+
+function getListingIssue(error) {
+  const data = error.response?.data;
+
+  if (data?.requiresVerification) {
+    return {
+      tone: 'warning',
+      title: 'Verify your email before listing',
+      messages: [
+        'Check your inbox for the verification email that was just sent.',
+        'Open the link in that email, then come back and submit your project again.',
+      ],
+    };
+  }
+
+  if (data?.requiresBankDetails) {
+    return {
+      tone: 'warning',
+      title: 'Bank details are required first',
+      messages: [
+        'Paid and exclusive listings need bank details on your account before submission.',
+        'Add your bank details first, then try submitting the listing again.',
+      ],
+    };
+  }
+
+  if (Array.isArray(data?.errors) && data.errors.length > 0) {
+    return {
+      tone: 'error',
+      title: 'Please fix these fields',
+      messages: data.errors.map(({ field, message }) => `${LISTING_FIELD_LABELS[field] || field}: ${message}`),
+    };
+  }
+
+  if (data?.message === 'Free websites must have price 0') {
+    return {
+      tone: 'error',
+      title: 'Price needs to stay at 0',
+      messages: [
+        'This form is currently submitting the project as a free listing.',
+        'Set the price to 0 and submit again.',
+      ],
+    };
+  }
+
+  if (data?.message === 'Paid/exclusive websites must have price > 0') {
+    return {
+      tone: 'error',
+      title: 'Paid listings need a price',
+      messages: [
+        'Paid or exclusive listings must have a price greater than 0.',
+        'Enter a valid price, then submit again.',
+      ],
+    };
+  }
+
+  return {
+    tone: 'error',
+    title: data?.message || 'Submission failed',
+    messages: [
+      data?.message && data.message !== 'Validation failed'
+        ? data.message
+        : 'Something in the form still needs attention. Review the fields above and try again.',
+    ],
+  };
+}
 
 export default function Profile() {
   const navigate = useNavigate();
@@ -36,21 +130,20 @@ export default function Profile() {
   const [purchases, setPurchases] = useState([]);
   const [wishlist, setWishlist] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [downloadsModalOpen, setDownloadsModalOpen] = useState(false);
-  const [downloadsLoading, setDownloadsLoading] = useState(false);
-  const [downloadsAssets, setDownloadsAssets] = useState(null);
-  const [downloadsWebsite, setDownloadsWebsite] = useState(null);
-  const [downloadsPurchase, setDownloadsPurchase] = useState(null);
-  const [purchaseDetailsOpen, setPurchaseDetailsOpen] = useState(false);
-  const [selectedPurchase, setSelectedPurchase] = useState(null);
-  const [selectedWebsiteDetail, setSelectedWebsiteDetail] = useState(null);
-  const [detailDownloadsLoading, setDetailDownloadsLoading] = useState(false);
-  const [detailDownloadsAssets, setDetailDownloadsAssets] = useState(null);
+
+  // --- BANK DETAILS STATE ---
+  const [bankDetails, setBankDetails] = useState({
+    upiId: '',
+    phoneNumber: ''
+  });
+  const [loadingBankDetails, setLoadingBankDetails] = useState(false);
+  const [savingBankDetails, setSavingBankDetails] = useState(false);
 
   // --- SELLING FORM STATE ---
   const [isAddingListing, setIsAddingListing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [openSection, setOpenSection] = useState('frontend');
+  const [sendingVerification, setSendingVerification] = useState(false);
+  const [listingIssue, setListingIssue] = useState(null);
   const [form, setForm] = useState({
     name: '',
     description: '',
@@ -73,19 +166,39 @@ export default function Profile() {
     if (activeTab === 'listings') fetchListings();
     else if (activeTab === 'purchases') fetchPurchases();
     else if (activeTab === 'wishlist') fetchWishlist();
+    else if (activeTab === 'bankDetails') fetchBankDetails();
   }, [activeTab]);
 
   const fetchProfile = async () => {
     try {
       setLoading(true);
-      const [profileRes, dashRes] = await Promise.all([
-        userAPI.getProfile(),
-        userAPI.getDashboard(),
-      ]);
-      setProfile(profileRes.data?.data?.user || profileRes.data?.data);
-      setDashboard(dashRes.data?.data);
+      const profileRes = await userAPI.getProfile();
+      const profileData = profileRes.data?.data;
+      setProfile(profileData?.user ? { ...profileData.user, hasBankDetails: profileData.hasBankDetails } : profileData);
+      try {
+        const dashRes = await userAPI.getDashboard();
+        setDashboard(dashRes.data?.data);
+      } catch (dashboardError) {
+        setDashboard({
+          uploadedWebsites: 0,
+          purchases: 0,
+          wishlistCount: 0,
+          totalEarnings: 0,
+          pendingPayouts: 0,
+        });
+        toast.error(dashboardError.response?.data?.message || 'Profile loaded, but dashboard stats could not be fetched');
+      }
     } catch (err) {
-      toast.error('Failed to load profile');
+      if (err.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.dispatchEvent(new Event('auth-changed'));
+        toast.error('Your session expired. Please login again.');
+        navigate('/', { replace: true });
+        return;
+      }
+
+      toast.error(err.response?.data?.message || 'Failed to load profile');
     } finally {
       setLoading(false);
     }
@@ -112,26 +225,33 @@ export default function Profile() {
     } catch { setWishlist([]); }
   };
 
-  // Download a specific asset by requesting signed URLs and opening the chosen file only
-  const downloadAsset = async (websiteId, fileType) => {
+  const fetchBankDetails = async () => {
     try {
-      setDownloadsLoading(true);
-      // backend returns all signed urls, we only open the requested one
-      const res = await assetAPI.getAssetUrls(websiteId);
-      const data = res.data?.data;
-      const map = {
-        source: data?.sourceCode?.url,
-        docs: data?.docs?.url,
-        video: data?.video?.url,
-      };
-      const url = map[fileType];
-      if (!url) return toast.error('Requested file not available');
-      window.open(url, '_blank');
-      toast.success('Download opened in a new tab');
+      setLoadingBankDetails(true);
+      const res = await userAPI.getBankDetails();
+      if (res.data?.data) {
+        setBankDetails(res.data.data);
+      }
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to get download link');
+      if (err.response?.status !== 404) {
+        toast.error('Failed to load bank details');
+      }
     } finally {
-      setDownloadsLoading(false);
+      setLoadingBankDetails(false);
+    }
+  };
+
+  const handleSaveBankDetails = async (e) => {
+    e.preventDefault();
+    try {
+      setSavingBankDetails(true);
+      await userAPI.saveBankDetails(bankDetails);
+      toast.success('Payout details saved successfully');
+      setProfile(prev => ({ ...prev, hasBankDetails: true }));
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to save bank details');
+    } finally {
+      setSavingBankDetails(false);
     }
   };
 
@@ -139,21 +259,61 @@ export default function Profile() {
   const handleAddListing = async (e) => {
     e.preventDefault();
     try {
+      setListingIssue(null);
       setSubmitting(true);
+      const normalizedPrice = form.category === 'free' ? 0 : Number(form.price);
+
       await sellerAPI.submitWebsite({
         ...form,
-        price: form.category === 'free' ? 0 : form.price,
+        price: normalizedPrice,
         techStack,
       });
       toast.success('Website submitted for review!');
       setIsAddingListing(false);
+      setListingIssue(null);
       setForm({ name: '', description: '', category: 'free', price: 0, deployedUrl: '', githubUrl: '' });
       setTechStack({ frontend: [], backend: [], database: [], devops: [] });
       fetchListings();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Submission failed');
+      const issue = getListingIssue(err);
+      setListingIssue(issue);
+      toast.error(issue.title);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleCategorySelect = (category) => {
+    setListingIssue(null);
+    setForm((prev) => ({
+      ...prev,
+      category,
+      price: category === 'free'
+        ? 0
+        : prev.category === 'free' || prev.price === 0
+          ? ''
+          : prev.price,
+    }));
+  };
+
+  const handleSendVerification = async () => {
+    try {
+      setSendingVerification(true);
+      await authAPI.sendVerification();
+      const issue = {
+        tone: 'warning',
+        title: 'Verification email sent',
+        messages: [
+          'Check your inbox and spam folder for the verification email.',
+          'After verifying your account, come back here and submit your project again.',
+        ],
+      };
+      setListingIssue(issue);
+      toast.success('Verification email sent');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to send verification email');
+    } finally {
+      setSendingVerification(false);
     }
   };
 
@@ -190,7 +350,7 @@ export default function Profile() {
   }
 
   const stats = [
-    { label: 'Uploaded', value: dashboard?.uploadedWebsites || 0, icon: Upload, color: '#f97316' },
+    { label: 'Approved', value: dashboard?.uploadedWebsites || 0, icon: Upload, color: '#f97316' },
     { label: 'Purchased', value: dashboard?.purchases || 0, icon: ShoppingBag, color: '#a78bfa' },
     { label: 'Wishlisted', value: dashboard?.wishlistCount || 0, icon: Heart, color: '#fb7185' },
     { label: 'Earnings', value: `₹${dashboard?.totalEarnings || 0}`, icon: DollarSign, color: '#34d399' },
@@ -221,7 +381,7 @@ export default function Profile() {
           {TABS.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => { setActiveTab(tab.id); setIsAddingListing(false); }}
+              onClick={() => { setActiveTab(tab.id); setIsAddingListing(false); setListingIssue(null); }}
               className={`relative flex items-center gap-2 px-6 py-3 text-[10px] font-black uppercase tracking-[0.15em] transition-all whitespace-nowrap z-10 ${
                 activeTab === tab.id ? 'text-black' : 'text-gray-500 hover:text-white'
               }`}
@@ -248,7 +408,7 @@ export default function Profile() {
                 ))}
               </div>
               <div className="flex gap-4">
-                <button onClick={() => setActiveTab('listings')} className="flex-1 bg-[#8b7355] hover:bg-[#725e46] text-white py-4 rounded-2xl font-bold text-xs uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2">
+                  <button onClick={() => setActiveTab('listings')} className="flex-1 bg-[#8b7355] hover:bg-[#725e46] text-white py-4 rounded-2xl font-bold text-xs uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2">
                   <Upload size={14} /> View My Work
                 </button>
                 <button onClick={() => navigate('/template')} className="flex-1 bg-white/5 border border-white/10 hover:bg-white/10 text-white py-4 rounded-2xl font-bold text-xs uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2">
@@ -266,7 +426,7 @@ export default function Profile() {
                   {isAddingListing ? "Submit New Template" : "My Project Hub"}
                 </h2>
                 {!isAddingListing && (
-                  <button onClick={() => setIsAddingListing(true)} className="flex items-center gap-2 px-5 py-2.5 bg-[#8b7355] rounded-xl text-[10px] font-bold uppercase tracking-widest text-white hover:bg-[#725e46] transition-all">
+                  <button onClick={() => { setIsAddingListing(true); setListingIssue(null); }} className="flex items-center gap-2 px-5 py-2.5 bg-[#8b7355] rounded-xl text-[10px] font-bold uppercase tracking-widest text-white hover:bg-[#725e46] transition-all">
                     <Plus size={14} /> List New
                   </button>
                 )}
@@ -275,11 +435,44 @@ export default function Profile() {
               {isAddingListing ? (
                 /* ── INTEGRATED SELL FORM ── */
                 <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="max-w-3xl mx-auto space-y-4">
-                   <button onClick={() => setIsAddingListing(false)} className="flex items-center gap-2 text-white/30 text-[10px] font-bold uppercase mb-4 hover:text-white transition-colors">
+                   <button onClick={() => { setIsAddingListing(false); setListingIssue(null); }} className="flex items-center gap-2 text-white/30 text-[10px] font-bold uppercase mb-4 hover:text-white transition-colors">
                     <ArrowLeft size={12} /> Back to Hub
                    </button>
                    
                    <form onSubmit={handleAddListing} className="space-y-4 pb-10">
+                      {!profile?.isVerified && (
+                        <GuidancePanel
+                          tone="warning"
+                          title="Your email is not verified yet"
+                          messages={[
+                            'Seller submissions are blocked until you verify your account email.',
+                            'Use the button below to resend the verification email, then open that link and try again.',
+                          ]}
+                          actionLabel={sendingVerification ? 'Sending...' : 'Send Verification Email'}
+                          onAction={handleSendVerification}
+                          actionDisabled={sendingVerification}
+                        />
+                      )}
+
+                      {listingIssue && !(listingIssue.title === 'Verify your email before listing' && !profile?.isVerified) && (
+                        <GuidancePanel
+                          tone={listingIssue.tone}
+                          title={listingIssue.title}
+                          messages={listingIssue.messages}
+                          actionLabel={
+                            listingIssue.title === 'Verify your email before listing'
+                              ? (sendingVerification ? 'Sending...' : 'Resend Verification Email')
+                              : null
+                          }
+                          onAction={
+                            listingIssue.title === 'Verify your email before listing'
+                              ? handleSendVerification
+                              : null
+                          }
+                          actionDisabled={sendingVerification}
+                        />
+                      )}
+
                       <div className="bg-[#111] border border-white/5 rounded-3xl p-6">
                         <label className="text-[9px] uppercase tracking-widest text-[#8b7355] block mb-2 font-bold">Project Name</label>
                         <input className="w-full bg-transparent text-xl font-bold outline-none placeholder:text-white/10" placeholder="e.g. Minimalist SaaS" required 
@@ -292,12 +485,60 @@ export default function Profile() {
                           value={form.description} onChange={(e) => setForm({...form, description: e.target.value})} />
                       </div>
 
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-[#111] border border-white/5 rounded-3xl p-6">
-                          <label className="text-[9px] uppercase tracking-widest text-[#8b7355] block mb-2 font-bold">Price (₹)</label>
-                          <input type="number" className="w-full bg-transparent text-lg font-bold outline-none" 
-                            value={form.price} onChange={(e) => setForm({...form, price: e.target.value})} />
+                      <div className="bg-[#111] border border-white/5 rounded-3xl p-6">
+                        <label className="text-[9px] uppercase tracking-widest text-[#8b7355] block mb-4 font-bold">Listing Type</label>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          {LISTING_TYPES.map((type) => {
+                            const isActive = form.category === type.id;
+                            return (
+                              <button
+                                key={type.id}
+                                type="button"
+                                onClick={() => handleCategorySelect(type.id)}
+                                className={`rounded-2xl border px-4 py-4 text-left transition-all ${
+                                  isActive
+                                    ? 'border-[#8b7355] bg-[#8b7355]/15 text-white'
+                                    : 'border-white/8 bg-white/[0.02] text-white/55 hover:border-white/20 hover:text-white'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-xs font-black uppercase tracking-[0.2em]">{type.label}</span>
+                                  {isActive && <CheckCircle size={16} className="text-[#c8b08d]" />}
+                                </div>
+                                <p className="text-xs leading-relaxed">{type.description}</p>
+                              </button>
+                            );
+                          })}
                         </div>
+                      </div>
+
+                      {form.category !== 'free' && !profile?.hasBankDetails && (
+                        <GuidancePanel
+                          tone="warning"
+                          title="Paid and exclusive listings need bank details"
+                          messages={[
+                            'The backend requires bank details before a paid or exclusive website can be accepted.',
+                            'If you submit now without bank details configured, this upload will be rejected.',
+                          ]}
+                        />
+                      )}
+
+                      <div className={`grid gap-4 ${form.category === 'free' ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'}`}>
+                        {form.category !== 'free' && (
+                          <div className="bg-[#111] border border-white/5 rounded-3xl p-6">
+                            <label className="text-[9px] uppercase tracking-widest text-[#8b7355] block mb-2 font-bold">Amount (₹)</label>
+                            <input
+                              type="number"
+                              min="1"
+                              required={form.category !== 'free'}
+                              className="w-full bg-transparent text-lg font-bold outline-none"
+                              placeholder="Enter your selling price"
+                              value={form.price}
+                              onChange={(e) => setForm({...form, price: e.target.value})}
+                            />
+                          </div>
+                        )}
+
                         <div className="bg-[#111] border border-white/5 rounded-3xl p-6">
                           <label className="text-[9px] uppercase tracking-widest text-[#8b7355] block mb-2 font-bold">Live URL</label>
                           <input className="w-full bg-transparent text-sm outline-none" placeholder="https://..." required
@@ -389,13 +630,12 @@ export default function Profile() {
                   {purchases.map((p) => {
                     const web = p.websiteId || {};
                     const cat = web.category || 'paid';
-                    const webId = web._id || (typeof p.websiteId === 'string' ? p.websiteId : null);
                     return (
-                      <div key={p._id} onClick={() => {
-                        setSelectedPurchase(p);
-                        setSelectedWebsiteDetail(web);
-                        setPurchaseDetailsOpen(true);
-                      }} className="bg-[#111] border border-white/5 rounded-3xl p-6 hover:border-white/15 transition-all group cursor-pointer">
+                      <div
+                        key={p._id}
+                        onClick={() => navigate(`/purchases/${p._id}`)}
+                        className="bg-[#111] border border-white/5 rounded-3xl p-6 hover:border-white/15 transition-all group cursor-pointer"
+                      >
                         <div className="flex items-start justify-between mb-3">
                           <div className="flex-1">
                             <h3 className="font-bold text-lg tracking-tight">{web.name || 'Template'}</h3>
@@ -430,16 +670,11 @@ export default function Profile() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                // Open modal; don't fetch links until user chooses a file
-                                setDownloadsModalOpen(true);
-                                setDownloadsLoading(false);
-                                setDownloadsAssets(null);
-                                setDownloadsWebsite(web);
-                                setDownloadsPurchase(p);
+                                navigate(`/purchases/${p._id}`);
                               }}
                               className="flex items-center gap-1.5 px-4 py-2 bg-emerald-500 text-black rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-emerald-600 transition-all"
                             >
-                              <Download size={11} /> Downloads
+                              <Download size={11} /> Open Access
                             </button>
                           </div>
                         </div>
@@ -449,175 +684,6 @@ export default function Profile() {
                 </div>
               )}
             </motion.div>
-          )}
-
-          {/* Purchase Details Modal */}
-          {purchaseDetailsOpen && selectedPurchase && selectedWebsiteDetail && (
-            <div className="fixed inset-0 z-[110] flex items-center justify-center">
-              <div className="absolute inset-0 bg-black/60" onClick={() => setPurchaseDetailsOpen(false)} />
-              <div className="relative bg-[#0b0b0b] border border-white/5 rounded-2xl p-6 max-w-3xl w-full mx-4 overflow-auto max-h-[80vh]">
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <h3 className="text-xl font-bold">{selectedWebsiteDetail.name}</h3>
-                    <p className="text-[10px] text-white/30">{selectedWebsiteDetail.category?.toUpperCase() || 'PAID'}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-right">
-                      <p className="text-[12px] text-white/30">Paid</p>
-                      <p className="text-lg font-black text-emerald-300">₹{selectedPurchase.totalPaid ?? selectedPurchase.amount ?? selectedWebsiteDetail.price ?? 0}</p>
-                    </div>
-                    <button onClick={() => setPurchaseDetailsOpen(false)} className="p-2 text-white/30 hover:text-white">
-                      <X size={16} />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="md:col-span-2">
-                    {/* Preview area */}
-                    <div className="aspect-video rounded-lg bg-[#111] overflow-hidden mb-4">
-                      {selectedWebsiteDetail.files?.previewVideo?.url ? (
-                        <video src={selectedWebsiteDetail.files.previewVideo.url} controls className="w-full h-full object-cover" />
-                      ) : selectedWebsiteDetail.deployedUrl ? (
-                        <a href={selectedWebsiteDetail.deployedUrl} target="_blank" rel="noreferrer" className="flex items-center justify-center h-full">Open Live Preview</a>
-                      ) : (
-                        <div className="flex items-center justify-center h-full text-white/20">No preview available</div>
-                      )}
-                    </div>
-
-                    <div className="bg-[#111] border border-white/5 rounded-2xl p-4 mb-4">
-                      <h4 className="font-bold mb-2">About this template</h4>
-                      <p className="text-white/40 text-sm">{selectedWebsiteDetail.description}</p>
-                    </div>
-
-                    <div className="bg-[#111] border border-white/5 rounded-2xl p-4">
-                      <h4 className="font-bold mb-2">Tech Stack</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {((selectedWebsiteDetail.techStack?.frontend||[]).concat(selectedWebsiteDetail.techStack?.backend||[], selectedWebsiteDetail.techStack?.database||[], selectedWebsiteDetail.techStack?.devops||[], selectedWebsiteDetail.techStack?.other||[])||[]).map((t,i)=>(
-                          <span key={i} className="px-3 py-1 bg-white/5 rounded-full text-[11px] text-white/40">{t}</span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="md:col-span-1 space-y-4">
-                    <div className="bg-[#111] border border-white/5 rounded-2xl p-4">
-                      <p className="text-[10px] text-white/30">Seller</p>
-                      <p className="font-bold mt-1">{selectedWebsiteDetail.sellerId?.name || 'Creator'}</p>
-                      {selectedWebsiteDetail.sellerId?.email && <p className="text-[10px] text-white/30">{selectedWebsiteDetail.sellerId.email}</p>}
-                    </div>
-
-                    <div className="bg-[#111] border border-white/5 rounded-2xl p-4">
-                      <p className="text-[10px] text-white/30">Purchase Date</p>
-                      <p className="font-bold mt-1">{new Date(selectedPurchase.purchaseDate || selectedPurchase.createdAt).toLocaleString()}</p>
-                    </div>
-
-                    <div className="bg-[#111] border border-white/5 rounded-2xl p-4">
-                      <p className="text-[10px] text-white/30">Files</p>
-                      <div className="mt-2 space-y-2">
-                        {selectedWebsiteDetail.githubUrl && (
-                          <a href={selectedWebsiteDetail.githubUrl} target="_blank" rel="noreferrer"
-                            className="flex items-center justify-center gap-2 w-full py-2 bg-emerald-500/10 text-emerald-300 rounded-lg font-bold">
-                            <FileCode size={14} /> Open Seller GitHub
-                          </a>
-                        )}
-                        {selectedWebsiteDetail.deployedUrl && (
-                          <a href={selectedWebsiteDetail.deployedUrl} target="_blank" rel="noreferrer"
-                            className="flex items-center justify-center gap-2 w-full py-2 bg-white/5 text-white rounded-lg font-bold">
-                            <ExternalLink size={14} /> Open Live Site
-                          </a>
-                        )}
-                        {selectedWebsiteDetail.files?.previewVideo?.url && (
-                          <a href={selectedWebsiteDetail.files.previewVideo.url} target="_blank" rel="noreferrer"
-                            className="flex items-center justify-center gap-2 w-full py-2 bg-amber-500/10 text-amber-200 rounded-lg font-bold">
-                            <Film size={14} /> Open Short Preview
-                          </a>
-                        )}
-                        <div className="space-y-2">
-                          <button onClick={() => downloadAsset(selectedWebsiteDetail._id || selectedWebsiteDetail, 'source')}
-                            className="w-full py-2 bg-emerald-500 text-black rounded-lg font-bold">Download Source ZIP</button>
-                          <button onClick={() => downloadAsset(selectedWebsiteDetail._id || selectedWebsiteDetail, 'docs')}
-                            className="w-full py-2 bg-blue-500 text-black rounded-lg font-bold">Download Docs PDF</button>
-                          {selectedWebsiteDetail.files?.video && (
-                            <button onClick={() => downloadAsset(selectedWebsiteDetail._id || selectedWebsiteDetail, 'video')}
-                              className="w-full py-2 bg-purple-500 text-black rounded-lg font-bold">Download Walkthrough Video</button>
-                          )}
-                          <p className="text-[10px] text-white/30">Seller GitHub and deployed links stay visible here. ZIP, PDF, and private videos open in a new tab when generated.</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Downloads Modal */}
-          {downloadsModalOpen && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center">
-              <div className="absolute inset-0 bg-black/60" onClick={() => setDownloadsModalOpen(false)} />
-              <div className="relative bg-[#0b0b0b] border border-white/5 rounded-2xl p-6 max-w-xl w-full mx-4">
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <h3 className="text-lg font-bold">Downloads — {downloadsWebsite?.name || 'Template'}</h3>
-                    <p className="text-[10px] text-white/30">Generate fresh links anytime from your dashboard.</p>
-                    {downloadsPurchase && (
-                      <div className="text-[12px] text-white/30 mt-2">
-                        <div>Paid: <span className="text-emerald-300 font-bold">₹{downloadsPurchase.totalPaid ?? downloadsPurchase.amount ?? downloadsWebsite?.price ?? 0}</span></div>
-                        <div>Purchased: <span className="text-white/40">{new Date(downloadsPurchase.purchaseDate || downloadsPurchase.createdAt).toLocaleString()}</span></div>
-                        {downloadsPurchase.razorpayOrderId && <div>Order: <span className="text-white/40">{downloadsPurchase.razorpayOrderId}</span></div>}
-                      </div>
-                    )}
-                  </div>
-                  <button onClick={() => setDownloadsModalOpen(false)} className="p-2 text-white/30 hover:text-white">
-                    <X size={16} />
-                  </button>
-                </div>
-
-                <div className="space-y-4">
-                  <p className="text-sm text-white/30">Open the seller links directly, or generate ZIP, PDF, and video downloads on demand.</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {downloadsWebsite?.githubUrl && (
-                      <a href={downloadsWebsite.githubUrl} target="_blank" rel="noreferrer"
-                        className="py-3 bg-emerald-500/10 text-emerald-300 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-emerald-500/20 transition-all">
-                        <FileCode size={16} /> Seller GitHub Repo
-                      </a>
-                    )}
-                    {downloadsWebsite?.deployedUrl && (
-                      <a href={downloadsWebsite.deployedUrl} target="_blank" rel="noreferrer"
-                        className="py-3 bg-white/5 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-white/10 transition-all">
-                        <ExternalLink size={16} /> Live Deployment
-                      </a>
-                    )}
-                    {downloadsWebsite?.files?.previewVideo?.url && (
-                      <a href={downloadsWebsite.files.previewVideo.url} target="_blank" rel="noreferrer"
-                        className="py-3 bg-amber-500/10 text-amber-200 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-amber-500/20 transition-all sm:col-span-2">
-                        <Film size={16} /> Short Preview Video
-                      </a>
-                    )}
-                  </div>
-                  <div className="flex flex-col sm:flex-row gap-3 mt-3">
-                    <button onClick={() => downloadAsset(downloadsWebsite._id || downloadsWebsite, 'source')}
-                      className="flex-1 py-3 bg-emerald-500 text-black rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-emerald-600 transition-all">
-                      <FileCode size={16} /> Download Source ZIP
-                    </button>
-                    <button onClick={() => downloadAsset(downloadsWebsite._id || downloadsWebsite, 'docs')}
-                      className="flex-1 py-3 bg-blue-500 text-black rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-blue-600 transition-all">
-                      <FileText size={16} /> Download Docs PDF
-                    </button>
-                    {downloadsWebsite?.files?.video && (
-                      <button onClick={() => downloadAsset(downloadsWebsite._id || downloadsWebsite, 'video')}
-                        className="flex-1 py-3 bg-purple-500 text-black rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-purple-600 transition-all">
-                        <Film size={16} /> Download Walkthrough
-                      </button>
-                    )}
-                  </div>
-                  <div className="pt-4 border-t border-white/5 flex items-center justify-end gap-2">
-                    <button onClick={() => setDownloadsModalOpen(false)} className="px-4 py-2 bg-white/5 rounded-xl">Close</button>
-                  </div>
-                </div>
-              </div>
-            </div>
           )}
 
           {activeTab === 'wishlist' && (
@@ -636,6 +702,60 @@ export default function Profile() {
                   ))}
                 </div>
               )}
+            </motion.div>
+          )}
+
+          {activeTab === 'bankDetails' && (
+            <motion.div key="bankDetails" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+              <div className="max-w-2xl mx-auto">
+                <div className="mb-8">
+                  <h2 className="text-xl font-bold tracking-tight">Payout Details</h2>
+                  <p className="text-white/40 text-xs mt-1">Manage your payout account information. We use UPI and Phone Number for payments.</p>
+                </div>
+                
+                {loadingBankDetails ? (
+                  <div className="flex justify-center py-10">
+                    <Loader2 className="animate-spin text-[#8b7355]" size={32} />
+                  </div>
+                ) : (
+                  <form onSubmit={handleSaveBankDetails} className="space-y-6">
+                    <div className="bg-[#111] border border-white/5 rounded-3xl p-6 md:p-8 space-y-6 hover:border-white/10 transition-all">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <label className="text-[9px] uppercase tracking-widest text-[#8b7355] block font-bold">UPI ID</label>
+                          <input 
+                            required
+                            className="w-full bg-black/40 border border-white/5 rounded-2xl px-4 py-3 text-sm outline-none focus:border-[#8b7355]/50 transition-colors" 
+                            placeholder="username@upi"
+                            value={bankDetails.upiId || ''}
+                            onChange={(e) => setBankDetails({...bankDetails, upiId: e.target.value})}
+                          />
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <label className="text-[9px] uppercase tracking-widest text-[#8b7355] block font-bold">Phone Number</label>
+                          <input 
+                            required
+                            type="tel"
+                            className="w-full bg-black/40 border border-white/5 rounded-2xl px-4 py-3 text-sm outline-none focus:border-[#8b7355]/50 transition-colors" 
+                            placeholder="+91 9876543210"
+                            value={bankDetails.phoneNumber || ''}
+                            onChange={(e) => setBankDetails({...bankDetails, phoneNumber: e.target.value})}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <button 
+                      type="submit" 
+                      disabled={savingBankDetails} 
+                      className="w-full py-4 bg-[#8b7355] text-white rounded-3xl font-bold text-xs uppercase tracking-widest hover:bg-[#725e46] transition-all flex items-center justify-center gap-2"
+                    >
+                      {savingBankDetails ? <Loader2 className="animate-spin" size={16} /> : <><CheckCircle size={16} /> Save Payout Details</>}
+                    </button>
+                  </form>
+                )}
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -666,6 +786,58 @@ function EmptyState({ icon: Icon, title, description, action, onAction }) {
       <button onClick={onAction} className="px-8 py-3 bg-[#8b7355] text-white rounded-2xl font-bold text-xs uppercase tracking-widest">
         {action}
       </button>
+    </div>
+  );
+}
+
+function GuidancePanel({ tone = 'warning', title, messages, actionLabel, onAction, actionDisabled = false }) {
+  const styles = {
+    warning: {
+      wrapper: 'border-amber-400/20 bg-amber-500/10',
+      icon: 'text-amber-300',
+      title: 'text-amber-200',
+      text: 'text-amber-100/80',
+      bullet: 'bg-amber-300',
+      button: 'bg-amber-300 text-black hover:bg-amber-200',
+    },
+    error: {
+      wrapper: 'border-red-400/20 bg-red-500/10',
+      icon: 'text-red-300',
+      title: 'text-red-200',
+      text: 'text-red-100/80',
+      bullet: 'bg-red-300',
+      button: 'bg-red-300 text-black hover:bg-red-200',
+    },
+  };
+
+  const palette = styles[tone] || styles.warning;
+
+  return (
+    <div className={`rounded-3xl border p-5 ${palette.wrapper}`}>
+      <div className="flex items-start gap-3">
+        <AlertCircle size={18} className={`mt-0.5 shrink-0 ${palette.icon}`} />
+        <div className="flex-1">
+          <h3 className={`text-sm font-bold mb-2 ${palette.title}`}>{title}</h3>
+          <div className="space-y-2">
+            {messages.map((message) => (
+              <div key={message} className={`flex items-start gap-2 text-sm leading-relaxed ${palette.text}`}>
+                <span className={`mt-2 h-1.5 w-1.5 rounded-full shrink-0 ${palette.bullet}`} />
+                <span>{message}</span>
+              </div>
+            ))}
+          </div>
+          {actionLabel && onAction && (
+            <button
+              type="button"
+              onClick={onAction}
+              disabled={actionDisabled}
+              className={`mt-4 rounded-2xl px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${palette.button}`}
+            >
+              {actionLabel}
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

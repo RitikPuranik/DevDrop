@@ -39,24 +39,20 @@ const getProfile = async (req, res) => {
 const saveBankDetails = async (req, res) => {
   try {
     const userId = req.userId;
-    const { accountHolderName, accountNumber, ifscCode, bankName, branch, upiId } = req.body;
+    const { upiId, phoneNumber } = req.body;
 
     let bankDetails = await BankDetails.findOne({ userId });
 
     if (bankDetails) {
-      bankDetails.accountHolderName = accountHolderName;
-      bankDetails.accountNumber = accountNumber;
-      bankDetails.ifscCode = ifscCode.toUpperCase();
-      bankDetails.bankName = bankName;
-      bankDetails.branch = branch;
-      bankDetails.upiId = upiId || bankDetails.upiId;
+      bankDetails.upiId = upiId;
+      bankDetails.phoneNumber = phoneNumber;
       await bankDetails.save();
-      return res.json({ success: true, message: 'Bank details updated successfully', data: bankDetails });
+      return res.json({ success: true, message: 'Payout details updated successfully', data: bankDetails });
     }
 
-    bankDetails = new BankDetails({ userId, accountHolderName, accountNumber, ifscCode: ifscCode.toUpperCase(), bankName, branch, upiId });
+    bankDetails = new BankDetails({ userId, upiId, phoneNumber });
     await bankDetails.save();
-    res.status(201).json({ success: true, message: 'Bank details saved successfully', data: bankDetails });
+    res.status(201).json({ success: true, message: 'Payout details saved successfully', data: bankDetails });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error saving bank details', error: error.message });
   }
@@ -76,7 +72,7 @@ const getDashboard = async (req, res) => {
   try {
     const userId = req.userId;
     const [uploadedWebsites, purchases, wishlistCount, earnings, pendingPayouts] = await Promise.all([
-      Website.countDocuments({ sellerId: userId, isDeleted: false }),
+      Website.countDocuments({ sellerId: userId, status: 'approved', isDeleted: false }),
       Purchase.countDocuments({ buyerId: userId, paymentStatus: 'completed' }),
       Wishlist.countDocuments({ userId }),
       Purchase.aggregate([{ $match: { sellerId: userId, paymentStatus: 'completed' } }, { $group: { _id: null, total: { $sum: '$sellerPrice' } } }]),
@@ -97,7 +93,7 @@ const getPurchases = async (req, res) => {
     const purchases = await Purchase.find({ buyerId: req.userId, paymentStatus: 'completed' })
       .populate({
         path: 'websiteId',
-        select: 'name description techStack category price deployedUrl githubUrl previewUrl files previewVideoUrl sellerId',
+        select: 'name description techStack category price deployedUrl previewUrl files previewVideoUrl sellerId',
         populate: {
           path: 'sellerId',
           select: 'name email',

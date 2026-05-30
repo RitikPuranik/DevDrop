@@ -135,9 +135,9 @@ export default function AdminDashboard() {
             accentColor="rgba(99,102,241,0.5)"
           />
           <StatCard
-            label="Total Websites"
-            value={totalWebsites}
-            sub={`${pendingCount} pending · ${approvedCount} live`}
+            label="Approved Websites"
+            value={approvedCount}
+            sub={`${pendingCount} pending reviews`}
             icon={<Globe size={18} />}
             accentColor="rgba(139,115,85,0.5)"
           />
