@@ -185,7 +185,7 @@ export default function PendingWebsites() {
   // ── Auth + Fetch ─────────────────────────────────────────────────────────
   const fetchWebsites = async () => {
     try {
-      const res = await adminAPI.getPendingWebsites();
+      const res = await adminAPI.getAllWebsites('all');
       setWebsites(res.data?.data || []);
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to load websites");

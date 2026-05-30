@@ -204,11 +204,8 @@ const createWebsite = async (req, res) => {
       }
     }
 
-    try {
-      await emailService.sendStatusUpdateEmail(resolvedSeller, website, WEBSITE_STATUS.APPROVED);
-    } catch (emailError) {
-      console.error('Failed to send email:', emailError);
-    }
+    emailService.sendStatusUpdateEmail(resolvedSeller, website, WEBSITE_STATUS.APPROVED)
+      .catch(emailError => console.error('Failed to send email:', emailError));
 
     res.status(201).json({ success: true, message: 'Website created and published successfully', data: website });
   } catch (error) {
@@ -249,16 +246,12 @@ const requestChanges = async (req, res) => {
     await website.save();
 
     // Send email to seller
-    try {
-      await emailService.sendStatusUpdateEmail(
-        website.sellerId,
-        website,
-        WEBSITE_STATUS.CHANGES_REQUESTED,
-        comment
-      );
-    } catch (emailError) {
-      console.error('Failed to send email:', emailError);
-    }
+    emailService.sendStatusUpdateEmail(
+      website.sellerId,
+      website,
+      WEBSITE_STATUS.CHANGES_REQUESTED,
+      comment
+    ).catch(emailError => console.error('Failed to send email:', emailError));
 
     res.json({
       success: true,
@@ -307,16 +300,12 @@ const rejectWebsite = async (req, res) => {
     await website.save();
 
     // Send email to seller
-    try {
-      await emailService.sendStatusUpdateEmail(
-        website.sellerId,
-        website,
-        WEBSITE_STATUS.REJECTED,
-        reason
-      );
-    } catch (emailError) {
-      console.error('Failed to send email:', emailError);
-    }
+    emailService.sendStatusUpdateEmail(
+      website.sellerId,
+      website,
+      WEBSITE_STATUS.REJECTED,
+      reason
+    ).catch(emailError => console.error('Failed to send email:', emailError));
 
     res.json({
       success: true,
@@ -507,15 +496,11 @@ const approveWebsite = async (req, res) => {
     }
 
     // Send email to seller
-    try {
-      await emailService.sendStatusUpdateEmail(
-        website.sellerId,
-        website,
-        WEBSITE_STATUS.APPROVED
-      );
-    } catch (emailError) {
-      console.error('Failed to send email:', emailError);
-    }
+    emailService.sendStatusUpdateEmail(
+      website.sellerId,
+      website,
+      WEBSITE_STATUS.APPROVED
+    ).catch(emailError => console.error('Failed to send email:', emailError));
 
     res.json({
       success: true,
