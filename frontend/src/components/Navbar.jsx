@@ -473,6 +473,5 @@ const MobileSubMenuItem = ({ label, index, onClick }) => (
   </motion.div>
 );
 
-export default Navbar;       
-
-
+export default Navbar;
+// fixed nav
