@@ -280,7 +280,6 @@ export default function PendingWebsites() {
     acc[t] = t === "all" ? websites.length : websites.filter((w) => w.status === t).length;
     return acc;
   }, {});
-
   // ── Loading / Auth Guard ──────────────────────────────────────────────────
   if (loading) {
     return (
@@ -304,24 +303,24 @@ export default function PendingWebsites() {
   }
 
   return (
-    <div className="min-h-screen bg-[#080808] text-white pt-32 pb-16 px-6">
+    <div className="min-h-screen bg-[#080808] text-white pt-24 md:pt-32 pb-16 px-4 md:px-6">
       <div className="max-w-6xl mx-auto space-y-8">
 
         <AdminNav />
 
         {/* Header */}
-        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-[36px] border border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(139,115,85,0.28),_transparent_38%),linear-gradient(180deg,_rgba(255,255,255,0.04),_rgba(255,255,255,0.02))] p-8 md:p-10 backdrop-blur-2xl">
-          <div className="flex items-center justify-between flex-wrap gap-4">
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-[36px] border border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(139,115,85,0.28),_transparent_38%),linear-gradient(180deg,_rgba(255,255,255,0.04),_rgba(255,255,255,0.02))] p-6 md:p-10 backdrop-blur-2xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
             <div>
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] uppercase tracking-[0.25em] text-white/40 mb-5">
                 <ShieldCheck size={12} /> Website Management
               </div>
-              <h1 className="text-4xl md:text-5xl font-black tracking-tight leading-none mb-3">All Websites</h1>
+              <h1 className="text-3xl md:text-5xl font-black tracking-tight leading-none mb-3">All Websites</h1>
               <p className="text-white/45 max-w-lg leading-relaxed text-sm">
                 {counts.pending_review} pending · {counts.changes_requested} need changes · {counts.approved} approved
               </p>
             </div>
-            <button onClick={fetchWebsites} className="flex items-center gap-2 px-5 py-3 rounded-2xl border border-white/10 text-xs text-white/50 hover:text-white hover:bg-white/5 font-bold uppercase tracking-[0.1em] transition-all">
+            <button onClick={fetchWebsites} className="w-full sm:w-auto flex justify-center items-center gap-2 px-5 py-3 rounded-2xl border border-white/10 text-xs text-white/50 hover:text-white hover:bg-white/5 font-bold uppercase tracking-[0.1em] transition-all">
               <RefreshCw size={14} /> Refresh
             </button>
           </div>
@@ -330,8 +329,8 @@ export default function PendingWebsites() {
         {/* Table Card */}
         <div className="rounded-[32px] border border-white/10 bg-[#0f0f0f] shadow-2xl shadow-black/30 overflow-hidden">
           {/* Tabs + Search */}
-          <div className="flex items-center justify-between border-b border-white/5 px-4 pt-2 flex-wrap gap-2">
-            <div className="flex overflow-x-auto">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-white/5 px-4 pt-2 gap-4 pb-2 sm:pb-0">
+            <div className="flex overflow-x-auto w-full custom-scrollbar">
               {TABS.map((tab) => (
                 <button
                   key={tab}
@@ -347,14 +346,14 @@ export default function PendingWebsites() {
                 </button>
               ))}
             </div>
-            <div className="relative my-2">
+            <div className="relative my-2 w-full sm:w-auto">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/25" />
               <input
                 type="text"
                 placeholder="Search..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-8 pr-4 py-2 text-sm bg-white/[0.03] border border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8b7355]/40 text-white placeholder:text-white/20 w-48"
+                className="pl-8 pr-4 py-2 text-sm bg-white/[0.03] border border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8b7355]/40 text-white placeholder:text-white/20 w-full sm:w-48"
               />
             </div>
           </div>
@@ -457,3 +456,5 @@ export default function PendingWebsites() {
     </div>
   );
 }
+
+export { PendingWebsites };
