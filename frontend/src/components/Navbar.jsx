@@ -3,8 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import LinkTransition from './TransitionLink';
 import AuthModal from './Login';
 import { LogOut } from "lucide-react";
-import { useNavigate } from 'react-router-dom';
-import { userAPI } from '../api/user';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -17,6 +16,7 @@ const Navbar = () => {
   const [isMobile, setIsMobile] = useState(false);
 
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 1024);
@@ -24,6 +24,11 @@ const Navbar = () => {
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  // Closes menu layout seamlessly when transition triggers
+  useEffect(() => {
+    closeMenu();
+  }, [location.pathname, location.search]);
 
   const checkLoginStatus = async () => {
     const token = localStorage.getItem("token");
@@ -91,6 +96,12 @@ const Navbar = () => {
       ],
     },
     {
+      to: "/about",
+      label: "About Us",
+      src: "https://images.unsplash.com/photo-1522071820081-009f0129c71c?q=80&w=870",
+      hasSubMenu: false,
+    },
+    {
       to: "/review",
       label: "People's Love",
       src: "https://plus.unsplash.com/premium_photo-1739436074076-3c6d73478d59?q=80&w=812",
@@ -139,11 +150,6 @@ const Navbar = () => {
     }
   };
 
-  const handleSubItemClick = (filter) => {
-    closeMenu();
-    navigate(`/template?filter=${filter}`);
-  };
-
   const activeImageIndex =
     websitesExpanded
       ? finalMenuItems.findIndex((m) => m.hasSubMenu)
@@ -170,10 +176,7 @@ const Navbar = () => {
         <button
           onClick={() => {
             if (isOpen) {
-              setIsOpen(false);
-              setWebsitesExpanded(false);
-              setHoveredIndex(null);
-              setHoveredSubIndex(null);
+              closeMenu();
             } else {
               setIsOpen(true);
             }
@@ -211,26 +214,11 @@ const Navbar = () => {
             animate={{ y: 0 }}
             exit={{ y: "-100%" }}
             transition={{ duration: 0.6, ease: fastEase }}
-            className="fixed inset-0 z-[100] overflow-hidden
-                        flex flex-col lg:flex-row
-                        bg-[#e8e2d6]"
+            className="fixed inset-0 z-[100] overflow-hidden flex flex-col lg:flex-row bg-[#e8e2d6]"
           >
-
-            {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                LEFT / MENU PANEL
-                — Full width on mobile, half width on desktop
-                — On mobile: takes ~60% of screen height (flex-[3])
-                — On desktop: takes 50% width, full height (original)
-            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-            <div className="
-              flex-[3] lg:flex-none
-              w-full lg:w-1/2
-              lg:h-full
-              flex flex-col justify-center text-center
-              pt-24 pb-6 sm:pt-28 sm:pb-8 lg:pt-0 lg:pb-12
-              px-6 sm:px-14 md:px-20 lg:px-24
-              overflow-y-auto
-            ">
+            {/* LEFT / MENU PANEL */}
+            <div className="mt-10 flex-[3] lg:flex-none w-full lg:w-1/2 lg:h-full flex flex-col justify-center text-center pt-24 pb-6 sm:pt-28 sm:pb-8 lg:pt-0 lg:pb-12 px-6 sm:px-14 md:px-20 lg:px-24 overflow-y-auto">
+              
               {/* Menu links */}
               <div className="flex flex-col w-full mb-5 sm:mb-8 -ml-0 lg:-ml-5">
                 {finalMenuItems.map((item, index) => {
@@ -250,12 +238,11 @@ const Navbar = () => {
                       onLeave={() => !isMobile && setHoveredIndex(null)}
                       onClick={() => handleMenuItemClick(item)}
                       closeMenu={closeMenu}
-                      isExpanded={item.hasSubMenu && websitesExpanded}
                     />
                   );
                 })}
 
-                {/* Mobile inline sub-menu — expands below "Websites" */}
+                {/* Mobile inline sub-menu */}
                 <AnimatePresence>
                   {websitesExpanded && isMobile && (
                     <motion.div
@@ -271,8 +258,9 @@ const Navbar = () => {
                           <MobileSubMenuItem
                             key={sub.filter}
                             label={sub.label}
+                            filter={sub.filter}
                             index={si}
-                            onClick={() => handleSubItemClick(sub.filter)}
+                            closeMenu={closeMenu}
                           />
                         ))}
                     </motion.div>
@@ -306,19 +294,8 @@ const Navbar = () => {
               </motion.div>
             </div>
 
-            {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                RIGHT / IMAGE PANEL
-                — On desktop: right half, full height (original)
-                — On mobile: bottom strip, ~40% screen height (flex-[2])
-                  with the same crossfade image + sub-menu overlay
-            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-            <div className="
-              flex-[2] lg:flex-none
-              w-full lg:w-1/2
-              min-h-[38vh] sm:min-h-[40vh] lg:min-h-0 lg:h-full
-              relative bg-black overflow-hidden
-            ">
-              {/* Crossfading image — same logic on both mobile and desktop */}
+            {/* RIGHT / IMAGE PANEL */}
+            <div className="flex-[2] lg:flex-none w-full lg:w-1/2 min-h-[38vh] sm:min-h-[40vh] lg:min-h-0 lg:h-full relative bg-black overflow-hidden">
               <AnimatePresence initial={false}>
                 <motion.div
                   key={activeImageIndex}
@@ -336,9 +313,7 @@ const Navbar = () => {
                 </motion.div>
               </AnimatePresence>
 
-              {/* Sub-menu overlay on image panel
-                  Desktop: shown when websitesExpanded (original behaviour)
-                  Mobile:  hidden — sub-menu renders inline in the menu panel above */}
+              {/* Desktop Sub-menu overlay */}
               <AnimatePresence>
                 {websitesExpanded && !isMobile && (
                   <motion.div
@@ -365,11 +340,12 @@ const Navbar = () => {
                             <SubMenuItem
                               key={sub.filter}
                               label={sub.label}
+                              filter={sub.filter}
                               index={si}
                               isDimmed={isSubDimmed}
                               onHover={() => setHoveredSubIndex(si)}
                               onLeave={() => setHoveredSubIndex(null)}
-                              onClick={() => handleSubItemClick(sub.filter)}
+                              closeMenu={closeMenu}
                             />
                           );
                         })}
@@ -387,9 +363,9 @@ const Navbar = () => {
 };
 
 /* ─── Menu Item ──────────────────────────────────────────────────── */
-const MenuItem = ({ item, onHover, onLeave, onClick, closeMenu, isDimmed, isExpanded }) => (
+const MenuItem = ({ item, onHover, onLeave, onClick, closeMenu, isDimmed }) => (
   <div
-    className="overflow-hidden py-0.5 sm:py-1"
+    className="overflow-hidden py-0.5 sm:py-2"
     onMouseEnter={onHover}
     onMouseLeave={onLeave}
     onClick={onClick}
@@ -409,13 +385,6 @@ const MenuItem = ({ item, onHover, onLeave, onClick, closeMenu, isDimmed, isExpa
           `}
         >
           {item.label}
-          <motion.span
-            animate={{ x: isExpanded ? 6 : 0, opacity: isExpanded ? 1 : 0.4 }}
-            transition={{ duration: 0.3 }}
-            className="inline-block ml-2 text-[5.5vw] sm:text-[4vw] lg:text-[2.8vw] align-middle"
-          >
-            ›
-          </motion.span>
         </span>
       ) : (
         <LinkTransition
@@ -435,8 +404,8 @@ const MenuItem = ({ item, onHover, onLeave, onClick, closeMenu, isDimmed, isExpa
   </div>
 );
 
-/* ─── Desktop Sub-Menu Item (image panel overlay) ────────────────── */
-const SubMenuItem = ({ label, index, isDimmed, onHover, onLeave, onClick }) => (
+/* ─── Desktop Sub-Menu Item ────────────────── */
+const SubMenuItem = ({ label, filter, index, isDimmed, onHover, onLeave, closeMenu }) => (
   <motion.div
     initial={{ opacity: 0, x: 24 }}
     animate={{ opacity: 1, x: 0 }}
@@ -444,9 +413,11 @@ const SubMenuItem = ({ label, index, isDimmed, onHover, onLeave, onClick }) => (
     className="overflow-hidden py-0.5"
     onMouseEnter={onHover}
     onMouseLeave={onLeave}
-    onClick={onClick}
   >
-    <span
+    <LinkTransition
+      key={`sub-${filter}`} // 👈 FORCE Full unmount/transition key matching path
+      to={`/template?filter=${filter}`}
+      onClick={closeMenu}
       className={`
         text-[5.0vw] leading-[0.9] font-serif italic tracking-tighter
         block transition-all duration-300 cursor-pointer select-none text-[#e8e2d6]
@@ -454,22 +425,26 @@ const SubMenuItem = ({ label, index, isDimmed, onHover, onLeave, onClick }) => (
       `}
     >
       {label}
-    </span>
+    </LinkTransition>
   </motion.div>
 );
 
-/* ─── Mobile Sub-Menu Item (inline in menu panel) ────────────────── */
-const MobileSubMenuItem = ({ label, index, onClick }) => (
+/* ─── Mobile Sub-Menu Item ────────────────── */
+const MobileSubMenuItem = ({ label, filter, index, closeMenu }) => (
   <motion.div
     initial={{ opacity: 0, x: 16 }}
     animate={{ opacity: 1, x: 0 }}
     transition={{ delay: index * 0.07 + 0.05, duration: 0.4, ease: [0.19, 1, 0.22, 1] }}
     className="overflow-hidden py-0.5"
-    onClick={onClick}
   >
-    <span className="text-[8.5vw] sm:text-[6.5vw] leading-[0.95] font-serif italic tracking-tighter block cursor-pointer select-none text-[#8b7355]">
+    <LinkTransition
+      key={`sub-mob-${filter}`} // 👈 FORCE Full unmount/transition key matching path
+      to={`/template?filter=${filter}`}
+      onClick={closeMenu}
+      className="text-[8.5vw] sm:text-[6.5vw] leading-[0.95] font-serif italic tracking-tighter block cursor-pointer select-none text-[#8b7355]"
+    >
       {label}
-    </span>
+    </LinkTransition>
   </motion.div>
 );
 

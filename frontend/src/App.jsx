@@ -23,7 +23,7 @@ import Checkout from './pages/Checkout';
 import VerifyEmail from './pages/VerifyEmail';
 import ResetPassword from './pages/ResetPassword';
 import AdminDashboard from "./pages/admin/Dashboard";
-import PendingWebsites from "./pages/admin/Pending_web";
+import { PendingWebsites } from "./pages/admin/Pending_web";
 import ProcessPayouts from "./pages/admin/Pending_payout";
 
 
