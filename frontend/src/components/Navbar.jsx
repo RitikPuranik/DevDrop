@@ -448,4 +448,6 @@ const MobileSubMenuItem = ({ label, filter, index, closeMenu }) => (
   </motion.div>
 );
 
-export default Navbar;
+export default Navbar;       
+
+
