@@ -72,36 +72,40 @@ export default function AuthModal({ isOpen, onClose }) {
     }
   }, [navigate, onClose]);
 
-  // Render Google button into a div
-  const initGoogleButton = useCallback(async (containerId) => {
+  // Render Google buttons into every visible auth container.
+  const initGoogleButtons = useCallback(async () => {
     if (!GOOGLE_CLIENT_ID) return;
     await loadGSI();
     if (!window.google?.accounts) return;
     window.google.accounts.id.initialize({
       client_id: GOOGLE_CLIENT_ID,
       callback: handleGoogleCredential,
+      ux_mode: "popup",
     });
-    const container = document.getElementById(containerId);
-    if (!container) return;
-    window.google.accounts.id.renderButton(container, {
-      type: "standard",
-      shape: "pill",
-      theme: "outline",
-      size: "large",
-      text: "continue_with",
-      width: container.offsetWidth || 280,
+    const containers = document.querySelectorAll("[data-google-button]");
+    containers.forEach((container) => {
+      container.innerHTML = "";
+      window.google.accounts.id.renderButton(container, {
+        type: "standard",
+        shape: "pill",
+        theme: "outline",
+        size: "large",
+        text: "continue_with",
+        width: container.offsetWidth || 280,
+      });
     });
   }, [handleGoogleCredential]);
 
   useEffect(() => {
-    if (isOpen && shouldRender) {
-      // slight delay so DOM is ready
-      setTimeout(() => {
-        initGoogleButton("google-btn-login");
-        initGoogleButton("google-btn-signup");
-      }, 100);
-    }
-  }, [isOpen, shouldRender, isSignUp, initGoogleButton]);
+    if (!isOpen || !shouldRender) return;
+
+    // Slight delay so the modal layout is ready before Google measures button width.
+    const timer = window.setTimeout(() => {
+      initGoogleButtons();
+    }, 100);
+
+    return () => window.clearTimeout(timer);
+  }, [isOpen, shouldRender, initGoogleButtons]);
 
   // ── Local login ──────────────────────────────────────────────────────────────
   const handleLogin = async (e) => {
@@ -221,7 +225,7 @@ export default function AuthModal({ isOpen, onClose }) {
                 <h2 className="text-3xl font-serif font-bold text-[#3d342b] mb-1">Create Account</h2>
                 <p className="text-[#8b7355] text-sm mb-5">Join DevDrop today</p>
 
-                <div id="google-btn-signup" className="w-full mb-4 flex justify-center" />
+                <div data-google-button className="w-full mb-4 flex justify-center" />
                 <Divider />
 
                 <form className="w-full" onSubmit={handleSignup}>
@@ -251,7 +255,7 @@ export default function AuthModal({ isOpen, onClose }) {
                 <h2 className="text-3xl font-serif font-bold text-[#3d342b] mb-1">Welcome</h2>
                 <p className="text-[#8b7355] text-sm mb-5">Please enter your credentials</p>
 
-                <div id="google-btn-login" className="w-full mb-4 flex justify-center" />
+                <div data-google-button className="w-full mb-4 flex justify-center" />
                 <Divider />
 
                 <form className="w-full" onSubmit={handleLogin}>
@@ -284,7 +288,7 @@ export default function AuthModal({ isOpen, onClose }) {
               <p className="text-[#8b7355] text-sm mb-4">Join DevDrop today</p>
 
               {/* Google button */}
-              <div id="google-btn-signup" className="w-full mb-3 flex justify-center" />
+              <div data-google-button className="w-full mb-3 flex justify-center" />
               <Divider />
 
               <AuthInput icon={User} type="text" placeholder="Full Name" name="name" value={signupData.name} onChange={handleSignupChange} />
@@ -318,7 +322,7 @@ export default function AuthModal({ isOpen, onClose }) {
                 <p className="text-[#8b7355] mb-4 text-sm">Please enter your credentials</p>
 
                 {/* Google button */}
-                <div id="google-btn-login" className="w-full mb-3 flex justify-center" />
+                <div data-google-button className="w-full mb-3 flex justify-center" />
                 <Divider />
 
                 <AuthInput icon={Mail} type="text" placeholder="Email or Phone" name="emailOrPhone" value={loginData.emailOrPhone} onChange={handleLoginChange} />

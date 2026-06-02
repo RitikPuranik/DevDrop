@@ -28,7 +28,15 @@ export default defineConfig({
     chunkSizeWarningLimit: 600,
   },
   server: {
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+    },
     port: 5173,
     strictPort: false,
+  },
+  preview: {
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+    },
   },
 });
