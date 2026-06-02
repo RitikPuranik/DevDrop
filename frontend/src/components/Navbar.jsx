@@ -77,6 +77,12 @@ const Navbar = () => {
       ],
     },
     {
+      to: "/about",
+      label: "About Us",
+      src: "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?q=80&w=870",
+      hasSubMenu: false,
+    },
+    {
       to: "/review",
       label: "People's Love",
       src: "https://plus.unsplash.com/premium_photo-1739436074076-3c6d73478d59?q=80&w=812",
