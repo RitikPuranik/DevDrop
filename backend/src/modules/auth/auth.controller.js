@@ -64,20 +64,34 @@ const verifyEmail = async (req, res) => {
     if (!token) return res.status(400).json({ success: false, message: 'Verification token is required' });
 
     const hashedToken = hashToken(token);
-    const user = await User.findOne({ verificationToken: hashedToken, verificationTokenExpiry: { $gt: Date.now() } });
-    if (!user) return res.status(400).json({ success: false, message: 'Invalid or expired verification token' });
 
-    const wasAlreadyVerified = user.isVerified;
+    // Atomic update — only succeeds if token exists AND user is not yet verified.
+    // This prevents the race condition where two simultaneous requests both read
+    // isVerified=false, then both send a welcome email.
+    const user = await User.findOneAndUpdate(
+      {
+        verificationToken: hashedToken,
+        verificationTokenExpiry: { $gt: Date.now() },
+        isVerified: false,  // only match unverified users
+      },
+      {
+        $set: { isVerified: true },
+        $unset: { verificationToken: '', verificationTokenExpiry: '' },
+      },
+      { new: true }
+    );
 
-    user.isVerified = true;
-    user.verificationToken = undefined;
-    user.verificationTokenExpiry = undefined;
-    await user.save();
-
-    // Only send welcome email once — skip if user was already verified (guards against duplicate calls)
-    if (!wasAlreadyVerified) {
-      try { await emailService.sendWelcomeEmail(user); } catch (e) { console.error('Welcome email failed:', e); }
+    if (!user) {
+      // Could be: token invalid, expired, OR already verified (idempotent 200)
+      const alreadyVerified = await User.findOne({ isVerified: true });
+      if (alreadyVerified) {
+        return res.json({ success: true, message: 'Email already verified' });
+      }
+      return res.status(400).json({ success: false, message: 'Invalid or expired verification token' });
     }
+
+    // Exactly one request will reach here — safe to send welcome email
+    try { await emailService.sendWelcomeEmail(user); } catch (e) { console.error('Welcome email failed:', e); }
 
     res.json({ success: true, message: 'Email verified successfully' });
   } catch (error) {

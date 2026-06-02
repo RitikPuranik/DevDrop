@@ -39,13 +39,24 @@ const getMyWebsites = async (req, res) => {
     const query = { sellerId: req.userId, isDeleted: false };
     if (status) query.status = status;
 
-    const websites = await Website.find(query).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(parseInt(limit));
-    const total = await Website.countDocuments(query);
+    const [websites, total] = await Promise.all([
+      Website.find(query).lean().sort({ createdAt: -1 }).skip((page - 1) * limit).limit(parseInt(limit)),
+      Website.countDocuments(query),
+    ]);
 
-    const websitesWithStats = await Promise.all(websites.map(async (w) => ({
-      ...w.toObject(),
-      salesCount: await Purchase.countDocuments({ websiteId: w._id, paymentStatus: 'completed' }),
-    })));
+    // Batch-count sales for all websites in one aggregation — avoids N+1 queries
+    const websiteIds = websites.map(w => w._id);
+    const salesCounts = await Purchase.aggregate([
+      { $match: { websiteId: { $in: websiteIds }, paymentStatus: 'completed' } },
+      { $group: { _id: '$websiteId', count: { $sum: 1 } } },
+    ]);
+    const salesMap = {};
+    salesCounts.forEach(s => { salesMap[s._id.toString()] = s.count; });
+
+    const websitesWithStats = websites.map(w => ({
+      ...w,
+      salesCount: salesMap[w._id.toString()] || 0,
+    }));
 
     res.json({ success: true, data: websitesWithStats, pagination: getPaginationMetadata(parseInt(page), parseInt(limit), total) });
   } catch (error) {

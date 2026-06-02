@@ -28,15 +28,15 @@ const getSalesStats = async (req, res) => {
   }
 };
 
-const getAllUser =async (req, res) => {
+const getAllUser = async (req, res) => {
   try {
-    const datas = await analyticsService.getAllUser();
-    res.json({ success: true, data:datas})
+    const data = await analyticsService.getAllUser();
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error fetching users', error: error.message });
   }
-  catch(error){
-    res.status(500).json({success: false, message: 'andi mandi sandi priyal pagalu ',  error: error.message})
-  }
-}
+};
+
 const getPublicStats = async (req, res) => {
   try {
     const stats = await analyticsService.getPlatformStats();

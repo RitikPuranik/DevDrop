@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const compression = require('compression');
 const { errorHandler, notFound } = require('./shared/middleware/errorHandler');
 const { generalLimiter } = require('./shared/middleware/rateLimit');
 
@@ -16,6 +17,9 @@ const allowedOrigins = [
   "http://localhost:3000",
 ].filter(Boolean);
 app.use(cors({ origin: allowedOrigins, credentials: true }));
+
+// Gzip compression — reduces response payload by ~70%
+app.use(compression());
 
 // Webhook must receive raw body for Razorpay signature verification — register BEFORE json parser
 app.use('/api/payment/webhook', express.raw({ type: 'application/json' }), (req, res, next) => {

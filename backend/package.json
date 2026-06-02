@@ -28,7 +28,8 @@
     "razorpay": "^2.9.0",
     "uuid": "^9.0.1",
     "winston": "^3.11.0",
-    "@getbrevo/brevo": "^2.0.0"
+    "@getbrevo/brevo": "^2.0.0",
+    "compression": "^1.7.4"
   },
   "devDependencies": {
     "jest": "^29.7.0",

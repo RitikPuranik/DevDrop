@@ -54,8 +54,8 @@ const getSalesStats = async (period = 30) => {
 };
 
 const getAllUser = async () => {
-  const user = await User.find({});
-  return user;
-}
+  const users = await User.find({}).lean().select('-password -verificationToken -verificationTokenExpiry -resetPasswordToken -resetPasswordExpiry');
+  return users;
+};
 
 module.exports = { getPlatformStats, getWebsiteStats, getSalesStats, getAllUser };

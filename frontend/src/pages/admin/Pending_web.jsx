@@ -280,7 +280,6 @@ export default function PendingWebsites() {
     acc[t] = t === "all" ? websites.length : websites.filter((w) => w.status === t).length;
     return acc;
   }, {});
-
   // ── Loading / Auth Guard ──────────────────────────────────────────────────
   if (loading) {
     return (
@@ -457,3 +456,5 @@ export default function PendingWebsites() {
     </div>
   );
 }
+
+export { PendingWebsites };

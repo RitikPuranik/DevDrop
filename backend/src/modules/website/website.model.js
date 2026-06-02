@@ -116,6 +116,8 @@ websiteSchema.index({ status: 1, category: 1 });
 websiteSchema.index({ sellerId: 1, status: 1 });
 websiteSchema.index({ category: 1, price: 1 });
 websiteSchema.index({ isDeleted: 1, status: 1 });
+// Text index for search — must exist for $text queries to work
+websiteSchema.index({ name: 'text', description: 'text' }, { weights: { name: 10, description: 3 } });
 
 websiteSchema.virtual('isSold').get(function () {
   return this.status === 'sold';

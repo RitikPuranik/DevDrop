@@ -172,33 +172,33 @@ export default function Profile() {
   const fetchProfile = async () => {
     try {
       setLoading(true);
-      const profileRes = await userAPI.getProfile();
-      const profileData = profileRes.data?.data;
-      setProfile(profileData?.user ? { ...profileData.user, hasBankDetails: profileData.hasBankDetails } : profileData);
-      try {
-        const dashRes = await userAPI.getDashboard();
-        setDashboard(dashRes.data?.data);
-      } catch (dashboardError) {
-        setDashboard({
-          uploadedWebsites: 0,
-          purchases: 0,
-          wishlistCount: 0,
-          totalEarnings: 0,
-          pendingPayouts: 0,
-        });
-        toast.error(dashboardError.response?.data?.message || 'Profile loaded, but dashboard stats could not be fetched');
-      }
-    } catch (err) {
-      if (err.response?.status === 401) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        window.dispatchEvent(new Event('auth-changed'));
-        toast.error('Your session expired. Please login again.');
-        navigate('/', { replace: true });
-        return;
+      // Run both requests in parallel — cuts initial load time in half
+      const [profileRes, dashRes] = await Promise.allSettled([
+        userAPI.getProfile(),
+        userAPI.getDashboard(),
+      ]);
+
+      if (profileRes.status === 'fulfilled') {
+        const profileData = profileRes.value.data?.data;
+        setProfile(profileData?.user ? { ...profileData.user, hasBankDetails: profileData.hasBankDetails } : profileData);
+      } else {
+        const err = profileRes.reason;
+        if (err.response?.status === 401) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          window.dispatchEvent(new Event('auth-changed'));
+          toast.error('Your session expired. Please login again.');
+          navigate('/', { replace: true });
+          return;
+        }
+        toast.error(err.response?.data?.message || 'Failed to load profile');
       }
 
-      toast.error(err.response?.data?.message || 'Failed to load profile');
+      if (dashRes.status === 'fulfilled') {
+        setDashboard(dashRes.value.data?.data);
+      } else {
+        setDashboard({ uploadedWebsites: 0, purchases: 0, wishlistCount: 0, totalEarnings: 0, pendingPayouts: 0 });
+      }
     } finally {
       setLoading(false);
     }

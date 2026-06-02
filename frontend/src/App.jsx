@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { Toaster } from "sonner";
-import "react-toastify/dist/ReactToastify.css";
 
 import IntroLoader from './components/Intro_Loader';
 import Loader from './components/Loading_Screen';
@@ -19,26 +18,21 @@ import Admin from './pages/Admin';
 import WebsiteDetail from './pages/WebsiteDetail';
 import Auctions from './pages/Auctions';
 import Checkout from './pages/Checkout';
-
 import VerifyEmail from './pages/VerifyEmail';
 import ResetPassword from './pages/ResetPassword';
 import AdminDashboard from "./pages/admin/Dashboard";
-import PendingWebsites from "./pages/admin/Pending_web";
+import { PendingWebsites } from "./pages/admin/Pending_web";
 import ProcessPayouts from "./pages/admin/Pending_payout";
-
 
 const VIDEO_SRC = '/dewdrop.s3.mp4';
 
 function AppContent() {
-
   const location = useLocation();
   const isBuilder = location.pathname === "/website";
   const isVerifyEmail = location.pathname === "/verify-email";
   const isResetPassword = location.pathname === "/reset-password";
   const isStandaloneAuthPage = isVerifyEmail || isResetPassword;
 
-  // Suppress intro for email-driven auth pages since they open from links outside the app.
-  // link so sessionStorage is empty. Set synchronously before useState runs.
   if (isStandaloneAuthPage) {
     sessionStorage.setItem('devdrop_intro_seen', 'true');
   }
@@ -67,6 +61,7 @@ function AppContent() {
 
     setAppReady(true);
 
+    // Preload the hero video
     const vid = document.createElement('video');
     vid.src = VIDEO_SRC;
     vid.muted = true;
@@ -77,21 +72,17 @@ function AppContent() {
 
     preloadedVideoRef.current = vid;
     videoReadyRef.current.element = vid;
-
   }, []);
 
   const handleIntroComplete = () => {
-
     sessionStorage.setItem('devdrop_intro_seen', 'true');
-
     suppressNextLoader.current = true;
     fromIntro.current = true;
 
     const vid = preloadedVideoRef.current;
-
     if (vid) {
       vid.currentTime = 0;
-      vid.play().catch(() => { });
+      vid.play().catch(() => {});
     }
 
     setShowIntro(false);
@@ -109,14 +100,10 @@ function AppContent() {
       {appReady && (
         <>
           {!isStandaloneAuthPage && <Loader suppressOnce={suppressNextLoader} />}
-
-          {/* Hide Navbar on Builder and standalone auth pages */}
           {!isBuilder && !isStandaloneAuthPage && <Navbar />}
 
           <main className="bg-black min-h-screen">
-
             <Routes>
-
               <Route
                 path="/"
                 element={
@@ -128,7 +115,6 @@ function AppContent() {
                   />
                 }
               />
-
               <Route path="/about" element={<About />} />
               <Route path="/template" element={<Template />} />
               <Route path="/contact" element={<ContactUs />} />
@@ -139,23 +125,20 @@ function AppContent() {
               <Route path="/website/:id" element={<WebsiteDetail />} />
               <Route path="/checkout/:id" element={<Checkout />} />
               <Route path="/auctions" element={<Auctions />} />
-
               <Route path="/verify-email" element={<VerifyEmail />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/admin/dashboard" element={<AdminDashboard />} />
               <Route path="/admin/websites/pending" element={<PendingWebsites />} />
               <Route path="/admin/payouts/pending" element={<ProcessPayouts />} />
-              {/* Builder */}
-              {/* <Route path="/website" element={<MakeYourOwn />} /> */}
-
             </Routes>
+
             <Toaster
               position="top-right"
               richColors
               toastOptions={{
                 style: {
                   backdropFilter: "blur(10px)",
-                  background: "rgba(30,30,30,0.8)",
+                  background: "rgba(30,30,30,0.85)",
                   color: "#fff",
                   border: "1px solid rgba(255,255,255,0.1)"
                 }
@@ -163,7 +146,6 @@ function AppContent() {
             />
           </main>
 
-          {/* Hide Footer on Builder and standalone auth pages */}
           {!isBuilder && !isStandaloneAuthPage && <Footer />}
         </>
       )}
