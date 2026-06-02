@@ -12,22 +12,21 @@ const userSchema = new mongoose.Schema(
     },
     phone: {
       type: String,
-      required: [true, 'Phone number is required'],
       unique: true,
+      sparse: true, // allows multiple null/missing values for OAuth users
       trim: true,
       match: [/^[0-9]{10}$/, 'Please provide a valid 10-digit phone number'],
     },
     email: {
       type: String,
       required: [true, 'Email is required'],
-      unique: true, // creates index automatically
+      unique: true,
       lowercase: true,
       trim: true,
       match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email'],
     },
     password: {
       type: String,
-      required: [true, 'Password is required'],
       minlength: [6, 'Password must be at least 6 characters'],
       select: false,
     },
@@ -40,6 +39,20 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // OAuth fields
+    googleId: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
+    avatar: {
+      type: String,
+    },
+    authProvider: {
+      type: String,
+      enum: ['local', 'google'],
+      default: 'local',
+    },
     verificationToken: String,
     verificationTokenExpiry: Date,
     resetPasswordToken: String,
@@ -50,15 +63,12 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-// Index for filtering verified/unverified users
 userSchema.index({ isVerified: 1 });
 
-// Hash password before saving
 userSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) {
+  if (!this.isModified('password') || !this.password) {
     return next();
   }
-
   try {
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
@@ -68,28 +78,18 @@ userSchema.pre('save', async function (next) {
   }
 });
 
-// Compare passwords
 userSchema.methods.comparePassword = async function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
 
-// Generate verification token
 userSchema.methods.generateVerificationToken = function () {
   const crypto = require('crypto');
-
   const token = crypto.randomBytes(32).toString('hex');
-
-  this.verificationToken = crypto
-    .createHash('sha256')
-    .update(token)
-    .digest('hex');
-
-  this.verificationTokenExpiry = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
-
+  this.verificationToken = crypto.createHash('sha256').update(token).digest('hex');
+  this.verificationTokenExpiry = Date.now() + 24 * 60 * 60 * 1000;
   return token;
 };
 
-// Remove sensitive fields when sending response
 userSchema.methods.toJSON = function () {
   const user = this.toObject();
   delete user.password;
@@ -103,17 +103,9 @@ userSchema.methods.toJSON = function () {
 userSchema.methods.generateResetPasswordToken = function () {
   const crypto = require('crypto');
   const token = crypto.randomBytes(32).toString('hex');
-
-  this.resetPasswordToken = crypto
-    .createHash('sha256')
-    .update(token)
-    .digest('hex');
-
-  this.resetPasswordExpiry = Date.now() + 15 * 60 * 1000; // 15 minutes
-
+  this.resetPasswordToken = crypto.createHash('sha256').update(token).digest('hex');
+  this.resetPasswordExpiry = Date.now() + 15 * 60 * 1000;
   return token;
 };
 
 module.exports = mongoose.model('User', userSchema);
-
-

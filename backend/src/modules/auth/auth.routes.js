@@ -6,8 +6,12 @@ const { auth } = require('../../shared/middleware/auth');
 const { authLimiter } = require('../../shared/middleware/rateLimit');
 const { validators, handleValidationErrors } = require('../../shared/utils/validators');
 
-router.post('/signup', authLimiter, [validators.name(), validators.phone(), validators.email(), validators.password(), handleValidationErrors], authController.signup);
+router.post('/signup', authLimiter, [validators.name(), validators.email(), validators.password(), handleValidationErrors], authController.signup);
 router.post('/login', authLimiter, [body('emailOrPhone').trim().notEmpty().withMessage('Email or phone is required'), validators.password(), handleValidationErrors], authController.login);
+
+// Google OAuth
+router.post('/google', authLimiter, [body('credential').notEmpty().withMessage('Google credential is required'), handleValidationErrors], authController.googleAuth);
+
 router.post('/send-verification', auth, authController.sendVerificationEmail);
 router.post('/verify-email', authController.verifyEmail);
 router.post('/resend-verification', auth, authController.resendVerification);
