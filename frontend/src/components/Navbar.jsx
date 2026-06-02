@@ -147,7 +147,7 @@ const Navbar = () => {
     <>
       <AuthModal
         isOpen={showAuthModal}
-        onClose={() => { setShowAuthModal(false); checkLoginStatus(); }}
+        onClose={() => { setShowAuthModal(false); syncFromStorage(); }}
       />
 
       {/* NAVBAR TOP STRIP */}

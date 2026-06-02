@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Mail,
   Lock,
@@ -44,6 +44,7 @@ export default function AuthModal({ isOpen, onClose }) {
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const lastGoogleCredentialRef = useRef(null);
   const navigate = useNavigate();
 
   const [loginData, setLoginData] = useState({ emailOrPhone: "", password: "" });
@@ -54,9 +55,19 @@ export default function AuthModal({ isOpen, onClose }) {
 
   // ── Google callback ──────────────────────────────────────────────────────────
   const handleGoogleCredential = useCallback(async (response) => {
+    const credential = response?.credential;
+    if (!credential) {
+      toast.error("Google sign-in did not return a credential.");
+      return;
+    }
+
+    // React Strict Mode and repeated popup callbacks can retry the same credential.
+    if (lastGoogleCredentialRef.current === credential) return;
+    lastGoogleCredentialRef.current = credential;
+
     try {
       setGoogleLoading(true);
-      const res = await authAPI.googleAuth(response.credential);
+      const res = await authAPI.googleAuth(credential);
       const { token, user } = res.data.data;
       localStorage.setItem("token", token);
       localStorage.setItem("user", JSON.stringify(user));
@@ -66,6 +77,7 @@ export default function AuthModal({ isOpen, onClose }) {
       if (user.role === "admin") navigate("/admin/dashboard");
       else navigate("/profile");
     } catch (err) {
+      lastGoogleCredentialRef.current = null;
       toast.error(err.response?.data?.message || "Google sign-in failed");
     } finally {
       setGoogleLoading(false);
@@ -84,6 +96,7 @@ export default function AuthModal({ isOpen, onClose }) {
     });
     const containers = document.querySelectorAll("[data-google-button]");
     containers.forEach((container) => {
+      if (container.getClientRects().length === 0) return;
       container.innerHTML = "";
       window.google.accounts.id.renderButton(container, {
         type: "standard",
@@ -166,6 +179,7 @@ export default function AuthModal({ isOpen, onClose }) {
     setIsForgotPassword(false);
     setForgotEmail("");
     setForgotLoading(false);
+    lastGoogleCredentialRef.current = null;
   }, [isOpen]);
 
   if (!shouldRender) return null;
