@@ -33,17 +33,17 @@ function ActivityRow({ purchase }) {
   const date = purchase.purchaseDate ? new Date(purchase.purchaseDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
 
   return (
-    <div className="flex items-center justify-between py-4 border-b border-white/5 last:border-0 hover:bg-white/[0.02] px-4 -mx-4 rounded-xl transition-colors">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between py-4 border-b border-white/5 last:border-0 hover:bg-white/[0.02] px-4 -mx-4 rounded-xl transition-colors gap-3">
       <div className="flex items-center gap-4">
-        <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 flex items-center justify-center">
+        <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 flex items-center justify-center shrink-0">
           <ShoppingCart size={16} className="text-emerald-400" />
         </div>
         <div>
           <p className="text-sm font-bold text-white tracking-tight">{websiteName}</p>
-          <p className="text-xs text-white/35 mt-0.5">{buyerEmail}</p>
+          <p className="text-xs text-white/35 mt-0.5 break-all">{buyerEmail}</p>
         </div>
       </div>
-      <div className="text-right">
+      <div className="text-left sm:text-right sm:ml-auto">
         <p className="text-sm font-bold text-emerald-400">₹{amount.toLocaleString()}</p>
         <p className="text-[10px] text-white/30 mt-0.5">{date}</p>
       </div>
@@ -109,18 +109,18 @@ export default function AdminDashboard() {
   const totalWebsites = Object.values(websites).reduce((s, v) => s + (typeof v === 'number' ? v : 0), 0);
 
   return (
-    <div className="min-h-screen bg-[#080808] text-white pt-32 pb-16 px-6">
+    <div className="min-h-screen bg-[#080808] text-white pt-24 md:pt-32 pb-16 px-4 md:px-6">
       <div className="max-w-6xl mx-auto space-y-8">
 
         <AdminNav />
 
         {/* Hero Header */}
-        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-[36px] border border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(139,115,85,0.28),_transparent_38%),linear-gradient(180deg,_rgba(255,255,255,0.04),_rgba(255,255,255,0.02))] p-8 md:p-10 backdrop-blur-2xl">
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-[36px] border border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(139,115,85,0.28),_transparent_38%),linear-gradient(180deg,_rgba(255,255,255,0.04),_rgba(255,255,255,0.02))] p-6 md:p-10 backdrop-blur-2xl">
           <div className="max-w-3xl">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] uppercase tracking-[0.25em] text-white/40 mb-5">
               <ShieldCheck size={12} /> Admin Dashboard
             </div>
-            <h1 className="text-4xl md:text-5xl font-black tracking-tight leading-none mb-4">Platform Overview</h1>
+            <h1 className="text-3xl md:text-5xl font-black tracking-tight leading-none mb-4">Platform Overview</h1>
             <p className="text-white/45 max-w-2xl leading-relaxed">Real-time stats for users, websites, revenue, and payouts across the DevDrop marketplace.</p>
           </div>
         </motion.div>
@@ -214,7 +214,7 @@ export default function AdminDashboard() {
 
         {/* Recent Activity */}
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="rounded-[32px] border border-white/10 bg-[#0f0f0f] p-6 md:p-8 shadow-2xl shadow-black/30">
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div>
               <p className="text-[10px] uppercase tracking-[0.3em] text-[#8b7355] font-bold mb-2">Activity</p>
               <h2 className="text-2xl font-black tracking-tight">Recent Purchases</h2>

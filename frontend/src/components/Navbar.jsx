@@ -460,6 +460,3 @@ const MobileSubMenuItem = ({ label, index, onClick }) => (
 );
 
 export default Navbar;       
-
-
-// fixed nav

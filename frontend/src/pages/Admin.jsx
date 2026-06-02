@@ -130,30 +130,30 @@ export default function Admin() {
   }
 
   return (
-    <div className="min-h-screen bg-[#080808] text-white pt-32 pb-16 px-6">
+    <div className="min-h-screen bg-[#080808] text-white pt-24 md:pt-32 pb-16 px-4 md:px-6">
       <div className="max-w-4xl mx-auto space-y-8">
         
         {/* Admin Navigation */}
         <AdminNav />
 
-        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-[36px] border border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(139,115,85,0.28),_transparent_38%),linear-gradient(180deg,_rgba(255,255,255,0.04),_rgba(255,255,255,0.02))] p-8 md:p-10 backdrop-blur-2xl">
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-[36px] border border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(139,115,85,0.28),_transparent_38%),linear-gradient(180deg,_rgba(255,255,255,0.04),_rgba(255,255,255,0.02))] p-6 md:p-10 backdrop-blur-2xl">
           <div className="max-w-3xl">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] uppercase tracking-[0.25em] text-white/40 mb-5">
               <ShieldCheck size={12} /> Admin Dashboard
             </div>
-            <h1 className="text-4xl md:text-5xl font-black tracking-tight leading-none mb-4">Review Queue</h1>
+            <h1 className="text-3xl md:text-5xl font-black tracking-tight leading-none mb-4">Review Queue</h1>
             <p className="text-white/45 max-w-2xl leading-relaxed">Select from the pending websites queue, add required files like ZIP and Docs PDF, and approve or reject seller submissions.</p>
           </div>
         </motion.div>
 
-        <div className="rounded-[32px] border border-white/10 bg-[#0f0f0f] p-6 md:p-8 shadow-2xl shadow-black/30">
-          <div className="flex items-center justify-between mb-6">
+        <div className="rounded-[32px] border border-white/10 bg-[#0f0f0f] p-5 md:p-8 shadow-2xl shadow-black/30">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div>
               <p className="text-[10px] uppercase tracking-[0.3em] text-[#8b7355] font-bold mb-2">Queue</p>
-              <h2 className="text-2xl font-black tracking-tight">Pending submissions</h2>
+              <h2 className="text-xl md:text-2xl font-black tracking-tight">Pending submissions</h2>
               <p className="text-xs text-white/35 mt-2">Creator stays locked. Approval adds ZIP, PDF, deployed link, and optional preview or walkthrough videos.</p>
             </div>
-            <button onClick={loadPending} className="text-[10px] uppercase tracking-[0.2em] text-[#8b7355] hover:text-[#a0896c] transition-colors font-bold px-4 py-2 border border-[#8b7355]/30 rounded-full hover:bg-[#8b7355]/10">
+            <button onClick={loadPending} className="w-full sm:w-auto text-center text-[10px] uppercase tracking-[0.2em] text-[#8b7355] hover:text-[#a0896c] transition-colors font-bold px-4 py-3 sm:py-2 border border-[#8b7355]/30 rounded-xl sm:rounded-full hover:bg-[#8b7355]/10">
               Refresh Queue
             </button>
           </div>
@@ -168,8 +168,8 @@ export default function Admin() {
               </div>
             ) : (
               pending.map((item) => (
-                <div key={item._id} className="rounded-3xl border border-white/8 bg-white/[0.03] p-5 hover:border-white/20 transition-colors">
-                  <div className="flex items-start justify-between gap-3 mb-4">
+                <div key={item._id} className="rounded-3xl border border-white/8 bg-white/[0.03] p-4 md:p-5 hover:border-white/20 transition-colors">
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-4">
                     <div>
                       <h3 className="font-bold text-xl tracking-tight">{item.name}</h3>
                       <p className="text-[11px] text-white/40 mt-1 uppercase tracking-[0.05em]">{item.sellerId?.email || item.sellerId?.name || 'Seller unknown'}</p>
