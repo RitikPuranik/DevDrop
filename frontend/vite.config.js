@@ -9,18 +9,19 @@ export default defineConfig({
     minify: 'terser',
     terserOptions: {
       compress: {
-        drop_console: true,   // Remove all console.log in production
+        drop_console: true,
         drop_debugger: true,
       },
     },
     rollupOptions: {
       output: {
-        // Manual chunk splitting — avoids one giant bundle
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom'],
-          motion: ['framer-motion'],
-          ui: ['lucide-react', 'sonner'],
-          gsap: ['gsap'],
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (['react', 'react-dom', 'react-router-dom'].some(pkg => id.includes(`/node_modules/${pkg}/`))) return 'vendor';
+            if (id.includes('/node_modules/framer-motion/')) return 'motion';
+            if (id.includes('/node_modules/lucide-react/') || id.includes('/node_modules/sonner/')) return 'ui';
+            if (id.includes('/node_modules/gsap/')) return 'gsap';
+          }
         },
       },
     },
