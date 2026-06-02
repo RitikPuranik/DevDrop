@@ -14,6 +14,15 @@ import { toast } from "sonner";
 // ─── Google One-Tap / GSI button helper ───────────────────────────────────────
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
+function getApiErrorMessage(error, fallbackMessage) {
+  const responseData = error?.response?.data;
+  const firstDetailedError =
+    responseData?.errors?.[0]?.message ||
+    responseData?.errors?.[0];
+
+  return firstDetailedError || responseData?.message || fallbackMessage;
+}
+
 function loadGSI() {
   return new Promise((resolve) => {
     if (window.google?.accounts) return resolve();
@@ -78,7 +87,7 @@ export default function AuthModal({ isOpen, onClose }) {
       else navigate("/profile");
     } catch (err) {
       lastGoogleCredentialRef.current = null;
-      toast.error(err.response?.data?.message || "Google sign-in failed");
+      toast.error(getApiErrorMessage(err, "Google sign-in failed"));
     } finally {
       setGoogleLoading(false);
     }
@@ -134,7 +143,7 @@ export default function AuthModal({ isOpen, onClose }) {
       if (user.role === "admin") navigate("/admin/dashboard");
       else navigate("/profile");
     } catch (err) {
-      toast.error(err.response?.data?.message || "Login failed");
+      toast.error(getApiErrorMessage(err, "Login failed"));
     }
   };
 
@@ -150,7 +159,7 @@ export default function AuthModal({ isOpen, onClose }) {
       toast.success("Account created! Please verify your email.");
       setIsSignUp(false);
     } catch (err) {
-      toast.error(err.response?.data?.message || "Signup failed");
+      toast.error(getApiErrorMessage(err, "Signup failed"));
     }
   };
 
@@ -168,7 +177,7 @@ export default function AuthModal({ isOpen, onClose }) {
       setLoginData((prev) => ({ ...prev, emailOrPhone: email }));
       setIsForgotPassword(false);
     } catch (err) {
-      toast.error(err.response?.data?.message || "Failed to send reset link");
+      toast.error(getApiErrorMessage(err, "Failed to send reset link"));
     } finally {
       setForgotLoading(false);
     }

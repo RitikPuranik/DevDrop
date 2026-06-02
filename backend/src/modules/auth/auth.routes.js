@@ -6,7 +6,17 @@ const { auth } = require('../../shared/middleware/auth');
 const { authLimiter } = require('../../shared/middleware/rateLimit');
 const { validators, handleValidationErrors } = require('../../shared/utils/validators');
 
-router.post('/signup', authLimiter, [validators.name(), validators.email(), validators.password(), handleValidationErrors], authController.signup);
+router.post('/signup', authLimiter, [
+  validators.name(),
+  body('phone')
+    .optional({ checkFalsy: true })
+    .trim()
+    .matches(/^[0-9]{10}$/)
+    .withMessage('Please provide a valid 10-digit phone number'),
+  validators.email(),
+  validators.password(),
+  handleValidationErrors,
+], authController.signup);
 router.post('/login', authLimiter, [body('emailOrPhone').trim().notEmpty().withMessage('Email or phone is required'), validators.password(), handleValidationErrors], authController.login);
 
 // Google OAuth

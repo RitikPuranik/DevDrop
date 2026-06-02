@@ -9,7 +9,7 @@ const { generalLimiter } = require('./shared/middleware/rateLimit');
 const app = express();
 
 // Security
-app.use(helmet({
+app.use(helmet({+
   crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
   crossOriginResourcePolicy: { policy: 'cross-origin' },
 }));

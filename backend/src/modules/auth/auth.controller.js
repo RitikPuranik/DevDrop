@@ -6,6 +6,29 @@ const emailService = require('../../services/email.service');
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
+const getAuthErrorStatus = (error, fallbackStatus = 500) => {
+  if (error?.code === 11000 || error?.name === 'ValidationError') {
+    return 400;
+  }
+
+  return fallbackStatus;
+};
+
+const getAuthErrorMessage = (error, fallbackMessage) => {
+  if (error?.code === 11000) {
+    if (error.keyPattern?.phone) return 'User with this phone number already exists';
+    if (error.keyPattern?.email) return 'User with this email already exists';
+    if (error.keyPattern?.googleId) return 'This Google account is already linked to another user';
+  }
+
+  if (error?.name === 'ValidationError') {
+    const firstValidationError = Object.values(error.errors || {})[0];
+    if (firstValidationError?.message) return firstValidationError.message;
+  }
+
+  return error?.message || fallbackMessage;
+};
+
 // ─────────────────────────────────────────
 // LOCAL AUTH
 // ─────────────────────────────────────────
@@ -33,7 +56,10 @@ const signup = async (req, res) => {
       data: { user: { id: user._id, name: user.name, phone: user.phone, email: user.email, role: user.role, isVerified: user.isVerified, avatar: user.avatar }, token },
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Error creating user', error: error.message });
+    res.status(getAuthErrorStatus(error)).json({
+      success: false,
+      message: getAuthErrorMessage(error, 'Error creating user'),
+    });
   }
 };
 
@@ -54,7 +80,10 @@ const login = async (req, res) => {
     const token = generateAccessToken(user._id);
     res.json({ success: true, message: 'Login successful', data: { user: { id: user._id, name: user.name, email: user.email, role: user.role, isVerified: user.isVerified, avatar: user.avatar }, token } });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Error logging in', error: error.message });
+    res.status(getAuthErrorStatus(error)).json({
+      success: false,
+      message: getAuthErrorMessage(error, 'Error logging in'),
+    });
   }
 };
 
@@ -116,7 +145,10 @@ const googleAuth = async (req, res) => {
     });
   } catch (error) {
     console.error('Google auth error:', error);
-    res.status(401).json({ success: false, message: 'Google authentication failed', error: error.message });
+    res.status(getAuthErrorStatus(error, 401)).json({
+      success: false,
+      message: getAuthErrorMessage(error, 'Google authentication failed'),
+    });
   }
 };
 
