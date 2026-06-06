@@ -21,10 +21,15 @@ const sendEmail = async ({ to, subject, html, from }) => {
     sendSmtpEmail.subject = subject;
     sendSmtpEmail.htmlContent = html;
 
+    console.log(`📧 Sending email: to=${Array.isArray(to) ? to.join(',') : to}, subject="${subject}", from=${defaultEmail}`);
     const info = await apiInstance.sendTransacEmail(sendSmtpEmail);
+    console.log(`✅ Email sent successfully: messageId=${info?.messageId || JSON.stringify(info)}`);
     return info;
   } catch (error) {
-    console.error('Failed to send email with Brevo API:', error?.response?.body || error);
+    const brevoError = error?.response?.body || error?.body || error;
+    console.error('❌ Failed to send email with Brevo API:', JSON.stringify(brevoError, null, 2));
+    console.error('   Brevo status:', error?.response?.status || error?.statusCode || 'unknown');
+    console.error('   Check: 1) BREVO_API_KEY is valid  2) EMAIL_FROM is verified in Brevo  3) Brevo account is active');
     throw error;
   }
 };
