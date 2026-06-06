@@ -67,7 +67,21 @@ const login = async (req, res) => {
   try {
     const { emailOrPhone, password } = req.body;
 
-    const user = await User.findOne({ $or: [{ email: emailOrPhone }, { phone: emailOrPhone }] }).select('+password');
+    // Normalize the input the same way signup does (express-validator normalizeEmail)
+    // so lookups match the stored value.
+    let normalizedInput = emailOrPhone;
+    const isEmail = emailOrPhone && emailOrPhone.includes('@');
+    if (isEmail) {
+      // Replicate express-validator's normalizeEmail defaults:
+      // lowercase the entire address, and for Gmail remove dots from local part
+      normalizedInput = emailOrPhone.toLowerCase().trim();
+      const [localPart, domain] = normalizedInput.split('@');
+      if (domain === 'gmail.com' || domain === 'googlemail.com') {
+        normalizedInput = localPart.replace(/\./g, '') + '@' + domain;
+      }
+    }
+
+    const user = await User.findOne({ $or: [{ email: normalizedInput }, { phone: emailOrPhone }] }).select('+password');
     if (!user) return res.status(401).json({ success: false, message: 'Invalid credentials' });
 
     if (user.authProvider === 'google' && !user.password) {
