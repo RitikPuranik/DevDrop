@@ -57,16 +57,16 @@ const LiquidMeltContactCard = () => {
         <defs>
           <filter id="metaballMelt" colorInterpolationFilters="sRGB">
             <feGaussianBlur in="SourceGraphic" stdDeviation="15" result="blur" />
-            <feColorMatrix 
-              in="blur" 
-              mode="matrix" 
-              values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 25 -10" 
-              result="melt" 
+            <feColorMatrix
+              in="blur"
+              mode="matrix"
+              values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 25 -10"
+              result="melt"
             />
             <feComposite in="SourceGraphic" in2="melt" operator="atop" />
           </filter>
         </defs>
-        
+
         <filter id="meltedShadow" x="-20%" y="-20%" width="150%" height="150%">
           <feGaussianBlur in="SourceAlpha" stdDeviation="12" />
           <feOffset dx="0" dy="12" result="offsetblur" />
@@ -89,12 +89,12 @@ const LiquidMeltContactCard = () => {
         {/* 4. CONTENT LAYER */}
         <div className="contact-content-overlay">
           <div className="contact-inner-layout">
-            
+
             {/* LEFT COLUMN: The Form */}
             <div className="contact-left-col">
-              <h1 className="contact-h1">Get in <br/>touch</h1>
+              <h1 className="contact-h1">Get in <br />touch</h1>
               <p className="contact-p">Premium support for the modern curator. Drop us a line below.</p>
-              
+
               <form onSubmit={handleSubmit} className="contact-form-group">
                 <div className="contact-field-row">
                   <div className="contact-field contact-field-flex">
@@ -161,29 +161,18 @@ const LiquidMeltContactCard = () => {
             {/* RIGHT COLUMN: Static Blended Image */}
             <div className="contact-right-col">
               <div className="contact-illustration-wrapper">
-                 <div className="contact-image-backdrop" />
-                 <img 
-                    src={man}
-                    alt="Contact" 
-                    className="contact-main-image" 
-                 />
+                <div className="contact-image-backdrop" />
+                <img
+                  src={man}
+                  alt="Contact"
+                  className="contact-main-image"
+                />
               </div>
 
               <div className="contact-details">
-                <div className="contact-info-grid">
-                  <div className="contact-info-item">
-                    <span className="contact-info-label">LOCATION</span>
-                    <span className="contact-info-value">Hartford, CT 06106</span>
-                  </div>
-                  <div className="contact-info-item">
-                    <span className="contact-info-label">PHONE</span>
-                    <span className="contact-info-value">+1 (203) 302-9545</span>
-                  </div>
-                </div>
-                
                 <div className="contact-email-row">
                   <span className="contact-info-label">DIRECT EMAIL</span>
-                  <span className="contact-info-value contact-email-value">hello@devdrop.studio</span>
+                  <span className="contact-info-value contact-email-value">devdrop2026@gmail.com</span>
                 </div>
 
                 <div className="contact-social-row">
