@@ -8,6 +8,10 @@ const { generalLimiter } = require('./shared/middleware/rateLimit');
 
 const app = express();
 
+// Trust the first proxy hop (Render, Vercel, etc.) so express-rate-limit
+// can read the real client IP from the X-Forwarded-For header.
+app.set('trust proxy', 1);
+
 // Security
 app.use(helmet({
   crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },

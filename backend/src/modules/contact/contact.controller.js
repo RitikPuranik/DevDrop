@@ -1,4 +1,5 @@
 const Contact = require('./contact.model');
+const emailService = require('../../services/email.service');
 
 /**
  * POST /api/contact
@@ -14,6 +15,14 @@ exports.submitContact = async (req, res, next) => {
       phone,
       message: message || '',
     });
+
+    // Send an email notification to the admins
+    emailService.sendAdminAlert({
+      subject: 'New Contact Us Enquiry',
+      message: `A new enquiry has been submitted by ${name}.`,
+      details: `Name: ${name}\nEmail: ${email}\nPhone: ${phone}\n\nMessage:\n${message || 'No message provided.'}`
+    }).catch(err => console.error('Failed to send contact admin alert:', err));
+
 
     res.status(201).json({
       success: true,
