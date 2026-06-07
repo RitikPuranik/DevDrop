@@ -6,12 +6,12 @@ import {
   Download, FileCode, FileText, Film, Lock, CheckCircle, Shield, Clock,
   ArrowLeft, Sparkles, Gavel, TrendingUp, Users, Timer
 } from 'lucide-react';
-import { websiteAPI } from '../api/website';
-import { wishlistAPI } from '../api/wishlist';
-import { buyerAPI } from '../api/buyer';
-import { paymentAPI } from '../api/payment';
-import { assetAPI } from '../api/asset';
-import { auctionAPI } from '../api/auction';
+import { websiteAPI } from '../../api/website';
+import { wishlistAPI } from '../../api/wishlist';
+import { buyerAPI } from '../../api/buyer';
+import { paymentAPI } from '../../api/payment';
+import { assetAPI } from '../../api/asset';
+import { auctionAPI } from '../../api/auction';
 import { toast } from 'sonner';
 
 export default function WebsiteDetail() {

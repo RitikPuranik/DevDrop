@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowRight, Lock } from "lucide-react";
 import { toast } from "sonner";
-import { authAPI } from "../api/auth";
+import { authAPI } from "../../api/auth";
 
 const REDIRECT_SECONDS = 4;
 

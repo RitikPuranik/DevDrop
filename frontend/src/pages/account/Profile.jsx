@@ -5,11 +5,11 @@ import {
   ExternalLink, Trash2, Loader2, LogOut, Plus, AlertCircle,
   ArrowLeft, Download, CheckCircle, Landmark
 } from 'lucide-react';
-import { userAPI } from '../api/user';
-import { sellerAPI } from '../api/seller';
-import { buyerAPI } from '../api/buyer';
-import { wishlistAPI } from '../api/wishlist';
-import { authAPI } from '../api/auth';
+import { userAPI } from '../../api/user';
+import { sellerAPI } from '../../api/seller';
+import { buyerAPI } from '../../api/buyer';
+import { wishlistAPI } from '../../api/wishlist';
+import { authAPI } from '../../api/auth';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 

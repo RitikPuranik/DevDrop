@@ -2,9 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Search, Loader2, Heart, User, ChevronRight, ShoppingBag, Gavel, Sparkles, CheckCircle, ExternalLink, Eye } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { websiteAPI } from "../api/website";
-import { buyerAPI } from "../api/buyer";
-import { paymentAPI } from "../api/payment";
+import { websiteAPI } from "../../api/website";
+import { buyerAPI } from "../../api/buyer";
+import { paymentAPI } from "../../api/payment";
 import { toast } from 'sonner';
 
 const transition = {

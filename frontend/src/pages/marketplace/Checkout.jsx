@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { paymentAPI } from '../api/payment';
+import { paymentAPI } from '../../api/payment';
 import { ShieldCheck, Loader2, ArrowLeft, Receipt } from 'lucide-react';
 import { toast } from 'sonner';
 

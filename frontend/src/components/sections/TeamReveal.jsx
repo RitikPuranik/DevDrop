@@ -4,8 +4,8 @@ import { motion, useTransform, useSpring } from 'framer-motion';
 const TEAM = [
   { name: 'Rideema Singh',  role: 'Software Developer',  img: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=500&q=80' },
   { name: 'Aryan Mehta',    role: 'Creative Director',   img: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&q=80' },
-  { name: 'Priya Nair',     role: 'Lead Designer',       img: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=500&q=80' },
-  { name: 'Dev Kapoor',     role: 'Full-Stack Engineer',  img: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=500&q=80' },
+  { name: 'Priyal Patel',     role: 'Frontend Developer',       img: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=500&q=80' },
+  { name: 'Ritik Puranik',     role: 'Full-Stack Engineer',  img: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=500&q=80' },
   { name: 'Sara El-Amin',   role: 'Motion Designer',     img: 'https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=500&q=80' },
   { name: 'Lucas Ferreira', role: 'Brand Strategist',    img: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&q=80' },
 ];

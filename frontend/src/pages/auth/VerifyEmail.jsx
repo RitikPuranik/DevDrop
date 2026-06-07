@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useSearchParams, useNavigate, useLocation } from "react-router-dom";
-import api from "../api/axios";
+import api from "../../api/axios";
 
 const REDIRECT_SECONDS = 5;
 

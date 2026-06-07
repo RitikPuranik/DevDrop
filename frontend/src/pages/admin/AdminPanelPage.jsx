@@ -1,14 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, Loader2 } from 'lucide-react';
-import AdminNav from '../../components/AdminNav';
+import AdminNav from '../../components/admin/AdminNav';
 import { userAPI } from '../../api/user';
 
-// Import extracted content components
-import { ReviewQueueContent } from '../Admin';
-import { DashboardContent } from './Dashboard';
-import { WebsitesContent } from './Pending_web';
-import { PayoutsContent } from './Pending_payout';
+import ReviewQueueSection from './sections/ReviewQueueSection';
+import DashboardSection from './sections/DashboardSection';
+import WebsitesSection from './sections/WebsitesSection';
+import PayoutsSection from './sections/PayoutsSection';
 
 export default function AdminPanel() {
   const navigate = useNavigate();
@@ -60,10 +59,10 @@ export default function AdminPanel() {
         <AdminNav activeTab={activeTab} onTabChange={setActiveTab} />
 
         {/* Content rendering conditionally based on state */}
-        {activeTab === 'review' && <ReviewQueueContent />}
-        {activeTab === 'dashboard' && <DashboardContent />}
-        {activeTab === 'websites' && <WebsitesContent />}
-        {activeTab === 'payouts' && <PayoutsContent />}
+        {activeTab === 'review' && <ReviewQueueSection />}
+        {activeTab === 'dashboard' && <DashboardSection />}
+        {activeTab === 'websites' && <WebsitesSection />}
+        {activeTab === 'payouts' && <PayoutsSection />}
       </div>
     </div>
   );

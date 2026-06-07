@@ -3,23 +3,23 @@ import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-route
 import { AnimatePresence } from 'framer-motion';
 import { Toaster } from "sonner";
 
-import IntroLoader from './components/Intro_Loader';
-import Loader from './components/Loading_Screen';
-import Navbar from './components/Navbar';
-import Footer from './components/Footer';
-import Home from './pages/Home';
-import About from './pages/AboutUs';
-import Template from './pages/Templates';
-import ContactUs from './pages/ContactUs';
-import ReviewPage from './pages/Review';
-import Profile from './pages/Profile';
-import PurchaseAccess from './pages/PurchaseAccess';
-import AdminPanel from "./pages/admin/AdminPanel";
-import WebsiteDetail from './pages/WebsiteDetail';
-import Auctions from './pages/Auctions';
-import Checkout from './pages/Checkout';
-import VerifyEmail from './pages/VerifyEmail';
-import ResetPassword from './pages/ResetPassword';
+import IntroLoader from './components/loaders/IntroLoader';
+import Loader from './components/loaders/LoadingScreen';
+import Navbar from './components/layout/Navbar';
+import Footer from './components/layout/Footer';
+import Home from './pages/marketing/Home';
+import About from './pages/marketing/AboutUs';
+import TemplatesPage from './pages/marketplace/Templates';
+import ContactUs from './pages/marketing/ContactUs';
+import ReviewPage from './pages/marketing/Review';
+import Profile from './pages/account/Profile';
+import PurchaseAccess from './pages/marketplace/PurchaseAccess';
+import AdminPanel from "./pages/admin/AdminPanelPage";
+import WebsiteDetail from './pages/marketplace/WebsiteDetail';
+import Auctions from './pages/marketplace/Auctions';
+import Checkout from './pages/marketplace/Checkout';
+import VerifyEmail from './pages/auth/VerifyEmail';
+import ResetPassword from './pages/auth/ResetPassword';
 
 const VIDEO_SRC = '/dewdrop.s3.mp4';
 
@@ -113,7 +113,7 @@ function AppContent() {
                 }
               />
               <Route path="/about" element={<About />} />
-              <Route path="/template" element={<Template />} />
+              <Route path="/template" element={<TemplatesPage />} />
               <Route path="/contact" element={<ContactUs />} />
               <Route path="/review" element={<ReviewPage />} />
               <Route path="/profile" element={<Profile />} />

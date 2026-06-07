@@ -11,8 +11,8 @@ import {
   Loader2,
   ShieldCheck,
 } from 'lucide-react';
-import { buyerAPI } from '../api/buyer';
-import { assetAPI } from '../api/asset';
+import { buyerAPI } from '../../api/buyer';
+import { assetAPI } from '../../api/asset';
 import { toast } from 'sonner';
 
 export default function PurchaseAccess() {

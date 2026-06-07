@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { contactAPI } from '../api/contact';
+import { contactAPI } from '../../api/contact';
 import { toast } from 'sonner';
-import man from "../assets/man.png";
+import man from "../../assets/man.png";
 import './ContactUs.css';
 
 const LiquidMeltContactCard = () => {

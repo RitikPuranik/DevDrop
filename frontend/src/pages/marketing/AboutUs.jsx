@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { motion, useScroll, useTransform, useSpring } from 'framer-motion';
-import TeamReveal from '../components/TeamReveal';
+import TeamReveal from '../../components/sections/TeamReveal';
 
 /* ABOUT PAGE v12 — FULL-SCREEN BOGIES + SEAMLESS TEAM REVEAL
   

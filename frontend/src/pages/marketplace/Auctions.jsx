@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Gavel, Clock, Flame, ArrowRight, Loader2, ExternalLink, Zap } from 'lucide-react';
-import { auctionAPI } from '../api/auction';
+import { auctionAPI } from '../../api/auction';
 import { toast } from 'sonner';
 
 export default function Auctions() {

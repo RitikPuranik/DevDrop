@@ -8,7 +8,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { authAPI } from "../api/auth";
+import { authAPI } from "../../api/auth";
 import { toast } from "sonner";
 
 // ─── Google One-Tap / GSI button helper ───────────────────────────────────────

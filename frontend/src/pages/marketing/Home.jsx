@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { motion, useScroll, useTransform, useSpring, useInView } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import secondVideo from '../assets/videos/v2.mp4'; 
+import secondVideo from '../../assets/videos/v2.mp4'; 
 
 const ARTIFACTS = [
   { id: 'kinetic', name: 'Kinetic', h: 'h-64', img: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?q=80&w=500' },
@@ -426,7 +426,7 @@ const ArtifactCard = ({ item, index }) => {
 
   const handleNav = () => {
     window.scrollTo(0, 0);
-    navigate(`/templates/${item.id}`);
+    navigate(`/template`);
   };
 
   return (
