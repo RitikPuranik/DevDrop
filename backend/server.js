@@ -35,7 +35,7 @@ const startServer = async () => {
   app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
   });
- //for render to not sleep
+//  for render to not sleep this in url
   app.get("/api/ping", (req, res) => {
   res.status(200).json({ status: "alive" });
 });
