@@ -363,7 +363,7 @@ export default function PendingWebsites() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-white/5">
-                  {["Website", "Seller", "Category", "Files", "Status", "Actions"].map((h) => (
+                  {["Website", "Seller", "Category", "Files", "Status", "Logs"].map((h) => (
                     <th key={h} className="text-left text-[10px] font-bold text-white/25 uppercase tracking-[0.2em] px-6 py-4">{h}</th>
                   ))}
                 </tr>
@@ -399,28 +399,9 @@ export default function PendingWebsites() {
                     <td className="px-6 py-5"><FileTags files={w.files} /></td>
                     <td className="px-6 py-5"><StatusBadge status={w.status} /></td>
                     <td className="px-6 py-5">
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          title="Approve"
-                          onClick={() => setApproveTarget(w)}
-                          className="w-8 h-8 rounded-xl border border-white/10 text-white/30 hover:bg-emerald-500/20 hover:text-emerald-400 hover:border-emerald-500/30 transition-all flex items-center justify-center"
-                        ><CheckCircle size={14} /></button>
-                        <button
-                          title="Request changes"
-                          onClick={() => setChangesTarget(w)}
-                          className="w-8 h-8 rounded-xl border border-white/10 text-white/30 hover:bg-blue-500/20 hover:text-blue-400 hover:border-blue-500/30 transition-all flex items-center justify-center"
-                        ><Edit3 size={14} /></button>
-                        <button
-                          title="Reject"
-                          onClick={() => setRejectTarget(w)}
-                          className="w-8 h-8 rounded-xl border border-white/10 text-white/30 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30 transition-all flex items-center justify-center"
-                        ><X size={14} /></button>
-                        <button
-                          title="Delete"
-                          onClick={() => setDeleteTarget(w)}
-                          className="w-8 h-8 rounded-xl border border-white/10 text-white/30 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30 transition-all flex items-center justify-center"
-                        ><Trash2 size={14} /></button>
-                      </div>
+                      <p className="text-xs text-white/50 max-w-[200px] whitespace-pre-wrap">
+                        {w.adminComment || "—"}
+                      </p>
                     </td>
                   </tr>
                 ))}
@@ -458,3 +439,238 @@ export default function PendingWebsites() {
 }
 
 export { PendingWebsites };
+
+// ── Standalone content component for unified admin panel ─────────────────────
+export function WebsitesContent() {
+  const [websites, setWebsites] = useState([]);
+  const [contentLoading, setContentLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("all");
+  const [search, setSearch] = useState("");
+  const [approveTarget, setApproveTarget] = useState(null);
+  const [changesTarget, setChangesTarget] = useState(null);
+  const [rejectTarget, setRejectTarget] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  const fetchWebsites = async () => {
+    try {
+      const res = await adminAPI.getAllWebsites('all');
+      setWebsites(res.data?.data || []);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to load websites");
+      setWebsites([]);
+    } finally {
+      setContentLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchWebsites(); }, []);
+
+  const handleApprove = async (formData) => {
+    setActionLoading(true);
+    try {
+      await adminAPI.approveWebsite(approveTarget._id, formData);
+      toast.success(`✓ ${approveTarget.name} approved`);
+      setApproveTarget(null);
+      await fetchWebsites();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to approve website");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleRequestChanges = async (comment) => {
+    setActionLoading(true);
+    try {
+      await adminAPI.requestChanges(changesTarget._id, { comment });
+      toast.success(`✎ Changes requested for ${changesTarget.name}`);
+      setChangesTarget(null);
+      await fetchWebsites();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to send change request");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleReject = async () => {
+    setActionLoading(true);
+    try {
+      await adminAPI.rejectWebsite(rejectTarget._id, { reason: "Rejected by admin" });
+      toast.success(`✕ ${rejectTarget.name} rejected`);
+      setRejectTarget(null);
+      await fetchWebsites();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to reject website");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setActionLoading(true);
+    try {
+      await adminAPI.deleteWebsite(deleteTarget._id);
+      toast.success(`🗑 ${deleteTarget.name} deleted`);
+      setDeleteTarget(null);
+      await fetchWebsites();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to delete website");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const filtered = websites
+    .filter((w) => activeTab === "all" || w.status === activeTab)
+    .filter((w) =>
+      !search ||
+      w.name?.toLowerCase().includes(search.toLowerCase()) ||
+      w.sellerId?.email?.toLowerCase().includes(search.toLowerCase()) ||
+      w.sellerId?.name?.toLowerCase().includes(search.toLowerCase())
+    );
+
+  const counts = TABS.reduce((acc, t) => {
+    acc[t] = t === "all" ? websites.length : websites.filter((w) => w.status === t).length;
+    return acc;
+  }, {});
+
+  if (contentLoading) {
+    return (
+      <div className="py-20 flex items-center justify-center text-white/30">
+        <Loader2 className="animate-spin" size={32} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      {/* Header */}
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-[36px] border border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(139,115,85,0.28),_transparent_38%),linear-gradient(180deg,_rgba(255,255,255,0.04),_rgba(255,255,255,0.02))] p-6 md:p-10 backdrop-blur-2xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+          <div>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] uppercase tracking-[0.25em] text-white/40 mb-5">
+              <ShieldCheck size={12} /> Website Management
+            </div>
+            <h1 className="text-3xl md:text-5xl font-black tracking-tight leading-none mb-3">All Websites</h1>
+            <p className="text-white/45 max-w-lg leading-relaxed text-sm">
+              {counts.pending_review} pending · {counts.changes_requested} need changes · {counts.approved} approved
+            </p>
+          </div>
+          <button onClick={fetchWebsites} className="w-full sm:w-auto flex justify-center items-center gap-2 px-5 py-3 rounded-2xl border border-white/10 text-xs text-white/50 hover:text-white hover:bg-white/5 font-bold uppercase tracking-[0.1em] transition-all">
+            <RefreshCw size={14} /> Refresh
+          </button>
+        </div>
+      </motion.div>
+
+      {/* Table Card */}
+      <div className="rounded-[32px] border border-white/10 bg-[#0f0f0f] shadow-2xl shadow-black/30 overflow-hidden">
+        {/* Tabs + Search */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-white/5 px-4 pt-2 gap-4 pb-2 sm:pb-0">
+          <div className="flex overflow-x-auto w-full custom-scrollbar">
+            {TABS.map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-3.5 text-xs font-bold uppercase tracking-[0.1em] border-b-2 transition-all whitespace-nowrap ${
+                  activeTab === tab
+                    ? "border-[#8b7355] text-[#8b7355]"
+                    : "border-transparent text-white/30 hover:text-white/60"
+                }`}
+              >
+                {tab === "all" ? "All" : STATUS_LABELS[tab]}
+                <span className="ml-1.5 opacity-50">({counts[tab]})</span>
+              </button>
+            ))}
+          </div>
+          <div className="relative my-2 w-full sm:w-auto">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/25" />
+            <input
+              type="text"
+              placeholder="Search..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8 pr-4 py-2 text-sm bg-white/[0.03] border border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8b7355]/40 text-white placeholder:text-white/20 w-full sm:w-48"
+            />
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-white/5">
+                {["Website", "Seller", "Category", "Files", "Status", "Logs"].map((h) => (
+                  <th key={h} className="text-left text-[10px] font-bold text-white/25 uppercase tracking-[0.2em] px-6 py-4">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="text-center py-20">
+                    <div className="flex flex-col items-center gap-3 text-white/20">
+                      <Globe size={36} />
+                      <span className="text-sm">No websites found</span>
+                    </div>
+                  </td>
+                </tr>
+              )}
+              {filtered.map((w) => (
+                <tr key={w._id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                  <td className="px-6 py-5">
+                    <p className="text-sm font-bold text-white tracking-tight">{w.name}</p>
+                    <p className="text-xs text-white/30 mt-1 line-clamp-1">{w.description?.slice(0, 60)}...</p>
+                  </td>
+                  <td className="px-6 py-5">
+                    <p className="text-sm text-white/70 font-medium">{w.sellerId?.name || "—"}</p>
+                    <p className="text-xs text-white/30">{w.sellerId?.email || "—"}</p>
+                  </td>
+                  <td className="px-6 py-5">
+                    <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.15em] ${
+                      w.category === 'exclusive' ? 'bg-purple-500/15 text-purple-400' :
+                      w.category === 'paid' ? 'bg-amber-500/15 text-amber-400' :
+                      'bg-emerald-500/15 text-emerald-400'
+                    }`}>{w.category}</span>
+                  </td>
+                  <td className="px-6 py-5"><FileTags files={w.files} /></td>
+                  <td className="px-6 py-5"><StatusBadge status={w.status} /></td>
+                  <td className="px-6 py-5">
+                    <p className="text-xs text-white/50 max-w-[200px] whitespace-pre-wrap">
+                      {w.adminComment || "—"}
+                    </p>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Modals */}
+      <ApproveModal open={!!approveTarget} website={approveTarget} onClose={() => setApproveTarget(null)} onSubmit={handleApprove} loading={actionLoading} />
+      <RequestChangesModal open={!!changesTarget} website={changesTarget} onClose={() => setChangesTarget(null)} onSubmit={handleRequestChanges} loading={actionLoading} />
+      <ConfirmModal
+        open={!!rejectTarget}
+        title="Reject website"
+        description={`Are you sure you want to reject "${rejectTarget?.name}"? The seller will be notified.`}
+        confirmLabel="Reject"
+        confirmColor="bg-red-500 hover:bg-red-400"
+        onConfirm={handleReject}
+        onCancel={() => setRejectTarget(null)}
+        loading={actionLoading}
+      />
+      <ConfirmModal
+        open={!!deleteTarget}
+        title="Delete website"
+        description={`Permanently delete "${deleteTarget?.name}"? This cannot be undone.`}
+        confirmLabel="Delete"
+        confirmColor="bg-red-500 hover:bg-red-400"
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteTarget(null)}
+        loading={actionLoading}
+      />
+    </div>
+  );
+}

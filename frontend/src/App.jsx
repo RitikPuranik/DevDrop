@@ -14,15 +14,12 @@ import ContactUs from './pages/ContactUs';
 import ReviewPage from './pages/Review';
 import Profile from './pages/Profile';
 import PurchaseAccess from './pages/PurchaseAccess';
-import Admin from './pages/Admin';
+import AdminPanel from "./pages/admin/AdminPanel";
 import WebsiteDetail from './pages/WebsiteDetail';
 import Auctions from './pages/Auctions';
 import Checkout from './pages/Checkout';
 import VerifyEmail from './pages/VerifyEmail';
 import ResetPassword from './pages/ResetPassword';
-import AdminDashboard from "./pages/admin/Dashboard";
-import { PendingWebsites } from "./pages/admin/Pending_web";
-import ProcessPayouts from "./pages/admin/Pending_payout";
 
 const VIDEO_SRC = '/dewdrop.s3.mp4';
 
@@ -121,15 +118,12 @@ function AppContent() {
               <Route path="/review" element={<ReviewPage />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/purchases/:purchaseId" element={<PurchaseAccess />} />
-              <Route path="/admin" element={<Admin />} />
+              <Route path="/admin" element={<AdminPanel />} />
               <Route path="/website/:id" element={<WebsiteDetail />} />
               <Route path="/checkout/:id" element={<Checkout />} />
               <Route path="/auctions" element={<Auctions />} />
               <Route path="/verify-email" element={<VerifyEmail />} />
               <Route path="/reset-password" element={<ResetPassword />} />
-              <Route path="/admin/dashboard" element={<AdminDashboard />} />
-              <Route path="/admin/websites/pending" element={<PendingWebsites />} />
-              <Route path="/admin/payouts/pending" element={<ProcessPayouts />} />
             </Routes>
 
             <Toaster
