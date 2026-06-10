@@ -61,8 +61,7 @@ const saveBankDetails = async (req, res) => {
 const getBankDetails = async (req, res) => {
   try {
     const bankDetails = await BankDetails.findOne({ userId: req.userId });
-    if (!bankDetails) return res.status(404).json({ success: false, message: 'Bank details not found' });
-    res.json({ success: true, data: bankDetails });
+    res.json({ success: true, data: bankDetails || null });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error fetching bank details', error: error.message });
   }

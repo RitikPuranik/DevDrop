@@ -13,6 +13,7 @@ import { toast } from "sonner";
 
 // ─── Google One-Tap / GSI button helper ───────────────────────────────────────
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+let gsiScriptPromise = null;
 
 function getApiErrorMessage(error, fallbackMessage) {
   const responseData = error?.response?.data;
@@ -24,8 +25,21 @@ function getApiErrorMessage(error, fallbackMessage) {
 }
 
 function loadGSI() {
-  return new Promise((resolve) => {
-    if (window.google?.accounts) return resolve();
+  if (window.google?.accounts) {
+    return Promise.resolve();
+  }
+
+  if (gsiScriptPromise) {
+    return gsiScriptPromise;
+  }
+
+  gsiScriptPromise = new Promise((resolve) => {
+    const existingScript = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
+    if (existingScript) {
+      existingScript.addEventListener("load", resolve, { once: true });
+      return;
+    }
+
     const script = document.createElement("script");
     script.src = "https://accounts.google.com/gsi/client";
     script.async = true;
@@ -33,6 +47,8 @@ function loadGSI() {
     script.onload = resolve;
     document.head.appendChild(script);
   });
+
+  return gsiScriptPromise;
 }
 
 // ─── Google SVG Icon ──────────────────────────────────────────────────────────
@@ -53,6 +69,7 @@ export default function AuthModal({ isOpen, onClose }) {
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const googleInitializedRef = useRef(false);
   const lastGoogleCredentialRef = useRef(null);
   const navigate = useNavigate();
 
@@ -83,7 +100,7 @@ export default function AuthModal({ isOpen, onClose }) {
       window.dispatchEvent(new Event("auth-changed"));
       toast.success("Signed in with Google!");
       onClose();
-      if (user.role === "admin") navigate("/admin/dashboard");
+      if (user.role === "admin") navigate("/admin");
       else navigate("/profile");
     } catch (err) {
       lastGoogleCredentialRef.current = null;
@@ -98,11 +115,16 @@ export default function AuthModal({ isOpen, onClose }) {
     if (!GOOGLE_CLIENT_ID) return;
     await loadGSI();
     if (!window.google?.accounts) return;
-    window.google.accounts.id.initialize({
-      client_id: GOOGLE_CLIENT_ID,
-      callback: handleGoogleCredential,
-      ux_mode: "popup",
-    });
+
+    if (!googleInitializedRef.current) {
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: handleGoogleCredential,
+        ux_mode: "popup",
+      });
+      googleInitializedRef.current = true;
+    }
+
     const containers = document.querySelectorAll("[data-google-button]");
     containers.forEach((container) => {
       if (container.getClientRects().length === 0) return;
@@ -140,7 +162,7 @@ export default function AuthModal({ isOpen, onClose }) {
       window.dispatchEvent(new Event("auth-changed"));
       toast.success("Login successful!");
       onClose();
-      if (user.role === "admin") navigate("/admin/dashboard");
+      if (user.role === "admin") navigate("/admin");
       else navigate("/profile");
     } catch (err) {
       toast.error(getApiErrorMessage(err, "Login failed"));
