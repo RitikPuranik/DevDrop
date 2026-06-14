@@ -1,30 +1,209 @@
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { motion, useTransform, useSpring } from 'framer-motion';
+import priyalImg from '../../assets/people/priyal.jpeg';
+import rideemaImg from '../../assets/people/rideema.jpeg';
+import saralImg from '../../assets/people/saral.jpeg';
 
 const TEAM = [
-  { initials: 'RS', name: 'Rideema Singh', role: 'Software Developer', img: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=800&q=80' },
-  { initials: 'AM', name: 'Aryan Mehta', role: 'Creative Director', img: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&q=80' },
-  { initials: 'RP', name: 'Ritik Puranik', role: 'Full-Stack Engineer', img: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=800&q=80' },
-  { initials: 'PP', name: 'Priyal Patel', role: 'Frontend Developer', img: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=800&q=80' },
-  { initials: 'SE', name: 'Sara El-Amin', role: 'Motion Designer', img: 'https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=800&q=80' },
+   { initials: 'RP', name: 'Ritik Puranik',  role: 'Full-Stack Engineer', img: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=800&q=80' }
+  ,{ initials: 'PP', name: 'Priyal Patel',   role: 'Full-Stack Developer',  img: priyalImg }
+  ,{ initials: 'RS', name: 'Rideema Singh',  role: 'Software Developer',  img: rideemaImg }
+  ,{ initials: 'SS', name: 'Saral Singore',  role: 'UI/UX Designer',   img: saralImg }
+  
 ];
 
-function AccordionGallery() {
-  const [hovered, setHovered] = useState(null);
+function useBreakpoint() {
+  const [isDesktop, setIsDesktop] = useState(
+    typeof window !== 'undefined' ? window.innerWidth >= 1024 : true
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const update = (e) => setIsDesktop(e.matches);
+    update(mq);
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+  return isDesktop;
+}
 
+/* ── 2×2 GRID CARD ── */
+function GridCard({ m, isActive, onClick }) {
   return (
-    <div style={{ display: 'flex', gap: '1.5vw', width: '85%', maxWidth: 1200, height: '55vh', minHeight: 400 }}>
-      {TEAM.map((m, i) => {
-        const isHovered = hovered === i;
-        const isAnyHovered = hovered !== null;
-        const flexValue = isHovered ? 6 : (isAnyHovered ? 1 : 1);
+    <div
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        cursor: 'pointer',
+        width: '100%',
+      }}
+    >
+      {/* Photo box — intrinsic square via aspect-ratio */}
+      <div style={{
+        position: 'relative',
+        width: '100%',
+        aspectRatio: '1 / 1',
+        borderRadius: 'clamp(14px, 2.5vw, 22px)',
+        overflow: 'hidden',
+        background: '#111',
+        boxShadow: isActive
+          ? 'inset 0 0 0 1px rgba(200,144,58,0.35), 0 16px 36px rgba(0,0,0,0.7)'
+          : 'inset 0 0 0 1px rgba(255,255,255,0.03), 0 12px 28px rgba(0,0,0,0.55)',
+        transition: 'box-shadow 0.45s ease',
+        marginBottom: 'clamp(8px, 1.5vw, 14px)',
+      }}>
+        <img
+          src={m.img}
+          alt={m.name}
+          style={{
+            position: 'absolute', inset: 0,
+            width: '100%', height: '100%',
+            objectFit: 'cover',
+            opacity: isActive ? 0.88 : 0,
+            filter: 'sepia(15%) contrast(1.05)',
+            transform: isActive ? 'scale(1)' : 'scale(1.08)',
+            transitionProperty: 'opacity, transform',
+            transitionDuration: '0.55s',
+            transitionTimingFunction: 'ease',
+          }}
+        />
+        {/* Initials */}
+        <div style={{
+          position: 'absolute', inset: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          opacity: isActive ? 0 : 1,
+          transition: 'opacity 0.35s ease',
+        }}>
+          <span style={{
+            fontFamily: "'Playfair Display', serif",
+            fontStyle: 'italic',
+            fontSize: 'clamp(24px, 6vw, 48px)',
+            color: '#5a4a3a',
+          }}>
+            {m.initials}
+          </span>
+        </div>
+        {/* Name overlay at bottom when active */}
+        <div style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0,
+          background: 'linear-gradient(to top, rgba(8,7,4,0.85) 0%, transparent 100%)',
+          padding: 'clamp(12px, 3vw, 20px)',
+          opacity: isActive ? 1 : 0,
+          transform: isActive ? 'translateY(0)' : 'translateY(6px)',
+          transition: 'opacity 0.4s ease, transform 0.4s ease',
+        }}>
+          <div style={{
+            fontFamily: "'Playfair Display', serif",
+            fontSize: 'clamp(13px, 3vw, 18px)',
+            color: '#e8d9b8',
+            marginBottom: 3,
+          }}>
+            {m.name}
+          </div>
+          <div style={{
+            fontFamily: "'Space Mono', monospace",
+            fontSize: 'clamp(7px, 1.8vw, 10px)',
+            letterSpacing: '0.14em',
+            color: '#c8903a',
+            textTransform: 'uppercase',
+          }}>
+            {m.role}
+          </div>
+        </div>
+      </div>
 
+      {/* Name + role below (hidden when active — shown in overlay instead) */}
+      <div style={{
+        textAlign: 'center',
+        width: '100%',
+        opacity: isActive ? 0 : 1,
+        transform: isActive ? 'translateY(-3px)' : 'translateY(0)',
+        transition: 'opacity 0.3s ease, transform 0.3s ease',
+      }}>
+        <div style={{
+          fontFamily: "'Playfair Display', serif",
+          fontSize: 'clamp(12px, 2.8vw, 17px)',
+          color: '#e8d9b8',
+          marginBottom: 3,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}>
+          {m.name}
+        </div>
+        <div style={{
+          fontFamily: "'Space Mono', monospace",
+          fontSize: 'clamp(6px, 1.5vw, 9px)',
+          letterSpacing: '0.13em',
+          color: '#c8903a',
+          textTransform: 'uppercase',
+          whiteSpace: 'nowrap',
+        }}>
+          {m.role}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── ACCORDION GALLERY ── */
+function AccordionGallery() {
+  const [active, setActive] = useState(null);
+  const isDesktop = useBreakpoint();
+  const toggle = (i) => setActive(active === i ? null : i);
+
+  /* ── TABLET / PHONE: 2×2 grid, fills available space ── */
+  if (!isDesktop) {
+    return (
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        /* gap scales with viewport so grid fills width symmetrically */
+        gap: 'clamp(12px, 3vw, 22px)',
+        /* take full available width up to a sensible max */
+        width: 'min(96%, 640px)',
+        /* no fixed height — let cards (aspect-ratio squares) define it */
+        alignItems: 'start',
+      }}>
+        {TEAM.map((m, i) => (
+          <GridCard
+            key={i}
+            m={m}
+            isActive={active === i}
+            onClick={() => toggle(i)}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  /* ── DESKTOP: original horizontal accordion ── */
+  return (
+    <div style={{
+      display: 'flex',
+      gap: '1.5vw',
+      width: '85%',
+      maxWidth: 1200,
+      height: '55vh',
+      minHeight: 400,
+    }}>
+      {TEAM.map((m, i) => {
+        const isHovered = active === i;
+        const isAnyHovered = active !== null;
+        const flexValue = isHovered ? 6 : (isAnyHovered ? 1 : 1);
         return (
-          <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: flexValue, transition: 'flex 0.6s cubic-bezier(0.16, 1, 0.3, 1)', minWidth: 0 }}>
-            {/* The Window Card */}
+          <div key={i} style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            flex: flexValue,
+            transition: 'flex 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
+            minWidth: 0,
+          }}>
             <div
-              onMouseEnter={() => setHovered(i)}
-              onMouseLeave={() => setHovered(null)}
+              onMouseEnter={() => setActive(i)}
+              onMouseLeave={() => setActive(null)}
               style={{
                 position: 'relative',
                 width: '100%',
@@ -34,34 +213,51 @@ function AccordionGallery() {
                 background: '#111',
                 cursor: 'pointer',
                 boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.03), 0 20px 40px rgba(0,0,0,0.6)',
-                marginBottom: 20
+                marginBottom: 20,
               }}
             >
-              {/* Image */}
               <img src={m.img} alt={m.name} style={{
-                position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
-                opacity: isHovered ? 0.9 : 0, transition: 'opacity 0.6s ease',
+                position: 'absolute', inset: 0, width: '100%', height: '100%',
+                objectFit: 'cover',
+                opacity: isHovered ? 0.9 : 0,
+                transition: 'opacity 0.6s ease',
                 filter: 'sepia(15%) contrast(1.05)',
-                transform: isHovered ? 'scale(1)' : 'scale(1.1)'
+                transform: isHovered ? 'scale(1)' : 'scale(1.1)',
               }} />
-
-              {/* Initials */}
               <div style={{
-                position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                opacity: isHovered ? 0 : 1, transition: 'opacity 0.4s ease'
+                position: 'absolute', inset: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                opacity: isHovered ? 0 : 1,
+                transition: 'opacity 0.4s ease',
               }}>
-                <span style={{ fontFamily: "'Playfair Display', serif", fontStyle: 'italic', fontSize: 'clamp(24px, 3vw, 50px)', color: '#5a4a3a' }}>
+                <span style={{
+                  fontFamily: "'Playfair Display', serif",
+                  fontStyle: 'italic',
+                  fontSize: 'clamp(24px, 3vw, 50px)',
+                  color: '#5a4a3a',
+                }}>
                   {m.initials}
                 </span>
               </div>
             </div>
-
-            {/* Name and Role */}
             <div style={{ textAlign: 'center', width: '100%', paddingBottom: '4px' }}>
-              <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 'clamp(14px, 1.2vw, 20px)', color: '#e8d9b8', marginBottom: 8, whiteSpace: 'nowrap' }}>
+              <div style={{
+                fontFamily: "'Playfair Display', serif",
+                fontSize: 'clamp(14px, 1.2vw, 20px)',
+                color: '#e8d9b8',
+                marginBottom: 8,
+                whiteSpace: 'nowrap',
+              }}>
                 {m.name}
               </div>
-              <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 'clamp(8px, 0.6vw, 11px)', letterSpacing: '0.15em', color: '#c8903a', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+              <div style={{
+                fontFamily: "'Space Mono', monospace",
+                fontSize: 'clamp(8px, 0.6vw, 11px)',
+                letterSpacing: '0.15em',
+                color: '#c8903a',
+                textTransform: 'uppercase',
+                whiteSpace: 'nowrap',
+              }}>
                 {m.role}
               </div>
             </div>
@@ -72,6 +268,7 @@ function AccordionGallery() {
   );
 }
 
+/* ── TEAR PATH HELPERS (unchanged) ── */
 function buildTearPoints(H, steps = 60) {
   const pts = [];
   for (let i = 0; i <= steps; i++) {
@@ -88,59 +285,39 @@ function buildTearPoints(H, steps = 60) {
 function makePaths(progress, W, H, pts) {
   const slide = progress * W * 0.56;
   const cx = W / 2;
-
   let L = `M${cx + pts[0].x - slide},0 `;
   pts.forEach(p => { L += `L${cx + p.x - slide},${p.y} `; });
   L += `L${-20},${H} L${-20},0 Z`;
-
   let R = `M${cx + pts[pts.length - 1].x + slide},${H} `;
   [...pts].reverse().forEach(p => { R += `L${cx + p.x + slide},${p.y} `; });
   R += `L${W + 20},0 L${W + 20},${H} Z`;
-
   let T = `M${cx + pts[0].x},0 `;
   pts.forEach(p => { T += `L${cx + p.x},${p.y} `; });
-
   return { L, R, T };
 }
 
+/* ── TEAM REVEAL ── */
 export function TeamReveal({ sp }) {
-  /*
-    Scroll map (relative to About.jsx's 1000vh):
-    0.60 – 0.65  : section fades in — immediately after gallery ends at 0.62
-    0.65 – 0.72  : paper rests, user reads / registers it
-    0.72 – 0.88  : tear opens (faster spring: stiffness 55, damping 22)
-    0.88+        : group photo fully visible, paper gone
-  */
-
-  // Fade in right as the last gallery card finishes
   const sectionOpacity = useTransform(sp, [0.60, 0.655], [0, 1]);
-
-  // Faster, snappier tear spring
-  const rawTear = useTransform(sp, [0.72, 0.88], [0, 1]);
-  const tearSpring = useSpring(rawTear, { stiffness: 55, damping: 22 });
-
-  // Photo fades in mid-tear — slightly earlier so it's visible sooner
-  const photoOpacity = useTransform(rawTear, [0.20, 0.60], [0, 1]);
-  const photoScale = useTransform(rawTear, [0.20, 0.75], [1.05, 1]);
-
-  // Labels appear after photo
-  const labelOpacity = useTransform(rawTear, [0.55, 0.85], [0, 1]);
-  const labelY = useTransform(rawTear, [0.55, 0.85], [22, 0]);
-
-  // Paper fades out sooner so photo isn't blocked long
-  const paperOpacity = useTransform(rawTear, [0.75, 0.96], [1, 0]);
+  const rawTear        = useTransform(sp, [0.72, 0.88], [0, 1]);
+  const tearSpring     = useSpring(rawTear, { stiffness: 55, damping: 22 });
+  const photoOpacity   = useTransform(rawTear, [0.20, 0.60], [0, 1]);
+  const photoScale     = useTransform(rawTear, [0.20, 0.75], [1.05, 1]);
+  const labelOpacity   = useTransform(rawTear, [0.55, 0.85], [0, 1]);
+  const labelY         = useTransform(rawTear, [0.55, 0.85], [22, 0]);
+  const paperOpacity   = useTransform(rawTear, [0.75, 0.96], [1, 0]);
+  const bgOpacity      = useTransform(sp, [0.56, 0.60], [0, 1]);
 
   const containerRef = useRef(null);
-  const [dims, setDims] = useState({ W: 1440, H: 900 });
+  const [dims, setDims]   = useState({ W: 1440, H: 900 });
   const [paths, setPaths] = useState({ L: '', R: '', T: '' });
-
   const tearPts = useMemo(() => buildTearPoints(dims.H), [dims.H]);
 
   useEffect(() => {
     const measure = () => {
       const el = containerRef.current;
       setDims({
-        W: el ? el.offsetWidth : window.innerWidth,
+        W: el ? el.offsetWidth  : window.innerWidth,
         H: el ? el.offsetHeight : window.innerHeight,
       });
     };
@@ -148,9 +325,9 @@ export function TeamReveal({ sp }) {
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
   }, []);
+
   useEffect(() => {
-    const initial = makePaths(0, dims.W, dims.H, tearPts);
-    setPaths(initial);
+    setPaths(makePaths(0, dims.W, dims.H, tearPts));
   }, [dims, tearPts]);
 
   useEffect(() => {
@@ -160,16 +337,13 @@ export function TeamReveal({ sp }) {
   }, [tearSpring, dims, tearPts]);
 
   const { W, H } = dims;
-
-  // Background opacity: covers the page the moment gallery fades out, no gap
-  const bgOpacity = useTransform(sp, [0.56, 0.60], [0, 1]);
+  const isDesktop = useBreakpoint();
 
   return (
     <div
       ref={containerRef}
       style={{ position: 'absolute', inset: 0, zIndex: 400, overflow: 'hidden' }}
     >
-      {/* Always-dark backing — eliminates black flash between gallery and reveal */}
       <motion.div style={{
         position: 'absolute', inset: 0,
         background: '#080704',
@@ -177,58 +351,102 @@ export function TeamReveal({ sp }) {
         pointerEvents: 'none',
       }} />
 
-      {/* Content fades in on cue */}
+
       <motion.div style={{ opacity: sectionOpacity, position: 'absolute', inset: 0 }}>
-        {/* ══ INNER CONTENT — Accordion Windows ══ */}
+
+        {/* ══ INNER CONTENT ══ */}
         <motion.div style={{
           position: 'absolute', inset: 0,
           opacity: photoOpacity,
           scale: photoScale,
-          display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',   /* always vertically centred */
+          boxSizing: 'border-box',
+          /*
+            Mobile/tablet: symmetric vertical padding so space above header
+            ≈ space below grid — no collapsed gap at the bottom.
+            Desktop: original 2vh top nudge only.
+          */
+          padding: isDesktop
+            ? '2vh 0 0 0'
+            : 'clamp(20px, 4vh, 44px) 0 clamp(36px, 8vh, 72px) 0',
           gap: 0,
-          paddingTop: '2vh'
+          /* no overflow scroll — grid must fit within viewport */
+          overflow: 'hidden',
         }}>
-          <motion.div style={{ opacity: labelOpacity, y: labelY, textAlign: 'center', marginBottom: 40, width: '80%', maxWidth: 1000 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 14 }}>
+
+          {/* Header */}
+          <motion.div style={{
+            opacity: labelOpacity,
+            y: labelY,
+            textAlign: 'center',
+            /*
+              Space between header and grid.
+              Slightly tighter on mobile so grid has room.
+            */
+            marginBottom: isDesktop
+              ? 'clamp(20px, 3.5vh, 40px)'
+              : 'clamp(22px, 4.5vh, 44px)',
+            width: '88%',
+            maxWidth: 1000,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 12 }}>
               <div style={{ flex: 1, height: '1px', background: 'linear-gradient(to left, rgba(200,165,90,0.45), transparent)' }} />
               <span style={{
-                fontFamily: "'Space Mono',monospace", fontSize: 10, letterSpacing: '0.58em',
-                color: '#c8a55a', textTransform: 'uppercase', whiteSpace: 'nowrap'
+                fontFamily: "'Space Mono',monospace",
+                fontSize: 'clamp(7px, 1.8vw, 10px)',
+                letterSpacing: '0.4em',
+                color: '#c8a55a',
+                textTransform: 'uppercase',
+                whiteSpace: 'nowrap',
               }}>
                 The People Behind the Work
               </span>
               <div style={{ flex: 1, height: '1px', background: 'linear-gradient(to right, rgba(200,165,90,0.45), transparent)' }} />
             </div>
             <h2 style={{
-              fontFamily: "'IM Fell English',serif", fontStyle: 'italic', fontWeight: 400,
-              fontSize: 'clamp(32px, 5vw, 70px)', color: '#f0e6cc', margin: '0',
-              lineHeight: 1.05, letterSpacing: '-0.01em'
+              fontFamily: "'IM Fell English',serif",
+              fontStyle: 'italic',
+              fontWeight: 400,
+              fontSize: 'clamp(26px, 5vw, 70px)',
+              color: '#f0e6cc',
+              margin: 0,
+              lineHeight: 1.05,
+              letterSpacing: '-0.01em',
             }}>
               Driven by <span style={{ color: '#c8903a' }}>Obsession</span>
             </h2>
           </motion.div>
 
-          {/* 5-Member Accordion Windows */}
+          {/* Gallery */}
           <AccordionGallery />
+
         </motion.div>
 
-        {/* ══ PAPER ══ */}
+        {/* ══ PAPER TEAR SVG ══ */}
         <motion.svg
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: paperOpacity, overflow: 'visible' }}
+          style={{
+            position: 'absolute', inset: 0,
+            width: '100%', height: '100%',
+            opacity: paperOpacity,
+            overflow: 'visible',
+            pointerEvents: 'none',
+          }}
           viewBox={`0 0 ${W} ${H}`}
           preserveAspectRatio="xMidYMid slice"
           xmlns="http://www.w3.org/2000/svg"
         >
           <defs>
             <linearGradient id="parchL" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor="#f8edd8" />
-              <stop offset="60%" stopColor="#f2e2c2" />
+              <stop offset="0%"   stopColor="#f8edd8" />
+              <stop offset="60%"  stopColor="#f2e2c2" />
               <stop offset="100%" stopColor="#e9d6ae" />
             </linearGradient>
             <linearGradient id="parchR" x1="1" y1="0" x2="0" y2="0">
-              <stop offset="0%" stopColor="#f8edd8" />
-              <stop offset="60%" stopColor="#f2e2c2" />
+              <stop offset="0%"   stopColor="#f8edd8" />
+              <stop offset="60%"  stopColor="#f2e2c2" />
               <stop offset="100%" stopColor="#e9d6ae" />
             </linearGradient>
             <filter id="shadowL" x="-2%" y="-2%" width="120%" height="104%">
@@ -252,7 +470,6 @@ export function TeamReveal({ sp }) {
               <feComposite in="blend" in2="SourceGraphic" operator="in" />
             </filter>
           </defs>
-
           <g filter="url(#shadowL)">
             <path d={paths.L} fill="url(#parchL)" filter="url(#paperGrain)" />
             <path d={paths.L} fill="url(#parchL)" opacity="0.18" />
@@ -261,12 +478,12 @@ export function TeamReveal({ sp }) {
             <path d={paths.R} fill="url(#parchR)" filter="url(#paperGrain)" />
             <path d={paths.R} fill="url(#parchR)" opacity="0.18" />
           </g>
-
-          <path d={paths.T} fill="none" stroke="rgba(0,0,0,0.28)" strokeWidth="14" strokeLinecap="round" />
-          <path d={paths.T} fill="none" stroke="rgba(0,0,0,0.14)" strokeWidth="6" strokeLinecap="round" />
+          <path d={paths.T} fill="none" stroke="rgba(0,0,0,0.28)"      strokeWidth="14" strokeLinecap="round" />
+          <path d={paths.T} fill="none" stroke="rgba(0,0,0,0.14)"       strokeWidth="6"  strokeLinecap="round" />
           <path d={paths.T} fill="none" stroke="rgba(255,248,228,0.75)" strokeWidth="1.5" strokeLinecap="round" />
         </motion.svg>
-      </motion.div>{/* end content fade wrapper */}
+
+      </motion.div>
     </div>
   );
 }
