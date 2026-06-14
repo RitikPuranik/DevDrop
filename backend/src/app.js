@@ -36,7 +36,9 @@ app.use('/api/payment/webhook', express.raw({ type: 'application/json' }), (req,
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use(process.env.NODE_ENV === 'development' ? morgan('dev') : morgan('combined'));
+app.use(morgan(process.env.NODE_ENV === 'development' ? 'dev' : 'combined', {
+  skip: (req, res) => req.url === '/health'
+}));
 app.use('/api/', generalLimiter);
 
 // Health check

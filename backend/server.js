@@ -41,7 +41,8 @@ const startServer = async () => {
       const PING_INTERVAL = 4 * 60 * 1000; // 4 minutes
       setInterval(async () => {
         try {
-          const res = await fetch(backendUrl);
+          const pingUrl = backendUrl.endsWith('/') ? `${backendUrl}health` : `${backendUrl}/health`;
+          const res = await fetch(pingUrl);
           console.log(`🏓 Keep-alive ping: ${res.status}`);
         } catch (err) {
           console.warn('⚠️  Keep-alive ping failed:', err.message);
