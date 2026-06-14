@@ -26,6 +26,26 @@ function useBreakpoint() {
   return isDesktop;
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /* ── 2×2 GRID CARD ── */
 function GridCard({ m, isActive, onClick }) {
   return (
