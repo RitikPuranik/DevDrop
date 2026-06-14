@@ -29,7 +29,14 @@ const submitWebsite = async (req, res) => {
 
     res.status(201).json({ success: true, message: 'Website submitted for review', data: website });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Error submitting website', error: error.message });
+    if (error.name === 'ValidationError') {
+      const errors = Object.entries(error.errors).map(([field, err]) => ({
+        field,
+        message: err.message,
+      }));
+      return res.status(400).json({ success: false, message: 'Validation failed', errors });
+    }
+    res.status(500).json({ success: false, message: error.message || 'Error submitting website' });
   }
 };
 

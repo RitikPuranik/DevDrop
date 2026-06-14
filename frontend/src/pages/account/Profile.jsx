@@ -110,13 +110,15 @@ function getListingIssue(error) {
     };
   }
 
+  const serverError = data?.error || data?.message;
+
   return {
     tone: 'error',
-    title: data?.message || 'Submission failed',
+    title: 'Submission failed',
     messages: [
-      data?.message && data.message !== 'Validation failed'
-        ? data.message
-        : 'Something in the form still needs attention. Review the fields above and try again.',
+      serverError && serverError !== 'Validation failed'
+        ? serverError
+        : 'Something went wrong on our end. Please check your fields and try again.',
     ],
   };
 }
@@ -277,7 +279,7 @@ export default function Profile() {
     } catch (err) {
       const issue = getListingIssue(err);
       setListingIssue(issue);
-      toast.error(issue.title);
+      toast.error(issue.messages[0] || issue.title);
     } finally {
       setSubmitting(false);
     }
