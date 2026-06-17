@@ -583,9 +583,13 @@ export default function WebsiteDetail() {
                 <div className="mt-6 pt-6 border-t border-white/5">
                   <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-white/20 mb-3">Created by</p>
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#8b7355] to-[#5a4a38] flex items-center justify-center text-sm font-serif italic text-white shadow-md">
-                      {sellerName[0]?.toUpperCase()}
-                    </div>
+                    {website.sellerId.avatar ? (
+                      <img src={website.sellerId.avatar} alt={sellerName} className="w-10 h-10 rounded-full object-cover shadow-md" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#8b7355] to-[#5a4a38] flex items-center justify-center text-sm font-serif italic text-white shadow-md">
+                        {sellerName[0]?.toUpperCase()}
+                      </div>
+                    )}
                     <div>
                       <p className="text-sm font-bold">{sellerName}</p>
                     </div>

@@ -23,7 +23,7 @@ const purchaseWebsitePopulate = {
   select: 'name description techStack category price deployedUrl previewUrl files previewVideoUrl sellerId',
   populate: {
     path: 'sellerId',
-    select: 'name email',
+    select: 'name email avatar',
   },
 };
 
@@ -37,6 +37,13 @@ const hydratePurchaseWebsite = async (purchaseDoc) => {
       ...(website.files.previewVideo || {}),
       url: await getPreviewVideoAccessUrl(website.previewVideoUrl),
     };
+  }
+
+  if (website?.sellerId?.avatar) {
+    website.sellerId.avatar = getPublicAssetUrl(website.sellerId.avatar);
+  }
+  if (purchase.sellerId && purchase.sellerId.avatar) {
+    purchase.sellerId.avatar = getPublicAssetUrl(purchase.sellerId.avatar);
   }
 
   return purchase;
@@ -84,7 +91,7 @@ const getMyPurchases = async (req, res) => {
     const { page = 1, limit = 10 } = req.query;
     const purchases = await Purchase.find({ buyerId: req.userId, paymentStatus: PAYMENT_STATUS.COMPLETED })
       .populate(purchaseWebsitePopulate)
-      .populate('sellerId', 'name email')
+      .populate('sellerId', 'name email avatar')
       .sort({ purchaseDate: -1 })
       .skip((page - 1) * limit)
       .limit(parseInt(limit));
@@ -108,7 +115,7 @@ const getPurchaseDetails = async (req, res) => {
       paymentStatus: PAYMENT_STATUS.COMPLETED,
     })
       .populate(purchaseWebsitePopulate)
-      .populate('sellerId', 'name email');
+      .populate('sellerId', 'name email avatar');
 
     if (!purchase) {
       return res.status(404).json({ success: false, message: 'Purchase not found' });

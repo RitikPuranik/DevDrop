@@ -250,10 +250,21 @@ export default function PurchaseAccess() {
                 </SectionCard>
 
                 <SectionCard title="Seller">
-                  <p className="text-lg font-black tracking-tight">{website.sellerId?.name || 'Creator'}</p>
-                  {website.sellerId?.email && (
-                    <p className="text-xs text-white/35 mt-2 break-all">{website.sellerId.email}</p>
-                  )}
+                  <div className="flex items-center gap-4">
+                    {website.sellerId?.avatar ? (
+                      <img src={website.sellerId.avatar} alt={website.sellerId?.name || 'Creator'} className="w-12 h-12 rounded-full object-cover" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#8b7355] to-[#5a4a38] flex items-center justify-center text-lg font-serif italic text-white shadow-md">
+                        {(website.sellerId?.name || 'C')[0]?.toUpperCase()}
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-lg font-black tracking-tight">{website.sellerId?.name || 'Creator'}</p>
+                      {website.sellerId?.email && (
+                        <p className="text-xs text-white/35 mt-1 break-all">{website.sellerId.email}</p>
+                      )}
+                    </div>
+                  </div>
                 </SectionCard>
               </div>
 

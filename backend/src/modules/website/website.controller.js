@@ -55,6 +55,12 @@ const hydrateWebsitePreviewsAsync = async (websites) => {
     });
   }
   
+  result.forEach(w => {
+    if (w.sellerId && w.sellerId.avatar) {
+      w.sellerId.avatar = getPublicAssetUrl(w.sellerId.avatar);
+    }
+  });
+
   return result;
 };
 
@@ -69,7 +75,7 @@ const browseWebsites = async (req, res) => {
 
     // Run find + count in parallel — saves one full DB round trip
     const [websites, total] = await Promise.all([
-      Website.find(query).select('-adminComment -isDeleted -githubUrl').populate('sellerId', 'name email').sort({ [sortBy]: order === 'asc' ? 1 : -1 }).skip(skip).limit(parseInt(limit)),
+      Website.find(query).select('-adminComment -isDeleted -githubUrl').populate('sellerId', 'name email avatar').sort({ [sortBy]: order === 'asc' ? 1 : -1 }).skip(skip).limit(parseInt(limit)),
       Website.countDocuments(query),
     ]);
 
@@ -92,7 +98,7 @@ const getWebsiteDetails = async (req, res) => {
       _id: req.params.id, 
       status: { $in: [WEBSITE_STATUS.APPROVED, WEBSITE_STATUS.SOLD, WEBSITE_STATUS.IN_AUCTION] }, 
       isDeleted: false 
-    }).select('-adminComment -isDeleted -githubUrl').populate('sellerId', 'name email');
+    }).select('-adminComment -isDeleted -githubUrl').populate('sellerId', 'name email avatar');
     if (!website) return res.status(404).json({ success: false, message: 'Website not found' });
 
     if (website.category === 'exclusive' && website.status === WEBSITE_STATUS.SOLD) {
@@ -125,7 +131,7 @@ const getByCategory = async (req, res) => {
     if (category === 'exclusive') query.status = { $ne: WEBSITE_STATUS.SOLD };
 
     const [websites, total] = await Promise.all([
-      Website.find(query).select('-adminComment -isDeleted -githubUrl').populate('sellerId', 'name email').sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit)),
+      Website.find(query).select('-adminComment -isDeleted -githubUrl').populate('sellerId', 'name email avatar').sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit)),
       Website.countDocuments(query),
     ]);
 
@@ -150,7 +156,7 @@ const searchWebsites = async (req, res) => {
     };
 
     const [websites, total] = await Promise.all([
-      Website.find(query).select('-adminComment -isDeleted -githubUrl').populate('sellerId', 'name email').sort({ score: { $meta: 'textScore' } }).skip(skip).limit(parseInt(limit)),
+      Website.find(query).select('-adminComment -isDeleted -githubUrl').populate('sellerId', 'name email avatar').sort({ score: { $meta: 'textScore' } }).skip(skip).limit(parseInt(limit)),
       Website.countDocuments(query),
     ]);
 

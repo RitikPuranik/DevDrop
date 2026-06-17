@@ -262,7 +262,12 @@ export default function SmoothEliteGallery() {
                           {item.category === 'exclusive' ? 'Auction' : item.category === 'free' ? 'FREE' : item.price ? `₹${item.price}` : 'Paid'}
                         </motion.p>
                         <span className="flex items-center gap-1.5 text-[10px] text-white/20">
-                          <User size={10} /> {sellerName}
+                          {item.sellerId?.avatar ? (
+                            <img src={item.sellerId.avatar} alt={sellerName} className="w-4 h-4 rounded-full object-cover" />
+                          ) : (
+                            <User size={10} />
+                          )}
+                          <span className="truncate max-w-[80px]">{sellerName}</span>
                         </span>
                       </div>
                     </div>
@@ -320,9 +325,13 @@ export default function SmoothEliteGallery() {
                   {/* Seller info */}
                   {selectedId.sellerId && (
                     <div className="flex items-center gap-3 mb-8">
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#8b7355] to-[#5a4a38] flex items-center justify-center text-xs font-serif italic text-white">
-                        {(selectedId.sellerId?.name || 'C')[0]?.toUpperCase()}
-                      </div>
+                      {selectedId.sellerId.avatar ? (
+                        <img src={selectedId.sellerId.avatar} alt={selectedId.sellerId?.name || 'Creator'} className="w-8 h-8 rounded-full object-cover" />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#8b7355] to-[#5a4a38] flex items-center justify-center text-xs font-serif italic text-white">
+                          {(selectedId.sellerId?.name || 'C')[0]?.toUpperCase()}
+                        </div>
+                      )}
                       <p className="text-sm font-bold text-white/60">{selectedId.sellerId?.name || 'Creator'}</p>
                       {(selectedId.wishlistCount > 0) && (
                         <span className="ml-auto flex items-center gap-1 text-[10px] text-white/20">
