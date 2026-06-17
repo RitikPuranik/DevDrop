@@ -1,23 +1,26 @@
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { motion, useTransform, useSpring } from 'framer-motion';
+import ritikImg from '../../assets/people/ritik.jpeg';
 import priyalImg from '../../assets/people/priyal.jpeg';
 import rideemaImg from '../../assets/people/rideema.jpeg';
 import saralImg from '../../assets/people/saral.jpeg';
 
+
 const TEAM = [
-   { initials: 'RP', name: 'Ritik Puranik',  role: 'Full-Stack Engineer', img: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=800&q=80' }
-  ,{ initials: 'PP', name: 'Priyal Patel',   role: 'Full-Stack Developer',  img: priyalImg }
-  ,{ initials: 'RS', name: 'Rideema Singh',  role: 'Software Developer',  img: rideemaImg }
-  ,{ initials: 'SS', name: 'Saral Singore',  role: 'UI/UX Designer',   img: saralImg }
-  
+  { title:'Founder', name: 'Ritik Puranik', role: 'Lead Developer', img: ritikImg },
+  { name: 'Priyal Patel', role: 'Full-Stack Developer', img: priyalImg },
+  { name: 'Rideema Singh', role: 'Software Developer', img: rideemaImg },
+  { name: 'Saral Singore', role: 'UI/UX Designer', img: saralImg },
 ];
+
+
 
 function useBreakpoint() {
   const [isDesktop, setIsDesktop] = useState(
-    typeof window !== 'undefined' ? window.innerWidth >= 1024 : true
+    typeof window !== 'undefined' ? window.innerWidth >= 1280 : true
   );
   useEffect(() => {
-    const mq = window.matchMedia('(min-width: 1024px)');
+    const mq = window.matchMedia('(min-width: 1280px)');
     const update = (e) => setIsDesktop(e.matches);
     update(mq);
     mq.addEventListener('change', update);
@@ -25,7 +28,6 @@ function useBreakpoint() {
   }, []);
   return isDesktop;
 }
-
 
 /* ── 2×2 GRID CARD ── */
 function GridCard({ m, isActive, onClick }) {
@@ -61,38 +63,17 @@ function GridCard({ m, isActive, onClick }) {
             position: 'absolute', inset: 0,
             width: '100%', height: '100%',
             objectFit: 'cover',
-            opacity: isActive ? 0.88 : 0,
+            opacity: 0.88,
             filter: 'sepia(15%) contrast(1.05)',
-            transform: isActive ? 'scale(1)' : 'scale(1.08)',
-            transitionProperty: 'opacity, transform',
-            transitionDuration: '0.55s',
-            transitionTimingFunction: 'ease',
           }}
         />
-        {/* Initials */}
-        <div style={{
-          position: 'absolute', inset: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          opacity: isActive ? 0 : 1,
-          transition: 'opacity 0.35s ease',
-        }}>
-          <span style={{
-            fontFamily: "'Playfair Display', serif",
-            fontStyle: 'italic',
-            fontSize: 'clamp(24px, 6vw, 48px)',
-            color: '#5a4a3a',
-          }}>
-            {m.initials}
-          </span>
-        </div>
-        {/* Name overlay at bottom when active */}
+
+        {/* Name overlay at bottom — always visible */}
         <div style={{
           position: 'absolute', bottom: 0, left: 0, right: 0,
           background: 'linear-gradient(to top, rgba(8,7,4,0.85) 0%, transparent 100%)',
           padding: 'clamp(12px, 3vw, 20px)',
-          opacity: isActive ? 1 : 0,
-          transform: isActive ? 'translateY(0)' : 'translateY(6px)',
-          transition: 'opacity 0.4s ease, transform 0.4s ease',
+          opacity: 1,
         }}>
           <div style={{
             fontFamily: "'Playfair Display', serif",
@@ -114,13 +95,14 @@ function GridCard({ m, isActive, onClick }) {
         </div>
       </div>
 
-      {/* Name + role below (hidden when active — shown in overlay instead) */}
+      {/* Name + role below card — always hidden since overlay shows it */}
       <div style={{
         textAlign: 'center',
         width: '100%',
-        opacity: isActive ? 0 : 1,
-        transform: isActive ? 'translateY(-3px)' : 'translateY(0)',
-        transition: 'opacity 0.3s ease, transform 0.3s ease',
+        opacity: 0,
+        pointerEvents: 'none',
+        height: 0,
+        overflow: 'hidden',
       }}>
         <div style={{
           fontFamily: "'Playfair Display', serif",
@@ -163,7 +145,7 @@ function AccordionGallery() {
         /* gap scales with viewport so grid fills width symmetrically */
         gap: 'clamp(12px, 3vw, 22px)',
         /* take full available width up to a sensible max */
-        width: 'min(96%, 640px)',
+        width: 'min(92%, 720px)',
         /* no fixed height — let cards (aspect-ratio squares) define it */
         alignItems: 'start',
       }}>
@@ -179,7 +161,7 @@ function AccordionGallery() {
     );
   }
 
-  /* ── DESKTOP: original horizontal accordion ── */
+  /* ── DESKTOP: equal-width cards, click to reveal photo, no size change ── */
   return (
     <div style={{
       display: 'flex',
@@ -190,21 +172,17 @@ function AccordionGallery() {
       minHeight: 400,
     }}>
       {TEAM.map((m, i) => {
-        const isHovered = active === i;
-        const isAnyHovered = active !== null;
-        const flexValue = isHovered ? 6 : (isAnyHovered ? 1 : 1);
+        const isActive = active === i;
         return (
           <div key={i} style={{
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            flex: flexValue,
-            transition: 'flex 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
+            flex: 1,
             minWidth: 0,
           }}>
             <div
-              onMouseEnter={() => setActive(i)}
-              onMouseLeave={() => setActive(null)}
+              onClick={() => toggle(i)}
               style={{
                 position: 'relative',
                 width: '100%',
@@ -213,23 +191,23 @@ function AccordionGallery() {
                 overflow: 'hidden',
                 background: '#111',
                 cursor: 'pointer',
-                boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.03), 0 20px 40px rgba(0,0,0,0.6)',
+                boxShadow: isActive
+                  ? 'inset 0 0 0 1px rgba(200,144,58,0.35), 0 20px 40px rgba(0,0,0,0.6)'
+                  : 'inset 0 0 0 1px rgba(255,255,255,0.03), 0 20px 40px rgba(0,0,0,0.6)',
                 marginBottom: 20,
+                transition: 'box-shadow 0.45s ease',
               }}
             >
               <img src={m.img} alt={m.name} style={{
                 position: 'absolute', inset: 0, width: '100%', height: '100%',
                 objectFit: 'cover',
-                opacity: isHovered ? 0.9 : 0,
-                transition: 'opacity 0.6s ease',
+                opacity: 0.9,
                 filter: 'sepia(15%) contrast(1.05)',
-                transform: isHovered ? 'scale(1)' : 'scale(1.1)',
               }} />
               <div style={{
                 position: 'absolute', inset: 0,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                opacity: isHovered ? 0 : 1,
-                transition: 'opacity 0.4s ease',
+                opacity: 0,
               }}>
                 <span style={{
                   fontFamily: "'Playfair Display', serif",
@@ -352,7 +330,6 @@ export function TeamReveal({ sp }) {
         pointerEvents: 'none',
       }} />
 
-
       <motion.div style={{ opacity: sectionOpacity, position: 'absolute', inset: 0 }}>
 
         {/* ══ INNER CONTENT ══ */}
@@ -363,18 +340,13 @@ export function TeamReveal({ sp }) {
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          justifyContent: 'center',   /* always vertically centred */
+          justifyContent: isDesktop ? 'flex-start' : 'center',
           boxSizing: 'border-box',
-          /*
-            Mobile/tablet: symmetric vertical padding so space above header
-            ≈ space below grid — no collapsed gap at the bottom.
-            Desktop: original 2vh top nudge only.
-          */
-          padding: isDesktop
-            ? '2vh 0 0 0'
-            : 'clamp(20px, 4vh, 44px) 0 clamp(36px, 8vh, 72px) 0',
+          paddingTop:    isDesktop ? '10vh' : '0',
+          paddingBottom: isDesktop ? '0'    : '0',
+          paddingLeft: 0,
+          paddingRight: 0,
           gap: 0,
-          /* no overflow scroll — grid must fit within viewport */
           overflow: 'hidden',
         }}>
 
@@ -389,7 +361,7 @@ export function TeamReveal({ sp }) {
             */
             marginBottom: isDesktop
               ? 'clamp(20px, 3.5vh, 40px)'
-              : 'clamp(22px, 4.5vh, 44px)',
+              : 'clamp(20px, 4vh, 36px)',
             width: '88%',
             maxWidth: 1000,
           }}>
