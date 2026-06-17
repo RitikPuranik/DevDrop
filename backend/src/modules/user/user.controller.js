@@ -30,7 +30,8 @@ const hydratePurchaseWebsite = (purchaseDoc) => {
 const getProfile = async (req, res) => {
   try {
     const bankDetails = await BankDetails.findOne({ userId: req.user._id });
-    res.json({ success: true, data: { user: { id: req.user._id, name: req.user.name, phone: req.user.phone, email: req.user.email, role: req.user.role, isVerified: req.user.isVerified, createdAt: req.user.createdAt }, hasBankDetails: !!bankDetails } });
+    const avatarUrl = getPublicAssetUrl(req.user.avatar);
+    res.json({ success: true, data: { user: { id: req.user._id, name: req.user.name, phone: req.user.phone, email: req.user.email, role: req.user.role, isVerified: req.user.isVerified, avatar: avatarUrl, createdAt: req.user.createdAt }, hasBankDetails: !!bankDetails } });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error fetching profile', error: error.message });
   }
@@ -114,4 +115,54 @@ const getPurchases = async (req, res) => {
   }
 };
 
-module.exports = { getProfile, saveBankDetails, getBankDetails, getDashboard, getPurchases };
+const updateProfilePicture = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No image file provided' });
+    }
+
+    const user = await User.findById(req.userId);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    // Delete old avatar from Supabase if it's a Supabase path (not an external URL)
+    if (user.avatar) {
+      await supabaseService.deleteAvatar(user.avatar);
+    }
+
+    // Upload new avatar
+    const uploadResult = await supabaseService.uploadAvatar(req.file);
+
+    // Save the Supabase storage path (not the public URL) so we can delete it later
+    user.avatar = uploadResult.path;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Profile picture updated successfully',
+      data: { avatar: uploadResult.publicUrl },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error updating profile picture', error: error.message });
+  }
+};
+
+const removeProfilePicture = async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    // Delete avatar from Supabase if it's a stored path
+    if (user.avatar) {
+      await supabaseService.deleteAvatar(user.avatar);
+    }
+
+    user.avatar = undefined;
+    await user.save();
+
+    res.json({ success: true, message: 'Profile picture removed successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error removing profile picture', error: error.message });
+  }
+};
+
+module.exports = { getProfile, saveBankDetails, getBankDetails, getDashboard, getPurchases, updateProfilePicture, removeProfilePicture };

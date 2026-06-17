@@ -44,6 +44,15 @@ const uploadVideo = multer({
   fileFilter: fileFilter(['.mp4', '.webm', '.mov', '.avi']),
 });
 
+// Avatar image upload (profile picture)
+const uploadAvatar = multer({
+  storage,
+  limits: {
+    fileSize: parseInt(process.env.MAX_FILE_SIZE_AVATAR) || 5 * 1024 * 1024, // 5MB
+  },
+  fileFilter: fileFilter(['.jpg', '.jpeg', '.png', '.webp']),
+});
+
 // Multiple files upload (for admin approval)
 const uploadMultiple = multer({
   storage,
@@ -92,6 +101,7 @@ module.exports = {
   uploadZip,
   uploadPdf,
   uploadVideo,
+  uploadAvatar,
   uploadMultiple,
   handleMulterError,
 };

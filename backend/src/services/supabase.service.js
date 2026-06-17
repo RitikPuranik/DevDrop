@@ -57,10 +57,28 @@ const uploadPreviewVideo = async (file) => {
   return result;
 };
 
+const uploadAvatar = async (file) => {
+  const result = await uploadFile(file, SUPABASE_FOLDERS.AVATARS);
+  result.publicUrl = getPublicUrl(result.path);
+  return result;
+};
+
+const deleteAvatar = async (avatarValue) => {
+  // Only delete if the avatar is a Supabase storage path (not an external URL like Google profile pics)
+  if (!avatarValue || /^https?:\/\//.test(avatarValue)) return false;
+  try {
+    await deleteFile(avatarValue);
+    return true;
+  } catch (error) {
+    console.error('Delete avatar error:', error);
+    return false;
+  }
+};
+
 const deleteWebsiteFiles = async (website) => {
   const filePaths = [website.sourceCodeUrl, website.docsUrl, website.videoUrl, website.previewVideoUrl].filter(Boolean);
   if (filePaths.length > 0) return deleteFiles(filePaths);
   return true;
 };
 
-module.exports = { uploadFile, getPublicUrl, createSignedUrl, createSignedUrls, deleteFile, deleteFiles, uploadSourceCode, uploadDocs, uploadVideo, uploadPreviewVideo, deleteWebsiteFiles };
+module.exports = { uploadFile, getPublicUrl, createSignedUrl, createSignedUrls, deleteFile, deleteFiles, uploadSourceCode, uploadDocs, uploadVideo, uploadPreviewVideo, uploadAvatar, deleteAvatar, deleteWebsiteFiles };

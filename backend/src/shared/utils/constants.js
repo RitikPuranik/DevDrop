@@ -67,6 +67,7 @@ const FILE_SIZE_LIMITS = {
   ZIP: parseInt(process.env.MAX_FILE_SIZE_ZIP) || 100 * 1024 * 1024, // 100MB
   PDF: parseInt(process.env.MAX_FILE_SIZE_PDF) || 10 * 1024 * 1024,   // 10MB
   VIDEO: parseInt(process.env.MAX_FILE_SIZE_VIDEO) || 500 * 1024 * 1024, // 500MB
+  AVATAR: parseInt(process.env.MAX_FILE_SIZE_AVATAR) || 5 * 1024 * 1024, // 5MB
 };
 
 // Supabase bucket configuration
@@ -78,6 +79,7 @@ const SUPABASE_FOLDERS = {
   DOCS: 'docs',
   VIDEOS: 'videos',
   PREVIEW_VIDEOS: 'preview-videos',
+  AVATARS: 'avatars',
 };
 
 // Signed URL expiry (in seconds)

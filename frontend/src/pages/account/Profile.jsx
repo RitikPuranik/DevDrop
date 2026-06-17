@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   User, Package, Heart, DollarSign, Upload, ShoppingBag, 
   ExternalLink, Trash2, Loader2, LogOut, Plus, AlertCircle,
-  ArrowLeft, Download, CheckCircle, Landmark
+  ArrowLeft, Download, CheckCircle, Landmark, Camera, X
 } from 'lucide-react';
 import { userAPI } from '../../api/user';
 import { sellerAPI } from '../../api/seller';
@@ -132,6 +132,9 @@ export default function Profile() {
   const [purchases, setPurchases] = useState([]);
   const [wishlist, setWishlist] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const avatarInputRef = useRef(null);
+
 
   // --- BANK DETAILS STATE ---
   const [bankDetails, setBankDetails] = useState({
@@ -343,6 +346,55 @@ export default function Profile() {
     window.location.reload();
   };
 
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowed.includes(file.type)) {
+      toast.error('Please upload a JPG, PNG, or WebP image');
+      return;
+    }
+
+    // Validate file size (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be under 5MB');
+      return;
+    }
+
+    try {
+      setAvatarUploading(true);
+      const formData = new FormData();
+      formData.append('avatar', file);
+      const res = await userAPI.updateAvatar(formData);
+      const newAvatarUrl = res.data?.data?.avatar;
+      if (newAvatarUrl) {
+        setProfile(prev => ({ ...prev, avatar: newAvatarUrl }));
+      }
+      toast.success('Profile picture updated!');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to upload profile picture');
+    } finally {
+      setAvatarUploading(false);
+      // Reset input so the same file can be re-selected
+      if (avatarInputRef.current) avatarInputRef.current.value = '';
+    }
+  };
+
+  const handleAvatarRemove = async () => {
+    try {
+      setAvatarUploading(true);
+      await userAPI.removeAvatar();
+      setProfile(prev => ({ ...prev, avatar: null }));
+      toast.success('Profile picture removed');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to remove profile picture');
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#050505] flex items-center justify-center">
@@ -365,9 +417,60 @@ export default function Profile() {
         {/* ── HEADER ── */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col md:flex-row items-start md:items-center justify-between mb-12 gap-6">
           <div className="flex items-center gap-6">
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#8b7355] to-[#5a4a38] flex items-center justify-center text-3xl font-serif italic text-white shadow-lg shadow-[#8b7355]/20">
-              {profile?.name?.[0]?.toUpperCase() || 'U'}
+            {/* ── INTERACTIVE AVATAR ── */}
+            <div className="relative group">
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handleAvatarUpload}
+              />
+
+              <div className="w-20 h-20 rounded-full overflow-hidden shadow-lg shadow-[#8b7355]/20 ring-2 ring-white/10 ring-offset-2 ring-offset-[#050505]">
+                {avatarUploading ? (
+                  <div className="w-full h-full bg-gradient-to-br from-[#8b7355] to-[#5a4a38] flex items-center justify-center">
+                    <Loader2 className="animate-spin text-white" size={24} />
+                  </div>
+                ) : profile?.avatar ? (
+                  <img
+                    src={profile.avatar}
+                    alt={profile?.name || 'User'}
+                    className="w-full h-full object-cover"
+                    onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                  />
+                ) : null}
+                {/* Initials fallback — shown when no avatar or image fails to load */}
+                <div
+                  className="w-full h-full bg-gradient-to-br from-[#8b7355] to-[#5a4a38] flex items-center justify-center text-3xl font-serif italic text-white"
+                  style={{ display: (!avatarUploading && !profile?.avatar) ? 'flex' : 'none' }}
+                >
+                  {profile?.name?.[0]?.toUpperCase() || 'U'}
+                </div>
+              </div>
+
+              {/* Hover overlay — upload trigger */}
+              {!avatarUploading && (
+                <div
+                  onClick={() => avatarInputRef.current?.click()}
+                  className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                >
+                  <Camera size={20} className="text-white" />
+                </div>
+              )}
+
+              {/* Remove button — only if avatar exists */}
+              {profile?.avatar && !avatarUploading && (
+                <button
+                  onClick={handleAvatarRemove}
+                  className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-400 shadow-lg z-10"
+                  title="Remove profile picture"
+                >
+                  <X size={12} className="text-white" />
+                </button>
+              )}
             </div>
+
             <div>
               <h1 className="text-3xl font-black tracking-tight">{profile?.name || 'User'}</h1>
               <p className="text-white/30 text-sm mt-1">{profile?.email}</p>
