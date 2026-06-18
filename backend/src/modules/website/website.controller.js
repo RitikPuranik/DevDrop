@@ -4,63 +4,54 @@ const supabaseService = require('../../services/supabase.service');
 const { getPaginationMetadata } = require('../../shared/utils/helpers');
 const { PAGINATION, WEBSITE_STATUS } = require('../../shared/utils/constants');
 
-const getPublicAssetUrl = (filePath) => {
-  if (!filePath) return null;
-  if (/^https?:\/\//.test(filePath)) return filePath;
-  return supabaseService.getPublicUrl(filePath);
-};
-
 const hydrateWebsitePreviewsAsync = async (websites) => {
   const result = websites.map(w => (w.toObject ? w.toObject() : w));
   
-  // Find all websites that have a previewVideoUrl that needs signing
   const pathsToSign = [];
   result.forEach(w => {
     if (w.previewVideoUrl && !/^https?:\/\//.test(w.previewVideoUrl)) {
       pathsToSign.push(w.previewVideoUrl);
     }
+    if (w.sellerId && w.sellerId.avatar && !/^https?:\/\//.test(w.sellerId.avatar)) {
+      pathsToSign.push(w.sellerId.avatar);
+    }
   });
+
+  const urlMap = {};
 
   if (pathsToSign.length > 0) {
     try {
-      // Create signed URLs valid for 2 hours
-      const signedUrls = await supabaseService.createSignedUrls(pathsToSign, 7200);
-      const urlMap = {};
+      const uniquePaths = [...new Set(pathsToSign)];
+      const signedUrls = await supabaseService.createSignedUrls(uniquePaths, 7200);
       signedUrls.forEach(item => {
         if (!item.error) urlMap[item.path] = item.signedUrl;
       });
-
-      result.forEach(w => {
-        if (w.previewVideoUrl && urlMap[w.previewVideoUrl]) {
-          w.files = w.files || {};
-          w.files.previewVideo = {
-            ...(w.files.previewVideo || {}),
-            url: urlMap[w.previewVideoUrl],
-          };
-        } else if (w.previewVideoUrl && /^https?:\/\//.test(w.previewVideoUrl)) {
-          w.files = w.files || {};
-          w.files.previewVideo = { ...(w.files.previewVideo || {}), url: w.previewVideoUrl };
-        }
-      });
     } catch (err) {
-      console.error('Failed to generate signed URLs for previews:', err);
+      console.error('Failed to generate signed URLs:', err);
     }
-  } else {
-    // Just map external URLs
-    result.forEach(w => {
-      if (w.previewVideoUrl && /^https?:\/\//.test(w.previewVideoUrl)) {
-        w.files = w.files || {};
-        w.files.previewVideo = { ...(w.files.previewVideo || {}), url: w.previewVideoUrl };
-      }
-    });
   }
-  
+
   result.forEach(w => {
+    if (w.previewVideoUrl) {
+      w.files = w.files || {};
+      if (/^https?:\/\//.test(w.previewVideoUrl)) {
+        w.files.previewVideo = { ...(w.files.previewVideo || {}), url: w.previewVideoUrl };
+      } else if (urlMap[w.previewVideoUrl]) {
+        w.files.previewVideo = { ...(w.files.previewVideo || {}), url: urlMap[w.previewVideoUrl] };
+      }
+    }
+
     if (w.sellerId && w.sellerId.avatar) {
-      w.sellerId.avatar = getPublicAssetUrl(w.sellerId.avatar);
+      if (/^https?:\/\//.test(w.sellerId.avatar)) {
+        // already an external url
+      } else if (urlMap[w.sellerId.avatar]) {
+        w.sellerId.avatar = urlMap[w.sellerId.avatar];
+      } else {
+        w.sellerId.avatar = null;
+      }
     }
   });
-
+  
   return result;
 };
 

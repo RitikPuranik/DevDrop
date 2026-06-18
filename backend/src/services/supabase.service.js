@@ -59,7 +59,7 @@ const uploadPreviewVideo = async (file) => {
 
 const uploadAvatar = async (file) => {
   const result = await uploadFile(file, SUPABASE_FOLDERS.AVATARS);
-  result.publicUrl = getPublicUrl(result.path);
+  result.publicUrl = await createSignedUrl(result.path);
   return result;
 };
 

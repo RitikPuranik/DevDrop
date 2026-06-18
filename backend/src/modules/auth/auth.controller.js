@@ -3,6 +3,18 @@ const User = require('../user/user.model');
 const { generateAccessToken } = require('../../shared/utils/jwt');
 const { hashToken } = require('../../shared/utils/helpers');
 const emailService = require('../../services/email.service');
+const supabaseService = require('../../services/supabase.service');
+
+const getPublicAssetUrl = async (filePath) => {
+  if (!filePath) return null;
+  if (/^https?:\/\//.test(filePath)) return filePath;
+  try {
+    return await supabaseService.createSignedUrl(filePath, 7200);
+  } catch (err) {
+    console.error('Error generating signed URL:', err);
+    return null;
+  }
+};
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -49,11 +61,12 @@ const signup = async (req, res) => {
     await user.save();
 
     const token = generateAccessToken(user._id);
+    const avatarUrl = await getPublicAssetUrl(user.avatar);
 
     res.status(201).json({
       success: true,
       message: 'User registered successfully.',
-      data: { user: { id: user._id, name: user.name, phone: user.phone, email: user.email, role: user.role, isVerified: user.isVerified, avatar: user.avatar }, token },
+      data: { user: { id: user._id, name: user.name, phone: user.phone, email: user.email, role: user.role, isVerified: user.isVerified, avatar: avatarUrl }, token },
     });
   } catch (error) {
     res.status(getAuthErrorStatus(error)).json({
@@ -92,7 +105,8 @@ const login = async (req, res) => {
     if (!isPasswordValid) return res.status(401).json({ success: false, message: 'Invalid credentials' });
 
     const token = generateAccessToken(user._id);
-    res.json({ success: true, message: 'Login successful', data: { user: { id: user._id, name: user.name, email: user.email, role: user.role, isVerified: user.isVerified, avatar: user.avatar }, token } });
+    const avatarUrl = await getPublicAssetUrl(user.avatar);
+    res.json({ success: true, message: 'Login successful', data: { user: { id: user._id, name: user.name, email: user.email, role: user.role, isVerified: user.isVerified, avatar: avatarUrl }, token } });
   } catch (error) {
     res.status(getAuthErrorStatus(error)).json({
       success: false,
@@ -148,12 +162,13 @@ const googleAuth = async (req, res) => {
     }
 
     const token = generateAccessToken(user._id);
+    const avatarUrl = await getPublicAssetUrl(user.avatar);
 
     res.json({
       success: true,
       message: 'Google login successful',
       data: {
-        user: { id: user._id, name: user.name, email: user.email, role: user.role, isVerified: user.isVerified, avatar: user.avatar },
+        user: { id: user._id, name: user.name, email: user.email, role: user.role, isVerified: user.isVerified, avatar: avatarUrl },
         token,
       },
     });
@@ -221,7 +236,8 @@ const resendVerification = async (req, res) => {
 const getMe = async (req, res) => {
   try {
     const user = req.user;
-    res.json({ success: true, data: { id: user._id, name: user.name, phone: user.phone, email: user.email, role: user.role, isVerified: user.isVerified, avatar: user.avatar, createdAt: user.createdAt } });
+    const avatarUrl = await getPublicAssetUrl(user.avatar);
+    res.json({ success: true, data: { id: user._id, name: user.name, phone: user.phone, email: user.email, role: user.role, isVerified: user.isVerified, avatar: avatarUrl, createdAt: user.createdAt } });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error fetching user', error: error.message });
   }

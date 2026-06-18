@@ -6,13 +6,18 @@ const Payout = require('../payout/payout.model');
 const Wishlist = require('../wishlist/wishlist.model');
 const supabaseService = require('../../services/supabase.service');
 
-const getPublicAssetUrl = (filePath) => {
+const getPublicAssetUrl = async (filePath) => {
   if (!filePath) return null;
   if (/^https?:\/\//.test(filePath)) return filePath;
-  return supabaseService.getPublicUrl(filePath);
+  try {
+    return await supabaseService.createSignedUrl(filePath, 7200);
+  } catch (err) {
+    console.error('Error generating signed URL:', err);
+    return null;
+  }
 };
 
-const hydratePurchaseWebsite = (purchaseDoc) => {
+const hydratePurchaseWebsite = async (purchaseDoc) => {
   const purchase = purchaseDoc.toObject();
   const website = purchase.websiteId;
 
@@ -20,8 +25,15 @@ const hydratePurchaseWebsite = (purchaseDoc) => {
     website.files = website.files || {};
     website.files.previewVideo = {
       ...(website.files.previewVideo || {}),
-      url: getPublicAssetUrl(website.previewVideoUrl),
+      url: await getPublicAssetUrl(website.previewVideoUrl),
     };
+  }
+
+  if (website?.sellerId?.avatar) {
+    website.sellerId.avatar = await getPublicAssetUrl(website.sellerId.avatar);
+  }
+  if (purchase.sellerId && purchase.sellerId.avatar) {
+    purchase.sellerId.avatar = await getPublicAssetUrl(purchase.sellerId.avatar);
   }
 
   return purchase;
@@ -30,7 +42,7 @@ const hydratePurchaseWebsite = (purchaseDoc) => {
 const getProfile = async (req, res) => {
   try {
     const bankDetails = await BankDetails.findOne({ userId: req.user._id });
-    const avatarUrl = getPublicAssetUrl(req.user.avatar);
+    const avatarUrl = await getPublicAssetUrl(req.user.avatar);
     res.json({ success: true, data: { user: { id: req.user._id, name: req.user.name, phone: req.user.phone, email: req.user.email, role: req.user.role, isVerified: req.user.isVerified, avatar: avatarUrl, createdAt: req.user.createdAt }, hasBankDetails: !!bankDetails } });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error fetching profile', error: error.message });
@@ -107,7 +119,7 @@ const getPurchases = async (req, res) => {
 
     res.json({
       success: true,
-      data: purchases.map(hydratePurchaseWebsite),
+      data: await Promise.all(purchases.map(hydratePurchaseWebsite)),
       pagination: { currentPage: parseInt(page), totalPages: Math.ceil(total / limit), totalItems: total },
     });
   } catch (error) {
