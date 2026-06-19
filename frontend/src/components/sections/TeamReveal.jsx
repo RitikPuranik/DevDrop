@@ -453,7 +453,7 @@ export function TeamReveal({ sp }) {
           </g>
           <path d={paths.T} fill="none" stroke="rgba(0,0,0,0.28)"      strokeWidth="14" strokeLinecap="round" />
           <path d={paths.T} fill="none" stroke="rgba(0,0,0,0.14)"       strokeWidth="6"  strokeLinecap="round" />
-          <path d={paths.T} fill="none" stroke="rgba(255,248,228,0.75)" strokeWidth="1.5" strokeLinecap="round" />
+
         </motion.svg>
 
       </motion.div>

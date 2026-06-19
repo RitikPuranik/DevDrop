@@ -56,8 +56,8 @@ const VideoHeroSection = ({ preloadedVideoRef, introComplete, fromIntro }) => {
   const { scrollY } = useScroll();
 
   const videoScale = useTransform(scrollY, [0, 1000], [1.05, 1]);
-  const videoBlur  = useTransform(scrollY, [200, 800], ["blur(0px)", "blur(10px)"]);
-  const opacity    = useTransform(scrollY, [0, 800], [1, 0.55]);
+  const videoBlur   = useTransform(scrollY, [200, 800], ["blur(0px)", "blur(10px)"]);
+  const opacity     = useTransform(scrollY, [0, 800], [1, 0.55]);
 
   useEffect(() => {
     const wrapper = wrapperRef.current;
@@ -239,7 +239,9 @@ const ArtifactCard = ({ item, index }) => {
 /* ─── DYNAMIC GEOMETRIC REVEAL CONTAINER ─── */
 const TemplatesGridReveal = ({ introComplete }) => {
   const containerRef = useRef(null);
-  const isSectionInView = useInView(containerRef, { once: true, amount: 0.15 });
+  
+  // FIXED: Changed once: true to once: false so the pop-up spring animation triggers every single time you scroll here
+  const isSectionInView = useInView(containerRef, { once: false, amount: 0.15 });
 
   // Progressive ripple sequencing: Center expands slightly ahead of outer boundaries
   const getOutwardDelay = (customId) => {
@@ -309,10 +311,9 @@ const TemplatesGridReveal = ({ introComplete }) => {
             className="lg:col-span-1 lg:row-span-2 bg-[#0d0d10] p-8 rounded-3xl flex flex-col justify-between cursor-pointer border border-white/5 hover:border-white/20 transition-all duration-300"
           >
             <div>
-              <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-[#e8e2d6]/40 block mb-4">LATEST DIGEST</span>
-              <h2 className="text-2xl font-serif italic text-[#e8e2d6] leading-[1.2]">{ARTIFACTS[0].name} Framework</h2>
+              <h2 className="text-2xl font-serif italic text-[#e8e2d6] leading-[1.2]">Best Quality</h2>
             </div>
-            <p className="text-xs text-[#e8e2d6]/60 font-mono">Explore modern fluid composition across platforms →</p>
+            <p className="text-xl text-[#e8e2d6]/60 font-mono">Get best quality website </p>
           </motion.div>
 
           {/* Tile 2: Center Wide Core Title Block */}
@@ -320,18 +321,11 @@ const TemplatesGridReveal = ({ introComplete }) => {
             variants={structuralAnimationVariants} custom="center-top" style={{ originX: 0.5, originY: 0.3 }}
             className="sm:col-span-2 lg:col-span-2 bg-[#111115] p-8 rounded-3xl flex flex-col justify-between border border-white/5 relative"
           >
-            <div className="flex justify-between items-center w-full">
-              <span className="text-xs font-mono tracking-[0.2em] text-[#e8e2d6] font-bold uppercase">AETHER LABS</span>
-              <div className="flex gap-4 items-center text-xs text-[#e8e2d6]/60 font-mono">
-                <span  className="cursor-pointer hover:text-[#e8e2d6] transition-colors">System</span>
-                <span  className="cursor-pointer hover:text-[#e8e2d6] transition-colors">Catalog</span>
-                <button className="bg-[#e8e2d6] text-black text-[11px] font-mono font-bold px-4 py-2 rounded-full hover:scale-105 transition-transform ml-2">View Code</button>
-              </div>
-            </div>
-            <div className="mt-auto">
-              <h1 className="text-3xl md:text-4xl font-serif text-[#e8e2d6] tracking-tight leading-tight mb-4">Cinematic Motion Fluid Design Assets</h1>
+           
+            <div className="mt-5">
+              <h1 className="text-3xl md:text-4xl font-serif text-[#e8e2d6] tracking-tight leading-tight mb-4">Devdrop give website with full documentation and authorization</h1>
               <div className="flex gap-8 text-xs font-mono text-[#e8e2d6]/40">
-                <span>✦ 8+ Archetypes</span>
+                <span>✦ 100% your website once sold</span>
                 <span>✦ 400% Output Rate</span>
               </div>
             </div>
@@ -379,7 +373,7 @@ const TemplatesGridReveal = ({ introComplete }) => {
             <h3 className="text-xl font-serif italic text-[#e8e2d6]/70 group-hover:text-[#e8e2d6] transition-colors leading-snug">Living Catalog Architecture</h3>
           </motion.div>
 
-          {/* Tile 7: Restored Bottom Right Edge Grid Tile (Completes the layout area perfectly matching the 4-column geometry) */}
+          {/* Tile 7: Restored Bottom Right Edge Grid Tile */}
           <motion.div 
             variants={structuralAnimationVariants} custom="bottom-right-corner" style={{ originX: 1, originY: 1 }}
             className="lg:col-span-1 rounded-3xl overflow-hidden cursor-pointer border border-white/5 bg-[#0d0d10] group relative"
@@ -390,54 +384,38 @@ const TemplatesGridReveal = ({ introComplete }) => {
               <span className="text-xs font-mono text-[#e8e2d6] self-end">✦ PREVIEW</span>
             </div>
           </motion.div>
+          
+          {/* Tile 8: Bottom Wide Panel */}
           <motion.div
-  variants={structuralAnimationVariants}
-  custom="bottom-wide"
-  style={{ originX: 1, originY: 1 }}
-  className="
-    lg:col-span-2
-    lg:col-start-3
-   lg:row-start-3
-    bg-[#111115]
-    rounded-3xl
-    border border-white/5
-    p-8
-    flex
-    items-center
-    justify-between
-    overflow-hidden
-    relative
-  "
->
-  <div>
-    <span className="text-[10px] uppercase tracking-[0.3em] text-[#e8e2d6]/40 font-mono">
-      WHY CHOOSE US
-    </span>
+            variants={structuralAnimationVariants}
+            custom="bottom-wide"
+            style={{ originX: 1, originY: 1 }}
+            className="lg:col-span-2 lg:col-start-3 lg:row-start-3 bg-[#111115] rounded-3xl border border-white/5 p-8 flex items-center justify-between overflow-hidden relative"
+          >
+            <div>
+              <span className="text-[10px] uppercase tracking-[0.3em] text-[#e8e2d6]/40 font-mono">
+                WHY CHOOSE US
+              </span>
+              <h2 className="mt-4 text-3xl md:text-4xl font-serif text-[#e8e2d6] leading-tight">
+                Trusted Marketplace<br />For Premium Websites
+              </h2>
+            </div>
 
-    <h2 className="mt-4 text-3xl md:text-4xl font-serif text-[#e8e2d6] leading-tight">
-      Trusted Marketplace
-      <br />
-      For Premium Websites
-    </h2>
-  </div>
-
-  <div className="flex gap-10">
-    <div className="text-center">
-      <h3 className="text-4xl font-serif text-[#e8e2d6]">500+</h3>
-      <p className="text-xs text-[#e8e2d6]/50">Projects</p>
-    </div>
-
-    <div className="text-center">
-      <h3 className="text-4xl font-serif text-[#e8e2d6]">98%</h3>
-      <p className="text-xs text-[#e8e2d6]/50">Satisfaction</p>
-    </div>
-
-    <div className="text-center">
-      <h3 className="text-4xl font-serif text-[#e8e2d6]">24/7</h3>
-      <p className="text-xs text-[#e8e2d6]/50">Support</p>
-    </div>
-  </div>
-</motion.div>
+            <div className="flex gap-10">
+              <div className="text-center">
+                <h3 className="text-4xl font-serif text-[#e8e2d6]">500+</h3>
+                <p className="text-xs text-[#e8e2d6]/50">Projects</p>
+              </div>
+              <div className="text-center">
+                <h3 className="text-4xl font-serif text-[#e8e2d6]">98%</h3>
+                <p className="text-xs text-[#e8e2d6]/50">Satisfaction</p>
+              </div>
+              <div className="text-center">
+                <h3 className="text-4xl font-serif text-[#e8e2d6]">24/7</h3>
+                <p className="text-xs text-[#e8e2d6]/50">Support</p>
+              </div>
+            </div>
+          </motion.div>
             
           {/* ─── THE FLOATING REVEAL CENTERPIECE OVERLAP CIRCLE (PERFECTLY ABSOLUTE CENTERED) ─── */}
           <motion.div 
@@ -445,22 +423,12 @@ const TemplatesGridReveal = ({ introComplete }) => {
             className="absolute hidden lg:block top-1/2 left-1/2 w-[250px] h-[250px] bg-[#050505] rounded-full p-3 shadow-[0_30px_70px_rgba(0,0,0,0.9)] z-30 pointer-events-auto"
           >
             <div className="w-full h-full rounded-full bg-gradient-to-br from-[#16161c] to-[#0d0d10] border border-white/10 flex items-center justify-center">
-
-  <div className="text-center px-6">
-    <h2 className="text-4xl md:text-5xl font-serif italic text-[#e8e2d6] leading-none">
-      Why
-    </h2>
-
-    <h2 className="text-5xl md:text-6xl font-serif text-[#e8e2d6] leading-none">
-      Choose
-    </h2>
-
-    <h2 className="text-4xl md:text-5xl font-serif italic text-[#e8e2d6] leading-none">
-      Us
-    </h2>
-  </div>
-
-</div>
+              <div className="text-center px-6">
+                <h2 className="text-4xl md:text-5xl font-serif italic text-[#e8e2d6] leading-none">Why</h2>
+                <h2 className="text-5xl md:text-6xl font-serif text-[#e8e2d6] leading-none my-1">Choose</h2>
+                <h2 className="text-4xl md:text-5xl font-serif italic text-[#e8e2d6] leading-none">Us</h2>
+              </div>
+            </div>
           </motion.div>
 
         </motion.div>
