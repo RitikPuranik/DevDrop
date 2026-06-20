@@ -260,7 +260,7 @@ export default function SmoothEliteGallery() {
                       <motion.h3 layoutId={`title-${itemId}`} transition={transition} className="font-black text-lg lg:text-xl tracking-tight truncate">{item.title || item.name}</motion.h3>
                       <div className="flex items-center justify-between mt-1">
                         <motion.p layoutId={`price-${itemId}`} transition={transition} className="text-[#8b7355] font-bold text-xs lg:text-sm tracking-widest uppercase">
-                          {item.category === 'exclusive' ? 'Auction' : item.category === 'free' ? 'FREE' : item.price ? `₹${item.price}` : 'Paid'}
+                          {item.category === 'exclusive' ? 'Exclusive' : item.category === 'free' ? 'FREE' : item.price ? `₹${item.price}` : 'Paid'}
                         </motion.p>
                         <span className="flex items-center gap-1.5 text-[10px] text-white/20">
                           {item.sellerId?.avatar ? (
@@ -320,7 +320,7 @@ export default function SmoothEliteGallery() {
                   </motion.h2>
 
                   <motion.div layoutId={`price-${selectedId._id || selectedId.id}`} transition={transition} className="text-xl lg:text-3xl font-light italic text-gray-500 mb-4">
-                    {selectedId.category === 'exclusive' ? 'Live Auction' : selectedId.category === 'free' ? 'FREE' : `₹${selectedId.price || 'Price on request'}`}
+                    {selectedId.category === 'exclusive' ? 'Exclusive Listing' : selectedId.category === 'free' ? 'FREE' : `₹${selectedId.price || 'Price on request'}`}
                   </motion.div>
 
                   {/* Seller info */}
@@ -365,7 +365,7 @@ export default function SmoothEliteGallery() {
                         onClick={() => navigate(`/website/${selectedId._id || selectedId.id}`)}
                         className="w-full py-4 lg:py-5 bg-orange-500 text-white rounded-[20px] lg:rounded-[28px] font-bold text-sm uppercase tracking-[0.15em] flex items-center justify-center gap-2 hover:bg-orange-600 transition-all active:scale-[0.98]"
                       >
-                        <Gavel size={16} /> Place a Bid
+                        <Gavel size={16} /> Make an Offer
                       </button>
                     ) : (
                       <button
