@@ -4,6 +4,7 @@ const Website = require('../website/website.model');
 const User = require('../user/user.model');
 const emailService = require('../../services/email.service');
 const { WEBSITE_STATUS } = require('../../shared/utils/constants');
+const supabaseService = require('../../services/supabase.service');
 const { getAuctionTimings } = require('../../shared/utils/envHelper');
 
 /**
@@ -14,12 +15,12 @@ const { getAuctionTimings } = require('../../shared/utils/envHelper');
 const startAuction = async (req, res) => {
   try {
     const { websiteId } = req.params;
-    const { 
-      startingPrice, 
-      minimumBidIncrement = 100, 
+    const {
+      startingPrice,
+      minimumBidIncrement = 100,
       reservePrice = 0
     } = req.body;
-    
+
     const { bidWaitHours: firstBidWaitingPeriodHours } = getAuctionTimings();
 
     // Find website
@@ -185,7 +186,7 @@ const placeBid = async (req, res) => {
         Date.now() + waitHours * 60 * 60 * 1000
       );
       auction.status = 'first_bid_waiting';
-      
+
       console.log(`🎯 FIRST BID placed by user ${bidderId}`);
       console.log(`⏰ If no one bids higher by ${auction.firstBidDeadline}, this bidder wins!`);
     } else {
@@ -193,7 +194,7 @@ const placeBid = async (req, res) => {
       auction.firstBidDeadline = new Date(
         Date.now() + waitHours * 60 * 60 * 1000
       );
-      
+
       console.log(`🔥 New bid placed! Timer RESET`);
       console.log(`⏰ New deadline: ${auction.firstBidDeadline}`);
     }
@@ -230,7 +231,7 @@ const placeBid = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: isFirstBid 
+      message: isFirstBid
         ? `First bid placed! If no one bids higher in ${auction.firstBidWaitingPeriodHours} hours, you win!`
         : `Bid placed successfully! ${auction.firstBidWaitingPeriodHours}-hour timer reset.`,
       data: {
@@ -375,11 +376,32 @@ const getAuction = async (req, res) => {
       );
     }
 
-    // Get bid history (without showing bidder names for privacy)
+    // Get bid history with bidder names and avatars
     const bids = await Bid.find({ websiteId, status: { $ne: 'expired' } })
+      .populate('bidderId', 'name avatar')
       .sort({ bidAmount: -1, createdAt: -1 })
       .limit(20)
-      .select('bidAmount bidPlacedAt status');
+      .select('bidAmount bidPlacedAt status bidderId');
+
+    // Resolve avatar storage paths to public URLs
+    const resolvedBids = await Promise.all(
+      bids.map(async (bid) => {
+        const bidObj = bid.toObject();
+        if (bidObj.bidderId?.avatar) {
+          // Avatar is stored as a Supabase path; resolve to a public URL
+          if (/^https?:\/\//.test(bidObj.bidderId.avatar)) {
+            // Already a full URL (e.g. Google profile pic)
+          } else {
+            try {
+              bidObj.bidderId.avatar = await supabaseService.createSignedUrl(bidObj.bidderId.avatar, 7200);
+            } catch {
+              bidObj.bidderId.avatar = null;
+            }
+          }
+        }
+        return bidObj;
+      })
+    );
 
     // Calculate time remaining
     let timeInfo = {};
@@ -391,7 +413,7 @@ const getAuction = async (req, res) => {
       timeInfo = {
         hoursRemaining,
         deadline: auction.firstBidDeadline,
-        message: hoursRemaining > 0 
+        message: hoursRemaining > 0
           ? `${hoursRemaining} hours left for others to bid higher`
           : 'Waiting period expired, finalizing winner...',
       };
@@ -414,18 +436,18 @@ const getAuction = async (req, res) => {
           ...auction.toObject(),
           timeInfo,
         },
-        bids,
+        bids: resolvedBids,
         minimumNextBid: auction.currentBidAmount > 0
           ? auction.currentBidAmount + auction.minimumBidIncrement
           : auction.startingPrice,
         howItWorks: {
-          current: auction.totalBids === 0 
+          current: auction.totalBids === 0
             ? 'Waiting for first bid'
             : auction.status === 'first_bid_waiting'
-            ? `First bidder wins if no one outbids in ${Math.round((auction.firstBidDeadline - new Date()) / (1000 * 60 * 60))} hours`
-            : auction.status === 'awaiting_payment'
-            ? `Winner must pay within ${timings.paymentHours} hours`
-            : auction.status,
+              ? `First bidder wins if no one outbids in ${Math.round((auction.firstBidDeadline - new Date()) / (1000 * 60 * 60))} hours`
+              : auction.status === 'awaiting_payment'
+                ? `Winner must pay within ${timings.paymentHours} hours`
+                : auction.status,
         },
       },
     });
@@ -464,7 +486,7 @@ const getMyBids = async (req, res) => {
         return {
           ...bid.toObject(),
           auctionStatus: auction ? auction.status : 'unknown',
-          isWinning: auction && auction.currentBidId 
+          isWinning: auction && auction.currentBidId
             ? auction.currentBidId.toString() === bid._id.toString()
             : false,
         };
@@ -640,15 +662,15 @@ const endAuction = async (req, res) => {
 
     if (!auction) {
       return res.status(404).json({
-        success:false,
-        message:"Auction not found"
+        success: false,
+        message: "Auction not found"
       });
     }
 
     if (auction.status !== "first_bid_waiting") {
       return res.status(400).json({
-        success:false,
-        message:"Auction is not ready to end"
+        success: false,
+        message: "Auction is not ready to end"
       });
     }
 
@@ -661,16 +683,16 @@ const endAuction = async (req, res) => {
     await auction.save();
 
     res.json({
-      success:true,
-      message:"Winner declared. Awaiting payment.",
+      success: true,
+      message: "Winner declared. Awaiting payment.",
       winner: auction.currentBidderId,
       amount: auction.currentBidAmount
     });
 
-  } catch(err){
+  } catch (err) {
     res.status(500).json({
-      success:false,
-      message:"Error ending auction"
+      success: false,
+      message: "Error ending auction"
     });
   }
 };

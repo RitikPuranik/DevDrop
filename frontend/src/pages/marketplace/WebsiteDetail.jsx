@@ -490,20 +490,43 @@ export default function WebsiteDetail() {
                         </div>
                       )}
 
-                      {/* Bid History */}
+                      {/* Bid History / Leaderboard */}
                       {bids.length > 0 && (
                         <div className="mt-5 pt-5 border-t border-white/5">
-                          <p className="text-[9px] font-bold uppercase tracking-widest text-white/20 mb-3">Offer History</p>
-                          <div className="space-y-2 max-h-48 overflow-y-auto">
-                            {bids.map((bid, i) => (
-                              <div key={i} className={`flex items-center justify-between px-3 py-2.5 rounded-xl ${i === 0 ? 'bg-orange-500/5 border border-orange-500/10' : 'bg-white/[0.02]'}`}>
-                                <span className="text-xs text-white/40">{i === 0 ? <><TrendingUp size={10} className="inline text-orange-400 mr-1" />Highest</> : `#${i + 1}`}</span>
-                                <div className="flex items-center gap-3">
-                                  <span className={`text-xs font-bold ${i === 0 ? 'text-orange-400' : 'text-white/40'}`}>₹{bid.bidAmount}</span>
-                                  {bid.bidPlacedAt && <span className="text-[9px] text-white/15">{new Date(bid.bidPlacedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>}
+                          <div className="flex items-center gap-2 mb-3">
+                            <Users size={12} className="text-white/20" />
+                            <p className="text-[9px] font-bold uppercase tracking-widest text-white/20">Offer Leaderboard</p>
+                          </div>
+                          <div className="space-y-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
+                            {bids.map((bid, i) => {
+                              const bidderName = bid.bidderId?.name || 'Anonymous';
+                              const bidderAvatar = bid.bidderId?.avatar || null;
+                              const initial = bidderName.charAt(0).toUpperCase();
+                              const isTop = i === 0;
+                              return (
+                                <div key={bid._id || i} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${isTop ? 'bg-orange-500/5 border border-orange-500/10' : 'bg-white/[0.02] hover:bg-white/[0.04]'}`}>
+                                  {/* Rank */}
+                                  <span className={`text-[10px] font-black w-5 shrink-0 ${isTop ? 'text-orange-400' : 'text-white/20'}`}>
+                                    {isTop ? <TrendingUp size={12} className="text-orange-400" /> : `#${i + 1}`}
+                                  </span>
+                                  {/* Avatar */}
+                                  {bidderAvatar ? (
+                                    <img src={bidderAvatar} alt={bidderName} className="w-7 h-7 rounded-full object-cover shrink-0 border border-white/10" />
+                                  ) : (
+                                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${isTop ? 'bg-gradient-to-br from-orange-500 to-amber-600 text-white' : 'bg-white/5 text-white/30 border border-white/10'}`}>
+                                      {initial}
+                                    </div>
+                                  )}
+                                  {/* Name */}
+                                  <div className="flex-1 min-w-0">
+                                    <p className={`text-xs font-bold truncate ${isTop ? 'text-orange-400' : 'text-white/50'}`}>{bidderName}</p>
+                                    {bid.bidPlacedAt && <p className="text-[9px] text-white/15">{new Date(bid.bidPlacedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>}
+                                  </div>
+                                  {/* Amount */}
+                                  <span className={`text-xs font-black shrink-0 ${isTop ? 'text-orange-400' : 'text-white/40'}`}>₹{bid.bidAmount}</span>
                                 </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
                       )}
