@@ -4,6 +4,7 @@ const { auth } = require('../../shared/middleware/auth');
 const adminOnly = require('../../shared/middleware/adminOnly');
 const { uploadMultiple, handleMulterError } = require('../../shared/middleware/uploadValidation');
 const adminController = require('./admin.controller');
+const backupController = require('../backup/backup.controller');
 
 router.use(auth, adminOnly);
 
@@ -17,5 +18,12 @@ router.post('/websites/:id/relist', adminController.relistWebsite);
 router.delete('/websites/:id', adminController.deleteWebsite);
 router.get('/payouts/pending', adminController.getPendingPayouts);
 router.post('/payouts/:id/process', adminController.processPayout);
+
+// Backup & restore (MongoDB + Supabase storage, mirrored against admin-provided backup credentials)
+router.get('/backup/status', backupController.getStatus);
+router.get('/backup/history', backupController.getHistory);
+router.post('/backup/mongo', backupController.backupMongo);
+router.post('/backup/supabase', backupController.backupSupabase);
+router.post('/backup/full', backupController.backupFull);
 
 module.exports = router;

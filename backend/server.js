@@ -24,6 +24,14 @@ const startServer = async () => {
     console.warn('⚠️  Supabase cleanup cron not started:', e.message);
   }
 
+  try {
+    const backupCron = require('./src/services/backup.cron.service');
+    backupCron.startBackupCron();
+    console.log('✅ Backup cron jobs started');
+  } catch (e) {
+    console.warn('⚠️  Backup cron not started:', e.message);
+  }
+
   app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
 

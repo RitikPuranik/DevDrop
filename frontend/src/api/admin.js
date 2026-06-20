@@ -16,4 +16,11 @@ export const adminAPI = {
   // Payouts
   getPendingPayouts: (page = 1) => api.get(`/admin/payouts/pending?page=${page}`),
   processPayout: (id, data) => api.post(`/admin/payouts/${id}/process`, data),
+
+  // Backup & Restore
+  getBackupStatus: () => api.get("/admin/backup/status"),
+  getBackupHistory: (limit = 20) => api.get(`/admin/backup/history?limit=${limit}`),
+  backupMongo: (direction, mode = "replace") => api.post("/admin/backup/mongo", { direction, mode }),
+  backupSupabase: (direction, supabaseMode = "mirror") => api.post("/admin/backup/supabase", { direction, supabaseMode }),
+  backupFull: (direction, mode = "replace", supabaseMode = "mirror") => api.post("/admin/backup/full", { direction, mode, supabaseMode }),
 };

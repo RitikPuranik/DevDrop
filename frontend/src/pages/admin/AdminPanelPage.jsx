@@ -8,6 +8,7 @@ import ReviewQueueSection from './sections/ReviewQueueSection';
 import DashboardSection from './sections/DashboardSection';
 import WebsitesSection from './sections/WebsitesSection';
 import PayoutsSection from './sections/PayoutsSection';
+import BackupSection from './sections/BackupSection';
 
 export default function AdminPanel() {
   const navigate = useNavigate();
@@ -63,6 +64,7 @@ export default function AdminPanel() {
         {activeTab === 'dashboard' && <DashboardSection />}
         {activeTab === 'websites' && <WebsitesSection />}
         {activeTab === 'payouts' && <PayoutsSection />}
+        {activeTab === 'backup' && <BackupSection />}
       </div>
     </div>
   );
