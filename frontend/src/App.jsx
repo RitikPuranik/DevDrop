@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { Toaster } from "sonner";
 
@@ -16,7 +16,6 @@ import Profile from './pages/account/Profile';
 import PurchaseAccess from './pages/marketplace/PurchaseAccess';
 import AdminPanel from "./pages/admin/AdminPanelPage";
 import WebsiteDetail from './pages/marketplace/WebsiteDetail';
-import Auctions from './pages/marketplace/Auctions';
 import Checkout from './pages/marketplace/Checkout';
 import VerifyEmail from './pages/auth/VerifyEmail';
 import ResetPassword from './pages/auth/ResetPassword';
@@ -121,7 +120,6 @@ function AppContent() {
               <Route path="/admin" element={<AdminPanel />} />
               <Route path="/website/:id" element={<WebsiteDetail />} />
               <Route path="/checkout/:id" element={<Checkout />} />
-              <Route path="/auctions" element={<Auctions />} />
               <Route path="/verify-email" element={<VerifyEmail />} />
               <Route path="/reset-password" element={<ResetPassword />} />
             </Routes>

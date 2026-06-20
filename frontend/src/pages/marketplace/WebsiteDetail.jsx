@@ -188,7 +188,7 @@ export default function WebsiteDetail() {
     try {
       setPlacingBid(true);
       const res = await auctionAPI.placeBid(website._id, parseFloat(bidAmount));
-      toast.success(res.data?.message || 'Bid placed!');
+      toast.success(res.data?.message || 'Offer submitted!');
       // Use returned auction data immediately to show timer without waiting for refetch
       const returnedAuction = res.data?.data?.auction;
       if (returnedAuction) {
@@ -212,7 +212,7 @@ export default function WebsiteDetail() {
       // still refetch to ensure full state sync
       fetchAuction(website._id);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to place bid');
+      toast.error(err.response?.data?.message || 'Failed to submit offer');
     } finally { setPlacingBid(false); }
   };
 
@@ -404,7 +404,7 @@ export default function WebsiteDetail() {
                 <div className="bg-[#111] border border-orange-500/10 rounded-3xl p-5 mb-4">
                   <div className="flex items-center gap-2 mb-5">
                     <Gavel size={16} className="text-orange-400" />
-                    <h3 className="text-sm font-black uppercase tracking-wider text-orange-400">Live Auction</h3>
+                    <h3 className="text-sm font-black uppercase tracking-wider text-orange-400">Exclusive Listing</h3>
                   </div>
 
                   {auctionLoading ? (
@@ -415,10 +415,10 @@ export default function WebsiteDetail() {
                       <div className="flex items-center gap-2 mb-4">
                         <span className={`w-2 h-2 rounded-full ${auction.status === 'active' ? 'bg-emerald-400 animate-pulse' : auction.status === 'first_bid_waiting' ? 'bg-orange-400 animate-pulse' : auction.status === 'completed' ? 'bg-blue-400' : 'bg-red-400'}`} />
                         <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">
-                          {auction.status === 'active' ? 'Waiting for first bid' :
-                           auction.status === 'first_bid_waiting' ? 'Bidding active' :
+                          {auction.status === 'active' ? 'Waiting for first offer' :
+                           auction.status === 'first_bid_waiting' ? 'Offers active' :
                            auction.status === 'awaiting_payment' ? 'Pending Payment' :
-                           auction.status === 'completed' ? 'Auction Ended' : auction.status}
+                           auction.status === 'completed' ? 'Listing Closed' : auction.status}
                         </span>
                       </div>
 
@@ -439,12 +439,12 @@ export default function WebsiteDetail() {
                       <div className="flex items-center justify-between mb-4">
                         <div>
                           <p className="text-[9px] font-bold uppercase tracking-widest text-white/30">
-                            {auction.currentBidAmount > 0 ? 'Current Bid' : 'Starting Price'}
+                            {auction.currentBidAmount > 0 ? 'Current Offer' : 'Starting Price'}
                           </p>
                           <p className="text-3xl font-black tracking-tight">₹{auction.currentBidAmount || auction.startingPrice}</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-[9px] font-bold uppercase tracking-widest text-white/30">Total Bids</p>
+                          <p className="text-[9px] font-bold uppercase tracking-widest text-white/30">Total Offers</p>
                           <p className="text-lg font-black">{auction.totalBids || 0}</p>
                         </div>
                       </div>
@@ -455,7 +455,7 @@ export default function WebsiteDetail() {
                           {((auction.currentBidderId?._id || auction.currentBidderId) === loggedInUserId) ? (
                             <>
                               <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl mb-2">
-                                <p className="text-xs text-emerald-400 font-bold mb-1">🎉 You won this auction!</p>
+                                <p className="text-xs text-emerald-400 font-bold mb-1">🎉 You won this listing!</p>
                                 <p className="text-[10px] text-emerald-400/70">Complete your payment before the timer expires to secure this template.</p>
                               </div>
                               <button onClick={handlePurchase} disabled={buying}
@@ -466,7 +466,7 @@ export default function WebsiteDetail() {
                           ) : (
                             <div className="p-4 bg-white/5 border border-white/10 rounded-2xl text-center">
                               <p className="text-xs text-white/60 font-bold">Assigned to Winner</p>
-                              <p className="text-[10px] text-white/40 mt-1">If the winner doesn't pay in time, the template will return to open auction.</p>
+                              <p className="text-[10px] text-white/40 mt-1">If the winner doesn't pay in time, the template will return to the open listing.</p>
                             </div>
                           )}
                         </div>
@@ -477,12 +477,12 @@ export default function WebsiteDetail() {
                           <div className="relative">
                             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30 font-bold">₹</span>
                             <input type="number" value={bidAmount} onChange={(e) => setBidAmount(e.target.value)}
-                              placeholder="Enter bid amount"
+                              placeholder="Enter offer amount"
                               className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-8 pr-4 text-white font-bold outline-none focus:border-orange-500/30 transition-colors" />
                           </div>
                           <button onClick={handleBid} disabled={placingBid}
                             className="w-full py-4 bg-orange-500 text-white rounded-2xl font-bold text-xs uppercase tracking-[0.2em] hover:bg-orange-600 transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-50">
-                            {placingBid ? <><Loader2 size={14} className="animate-spin" /> Placing...</> : <><Gavel size={14} /> Place Bid</>}
+                            {placingBid ? <><Loader2 size={14} className="animate-spin" /> Submitting...</> : <><Gavel size={14} /> Submit Offer</>}
                           </button>
                           <p className="text-[9px] text-white/20 text-center">
                             Min: ₹{auction.currentBidAmount > 0 ? auction.currentBidAmount + (auction.minimumBidIncrement || 100) : auction.startingPrice}
@@ -493,7 +493,7 @@ export default function WebsiteDetail() {
                       {/* Bid History */}
                       {bids.length > 0 && (
                         <div className="mt-5 pt-5 border-t border-white/5">
-                          <p className="text-[9px] font-bold uppercase tracking-widest text-white/20 mb-3">Bid History</p>
+                          <p className="text-[9px] font-bold uppercase tracking-widest text-white/20 mb-3">Offer History</p>
                           <div className="space-y-2 max-h-48 overflow-y-auto">
                             {bids.map((bid, i) => (
                               <div key={i} className={`flex items-center justify-between px-3 py-2.5 rounded-xl ${i === 0 ? 'bg-orange-500/5 border border-orange-500/10' : 'bg-white/[0.02]'}`}>
@@ -512,12 +512,12 @@ export default function WebsiteDetail() {
                       <div className="mt-5 pt-5 border-t border-white/5">
                         <p className="text-[9px] font-bold uppercase tracking-widest text-white/20 mb-3">How It Works</p>
                         <div className="space-y-2">
-                          {['Place a bid at or above the minimum price',
-                            `After first bid, a waiting period starts`,
+                          {['Make an offer at or above the minimum price',
+                            `After the first offer, a waiting period starts`,
                             `If outbid, the timer resets`,
-                            `If no one outbids within the time limit, highest bidder wins`,
+                            `If no one offers higher within the time limit, the highest offer wins`,
                             `Winner has limited time to complete payment`,
-                            "If winner doesn't pay, template goes back to auction"
+                            "If winner doesn't pay, the listing reopens"
                           ].map((text, i) => (
                             <div key={i} className="flex items-start gap-2">
                               <span className="w-4 h-4 rounded-full bg-white/5 flex items-center justify-center text-[7px] font-bold text-white/30 shrink-0 mt-0.5">{i+1}</span>
@@ -529,15 +529,15 @@ export default function WebsiteDetail() {
 
                       {auction.attemptNumber > 1 && (
                         <div className="mt-4 px-3 py-2 bg-amber-500/5 border border-amber-500/10 rounded-xl">
-                          <p className="text-[9px] text-amber-400 font-bold">Re-auction #{auction.attemptNumber} — Previous winner did not pay</p>
+                          <p className="text-[9px] text-amber-400 font-bold">Relisted #{auction.attemptNumber} — Previous winner did not pay</p>
                         </div>
                       )}
                     </>
                   ) : (
                     <div className="py-6 text-center">
                       <Gavel size={24} className="text-white/10 mx-auto mb-3" />
-                      <p className="text-sm text-white/30">No active auction</p>
-                      <p className="text-[10px] text-white/15 mt-1">Auction hasn't started yet</p>
+                      <p className="text-sm text-white/30">No active listing</p>
+                      <p className="text-[10px] text-white/15 mt-1">Listing hasn't started yet</p>
                     </div>
                   )}
                 </div>
