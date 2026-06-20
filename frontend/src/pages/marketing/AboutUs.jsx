@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { motion, useScroll, useTransform, useSpring } from 'framer-motion';
 import TeamReveal from '../../components/sections/TeamReveal';
 import ritikImg from '../../assets/people/ritik.jpeg';
@@ -6,17 +6,7 @@ import priyalImg from '../../assets/people/priyal.jpeg';
 import rideemaImg from '../../assets/people/rideema.jpeg';
 import saralImg from '../../assets/people/saral.jpeg';
 
-
-/* ABOUT PAGE v12 — FULL-SCREEN BOGIES + SEAMLESS TEAM REVEAL
-  
-  Scroll timeline (total: 1000vh):
-  ─────────────────────────────────────────────────────────
-  0.00 – 0.05   → "About Us" hero fades out
-  0.06 – 0.22   → "Since '26" appears + fades
-  0.22 – 0.62   → Horizontal gallery (4 full-screen bogies)
-  0.62 – 1.00   → Team Reveal fades in immediately + tears open
-  ─────────────────────────────────────────────────────────
-*/
+/* ABOUT PAGE v12 — FULL-SCREEN BOGIES + SEAMLESS TEAM REVEAL */
 
 const BOGIES = [
   {
@@ -46,16 +36,23 @@ const BOGIES = [
 ];
 
 const CORNER_PHOTOS = {
-  topLeft:    ritikImg,
+  topLeft:     ritikImg,
   bottomLeft: priyalImg,
-  topRight:   rideemaImg,
+  topRight:    rideemaImg,
   bottomRight: saralImg,
 };
 
 export default function About() {
   const containerRef = useRef(null);
+  const [isMobile, setIsMobile] = useState(false);
 
-  // 1000vh — tighter, snappier feel
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 1024);
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const { scrollYProgress } = useScroll({
     target: containerRef,
     offset: ['start start', 'end end'],
@@ -80,10 +77,8 @@ export default function About() {
   const s2O = useTransform(sp, [0.06, 0.11, 0.18, 0.22], [0, 1, 1, 0]);
   const s2S = useTransform(sp, [0.06, 0.11, 0.18, 0.22], [0.85, 1, 1, 1.06]);
 
-  /* ── STAGE 2: Horizontal gallery ──
-     4 bogies × 100vw = 400vw of travel, starting at 0.22 → 0.62 */
-  const xTranslate    = useTransform(sp, [0.22, 0.62], ['0vw', '-400vw']);
-  // Hidden until its stage begins, fades out just as the dark backing covers it
+  /* ── STAGE 2: Horizontal gallery ── */
+  const xTranslate = useTransform(sp, [0.22, 0.62], ['0vw', '-400vw']);
   const galleryOpacity = useTransform(sp, [0.20, 0.24, 0.58, 0.62], [0, 1, 1, 0]);
 
   return (
@@ -114,79 +109,71 @@ export default function About() {
           background: 'radial-gradient(circle at 50% 50%, transparent 25%, rgba(0,0,0,0.75) 100%)',
         }} />
 
-        {/* ════════════════════════════════════════════
-            STAGE 0 — ABOUT US HERO WITH CORNER PHOTOS
-            ════════════════════════════════════════════ */}
-        <motion.div
-          style={{
-            opacity: s0O,
-            position: 'absolute',
-            inset: 0,
-            zIndex: 100,
-          }}
-        >
+        {/* STAGE 0 — HERO */}
+        <motion.div style={{ opacity: s0O, position: 'absolute', inset: 0, zIndex: 100 }}>
+          {/* Top Left Photo */}
           <motion.div style={{
             position: 'absolute', top: 0, left: 0,
-            width: 'clamp(200px, 22vw, 340px)',
-            height: 'clamp(260px, 48vh, 480px)',
+            width: isMobile ? '145px' : 'clamp(200px, 22vw, 340px)',
+            height: isMobile ? '200px' : 'clamp(260px, 48vh, 480px)',
             opacity: photoOpacity, x: tlX, y: tlY, scale: tlScale,
             transformOrigin: 'top left', overflow: 'hidden',
             borderRadius: '0 0 clamp(20px,3vw,42px) 0',
             boxShadow: '20px 20px 60px rgba(0,0,0,0.6)',
           }}>
-            <img src={CORNER_PHOTOS.topLeft} alt=""
-              style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'center top' }} />
+            <img src={CORNER_PHOTOS.topLeft} alt="" style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'center top' }} />
             <div style={{ position:'absolute', inset:0, background:'linear-gradient(135deg, rgba(249,115,22,0.12) 0%, transparent 60%)' }} />
           </motion.div>
 
+          {/* Bottom Left Photo */}
           <motion.div style={{
             position: 'absolute', bottom: 0, left: 0,
-            width: 'clamp(160px, 18vw, 280px)',
-            height: 'clamp(200px, 38vh, 380px)',
+            width: isMobile ? '125px' : 'clamp(160px, 18vw, 280px)',
+            height: isMobile ? '165px' : 'clamp(200px, 38vh, 380px)',
             opacity: photoOpacity, x: blX, y: blY,
             transformOrigin: 'bottom left', overflow: 'hidden',
             borderRadius: '0 clamp(20px,3vw,42px) 0 0',
             boxShadow: '20px -20px 60px rgba(0,0,0,0.6)',
           }}>
-            <img src={CORNER_PHOTOS.bottomLeft} alt=""
-              style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'center top' }} />
+            <img src={CORNER_PHOTOS.bottomLeft} alt="" style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'center top' }} />
             <div style={{ position:'absolute', inset:0, background:'linear-gradient(315deg, rgba(52,211,153,0.1) 0%, transparent 60%)' }} />
           </motion.div>
 
+          {/* Top Right Photo */}
           <motion.div style={{
             position: 'absolute', top: 0, right: 0,
-            width: 'clamp(180px, 20vw, 310px)',
-            height: 'clamp(230px, 44vh, 430px)',
+            width: isMobile ? '135px' : 'clamp(180px, 20vw, 310px)',
+            height: isMobile ? '190px' : 'clamp(230px, 44vh, 430px)',
             opacity: photoOpacity, x: trX, y: trY,
             transformOrigin: 'top right', overflow: 'hidden',
             borderRadius: '0 0 0 clamp(20px,3vw,42px)',
             boxShadow: '-20px 20px 60px rgba(0,0,0,0.6)',
           }}>
-            <img src={CORNER_PHOTOS.topRight} alt=""
-              style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'center top' }} />
+            <img src={CORNER_PHOTOS.topRight} alt="" style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'center top' }} />
             <div style={{ position:'absolute', inset:0, background:'linear-gradient(225deg, rgba(167,139,250,0.12) 0%, transparent 60%)' }} />
           </motion.div>
 
+          {/* Bottom Right Photo */}
           <motion.div style={{
             position: 'absolute', bottom: 0, right: 0,
-            width: 'clamp(200px, 24vw, 360px)',
-            height: 'clamp(250px, 46vh, 460px)',
+            width: isMobile ? '145px' : 'clamp(200px, 24vw, 360px)',
+            height: isMobile ? '190px' : 'clamp(250px, 46vh, 460px)',
             opacity: photoOpacity, x: brX, y: brY, scale: brScale,
             transformOrigin: 'bottom right', overflow: 'hidden',
             borderRadius: 'clamp(20px,3vw,42px) 0 0 0',
             boxShadow: '-20px -20px 60px rgba(0,0,0,0.6)',
           }}>
-            <img src={CORNER_PHOTOS.bottomRight} alt=""
-              style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'center top' }} />
+            <img src={CORNER_PHOTOS.bottomRight} alt="" style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'center top' }} />
             <div style={{ position:'absolute', inset:0, background:'linear-gradient(45deg, rgba(251,146,60,0.1) 0%, transparent 60%)' }} />
           </motion.div>
 
-          {/* ── CENTER TEXT ── */}
+          {/* CENTER TEXT */}
           <div style={{
             position: 'absolute', inset: 0,
             display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'center',
             zIndex: 10, textAlign: 'center',
+            padding: '0 20px'
           }}>
             <motion.span
               initial={{ opacity: 0, y: 12 }}
@@ -206,7 +193,7 @@ export default function About() {
               transition={{ delay: 0.9, duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
               style={{
                 fontFamily: "'Playfair Display', serif", fontStyle: 'italic',
-                fontSize: 'clamp(64px, 11vw, 160px)', lineHeight: 0.85,
+                fontSize: 'clamp(54px, 11vw, 160px)', lineHeight: 0.85,
                 margin: 0, letterSpacing: '-0.02em', color: '#e8e2d6',
               }}
             >
@@ -238,9 +225,7 @@ export default function About() {
           </div>
         </motion.div>
 
-        {/* ════════════════════════════════════
-            STAGE 1 — SINCE '26
-            ════════════════════════════════════ */}
+        {/* STAGE 1 — SINCE '26 */}
         <motion.div style={{
           opacity: s2O, scale: s2S,
           position: 'absolute', width: '100%', textAlign: 'center', zIndex: 100,
@@ -253,9 +238,7 @@ export default function About() {
           </h1>
         </motion.div>
 
-        {/* ════════════════════════════════════
-            STAGE 2 — HORIZONTAL GALLERY (full-screen)
-            ════════════════════════════════════ */}
+        {/* STAGE 2 — HORIZONTAL GALLERY */}
         <motion.div style={{
           x: xTranslate,
           opacity: galleryOpacity,
@@ -269,36 +252,32 @@ export default function About() {
           pointerEvents: 'none',
         }}>
           {BOGIES.map((bogie, i) => (
-            <HorizontalNode key={i} bogie={bogie} index={i} />
+            <HorizontalNode key={i} bogie={bogie} index={i} isMobile={isMobile} />
           ))}
         </motion.div>
 
-        {/* ════════════════════════════════════
-            STAGE 3 — TEAM REVEAL
-            Fades in right as gallery ends (0.60+)
-            ════════════════════════════════════ */}
+        {/* STAGE 3 — TEAM REVEAL */}
         <TeamReveal sp={sp} />
       </div>
     </div>
   );
 }
 
-/* ─────────────────────────────────────────── */
-function HorizontalNode({ bogie, index }) {
+/* ─── Horizontal Node ─── */
+function HorizontalNode({ bogie, index, isMobile }) {
   return (
     <div style={{
       position: 'relative',
-      // Each card is exactly one viewport wide — fills the screen
       minWidth: '100vw',
       width: '100vw',
       height: '100vh',
       display: 'flex',
+      flexDirection: isMobile ? 'column' : 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: '6vw',
-      padding: '0 6vw',
+      gap: isMobile ? '30px' : '6vw',
+      padding: isMobile ? '80px 24px 40px 24px' : '0 6vw',
       boxSizing: 'border-box',
-      // Subtle per-card background tint so they feel distinct
       background: `radial-gradient(ellipse at 60% 50%, ${bogie.accent}08 0%, transparent 70%)`,
     }}>
       {/* Giant ghost number */}
@@ -314,8 +293,19 @@ function HorizontalNode({ bogie, index }) {
       </span>
 
       {/* Text column */}
-      <div style={{ maxWidth: 520, zIndex: 2, flex: '0 0 auto' }}>
-        <div style={{ display: 'flex', gap: 15, alignItems: 'center', marginBottom: 28 }}>
+      <div style={{ 
+        maxWidth: 520, 
+        zIndex: 2, 
+        flex: '0 0 auto',
+        textAlign: isMobile ? 'center' : 'left'
+      }}>
+        <div style={{ 
+          display: 'flex', 
+          gap: 15, 
+          alignItems: 'center', 
+          justifyContent: isMobile ? 'center' : 'flex-start',
+          marginBottom: isMobile ? 16 : 28 
+        }}>
           <span style={{ fontSize: 16, fontWeight: 800, color: bogie.accent }}>0{index + 1}</span>
           <div style={{ height: 1, width: 40, background: 'rgba(255,255,255,0.1)' }} />
           <span style={{ fontSize: 10, letterSpacing: '.4em', textTransform: 'uppercase', opacity: 0.4 }}>
@@ -324,21 +314,27 @@ function HorizontalNode({ bogie, index }) {
         </div>
         <h3 style={{
           fontFamily: "'Playfair Display', serif", fontStyle: 'italic',
-          fontSize: 'clamp(48px, 6.5vw, 100px)',
-          lineHeight: 0.85, marginBottom: 36,
+          fontSize: isMobile ? '36px' : 'clamp(48px, 6.5vw, 100px)',
+          lineHeight: 0.85, marginBottom: isMobile ? 18 : 36,
         }}>
           {bogie.head[0]} <br />
           <span style={{ color: bogie.accent }}>{bogie.head[1]}</span> <br />
           {bogie.head[2]}
         </h3>
-        <p style={{ fontSize: 16, lineHeight: 1.8, opacity: 0.4, maxWidth: 420 }}>{bogie.body}</p>
+        <p style={{ 
+          fontSize: isMobile ? 14 : 16, 
+          lineHeight: 1.8, 
+          opacity: 0.4, 
+          maxWidth: isMobile ? 340 : 420,
+          margin: isMobile ? '0 auto' : '0'
+        }}>{bogie.body}</p>
       </div>
 
-      {/* Image card — taller, fills more screen height */}
+      {/* Image card */}
       <div style={{
-        width: 'clamp(300px, 38vw, 580px)',
-        height: 'clamp(400px, 72vh, 800px)',
-        borderRadius: 40,
+        width: isMobile ? '260px' : 'clamp(300px, 38vw, 580px)',
+        height: isMobile ? '320px' : 'clamp(400px, 72vh, 800px)',
+        borderRadius: isMobile ? 24 : 40,
         overflow: 'hidden',
         position: 'relative',
         zIndex: 2,
@@ -346,8 +342,7 @@ function HorizontalNode({ bogie, index }) {
         border: '1px solid rgba(255,255,255,0.06)',
         flex: '0 0 auto',
       }}>
-        <img src={bogie.img} alt=""
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        <img src={bogie.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         <div style={{
           position: 'absolute', inset: 0,
           background: `linear-gradient(to bottom, transparent, ${bogie.accent}18)`,

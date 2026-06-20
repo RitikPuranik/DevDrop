@@ -24,8 +24,6 @@ const Navbar = () => {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Read auth state from localStorage — no API call needed on every mount.
-  // The 'auth-changed' event fires after login/logout so we stay in sync.
   const syncFromStorage = () => {
     const token = localStorage.getItem("token");
     setIsLoggedIn(!!token);
@@ -112,7 +110,6 @@ const Navbar = () => {
     : menuItems;
 
   const fastEase = [0.19, 1, 0.22, 1];
-
   const openLogin = () => { setIsOpen(false); setShowAuthModal(true); };
 
   const closeMenu = () => {
@@ -162,10 +159,7 @@ const Navbar = () => {
         <button
           onClick={() => {
             if (isOpen) {
-              setIsOpen(false);
-              setWebsitesExpanded(false);
-              setHoveredIndex(null);
-              setHoveredSubIndex(null);
+              closeMenu();
             } else {
               setIsOpen(true);
             }
@@ -203,27 +197,10 @@ const Navbar = () => {
             animate={{ y: 0 }}
             exit={{ y: "-100%" }}
             transition={{ duration: 0.6, ease: fastEase }}
-            className="fixed inset-0 z-[100] overflow-hidden
-                        flex flex-col lg:flex-row
-                        bg-[#e8e2d6]"
+            className="fixed inset-0 z-[100] overflow-hidden flex flex-col lg:flex-row bg-[#e8e2d6]"
           >
-
-            {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                LEFT / MENU PANEL
-                — Full width on mobile, half width on desktop
-                — On mobile: takes ~60% of screen height (flex-[3])
-                — On desktop: takes 50% width, full height (original)
-            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-            <div className="
-  flex-[3] lg:flex-none
-  w-full lg:w-1/2
-  lg:h-full
-  flex flex-col justify-center text-center
-  pt-32 pb-6 sm:pt-36 sm:pb-8 lg:pt-20 lg:pb-12
-  px-6 sm:px-14 md:px-20 lg:px-24
-  overflow-y-auto
-">
-              {/* Menu links */}
+            {/* LEFT / MENU PANEL */}
+            <div className="flex-[3] lg:flex-none w-full lg:w-1/2 lg:h-full flex flex-col justify-center text-center pt-28 pb-6 sm:pt-36 sm:pb-8 lg:pt-20 lg:pb-12 px-6 sm:px-14 md:px-20 lg:px-24 overflow-y-auto">
               <div className="flex flex-col w-full mb-5 sm:mb-8 -ml-0 lg:-ml-5">
                 {finalMenuItems.map((item, index) => {
                   const anyHovered = hoveredIndex !== null;
@@ -246,30 +223,6 @@ const Navbar = () => {
                     />
                   );
                 })}
-
-                {/* Mobile inline sub-menu — expands below "Websites" */}
-                <AnimatePresence>
-                  {websitesExpanded && isMobile && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      transition={{ duration: 0.35, ease: fastEase }}
-                      className="overflow-hidden pl-5"
-                    >
-                      {finalMenuItems
-                        .find((m) => m.hasSubMenu)
-                        ?.subItems.map((sub, si) => (
-                          <MobileSubMenuItem
-                            key={sub.filter}
-                            label={sub.label}
-                            index={si}
-                            onClick={() => handleSubItemClick(sub.filter)}
-                          />
-                        ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
               </div>
 
               {/* Auth button */}
@@ -298,24 +251,13 @@ const Navbar = () => {
               </motion.div>
             </div>
 
-            {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                RIGHT / IMAGE PANEL
-                — On desktop: right half, full height (original)
-                — On mobile: bottom strip, ~40% screen height (flex-[2])
-                  with the same crossfade image + sub-menu overlay
-            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-            <div className="
-              flex-[2] lg:flex-none
-              w-full lg:w-1/2
-              min-h-[38vh] sm:min-h-[40vh] lg:min-h-0 lg:h-full
-              relative bg-black overflow-hidden
-            ">
-              {/* Crossfading image — same logic on both mobile and desktop */}
+            {/* RIGHT / IMAGE PANEL */}
+            <div className="flex-[2] lg:flex-none w-full lg:w-1/2 min-h-[38vh] sm:min-h-[40vh] lg:min-h-0 lg:h-full relative bg-black overflow-hidden">
               <AnimatePresence initial={false}>
                 <motion.div
                   key={activeImageIndex}
                   initial={{ opacity: 0 }}
-                  animate={{ opacity: websitesExpanded ? 0.3 : 1 }}
+                  animate={{ opacity: websitesExpanded ? 0.35 : 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.3, ease: "linear" }}
                   className="absolute inset-0 w-full h-full"
@@ -328,27 +270,25 @@ const Navbar = () => {
                 </motion.div>
               </AnimatePresence>
 
-              {/* Sub-menu overlay on image panel
-                  Desktop: shown when websitesExpanded (original behaviour)
-                  Mobile:  hidden — sub-menu renders inline in the menu panel above */}
+              {/* Fully Centered Submenu overlay for both mobile and desktop views */}
               <AnimatePresence>
-                {websitesExpanded && !isMobile && (
+                {websitesExpanded && (
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.25, ease: fastEase }}
-                    className="absolute inset-0 flex flex-col justify-center px-16 z-10"
+                    className="absolute inset-0 flex flex-col justify-center items-center text-center p-6 sm:p-10 lg:px-16 z-10 bg-black/40"
                   >
                     <motion.p
                       initial={{ opacity: 0, y: -8 }}
-                      animate={{ opacity: 0.55, y: 0 }}
+                      animate={{ opacity: 0.6, y: 0 }}
                       transition={{ delay: 0.05, duration: 0.35 }}
-                      className="text-[#e8e2d6] text-sm font-sans uppercase tracking-[0.3em] mb-6"
+                      className="text-[#e8e2d6] text-[10px] sm:text-xs lg:text-sm font-sans uppercase tracking-[0.3em] mb-3 lg:mb-6"
                     >
                       Websites
                     </motion.p>
-                    <div className="flex flex-col">
+                    <div className="flex flex-col gap-1 lg:gap-0 w-full items-center">
                       {finalMenuItems
                         .find((m) => m.hasSubMenu)
                         ?.subItems.map((sub, si) => {
@@ -379,7 +319,7 @@ const Navbar = () => {
 };
 
 /* ─── Menu Item ──────────────────────────────────────────────────── */
-const MenuItem = ({ item, onHover, onLeave, onClick, closeMenu, isDimmed, isExpanded }) => (
+const MenuItem = ({ item, onHover, onLeave, onClick, closeMenu, isDimmed }) => (
   <div
     className="overflow-hidden py-0.5 sm:py-1"
     onMouseEnter={onHover}
@@ -401,7 +341,6 @@ const MenuItem = ({ item, onHover, onLeave, onClick, closeMenu, isDimmed, isExpa
           `}
         >
           {item.label}
-          
         </span>
       ) : (
         <LinkTransition
@@ -421,22 +360,23 @@ const MenuItem = ({ item, onHover, onLeave, onClick, closeMenu, isDimmed, isExpa
   </div>
 );
 
-/* ─── Desktop Sub-Menu Item (image panel overlay) ────────────────── */
+/* ─── Shared Universal Sub-Menu Item ────────────────── */
 const SubMenuItem = ({ label, index, isDimmed, onHover, onLeave, onClick }) => (
   <motion.div
-    initial={{ opacity: 0, x: 24 }}
-    animate={{ opacity: 1, x: 0 }}
-    transition={{ delay: index * 0.08 + 0.08, duration: 0.45, ease: [0.19, 1, 0.22, 1] }}
-    className="overflow-hidden py-0.5"
+    initial={{ opacity: 0, y: 15 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ delay: index * 0.06 + 0.05, duration: 0.45, ease: [0.19, 1, 0.22, 1] }}
+    className="overflow-hidden py-0.5 lg:py-1 w-fit"
     onMouseEnter={onHover}
     onMouseLeave={onLeave}
     onClick={onClick}
   >
     <span
       className={`
-        text-[5.0vw] leading-[0.9] font-serif italic tracking-tighter
+        text-[8vw] sm:text-[6.5vw] lg:text-[5.0vw] leading-[0.95] lg:leading-[0.9] font-serif italic tracking-tighter
         block transition-all duration-300 cursor-pointer select-none text-[#e8e2d6]
-        ${isDimmed ? 'opacity-20' : 'opacity-100'}
+        ${isDimmed ? 'opacity-25' : 'opacity-100'}
+        hover:text-[#8b7355] lg:hover:text-[#e8e2d6]
       `}
     >
       {label}
@@ -444,19 +384,4 @@ const SubMenuItem = ({ label, index, isDimmed, onHover, onLeave, onClick }) => (
   </motion.div>
 );
 
-/* ─── Mobile Sub-Menu Item (inline in menu panel) ────────────────── */
-const MobileSubMenuItem = ({ label, index, onClick }) => (
-  <motion.div
-    initial={{ opacity: 0, x: 16 }}
-    animate={{ opacity: 1, x: 0 }}
-    transition={{ delay: index * 0.07 + 0.05, duration: 0.4, ease: [0.19, 1, 0.22, 1] }}
-    className="overflow-hidden py-0.5"
-    onClick={onClick}
-  >
-    <span className="text-[8.5vw] sm:text-[6.5vw] leading-[0.95] font-serif italic tracking-tighter block cursor-pointer select-none text-[#8b7355]">
-      {label}
-    </span>
-  </motion.div>
-);
-
-export default Navbar;       
+export default Navbar;

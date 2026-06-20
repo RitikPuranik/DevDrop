@@ -112,6 +112,7 @@ const LeaderCard = ({ person, isAutoFlipped }) => {
             backfaceVisibility: 'hidden',
             transform: 'rotateY(180deg)',
           }}
+          className="hidden md:block"
         >
           <div style={{ color: '#f59e0b', fontSize: 10, marginBottom: 4, letterSpacing: 1 }}>★★★★★</div>
           <p style={{ fontSize: 9, lineHeight: 1.4, fontWeight: 700, color: '#1e293b', margin: 0 }}>"{person.review}"</p>
@@ -373,7 +374,36 @@ export default function IndustryLeaders() {
 
   return (
     <div className="w-full bg-black font-sans">
-
+{/* ══ MOBILE HERO ══ */}
+<section className="block md:hidden w-full bg-black px-6 py-16 flex flex-col items-center justify-center gap-10">
+  <div className="text-center">
+    <h1 className="text-4xl font-black text-yellow-100 leading-tight tracking-tighter mb-4">
+      Trusted by leaders <br />
+      <span className="text-slate-500 font-medium italic text-2xl">from various industries</span>
+    </h1>
+    <p className="text-slate-400 text-sm max-w-xs mx-auto mb-6 leading-relaxed">
+      Learn why professionals trust our solutions to complete their customer journeys.
+    </p>
+    <button
+      onClick={handleReadStories}
+      disabled={showGallery}
+      className="w-full bg-amber-200 text-black px-8 py-4 rounded-full font-bold text-[11px] tracking-widest flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-40"
+    >
+      READ SUCCESS STORIES →
+    </button>
+  </div>
+  <div className="w-full flex flex-col gap-3">
+    {leaders.map((person) => (
+      <div key={person.id} className="flex items-center gap-4 bg-zinc-900/90 border border-zinc-800/60 rounded-xl p-3.5">
+        <img src={person.img} className="w-12 h-12 rounded-xl object-cover border border-white/10" alt={person.name} />
+        <div className="flex-1 min-w-0">
+          <p className="text-white text-xs font-bold leading-snug">"{person.review}"</p>
+          <p className="text-amber-400 text-[9px] uppercase tracking-wider font-bold mt-1">{person.name}</p>
+        </div>
+      </div>
+    ))}
+  </div>
+</section>
       {/* ══ HERO ══ */}
       <section className="relative w-full min-h-screen overflow-hidden flex items-center justify-center">
         {/* subtle grid backdrop */}
@@ -418,6 +448,29 @@ export default function IndustryLeaders() {
           </div>
         )}
       </AnimatePresence>
+      {/* ══ MOBILE GALLERY ══ */}
+{showGallery && (
+  <div className="block md:hidden bg-black w-full px-6 py-12">
+    <div className="mb-8">
+      <p className="text-amber-400 text-[10px] tracking-[0.35em] uppercase font-semibold mb-4">What they say</p>
+      <h2 className="font-black text-white leading-[0.88] tracking-tight text-4xl">
+        People's<br /><span style={{ color: '#e07b39' }}>Appreci­ations</span>
+      </h2>
+      <p className="text-white/30 text-sm mt-5 leading-relaxed max-w-xs">Real voices from teams who trust us every day.</p>
+    </div>
+    <div className="grid grid-cols-2 gap-3 w-full">
+      {allCards.map((card) => (
+        <div key={card.id} className="relative aspect-square overflow-hidden rounded-xl" style={{ background: card.color }}>
+          <img src={card.img} alt={card.name} className="w-full h-full object-cover" />
+          <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/90 to-transparent">
+            <p className="text-white text-[10px] font-bold truncate">{card.name}</p>
+            <p className="text-white/50 text-[8px] truncate">{card.company}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
     </div>
   );
 }

@@ -118,7 +118,7 @@ export default function SmoothEliteGallery() {
     const isCard = mode === 'card';
     const containerClasses = isCard
       ? 'group/preview aspect-[12/11] rounded-[32px] mb-6 relative overflow-hidden flex items-center justify-center border border-white/5'
-      : 'group/preview h-full min-h-[450px] rounded-[40px] relative flex items-center justify-center overflow-hidden border border-white/5';
+      : 'group/preview h-full min-h-[260px] sm:min-h-[350px] lg:min-h-[450px] rounded-[30px] lg:rounded-[40px] relative flex items-center justify-center overflow-hidden border border-white/5';
 
     return (
       <motion.div
@@ -150,7 +150,7 @@ export default function SmoothEliteGallery() {
               target="_blank"
               rel="noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-xs font-black uppercase tracking-[0.22em] text-black shadow-xl transition-transform duration-300 hover:scale-[1.06]"
+              className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2.5 lg:px-5 lg:py-3 text-[10px] lg:text-xs font-black uppercase tracking-[0.22em] text-black shadow-xl transition-transform duration-300 hover:scale-[1.06]"
             >
               <ExternalLink size={14} /> Open Live
             </a>
@@ -182,34 +182,35 @@ export default function SmoothEliteGallery() {
   return (
     <div className="min-h-screen bg-[#080808] text-white selection:bg-orange-500 font-sans antialiased pb-20">
 
-      {/* --- NAV DOCK --- */}
-      <nav className="top-0 z-40 flex justify-center mb-12 px-7">
-        <motion.div className="flex flex-row items-center mt-20 justify-between bg-white/[0.03] border border-white/10 p-1.5 rounded-[32px] backdrop-blur-2xl shadow-2xl w-full max-w-5xl focus-within:border-[#e8e2d6] transition-all duration-500">
-          <div className="relative flex items-center max-w-xs w-full ml-2">
+      {/* --- NAV DOCK (Clean, Dynamic Positioning) --- */}
+      {/* Changed: Non-sticky on mobile (`relative pt-32`), stays sticky on desktop (`md:sticky md:top-0 md:pt-4`) to drop down beautifully without merging with the header navbar */}
+      <nav className="relative md:sticky top-0 z-40 flex justify-center mb-8 lg:mb-12 px-4 sm:px-7 pt-32 md:pt-4 bg-gradient-to-b from-[#080808] via-[#080808]/80 to-transparent backdrop-blur-sm">
+        <motion.div className="flex flex-col md:flex-row items-stretch md:items-center mt-4 md:mt-20 justify-between bg-white/[0.03] border border-white/10 p-2 md:p-1.5 rounded-[24px] md:rounded-[32px] backdrop-blur-2xl shadow-2xl w-full max-w-5xl focus-within:border-[#e8e2d6] transition-all duration-500 gap-3 md:gap-0">
+          <div className="relative flex items-center w-full md:max-w-xs ml-0 md:ml-2">
             <Search className="absolute left-3 text-gray-500" size={16} />
             <input
               type="text"
               placeholder="Search library..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-transparent py-3 pl-10 pr-4 focus:outline-none text-sm font-medium placeholder:text-gray-600"
+              className="w-full bg-transparent py-2.5 md:py-3 pl-10 pr-4 focus:outline-none text-sm font-medium placeholder:text-gray-600"
             />
           </div>
 
-          <div className="flex items-center gap-2 pr-1">
-            <div className="flex items-center gap-1 bg-black/40 rounded-[26px] p-1">
+          <div className="flex items-center justify-start overflow-x-auto no-scrollbar md:justify-end gap-2 pr-0 md:pr-1">
+            <div className="flex items-center gap-1 bg-black/40 rounded-[20px] md:rounded-[26px] p-1 w-full md:w-auto whitespace-nowrap">
               {['all', 'free', 'paid', 'exclusive'].map((filter) => (
                 <motion.button
                   key={filter}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => setActiveFilter(filter)}
-                  className={`relative px-6 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 z-10 ${activeFilter === filter ? 'text-black' : 'text-gray-500 hover:text-white'
+                  className={`relative flex-1 md:flex-none px-4 md:px-6 py-2 text-[9px] md:text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 z-10 ${activeFilter === filter ? 'text-black' : 'text-gray-500 hover:text-white'
                     }`}
                 >
                   {activeFilter === filter && (
                     <motion.div
                       layoutId="activeFilter"
-                      className="absolute inset-0 bg-white rounded-[22px] -z-10"
+                      className="absolute inset-0 bg-white rounded-[16px] md:rounded-[22px] -z-10"
                       transition={transition}
                     />
                   )}
@@ -222,7 +223,7 @@ export default function SmoothEliteGallery() {
       </nav>
 
       {/* --- MAIN GRID --- */}
-      <main className="max-w-7xl mx-auto px-7">
+      <main className="max-w-7xl mx-auto px-4 sm:px-7">
         {loading ? (
           <div className="flex flex-col justify-center items-center py-40 gap-4">
             <Loader2 className="animate-spin text-amber-100" size={40} />
@@ -234,7 +235,7 @@ export default function SmoothEliteGallery() {
             <p className="text-sm text-white/30 font-bold">No templates found</p>
           </div>
         ) : (
-          <motion.div layout className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
             <AnimatePresence mode="popLayout">
               {filteredItems.map((item) => {
                 const itemId = item._id || item.id;
@@ -251,14 +252,14 @@ export default function SmoothEliteGallery() {
                     whileHover={{ y: -8 }}
                     whileTap={{ scale: 0.98 }}
                     transition={transition}
-                    className="group cursor-pointer bg-[#111] rounded-[40px] p-4 border border-white/5 hover:border-orange-100/20 transition-colors duration-500"
+                    className="group cursor-pointer bg-[#111] rounded-[32px] lg:rounded-[40px] p-4 border border-white/5 hover:border-orange-100/20 transition-colors duration-500"
                   >
                     {renderPreviewPane(item, 'card')}
 
                     <div className="px-2">
-                      <motion.h3 layoutId={`title-${itemId}`} transition={transition} className="font-black text-xl tracking-tight">{item.title || item.name}</motion.h3>
+                      <motion.h3 layoutId={`title-${itemId}`} transition={transition} className="font-black text-lg lg:text-xl tracking-tight truncate">{item.title || item.name}</motion.h3>
                       <div className="flex items-center justify-between mt-1">
-                        <motion.p layoutId={`price-${itemId}`} transition={transition} className="text-[#8b7355] font-bold text-sm tracking-widest uppercase">
+                        <motion.p layoutId={`price-${itemId}`} transition={transition} className="text-[#8b7355] font-bold text-xs lg:text-sm tracking-widest uppercase">
                           {item.category === 'exclusive' ? 'Auction' : item.category === 'free' ? 'FREE' : item.price ? `₹${item.price}` : 'Paid'}
                         </motion.p>
                         <span className="flex items-center gap-1.5 text-[10px] text-white/20">
@@ -279,10 +280,10 @@ export default function SmoothEliteGallery() {
         )}
       </main>
 
-      {/* --- MODAL (View Details only) --- */}
+      {/* --- MODAL (View Details) --- */}
       <AnimatePresence>
         {selectedId && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-12">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 md:p-12">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -294,37 +295,37 @@ export default function SmoothEliteGallery() {
             <motion.div
               layoutId={`card-${selectedId._id || selectedId.id}`}
               transition={transition}
-              className="relative w-full max-w-6xl bg-[#0F0F0F] rounded-[50px] border border-white/10 shadow-2xl overflow-hidden grid grid-cols-1 lg:grid-cols-2 z-50 h-fit"
+              className="relative w-full max-w-6xl bg-[#0F0F0F] rounded-[36px] lg:rounded-[50px] border border-white/10 shadow-2xl overflow-y-auto lg:overflow-hidden grid grid-cols-1 lg:grid-cols-2 z-50 max-h-[92vh] lg:max-h-none h-fit"
             >
               <button
                 onClick={(e) => { e.stopPropagation(); setSelectedId(null); }}
-                className="absolute top-8 right-8 z-[110] p-4 bg-white/5 text-white hover:bg-[#8b7355] rounded-full transition-all active:scale-90"
+                className="absolute top-4 right-4 lg:top-8 lg:right-8 z-[110] p-3 lg:p-4 bg-white/5 text-white hover:bg-[#8b7355] rounded-full transition-all active:scale-90"
               >
-                <X size={24} />
+                <X size={20} />
               </button>
 
-              <div className="p-4">
+              <div className="p-3 lg:p-4">
                 {renderPreviewPane(selectedId, 'modal')}
               </div>
 
-              <div className="p-12 md:p-20 flex flex-col justify-center">
+              <div className="p-6 sm:p-10 md:p-12 lg:p-20 flex flex-col justify-center">
                 <motion.div
                   initial={{ opacity: 0, x: 30 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 30 }}
                   transition={{ duration: 0.4 }}
                 >
-                  <motion.h2 layoutId={`title-${selectedId._id || selectedId.id}`} transition={transition} className="text-6xl font-black tracking-tighter mb-4 leading-none">
+                  <motion.h2 layoutId={`title-${selectedId._id || selectedId.id}`} transition={transition} className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black tracking-tighter mb-3 lg:mb-4 leading-none">
                     {selectedId.title || selectedId.name}
                   </motion.h2>
 
-                  <motion.div layoutId={`price-${selectedId._id || selectedId.id}`} transition={transition} className="text-3xl font-light italic text-gray-500 mb-4">
+                  <motion.div layoutId={`price-${selectedId._id || selectedId.id}`} transition={transition} className="text-xl lg:text-3xl font-light italic text-gray-500 mb-4">
                     {selectedId.category === 'exclusive' ? 'Live Auction' : selectedId.category === 'free' ? 'FREE' : `₹${selectedId.price || 'Price on request'}`}
                   </motion.div>
 
                   {/* Seller info */}
                   {selectedId.sellerId && (
-                    <div className="flex items-center gap-3 mb-8">
+                    <div className="flex items-center gap-3 mb-6 lg:mb-8">
                       {selectedId.sellerId.avatar ? (
                         <img src={selectedId.sellerId.avatar} alt={selectedId.sellerId?.name || 'Creator'} className="w-8 h-8 rounded-full object-cover" />
                       ) : (
@@ -343,37 +344,34 @@ export default function SmoothEliteGallery() {
 
                   {/* Description preview */}
                   {selectedId.description && (
-                    <p className="text-white/30 text-sm mb-8 leading-relaxed line-clamp-3">{selectedId.description}</p>
+                    <p className="text-white/30 text-sm mb-6 lg:mb-8 leading-relaxed line-clamp-3 md:line-clamp-none">{selectedId.description}</p>
                   )}
 
                   {/* Action Buttons */}
                   <div className="space-y-3">
                     {checkingPurchase ? (
-                      <div className="w-full py-5 flex items-center justify-center gap-2 text-white/30 text-sm">
+                      <div className="w-full py-4 lg:py-5 flex items-center justify-center gap-2 text-white/30 text-sm">
                         <Loader2 size={16} className="animate-spin" /> Checking…
                       </div>
                     ) : purchased ? (
-                      /* Already purchased — go to downloads */
                       <button
                         onClick={() => navigate(`/website/${selectedId._id || selectedId.id}`)}
-                        className="w-full py-5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-[28px] font-bold text-sm uppercase tracking-[0.15em] flex items-center justify-center gap-2 hover:bg-emerald-500/20 transition-all active:scale-[0.98]"
+                        className="w-full py-4 lg:py-5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-[20px] lg:rounded-[28px] font-bold text-sm uppercase tracking-[0.15em] flex items-center justify-center gap-2 hover:bg-emerald-500/20 transition-all active:scale-[0.98]"
                       >
                         <CheckCircle size={16} /> Purchased — View Downloads
                       </button>
                     ) : selectedId.category === 'exclusive' ? (
-                      /* Exclusive → Bid (navigate to detail for full auction UI) */
                       <button
                         onClick={() => navigate(`/website/${selectedId._id || selectedId.id}`)}
-                        className="w-full py-5 bg-orange-500 text-white rounded-[28px] font-bold text-sm uppercase tracking-[0.15em] flex items-center justify-center gap-2 hover:bg-orange-600 transition-all active:scale-[0.98]"
+                        className="w-full py-4 lg:py-5 bg-orange-500 text-white rounded-[20px] lg:rounded-[28px] font-bold text-sm uppercase tracking-[0.15em] flex items-center justify-center gap-2 hover:bg-orange-600 transition-all active:scale-[0.98]"
                       >
                         <Gavel size={16} /> Place a Bid
                       </button>
                     ) : (
-                      /* Free / Paid → Buy directly */
                       <button
                         onClick={handleQuickPurchase}
                         disabled={buying}
-                        className="w-full py-5 bg-white text-black rounded-[28px] font-black text-lg uppercase tracking-wide flex items-center justify-center gap-2 hover:bg-[#8b7355] hover:text-white transition-all active:scale-[0.98] disabled:opacity-50"
+                        className="w-full py-4 lg:py-5 bg-white text-black rounded-[20px] lg:rounded-[28px] font-black text-md lg:text-lg uppercase tracking-wide flex items-center justify-center gap-2 hover:bg-[#8b7355] hover:text-white transition-all active:scale-[0.98] disabled:opacity-50"
                       >
                         {buying ? (
                           <><Loader2 size={16} className="animate-spin" /> Processing…</>
@@ -385,11 +383,10 @@ export default function SmoothEliteGallery() {
                       </button>
                     )}
 
-                    {/* View Details (secondary) */}
                     {!purchased && (
                       <button
                         onClick={() => navigate(`/website/${selectedId._id || selectedId.id}`)}
-                        className="w-full py-4 bg-white/5 border border-white/10 text-white/50 rounded-[28px] font-bold text-xs uppercase tracking-[0.15em] flex items-center justify-center gap-2 hover:text-white hover:bg-white/10 transition-all"
+                        className="w-full py-3.5 lg:py-4 bg-white/5 border border-white/10 text-white/50 rounded-[20px] lg:rounded-[28px] font-bold text-xs uppercase tracking-[0.15em] flex items-center justify-center gap-2 hover:text-white hover:bg-white/10 transition-all"
                       >
                         View Full Details <ChevronRight size={14} />
                       </button>
