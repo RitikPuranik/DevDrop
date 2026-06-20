@@ -25,3 +25,6 @@ scripts/
 # Editor
 .vscode/
 .idea/
+
+# Backup
+backup
