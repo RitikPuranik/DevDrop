@@ -215,14 +215,14 @@ const Navbar = () => {
                 — On desktop: takes 50% width, full height (original)
             ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
             <div className="
-              flex-[3] lg:flex-none
-              w-full lg:w-1/2
-              lg:h-full
-              flex flex-col justify-center text-center
-              pt-24 pb-6 sm:pt-28 sm:pb-8 lg:pt-0 lg:pb-12
-              px-6 sm:px-14 md:px-20 lg:px-24
-              overflow-y-auto
-            ">
+  flex-[3] lg:flex-none
+  w-full lg:w-1/2
+  lg:h-full
+  flex flex-col justify-center text-center
+  pt-32 pb-6 sm:pt-36 sm:pb-8 lg:pt-20 lg:pb-12
+  px-6 sm:px-14 md:px-20 lg:px-24
+  overflow-y-auto
+">
               {/* Menu links */}
               <div className="flex flex-col w-full mb-5 sm:mb-8 -ml-0 lg:-ml-5">
                 {finalMenuItems.map((item, index) => {
@@ -401,13 +401,7 @@ const MenuItem = ({ item, onHover, onLeave, onClick, closeMenu, isDimmed, isExpa
           `}
         >
           {item.label}
-          <motion.span
-            animate={{ x: isExpanded ? 6 : 0, opacity: isExpanded ? 1 : 0.4 }}
-            transition={{ duration: 0.3 }}
-            className="inline-block ml-2 text-[5.5vw] sm:text-[4vw] lg:text-[2.8vw] align-middle"
-          >
-            ›
-          </motion.span>
+          
         </span>
       ) : (
         <LinkTransition

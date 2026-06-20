@@ -1,6 +1,11 @@
 import React, { useRef } from 'react';
 import { motion, useScroll, useTransform, useSpring } from 'framer-motion';
 import TeamReveal from '../../components/sections/TeamReveal';
+import ritikImg from '../../assets/people/ritik.jpeg';
+import priyalImg from '../../assets/people/priyal.jpeg';
+import rideemaImg from '../../assets/people/rideema.jpeg';
+import saralImg from '../../assets/people/saral.jpeg';
+
 
 /* ABOUT PAGE v12 — FULL-SCREEN BOGIES + SEAMLESS TEAM REVEAL
   
@@ -41,10 +46,10 @@ const BOGIES = [
 ];
 
 const CORNER_PHOTOS = {
-  topLeft:    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&q=80',
-  bottomLeft: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=500&q=80',
-  topRight:   'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&q=80',
-  bottomRight:'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=500&q=80',
+  topLeft:    ritikImg,
+  bottomLeft: priyalImg,
+  topRight:   rideemaImg,
+  bottomRight: saralImg,
 };
 
 export default function About() {
