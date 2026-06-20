@@ -288,6 +288,37 @@ const sendAdminAlert = async ({ subject, message, error, details }) => {
   }
 };
 
+const sendOutbidNotification = async (previousBidder, website, newBidAmount) => {
+  try {
+    await sendEmail({
+      to: previousBidder.email,
+      from: 'auctions',
+      subject: EMAIL_SUBJECTS.OUTBID_NOTIFICATION,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>You've Been Outbid! ⚡</h2>
+          <p>Hi ${previousBidder.name || previousBidder.email}!</p>
+          <p>Someone has placed a higher bid on <strong>"${website.name}"</strong>.</p>
+          <div style="background-color: #f5f5f5; padding: 20px; border-radius: 5px; margin: 20px 0;">
+            <p><strong>Website:</strong> ${website.name}</p>
+            <p><strong>New Highest Bid:</strong> ₹${newBidAmount}</p>
+          </div>
+          <p>Don't miss out! Place a higher bid now to stay in the running.</p>
+          <div style="margin: 30px 0;">
+            <a href="${process.env.FRONTEND_URL}/exclusive/${website._id}" style="background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">
+              Place a Higher Bid
+            </a>
+          </div>
+          <p style="color: #999; font-size: 12px; margin-top: 30px;">If you no longer wish to participate in this auction, you can ignore this email.</p>
+        </div>
+      `,
+    });
+    console.log(`✅ Outbid notification sent to ${previousBidder.email}`);
+  } catch (error) {
+    console.error('Error sending outbid notification:', error);
+  }
+};
+
 module.exports = {
   sendVerificationEmail,
   sendWelcomeEmail,
@@ -297,4 +328,5 @@ module.exports = {
   sendPayoutNotification,
   sendPasswordResetEmail,
   sendAdminAlert,
+  sendOutbidNotification,
 };

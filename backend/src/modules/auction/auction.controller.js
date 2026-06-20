@@ -217,8 +217,11 @@ const placeBid = async (req, res) => {
       try {
         const previousBidder = await User.findById(previousBidderId);
         if (previousBidder) {
-          console.log(`📧 Notify ${previousBidder.email}: You've been outbid`);
-          // TODO: Send outbid email
+          const websiteData = auction.websiteId; // already populated above
+          console.log(`📧 Sending outbid notification to ${previousBidder.email}`);
+          // Fire-and-forget: don't block bid response on email delivery
+          emailService.sendOutbidNotification(previousBidder, websiteData, bidAmount)
+            .catch(err => console.error('Failed to send outbid email:', err));
         }
       } catch (emailError) {
         console.error('Failed to send outbid email:', emailError);
