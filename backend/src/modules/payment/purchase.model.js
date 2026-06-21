@@ -30,13 +30,17 @@ const purchaseSchema = new mongoose.Schema(
     tax:         { type: Number, required: true, min: 0 },
     totalPaid:   { type: Number, required: true, min: 0 },
 
+    // Exclusive/auction-only — platform's commission taken from the bidding premium
+    // (finalBidAmount - startingPrice). Always 0 for paid/free listings.
+    platformCommission: { type: Number, default: 0, min: 0 },
+
     // Razorpay identifiers
     razorpayOrderId:   { type: String, index: true, sparse: true },
     razorpayPaymentId: { type: String, index: true, sparse: true },
 
     paymentStatus: {
       type: String,
-      enum: ['pending', 'completed', 'failed', 'refunded'],
+      enum: ['pending', 'completed', 'failed'],
       default: function () {
         return this.category === 'free' ? 'completed' : 'pending';
       },

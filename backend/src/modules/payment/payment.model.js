@@ -19,19 +19,13 @@ const paymentSchema = new mongoose.Schema({
   // Status
   status: {
     type: String,
-    enum: ['created', 'processing', 'succeeded', 'failed', 'refunded'],
+    enum: ['created', 'processing', 'succeeded', 'failed'],
     default: 'created',
     index: true,
   },
 
   // Full gateway response for debugging/audit
   gatewayResponse: { type: mongoose.Schema.Types.Mixed },
-
-  // Refund
-  refundId:     String,
-  refundAmount: Number,
-  refundReason: String,
-  refundedAt:   Date,
 
   // Failure
   failureReason: String,
