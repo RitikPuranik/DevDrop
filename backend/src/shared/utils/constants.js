@@ -102,6 +102,7 @@ const EMAIL_SUBJECTS = {
   ADMIN_REVIEW_REQUEST: 'New Website Pending Review',
   STATUS_UPDATE: 'Website Review Status Update',
   PAYOUT_NOTIFICATION: 'Payout Processed',
+  OUTBID_NOTIFICATION: 'You\'ve Been Outbid!',
 };
 
 // Rate limiting (requests per window)
