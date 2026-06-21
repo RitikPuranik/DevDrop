@@ -105,27 +105,10 @@ const verifyWebhookSignature = (rawBody, razorpaySignature) => {
   }
 };
 
-/**
- * Create refund for a payment
- */
-const createRefund = async (razorpayPaymentId, amount, notes = {}) => {
-  try {
-    const refund = await getRazorpay().payments.refund(razorpayPaymentId, {
-      amount: Math.round(amount * 100), // paise
-      notes,
-    });
-    return refund;
-  } catch (error) {
-    console.error('Razorpay create refund error:', error);
-    throw new Error(error?.error?.description || error.message);
-  }
-};
-
 module.exports = {
   createOrder,
   fetchOrder,
   fetchPayment,
   verifyPaymentSignature,
   verifyWebhookSignature,
-  createRefund,
 };

@@ -8,7 +8,7 @@ const User = require('../user/user.model');
 const Auction = require('../auction/auction.model');
 const Bid = require('../auction/bid.model');
 const { WEBSITE_STATUS, WEBSITE_CATEGORIES, PAYOUT_STATUS } = require('../../shared/utils/constants');
-const { getPaginationMetadata } = require('../../shared/utils/helpers');
+const { getPaginationMetadata, generateUpiPayoutLink } = require('../../shared/utils/helpers');
 const supabaseService = require('../../services/supabase.service');
 const emailService = require('../../services/email.service');
 
@@ -790,15 +790,30 @@ const getPendingPayouts = async (req, res) => {
     const payouts = await Payout.find({ status: PAYOUT_STATUS.PENDING })
       .populate('sellerId', 'email')
       .populate('websiteId', 'name category')
+      .populate('purchaseId', 'sellerPrice platformCommission totalPaid category')
       .sort({ createdAt: 1 })
       .skip(skip)
       .limit(parseInt(limit));
 
     const total = await Payout.countDocuments({ status: PAYOUT_STATUS.PENDING });
 
+    // Attach a ready-to-tap UPI payout link to each record (no business
+    // registration needed — this is a standard UPI payment intent, admin
+    // just taps it and confirms in their own UPI app).
+    const payoutsWithUpiLink = payouts.map((payout) => {
+      const obj = payout.toObject();
+      obj.upiPayoutLink = generateUpiPayoutLink({
+        upiId: payout.bankDetails?.upiId,
+        payeeName: payout.bankDetails?.accountHolderName || payout.sellerId?.email,
+        amount: payout.amount,
+        note: `DevDrop payout - ${payout.websiteId?.name || ''}`.trim(),
+      });
+      return obj;
+    });
+
     res.json({
       success: true,
-      data: payouts,
+      data: payoutsWithUpiLink,
       pagination: getPaginationMetadata(parseInt(page), parseInt(limit), total),
     });
   } catch (error) {

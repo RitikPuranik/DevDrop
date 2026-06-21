@@ -1,28 +1,63 @@
 const crypto = require('crypto');
-const { PLATFORM_FEE_AMOUNT, TAX_PERCENTAGE } = require('./constants');
+const { PLATFORM_FEE_AMOUNT, TAX_PERCENTAGE, EXCLUSIVE_COMMISSION_PERCENTAGE } = require('./constants');
 
 /**
- * Calculate pricing breakdown for a purchase
- * Platform fee is now EXACT AMOUNT, not percentage!
+ * Calculate pricing breakdown for a purchase.
+ *
+ * @param {number} finalPrice    The amount the buyer is paying for (website.price for
+ *                                 paid listings, or auction.currentBidAmount for exclusive).
+ * @param {object} [opts]
+ * @param {number} [opts.startingPrice]  Only for exclusive/auction sales — the seller's
+ *                                         original starting price. When provided and lower
+ *                                         than finalPrice, the platform takes a commission
+ *                                         ONLY on the premium (finalPrice - startingPrice).
+ *                                         Seller keeps 100% of startingPrice no matter what.
+ *
+ * Buyer-side charges (platform fee + tax) are UNCHANGED for both paid and exclusive sales.
+ * The seller-side split only changes for exclusive sales with a startingPrice provided.
  */
-const calculatePricing = (sellerPrice) => {
-  // Platform fee is a FIXED AMOUNT (e.g., ₹500)
+const calculatePricing = (finalPrice, opts = {}) => {
+  const { startingPrice } = opts;
+
+  // Platform fee is a FIXED AMOUNT (e.g., ₹500) — same for paid and exclusive
   const platformFee = PLATFORM_FEE_AMOUNT;
-  
-  // Calculate subtotal
-  const subtotal = sellerPrice + platformFee;
-  
+
+  // Calculate subtotal (always based on the full final price the buyer is paying)
+  const subtotal = finalPrice + platformFee;
+
   // Calculate tax on subtotal
   const tax = Math.round((subtotal * TAX_PERCENTAGE) / 100);
-  
+
   // Total amount buyer pays
   const totalPaid = subtotal + tax;
 
+  // ===== Seller payout split =====
+  // Default (paid listings, or exclusive with no startingPrice given): seller gets 100%.
+  let sellerPrice = finalPrice;
+  let premium = 0;
+  let platformCommission = 0;
+
+  const isExclusiveSplit = typeof startingPrice === 'number' && startingPrice >= 0 && finalPrice > startingPrice;
+
+  if (isExclusiveSplit) {
+    premium = finalPrice - startingPrice;
+    platformCommission = Math.round((premium * EXCLUSIVE_COMMISSION_PERCENTAGE) / 100);
+    // Seller keeps 100% of starting price + their share (100 - commission%) of the premium
+    sellerPrice = startingPrice + (premium - platformCommission);
+  } else if (typeof startingPrice === 'number' && startingPrice >= 0) {
+    // Exclusive sale that closed at (or below, edge case) the starting price — no premium,
+    // seller still gets their full starting/final price, no commission taken.
+    sellerPrice = finalPrice;
+  }
+
   return {
-    sellerPrice,
-    platformFee,
-    tax,
-    totalPaid,
+    sellerPrice,           // What the seller is actually owed/paid out
+    platformFee,           // Fixed buyer-side fee (unchanged)
+    tax,                   // Buyer-side tax (unchanged)
+    totalPaid,             // What the buyer pays in total (unchanged)
+    startingPrice: typeof startingPrice === 'number' ? startingPrice : undefined,
+    premium,               // finalPrice - startingPrice (0 for paid listings)
+    platformCommission,    // Platform's cut of the premium (0 for paid listings)
   };
 };
 
@@ -172,6 +207,35 @@ const getDateRange = (period = 'month') => {
   return { startDate, endDate: new Date() };
 };
 
+/**
+ * Generate a UPI deep link for paying out a seller.
+ * Opening this link on a phone with any UPI app installed pre-fills the
+ * payee VPA, amount, and a note — admin just taps to confirm and pay.
+ * No registered payout/business account required since this is a normal
+ * person-to-person/person-to-merchant UPI intent, not a programmatic API call.
+ *
+ * @param {object} params
+ * @param {string} params.upiId        Seller's UPI VPA, e.g. "name@okhdfcbank"
+ * @param {string} params.payeeName    Seller's display name (shown in UPI app)
+ * @param {number} params.amount       Amount to pay, in rupees
+ * @param {string} [params.note]       Short transaction note (keep it brief — UPI apps truncate)
+ * @returns {string|null} A "upi://pay?..." URL, or null if upiId is missing/invalid
+ */
+const generateUpiPayoutLink = ({ upiId, payeeName, amount, note }) => {
+  if (!upiId || typeof upiId !== 'string' || !upiId.includes('@')) return null;
+  if (!amount || amount <= 0) return null;
+
+  const params = new URLSearchParams({
+    pa: upiId,                                   // payee address (VPA)
+    pn: payeeName || 'DevDrop Seller',            // payee name
+    am: amount.toFixed(2),                        // amount
+    cu: 'INR',                                    // currency
+    tn: (note || 'DevDrop payout').slice(0, 50),  // transaction note, keep short
+  });
+
+  return `upi://pay?${params.toString()}`;
+};
+
 module.exports = {
   calculatePricing,
   generateFileName,
@@ -188,4 +252,5 @@ module.exports = {
   formatCurrency,
   isExpired,
   getDateRange,
+  generateUpiPayoutLink,
 };

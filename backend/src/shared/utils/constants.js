@@ -35,7 +35,6 @@ const PAYMENT_STATUS = {
   PENDING: 'pending',
   COMPLETED: 'completed',
   FAILED: 'failed',
-  REFUNDED: 'refunded',
 };
 
 // Payout status
@@ -61,6 +60,11 @@ const PLATFORM_FEE_AMOUNT = parseFloat(process.env.PLATFORM_FEE_AMOUNT) || 500;
 
 // Tax percentage (this remains as percentage)
 const TAX_PERCENTAGE = parseFloat(process.env.TAX_PERCENTAGE) || 18;
+
+// Exclusive/auction commission — platform's cut of the bidding PREMIUM only
+// (final bid amount minus the seller's starting price). Seller always
+// keeps 100% of their starting price + (100 - this%) of the premium.
+const EXCLUSIVE_COMMISSION_PERCENTAGE = parseFloat(process.env.EXCLUSIVE_COMMISSION_PERCENTAGE) || 20;
 
 // File size limits (in bytes)
 const FILE_SIZE_LIMITS = {
@@ -134,6 +138,7 @@ module.exports = {
   FILE_TYPES,
   PLATFORM_FEE_AMOUNT,
   TAX_PERCENTAGE,
+  EXCLUSIVE_COMMISSION_PERCENTAGE,
   FILE_SIZE_LIMITS,
   SUPABASE_BUCKET,
   SUPABASE_FOLDERS,

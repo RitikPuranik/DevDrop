@@ -24,6 +24,7 @@ const createOrder = async (req, res) => {
     if (!website) return res.status(404).json({ success: false, message: 'Website not found' });
 
     let priceToUse = website.price;
+    let auctionStartingPrice = null;
 
     if (website.category === 'exclusive') {
       if (website.status === WEBSITE_STATUS.SOLD) {
@@ -56,6 +57,7 @@ const createOrder = async (req, res) => {
       }
 
       priceToUse = auction.currentBidAmount;
+      auctionStartingPrice = auction.startingPrice;
     } else {
       if (website.status !== WEBSITE_STATUS.APPROVED) {
         return res.status(400).json({
@@ -72,7 +74,7 @@ const createOrder = async (req, res) => {
     if (existingPurchase)
       return res.status(400).json({ success: false, message: 'You have already purchased this website' });
 
-    const pricing = calculatePricing(priceToUse);
+    const pricing = calculatePricing(priceToUse, { startingPrice: auctionStartingPrice });
 
     // Internal receipt ID — unique per order attempt
     const receiptId = `rcpt_${Date.now()}_${websiteId.toString().slice(-6)}`;
@@ -176,16 +178,18 @@ const verifyPayment = async (req, res) => {
     if (!website) return res.status(404).json({ success: false, message: 'Website not found' });
 
     let priceToUse = website.price;
+    let auctionStartingPrice = null;
     if (website.category === 'exclusive') {
       const auction = await Auction.findOne({ websiteId: website._id, status: 'awaiting_payment' });
       if (auction) {
         priceToUse = auction.currentBidAmount;
+        auctionStartingPrice = auction.startingPrice;
         auction.status = 'completed';
         await auction.save();
       }
     }
 
-    const pricing = calculatePricing(priceToUse);
+    const pricing = calculatePricing(priceToUse, { startingPrice: auctionStartingPrice });
 
     const existingPurchase = paymentRecord.purchaseId
       ? await Purchase.findById(paymentRecord.purchaseId)
@@ -230,6 +234,7 @@ const verifyPayment = async (req, res) => {
             platformFee: existingPurchase.platformFee,
             tax: existingPurchase.tax,
             totalPaid: existingPurchase.totalPaid,
+            platformCommission: existingPurchase.platformCommission || 0,
           },
         },
       });
@@ -256,6 +261,7 @@ const verifyPayment = async (req, res) => {
         platformFee: pricing.platformFee,
         tax: pricing.tax,
         totalPaid: pricing.totalPaid,
+        platformCommission: pricing.platformCommission || 0,
         razorpayOrderId: orderId,
         razorpayPaymentId: paymentId,
         paymentStatus: PAYMENT_STATUS.COMPLETED,
@@ -290,6 +296,7 @@ const verifyPayment = async (req, res) => {
                 platformFee: recoveredPurchase.platformFee,
                 tax: recoveredPurchase.tax,
                 totalPaid: recoveredPurchase.totalPaid,
+                platformCommission: recoveredPurchase.platformCommission || 0,
               },
             },
           });
@@ -385,7 +392,7 @@ const verifyPayment = async (req, res) => {
 
 /**
  * @route  POST /api/payment/webhook
- * @desc   Handle Razorpay webhooks (payment.captured, payment.failed, refund.created)
+ * @desc   Handle Razorpay webhooks (payment.captured, payment.failed)
  * @access Public
  */
 const handleWebhook = async (req, res) => {
@@ -427,22 +434,6 @@ const handleWebhook = async (req, res) => {
         }
         break;
       }
-      case 'refund.created': {
-        const refund = event.payload?.refund?.entity;
-        const paymentId = refund?.payment_id;
-        if (paymentId) {
-          await Payment.findOneAndUpdate(
-            { razorpayPaymentId: paymentId },
-            { status: 'refunded', refundId: refund?.id, refundAmount: refund?.amount / 100, refundedAt: new Date() }
-          );
-          await Purchase.findOneAndUpdate(
-            { razorpayPaymentId: paymentId },
-            { paymentStatus: 'refunded' }
-          );
-          console.log(`↩️  Refund created for payment: ${paymentId}`);
-        }
-        break;
-      }
       default:
         console.log(`ℹ️  Unhandled webhook event: ${eventType}`);
     }
@@ -454,41 +445,4 @@ const handleWebhook = async (req, res) => {
   }
 };
 
-/**
- * @route  POST /api/payment/refund
- * @desc   Refund a payment (Admin only)
- * @access Admin
- */
-const createRefund = async (req, res) => {
-  try {
-    const { paymentId, amount, reason } = req.body;
-
-    const paymentRecord = await Payment.findOne({
-      $or: [{ _id: paymentId }, { razorpayPaymentId: paymentId }],
-    });
-    if (!paymentRecord) return res.status(404).json({ success: false, message: 'Payment not found' });
-    if (paymentRecord.status !== 'succeeded') return res.status(400).json({ success: false, message: 'Can only refund succeeded payments' });
-    if (!paymentRecord.razorpayPaymentId) return res.status(400).json({ success: false, message: 'Razorpay payment ID missing — cannot process refund' });
-
-    const refundAmount = amount || paymentRecord.amount;
-    const refund = await razorpayService.createRefund(
-      paymentRecord.razorpayPaymentId,
-      refundAmount,
-      { reason: reason || 'Refund requested' }
-    );
-
-    paymentRecord.status = 'refunded';
-    paymentRecord.refundId = refund.id;
-    paymentRecord.refundAmount = refundAmount;
-    paymentRecord.refundReason = reason;
-    paymentRecord.refundedAt = new Date();
-    await paymentRecord.save();
-
-    res.json({ success: true, message: 'Refund processed successfully', data: refund });
-  } catch (error) {
-    console.error('Refund error:', error);
-    res.status(500).json({ success: false, message: 'Error creating refund', error: error.message });
-  }
-};
-
-module.exports = { createOrder, verifyPayment, handleWebhook, createRefund };
+module.exports = { createOrder, verifyPayment, handleWebhook };

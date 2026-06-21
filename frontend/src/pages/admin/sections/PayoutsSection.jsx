@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowUpRight, DollarSign, Loader2, RefreshCw, Search, ShieldCheck, TrendingUp, X } from 'lucide-react';
+import { ArrowUpRight, DollarSign, Loader2, RefreshCw, Search, ShieldCheck, TrendingUp, X, Smartphone } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { adminAPI } from '../../../api/admin';
@@ -81,7 +81,37 @@ function ProcessModal({ open, payout, onClose, onConfirm, loading }) {
             </div>
             <p className="text-3xl font-black text-emerald-400">₹{(payout.amount || 0).toLocaleString()}</p>
           </div>
+          {payout.purchaseId?.category === 'exclusive' && payout.purchaseId?.platformCommission > 0 && (
+            <p className="text-[10px] text-white/25 mt-3 pt-3 border-t border-white/5">
+              Includes starting price + 80% of bid premium · platform kept ₹{payout.purchaseId.platformCommission.toLocaleString()} commission
+            </p>
+          )}
         </div>
+
+        {payout.upiPayoutLink && (
+          <div className="mb-6">
+            <a
+              href={payout.upiPayoutLink}
+              className="flex items-center justify-center gap-2 w-full py-3.5 rounded-2xl bg-[#8b7355]/15 border border-[#8b7355]/40 text-[#d4c4a8] font-bold text-xs uppercase tracking-[0.15em] hover:bg-[#8b7355]/25 transition-all active:scale-[0.98]"
+            >
+              <Smartphone size={14} /> Pay ₹{(payout.amount || 0).toLocaleString()} via UPI
+            </a>
+            <p className="text-[10px] text-white/25 text-center mt-2">
+              Opens your UPI app on mobile. On desktop,{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard?.writeText(payout.bankDetails?.upiId || '');
+                  toast.success('UPI ID copied');
+                }}
+                className="underline hover:text-white/50 transition-colors"
+              >
+                copy the UPI ID
+              </button>{' '}
+              and pay from your phone instead.
+            </p>
+          </div>
+        )}
 
         <div className="space-y-4 mb-6">
           <div>
