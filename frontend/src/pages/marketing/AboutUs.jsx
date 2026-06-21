@@ -114,8 +114,8 @@ export default function About() {
           {/* Top Left Photo */}
           <motion.div style={{
             position: 'absolute', top: 0, left: 0,
-            width: isMobile ? '145px' : 'clamp(200px, 22vw, 340px)',
-            height: isMobile ? '200px' : 'clamp(260px, 48vh, 480px)',
+            width: isMobile ? '180px' : 'clamp(200px, 22vw, 340px)',
+            height: isMobile ? '290px' : 'clamp(260px, 48vh, 480px)',
             opacity: photoOpacity, x: tlX, y: tlY, scale: tlScale,
             transformOrigin: 'top left', overflow: 'hidden',
             borderRadius: '0 0 clamp(20px,3vw,42px) 0',
@@ -128,8 +128,8 @@ export default function About() {
           {/* Bottom Left Photo */}
           <motion.div style={{
             position: 'absolute', bottom: 0, left: 0,
-            width: isMobile ? '125px' : 'clamp(160px, 18vw, 280px)',
-            height: isMobile ? '165px' : 'clamp(200px, 38vh, 380px)',
+            width: isMobile ? '180px' : 'clamp(160px, 18vw, 280px)',
+            height: isMobile ? '290px' : 'clamp(200px, 38vh, 380px)',
             opacity: photoOpacity, x: blX, y: blY,
             transformOrigin: 'bottom left', overflow: 'hidden',
             borderRadius: '0 clamp(20px,3vw,42px) 0 0',
@@ -142,8 +142,8 @@ export default function About() {
           {/* Top Right Photo */}
           <motion.div style={{
             position: 'absolute', top: 0, right: 0,
-            width: isMobile ? '135px' : 'clamp(180px, 20vw, 310px)',
-            height: isMobile ? '190px' : 'clamp(230px, 44vh, 430px)',
+            width: isMobile ? '180px' : 'clamp(180px, 20vw, 310px)',
+            height: isMobile ? '290px' : 'clamp(230px, 44vh, 430px)',
             opacity: photoOpacity, x: trX, y: trY,
             transformOrigin: 'top right', overflow: 'hidden',
             borderRadius: '0 0 0 clamp(20px,3vw,42px)',
@@ -156,8 +156,8 @@ export default function About() {
           {/* Bottom Right Photo */}
           <motion.div style={{
             position: 'absolute', bottom: 0, right: 0,
-            width: isMobile ? '145px' : 'clamp(200px, 24vw, 360px)',
-            height: isMobile ? '190px' : 'clamp(250px, 46vh, 460px)',
+            width: isMobile ? '180px' : 'clamp(200px, 24vw, 360px)',
+            height: isMobile ? '290px' : 'clamp(250px, 46vh, 460px)',
             opacity: photoOpacity, x: brX, y: brY, scale: brScale,
             transformOrigin: 'bottom right', overflow: 'hidden',
             borderRadius: 'clamp(20px,3vw,42px) 0 0 0',

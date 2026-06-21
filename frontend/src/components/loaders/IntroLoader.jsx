@@ -97,32 +97,27 @@ const CinematicLoader = ({ onComplete }) => {
               className="flex flex-col items-center w-full mt-16"
             >
               {/* Tagline: Positioned well above the bar */}
-              <div className="font-mono text-[9px] md:text-[11px] tracking-[0.4em] text-[#e8e2d6]/30 uppercase mb-24">
+              <div className="font-mono text-[10px] md:text-[15px] tracking-[0.4em] text-[#e8e2d6]/30 uppercase mb-24">
                 {TAGLINE}
               </div>
 
               {/* Progress Bar Container */}
-              <div className="relative w-56 md:w-80 h-[2px] bg-[#e8e2d6]/10">
+              <div className="relative w-56 md:w-80">
                 
-                {/* Floating Percentage: Glides above the bar tip */}
-                <motion.span 
-                  className="absolute bottom-4 font-mono text-[10px] text-[#e8e2d6]/80 tabular-nums -translate-x-1/2"
-                  animate={{ left: `${progress}%` }}
-                  transition={{ duration: 0.4, ease: "easeOut" }}
-                >
+                {/* Fixed Percentage: Positioned exactly in the center above the line */}
+                <span className="absolute bottom-4 left-1/2 -translate-x-1/2 font-mono text-[20px] text-[#e8e2d6]/80 tabular-nums">
                   {progress}%
-                </motion.span>
+                </span>
 
-                {/* Animated Loading Line */}
-                {/* Loading Bar Container - h-[8px] for boldness, rounded-full for curves */}
-<div className="relative w-56 md:w-80 h-[8px] bg-[#e8e2d6]/10 rounded-full overflow-hidden">
-  <motion.div 
-    initial={{ width: "0%" }}
-    animate={{ width: `${progress}%` }}
-    transition={{ duration: 0.4, ease: "easeOut" }}
-    className="h-full bg-[#e8e2d6] rounded-full shadow-[0_0_20px_rgba(232,226,214,0.6)]"
-  />
-</div>
+                {/* Animated Loading Line Bar Container */}
+                <div className="relative w-full h-[8px] bg-[#e8e2d6]/10 rounded-full overflow-hidden">
+                  <motion.div 
+                    initial={{ width: "0%" }}
+                    animate={{ width: `${progress}%` }}
+                    transition={{ duration: 0.4, ease: "easeOut" }}
+                    className="h-full bg-[#e8e2d6] rounded-full shadow-[0_0_20px_rgba(232,226,214,0.6)]"
+                  />
+                </div>
               </div>
             </motion.div>
           </motion.div>
