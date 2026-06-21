@@ -366,7 +366,7 @@ const SubMenuItem = ({ label, index, isDimmed, onHover, onLeave, onClick }) => (
     initial={{ opacity: 0, y: 15 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ delay: index * 0.06 + 0.05, duration: 0.45, ease: [0.19, 1, 0.22, 1] }}
-    className="overflow-hidden py-0.5 lg:py-1 w-fit"
+    className="overflow-hidden py-0.5 lg:py-1 w-fit w-full"
     onMouseEnter={onHover}
     onMouseLeave={onLeave}
     onClick={onClick}
