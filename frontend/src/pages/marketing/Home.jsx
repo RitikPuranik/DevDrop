@@ -19,7 +19,13 @@ const REVIEWS = [
   { quote: "The motion dynamics feel incredibly heavy yet effortless. It's rare to see optimization and complex cinematic fluid transitions play so beautifully together.", author: "Marcus Vance", role: "Technical Lead, Nexus Studio" },
   { quote: "They didn't just build a portfolio layout; they generated a living, breathing luxury catalog that communicates raw artistic value on every single frame.", author: "Sora Takahashi", role: "Creative Producer, Neo-Tokyo" }
 ];
-
+const SERVICES_DATA = [
+  { title: "Logo, Icon & Banner", desc: "With our graphics expertise and concept designing traits, we design innovative logos, icons and banners." },
+  { title: "UI / UX Design", desc: "We create sleek and aesthetically appealing UI / UX designs that visitors will remember." },
+  { title: "Business Website", desc: "Our focus lies not just on great style, but also on user experience, tech details, search engine optimisation and ease of use." },
+  { title: "Landing Page", desc: "We design captivating landing pages that help turn visitors into potential customers." },
+  { title: "PSD to HTML", desc: "We convert your ideas into reality with a pixel perfect approach." }
+];
 const Home = ({ preloadedVideoRef, introComplete, fromIntro }) => {
   const [isReady, setIsReady] = useState(false);
 
@@ -43,6 +49,8 @@ const Home = ({ preloadedVideoRef, introComplete, fromIntro }) => {
         <SmoothVideoSection />
         <TemplatesMasonry introComplete={showContent} />
         <TemplatesGridReveal introComplete={showContent} />
+        {/* Added this line below so it actually renders on the screen */}
+        <OurServicesSection />
       </div>
     </div>
   );
@@ -150,9 +158,6 @@ const SmoothVideoSection = () => {
             className="w-full h-full object-cover opacity-90 transition-opacity duration-700 group-hover:opacity-100" 
           />
           <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
-          <div className="absolute bottom-4 left-4 md:bottom-10 md:left-10">
-             <h3 className="text-sm md:text-xl font-serif italic tracking-tight opacity-40">visual perspective</h3>
-          </div>
         </motion.div>
       </div>
     </section>
@@ -431,6 +436,7 @@ const TemplatesGridReveal = ({ introComplete }) => {
         </motion.div>
       </div>
     </motion.section>
+    
   );
 };
 
