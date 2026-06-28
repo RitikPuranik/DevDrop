@@ -440,4 +440,69 @@ const TemplatesGridReveal = ({ introComplete }) => {
   );
 };
 
+/* ─── OUR SERVICES SECTION ─── */
+const OurServicesSection = () => {
+  return (
+    <section className="relative z-20 bg-[#050505] py-24 px-6 md:px-12 lg:px-16 text-[#e8e2d6] border-t border-white/5">
+      <div className="max-w-[1400px] mx-auto">
+        <div className="mb-16 md:mb-24 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+          <div>
+            <span className="text-[10px] uppercase font-mono tracking-[0.3em] text-[#e8e2d6]/40 mb-4 block">Capabilities</span>
+            <h2 className="text-4xl md:text-6xl font-serif leading-tight">
+              Elevating Digital <br /> <span className="italic text-white/70">Experiences</span>
+            </h2>
+          </div>
+          <p className="text-sm md:text-base font-mono text-[#e8e2d6]/50 max-w-sm">
+            We merge artistic intent with technical precision to build digital landscapes that redefine industry standards.
+          </p>
+        </div>
+
+        <div className="flex flex-col border-t border-white/10">
+          {SERVICES_DATA.map((service, index) => (
+            <ServiceRow key={index} service={service} index={index} />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const ServiceRow = ({ service, index }) => {
+  const [isHovered, setIsHovered] = useState(false);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.6, delay: index * 0.1 }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      className="group flex flex-col md:flex-row justify-between items-start md:items-center py-8 md:py-12 border-b border-white/10 cursor-pointer relative overflow-hidden"
+    >
+      <div className="absolute inset-0 bg-gradient-to-r from-white/[0.03] to-transparent scale-x-0 group-hover:scale-x-100 origin-left transition-transform duration-700 ease-out" />
+      
+      <div className="relative z-10 flex items-center gap-6 md:gap-12 w-full md:w-auto">
+        <span className="text-xs font-mono text-[#e8e2d6]/30 w-8">0{index + 1}</span>
+        <h3 className={`text-2xl md:text-4xl font-serif transition-colors duration-500 ${isHovered ? 'text-white' : 'text-[#e8e2d6]/80'}`}>
+          {service.title}
+        </h3>
+      </div>
+      
+      <div className="relative z-10 mt-4 md:mt-0 md:w-1/3 flex items-center justify-between w-full">
+        <p className={`text-sm font-mono transition-colors duration-500 pr-8 ${isHovered ? 'text-[#e8e2d6]' : 'text-[#e8e2d6]/40'}`}>
+          {service.desc}
+        </p>
+        <motion.div
+          animate={{ x: isHovered ? 0 : -10, opacity: isHovered ? 1 : 0 }}
+          transition={{ duration: 0.4 }}
+          className="text-white"
+        >
+          →
+        </motion.div>
+      </div>
+    </motion.div>
+  );
+};
+
 export default Home;
