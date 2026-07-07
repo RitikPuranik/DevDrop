@@ -63,7 +63,7 @@ const writeLog = async ({ type, direction, trigger, status, triggeredBy, summary
 /**
  * Run a MongoDB copy in the given direction and log the result.
  */
-const runMongoBackup = async ({ direction = 'main_to_backup', trigger = 'manual', triggeredBy = null, mode = 'replace' } = {}) => {
+const runMongoBackup = async ({ direction = 'main_to_backup', trigger = 'manual', triggeredBy = null, mode = 'replace', skipLog = false } = {}) => {
   const { source, target } = directionToEndpoints(direction);
   const start = Date.now();
 
@@ -75,11 +75,15 @@ const runMongoBackup = async ({ direction = 'main_to_backup', trigger = 'manual'
     });
 
     const durationMs = Date.now() - start;
-    await writeLog({ type: 'mongo', direction, trigger, status: 'success', triggeredBy, summary: result, durationMs });
+    if (!skipLog) {
+      await writeLog({ type: 'mongo', direction, trigger, status: 'success', triggeredBy, summary: result, durationMs });
+    }
     return { success: true, ...result, durationMs };
   } catch (error) {
     const durationMs = Date.now() - start;
-    await writeLog({ type: 'mongo', direction, trigger, status: 'failed', triggeredBy, errorMessage: error.message, durationMs });
+    if (!skipLog) {
+      await writeLog({ type: 'mongo', direction, trigger, status: 'failed', triggeredBy, errorMessage: error.message, durationMs });
+    }
     throw error;
   }
 };
@@ -90,7 +94,7 @@ const runMongoBackup = async ({ direction = 'main_to_backup', trigger = 'manual'
  * deleting files on target that no longer exist on source — this is
  * what stops the backup bucket from growing forever.
  */
-const runSupabaseBackup = async ({ direction = 'main_to_backup', trigger = 'manual', triggeredBy = null, supabaseMode = 'mirror' } = {}) => {
+const runSupabaseBackup = async ({ direction = 'main_to_backup', trigger = 'manual', triggeredBy = null, supabaseMode = 'mirror', skipLog = false } = {}) => {
   const { source, target } = directionToEndpoints(direction);
   const start = Date.now();
 
@@ -107,11 +111,15 @@ const runSupabaseBackup = async ({ direction = 'main_to_backup', trigger = 'manu
 
     const durationMs = Date.now() - start;
     const status = result.failed.length > 0 ? 'partial' : 'success';
-    await writeLog({ type: 'supabase', direction, trigger, status, triggeredBy, summary: result, durationMs });
+    if (!skipLog) {
+      await writeLog({ type: 'supabase', direction, trigger, status, triggeredBy, summary: result, durationMs });
+    }
     return { success: true, ...result, durationMs };
   } catch (error) {
     const durationMs = Date.now() - start;
-    await writeLog({ type: 'supabase', direction, trigger, status: 'failed', triggeredBy, errorMessage: error.message, durationMs });
+    if (!skipLog) {
+      await writeLog({ type: 'supabase', direction, trigger, status: 'failed', triggeredBy, errorMessage: error.message, durationMs });
+    }
     throw error;
   }
 };
@@ -127,14 +135,14 @@ const runFullBackup = async ({ direction = 'main_to_backup', trigger = 'manual',
   let overallStatus = 'success';
 
   try {
-    outcome.mongo = await runMongoBackup({ direction, trigger, triggeredBy, mode });
+    outcome.mongo = await runMongoBackup({ direction, trigger, triggeredBy, mode, skipLog: true });
   } catch (error) {
     outcome.mongo = { success: false, error: error.message };
     overallStatus = 'partial';
   }
 
   try {
-    outcome.supabase = await runSupabaseBackup({ direction, trigger, triggeredBy, supabaseMode });
+    outcome.supabase = await runSupabaseBackup({ direction, trigger, triggeredBy, supabaseMode, skipLog: true });
   } catch (error) {
     outcome.supabase = { success: false, error: error.message };
     overallStatus = outcome.mongo?.success === false ? 'failed' : 'partial';
@@ -166,8 +174,17 @@ const safe = async (fn) => {
   }
 };
 
-const getRecentLogs = async (limit = 20) => {
-  return BackupLog.find({}).sort({ createdAt: -1 }).limit(limit).populate('triggeredBy', 'name email').lean();
+const getRecentLogs = async ({ limit = 20, type, from, to } = {}) => {
+  const filter = {};
+  if (type && ['mongo', 'supabase', 'full'].includes(type)) {
+    filter.type = type;
+  }
+  if (from || to) {
+    filter.createdAt = {};
+    if (from) filter.createdAt.$gte = new Date(from);
+    if (to) filter.createdAt.$lte = new Date(to);
+  }
+  return BackupLog.find(filter).sort({ createdAt: -1 }).limit(limit).populate('triggeredBy', 'name email').lean();
 };
 
 module.exports = {

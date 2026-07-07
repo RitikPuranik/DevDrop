@@ -6,6 +6,7 @@ import {
   CloudUpload,
   Database,
   DatabaseBackup,
+  Filter,
   History,
   Loader2,
   RefreshCw,
@@ -108,6 +109,13 @@ const STATUS_BADGE_STYLES = {
   failed: 'bg-red-500/15 text-red-400 border-red-500/30',
 };
 
+const TYPE_FILTER_OPTIONS = [
+  { value: '', label: 'All Types' },
+  { value: 'full', label: 'Full' },
+  { value: 'supabase', label: 'Supabase' },
+  { value: 'mongo', label: 'Mongo' },
+];
+
 const summarizeLog = (log) => {
   const s = log.summary || {};
 
@@ -151,11 +159,26 @@ export default function BackupSection() {
   const [actionLoading, setActionLoading] = useState(false);
   const [confirmAction, setConfirmAction] = useState(null); // { type, direction, label }
 
+  // Filter state
+  const [filterType, setFilterType] = useState('');
+  const [filterFrom, setFilterFrom] = useState('');
+  const [filterTo, setFilterTo] = useState('');
+
   const loadAll = async () => {
     try {
+      const filters = {};
+      if (filterType) filters.type = filterType;
+      if (filterFrom) filters.from = new Date(filterFrom).toISOString();
+      if (filterTo) {
+        // Set 'to' to end of the selected day
+        const toDate = new Date(filterTo);
+        toDate.setHours(23, 59, 59, 999);
+        filters.to = toDate.toISOString();
+      }
+
       const [statusRes, historyRes] = await Promise.all([
         adminAPI.getBackupStatus(),
-        adminAPI.getBackupHistory(20),
+        adminAPI.getBackupHistory(50, filters),
       ]);
       setStatus(statusRes.data?.data || null);
       setHistory(historyRes.data?.data || []);
@@ -169,6 +192,22 @@ export default function BackupSection() {
   useEffect(() => {
     loadAll();
   }, []);
+
+  // Reload history when filters change
+  useEffect(() => {
+    if (!loading) {
+      loadAll();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterType, filterFrom, filterTo]);
+
+  const clearFilters = () => {
+    setFilterType('');
+    setFilterFrom('');
+    setFilterTo('');
+  };
+
+  const hasActiveFilters = filterType || filterFrom || filterTo;
 
   const runAction = async () => {
     if (!confirmAction) return;
@@ -320,6 +359,61 @@ export default function BackupSection() {
             <h2 className="text-xl font-black tracking-tight">Recent Activity</h2>
           </div>
         </div>
+
+        {/* Filters */}
+        <div className="px-6 py-4 border-b border-white/5 flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 text-white/30">
+            <Filter size={14} />
+            <span className="text-[10px] uppercase tracking-[0.2em] font-bold">Filters</span>
+          </div>
+
+          {/* Type filter pills */}
+          <div className="flex gap-1.5">
+            {TYPE_FILTER_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setFilterType(opt.value)}
+                className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-[0.1em] border transition-all ${
+                  filterType === opt.value
+                    ? 'bg-[#8b7355]/20 text-[#8b7355] border-[#8b7355]/40'
+                    : 'bg-white/[0.03] text-white/40 border-white/10 hover:border-white/20 hover:text-white/60'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="w-px h-5 bg-white/10 mx-1 hidden sm:block" />
+
+          {/* Date range */}
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] uppercase tracking-[0.15em] text-white/30 font-bold">From</label>
+            <input
+              type="date"
+              value={filterFrom}
+              onChange={(e) => setFilterFrom(e.target.value)}
+              className="bg-white/[0.03] border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white/70 outline-none focus:border-[#8b7355]/50 transition-colors [color-scheme:dark]"
+            />
+            <label className="text-[10px] uppercase tracking-[0.15em] text-white/30 font-bold">To</label>
+            <input
+              type="date"
+              value={filterTo}
+              onChange={(e) => setFilterTo(e.target.value)}
+              className="bg-white/[0.03] border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white/70 outline-none focus:border-[#8b7355]/50 transition-colors [color-scheme:dark]"
+            />
+          </div>
+
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-[0.1em] bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-colors"
+            >
+              Clear Filters
+            </button>
+          )}
+        </div>
+
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
@@ -337,7 +431,7 @@ export default function BackupSection() {
                   <td colSpan={7} className="text-center py-20">
                     <div className="flex flex-col items-center gap-3 text-white/20">
                       <History size={36} />
-                      <span className="text-sm">No backup runs yet</span>
+                      <span className="text-sm">{hasActiveFilters ? 'No backups match your filters' : 'No backup runs yet'}</span>
                     </div>
                   </td>
                 </tr>
@@ -379,3 +473,4 @@ export default function BackupSection() {
     </div>
   );
 }
+
