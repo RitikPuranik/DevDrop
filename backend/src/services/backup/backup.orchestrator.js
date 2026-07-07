@@ -174,7 +174,7 @@ const safe = async (fn) => {
   }
 };
 
-const getRecentLogs = async ({ limit = 20, page = 1, type, from, to } = {}) => {
+const getRecentLogs = async ({ limit = 10, page = 1, type, from, to } = {}) => {
   const filter = {};
   if (type && ['mongo', 'supabase', 'full'].includes(type)) {
     filter.type = type;
