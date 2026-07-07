@@ -10,6 +10,8 @@ const {
 
 const VALID_DIRECTIONS = ['main_to_backup', 'backup_to_main'];
 const VALID_SUPABASE_MODES = ['mirror', 'add-only'];
+const DEFAULT_HISTORY_LIMIT = 10;
+const MAX_HISTORY_LIMIT = 100;
 
 const parseDirection = (req) => {
   const direction = req.body?.direction || 'main_to_backup';
@@ -48,8 +50,10 @@ const getStatus = async (req, res) => {
  */
 const getHistory = async (req, res) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
-    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const parsedLimit = Number.parseInt(req.query.limit, 10);
+    const parsedPage = Number.parseInt(req.query.page, 10);
+    const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, MAX_HISTORY_LIMIT) : DEFAULT_HISTORY_LIMIT;
+    const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
     const { type, from, to } = req.query;
     const paginatedData = await getRecentLogs({ limit, page, type, from, to });
     res.json({ success: true, data: paginatedData });

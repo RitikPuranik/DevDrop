@@ -115,6 +115,7 @@ const TYPE_FILTER_OPTIONS = [
   { value: 'supabase', label: 'Supabase' },
   { value: 'mongo', label: 'Mongo' },
 ];
+const HISTORY_PAGE_SIZE = 10;
 
 const summarizeLog = (log) => {
   const s = log.summary || {};
@@ -180,7 +181,7 @@ export default function BackupSection() {
 
       const [statusRes, historyRes] = await Promise.all([
         adminAPI.getBackupStatus(),
-        adminAPI.getBackupHistory(20, page, filters),
+        adminAPI.getBackupHistory(HISTORY_PAGE_SIZE, page, filters),
       ]);
       setStatus(statusRes.data?.data || null);
       setHistory(historyRes.data?.data?.logs || []);
@@ -507,4 +508,3 @@ export default function BackupSection() {
     </div>
   );
 }
-
