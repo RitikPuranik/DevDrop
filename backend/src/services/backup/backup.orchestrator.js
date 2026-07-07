@@ -18,7 +18,7 @@ const getEndpoints = () => ({
     mongoUri: process.env.BACKUP_MONGODB_URI,
     supabaseUrl: process.env.BACKUP_SUPABASE_URL,
     supabaseKey: process.env.BACKUP_SUPABASE_SERVICE_ROLE_KEY,
-    supabaseBucket: process.env.SUPABASE_BUCKET_NAME || 'marketplace-files',
+    supabaseBucket: process.env.BACKUP_SUPABASE_BUCKET_NAME || 'marketplace-files',
   },
 });
 
