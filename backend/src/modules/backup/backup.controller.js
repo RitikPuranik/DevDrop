@@ -49,9 +49,10 @@ const getStatus = async (req, res) => {
 const getHistory = async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const { type, from, to } = req.query;
-    const logs = await getRecentLogs({ limit, type, from, to });
-    res.json({ success: true, data: logs });
+    const paginatedData = await getRecentLogs({ limit, page, type, from, to });
+    res.json({ success: true, data: paginatedData });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to load backup history', error: error.message });
   }

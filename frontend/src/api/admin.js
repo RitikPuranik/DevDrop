@@ -24,8 +24,8 @@ export const adminAPI = {
 
   // Backup & Restore
   getBackupStatus: () => api.get("/admin/backup/status"),
-  getBackupHistory: (limit = 20, { type, from, to } = {}) => {
-    const params = new URLSearchParams({ limit });
+  getBackupHistory: (limit = 20, page = 1, { type, from, to } = {}) => {
+    const params = new URLSearchParams({ limit, page });
     if (type) params.append('type', type);
     if (from) params.append('from', from);
     if (to) params.append('to', to);

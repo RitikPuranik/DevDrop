@@ -174,7 +174,7 @@ const safe = async (fn) => {
   }
 };
 
-const getRecentLogs = async ({ limit = 20, type, from, to } = {}) => {
+const getRecentLogs = async ({ limit = 20, page = 1, type, from, to } = {}) => {
   const filter = {};
   if (type && ['mongo', 'supabase', 'full'].includes(type)) {
     filter.type = type;
@@ -184,7 +184,19 @@ const getRecentLogs = async ({ limit = 20, type, from, to } = {}) => {
     if (from) filter.createdAt.$gte = new Date(from);
     if (to) filter.createdAt.$lte = new Date(to);
   }
-  return BackupLog.find(filter).sort({ createdAt: -1 }).limit(limit).populate('triggeredBy', 'name email').lean();
+  
+  const skip = (page - 1) * limit;
+  const [logs, total] = await Promise.all([
+    BackupLog.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).populate('triggeredBy', 'name email').lean(),
+    BackupLog.countDocuments(filter)
+  ]);
+  
+  return {
+    logs,
+    total,
+    page: parseInt(page, 10),
+    totalPages: Math.ceil(total / limit)
+  };
 };
 
 module.exports = {

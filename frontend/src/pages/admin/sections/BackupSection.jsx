@@ -159,10 +159,12 @@ export default function BackupSection() {
   const [actionLoading, setActionLoading] = useState(false);
   const [confirmAction, setConfirmAction] = useState(null); // { type, direction, label }
 
-  // Filter state
+  // Filter & Pagination state
   const [filterType, setFilterType] = useState('');
   const [filterFrom, setFilterFrom] = useState('');
   const [filterTo, setFilterTo] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   const loadAll = async () => {
     try {
@@ -178,10 +180,11 @@ export default function BackupSection() {
 
       const [statusRes, historyRes] = await Promise.all([
         adminAPI.getBackupStatus(),
-        adminAPI.getBackupHistory(50, filters),
+        adminAPI.getBackupHistory(20, page, filters),
       ]);
       setStatus(statusRes.data?.data || null);
-      setHistory(historyRes.data?.data || []);
+      setHistory(historyRes.data?.data?.logs || []);
+      setTotalPages(historyRes.data?.data?.totalPages || 1);
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to load backup status');
     } finally {
@@ -193,18 +196,24 @@ export default function BackupSection() {
     loadAll();
   }, []);
 
-  // Reload history when filters change
+  // Reload history when filters or page change
   useEffect(() => {
     if (!loading) {
       loadAll();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterType, filterFrom, filterTo]);
+  }, [filterType, filterFrom, filterTo, page]);
+
+  const handleFilterChange = (setter) => (val) => {
+    setter(val);
+    setPage(1); // Reset to first page on filter change
+  };
 
   const clearFilters = () => {
     setFilterType('');
     setFilterFrom('');
     setFilterTo('');
+    setPage(1);
   };
 
   const hasActiveFilters = filterType || filterFrom || filterTo;
@@ -372,7 +381,7 @@ export default function BackupSection() {
             {TYPE_FILTER_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
-                onClick={() => setFilterType(opt.value)}
+                onClick={() => handleFilterChange(setFilterType)(opt.value)}
                 className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-[0.1em] border transition-all ${
                   filterType === opt.value
                     ? 'bg-[#8b7355]/20 text-[#8b7355] border-[#8b7355]/40'
@@ -392,14 +401,14 @@ export default function BackupSection() {
             <input
               type="date"
               value={filterFrom}
-              onChange={(e) => setFilterFrom(e.target.value)}
+              onChange={(e) => handleFilterChange(setFilterFrom)(e.target.value)}
               className="bg-white/[0.03] border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white/70 outline-none focus:border-[#8b7355]/50 transition-colors [color-scheme:dark]"
             />
             <label className="text-[10px] uppercase tracking-[0.15em] text-white/30 font-bold">To</label>
             <input
               type="date"
               value={filterTo}
-              onChange={(e) => setFilterTo(e.target.value)}
+              onChange={(e) => handleFilterChange(setFilterTo)(e.target.value)}
               className="bg-white/[0.03] border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white/70 outline-none focus:border-[#8b7355]/50 transition-colors [color-scheme:dark]"
             />
           </div>
@@ -458,6 +467,31 @@ export default function BackupSection() {
             </tbody>
           </table>
         </div>
+        
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-6 py-4 border-t border-white/5 bg-white/[0.01]">
+            <p className="text-xs text-white/40">
+              Page <span className="text-white font-bold">{page}</span> of <span className="text-white font-bold">{totalPages}</span>
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPage(Math.max(1, page - 1))}
+                disabled={page === 1 || actionLoading}
+                className="px-3 py-1.5 rounded-lg border border-white/10 text-xs font-bold uppercase tracking-[0.1em] text-white/60 hover:text-white hover:bg-white/5 disabled:opacity-30 transition-colors"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => setPage(Math.min(totalPages, page + 1))}
+                disabled={page === totalPages || actionLoading}
+                className="px-3 py-1.5 rounded-lg border border-white/10 text-xs font-bold uppercase tracking-[0.1em] text-white/60 hover:text-white hover:bg-white/5 disabled:opacity-30 transition-colors"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <ConfirmModal
