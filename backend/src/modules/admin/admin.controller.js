@@ -697,6 +697,7 @@ const getDashboard = async (req, res) => {
           totalTaxCollected: { $sum: '$tax' },
           totalSellerPayments: { $sum: '$sellerPrice' },
           totalGrossRevenue: { $sum: '$totalPaid' },
+          totalDiscounts: { $sum: { $ifNull: ['$discountAmount', 0] } },
           totalTransactions: { $sum: 1 },
         },
       },
@@ -707,6 +708,7 @@ const getDashboard = async (req, res) => {
       totalTaxCollected: 0,
       totalSellerPayments: 0,
       totalGrossRevenue: 0,
+      totalDiscounts: 0,
       totalTransactions: 0,
     };
 
@@ -752,6 +754,7 @@ const getDashboard = async (req, res) => {
           
           // What goes to sellers
           totalSellerPayments: revenue.totalSellerPayments,  // Total you must pay sellers
+          totalDiscounts: revenue.totalDiscounts,            // Discounts absorbed by the platform
           
           // Overall metrics
           totalGrossRevenue: revenue.totalGrossRevenue,      // Total money collected

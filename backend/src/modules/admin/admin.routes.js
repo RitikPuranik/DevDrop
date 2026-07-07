@@ -5,10 +5,14 @@ const adminOnly = require('../../shared/middleware/adminOnly');
 const { uploadMultiple, handleMulterError } = require('../../shared/middleware/uploadValidation');
 const adminController = require('./admin.controller');
 const backupController = require('../backup/backup.controller');
+const couponController = require('../coupons/coupon.controller');
 
 router.use(auth, adminOnly);
 
 router.get('/dashboard', adminController.getDashboard);
+router.get('/coupons', couponController.getCoupons);
+router.post('/coupons', couponController.createCoupon);
+router.patch('/coupons/:id/toggle', couponController.toggleCoupon);
 router.post('/websites', uploadMultiple.fields([{ name: 'sourceCode', maxCount: 1 }, { name: 'docs', maxCount: 1 }, { name: 'video', maxCount: 1 }, { name: 'previewVideo', maxCount: 1 }]), handleMulterError, adminController.createWebsite);
 router.get('/websites', adminController.getAllWebsites);
 router.put('/websites/:id/request-changes', adminController.requestChanges);

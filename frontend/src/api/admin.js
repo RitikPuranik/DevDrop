@@ -13,6 +13,11 @@ export const adminAPI = {
   // Dashboard
   getDashboard: () => api.get("/admin/dashboard"),
 
+  // Coupons
+  getCoupons: () => api.get("/admin/coupons"),
+  createCoupon: (data) => api.post("/admin/coupons", data),
+  toggleCoupon: (id, data = {}) => api.patch(`/admin/coupons/${id}/toggle`, data),
+
   // Payouts
   getPendingPayouts: (page = 1) => api.get(`/admin/payouts/pending?page=${page}`),
   processPayout: (id, data) => api.post(`/admin/payouts/${id}/process`, data),

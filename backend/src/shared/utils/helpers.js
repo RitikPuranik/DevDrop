@@ -62,6 +62,53 @@ const calculatePricing = (finalPrice, opts = {}) => {
 };
 
 /**
+ * Apply a coupon to the buyer-facing pricing while preserving seller payout.
+ */
+const applyCouponToPricing = (basePricing, coupon) => {
+  const platformCommission = basePricing.platformCommission || 0;
+  const subtotalBeforeDiscount = Math.max(
+    0,
+    (basePricing.sellerPrice || 0) + platformCommission + (basePricing.platformFee || 0)
+  );
+  const originalTotalPaid = basePricing.totalPaid || 0;
+
+  if (!coupon) {
+    return {
+      ...basePricing,
+      subtotalBeforeDiscount,
+      discountAmount: 0,
+      subtotalAfterDiscount: subtotalBeforeDiscount,
+      originalTotalPaid,
+      totalPaid: originalTotalPaid,
+    };
+  }
+
+  let discountAmount = 0;
+
+  if (coupon.discountType === 'percent') {
+    discountAmount = Math.round((subtotalBeforeDiscount * coupon.discountValue) / 100);
+  } else if (coupon.discountType === 'flat') {
+    discountAmount = coupon.discountValue;
+  }
+
+  discountAmount = Math.min(Math.max(discountAmount, 0), subtotalBeforeDiscount);
+
+  const subtotalAfterDiscount = subtotalBeforeDiscount - discountAmount;
+  const tax = Math.round((subtotalAfterDiscount * TAX_PERCENTAGE) / 100);
+  const totalPaid = subtotalAfterDiscount + tax;
+
+  return {
+    ...basePricing,
+    tax,
+    totalPaid,
+    subtotalBeforeDiscount,
+    discountAmount,
+    subtotalAfterDiscount,
+    originalTotalPaid,
+  };
+};
+
+/**
  * Generate unique filename with timestamp
  */
 const generateFileName = (originalName, prefix = '') => {
@@ -238,6 +285,7 @@ const generateUpiPayoutLink = ({ upiId, payeeName, amount, note }) => {
 
 module.exports = {
   calculatePricing,
+  applyCouponToPricing,
   generateFileName,
   formatFileSize,
   sanitizeInput,

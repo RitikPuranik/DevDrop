@@ -1,10 +1,11 @@
 import React from 'react';
-import { LayoutDashboard, Globe, DollarSign, ListTodo, DatabaseBackup } from 'lucide-react';
+import { LayoutDashboard, Globe, DollarSign, ListTodo, DatabaseBackup, TicketPercent } from 'lucide-react';
 
 const navTabs = [
     { id: "review", name: "Review Queue", icon: <ListTodo size={16} /> },
     { id: "dashboard", name: "Dashboard", icon: <LayoutDashboard size={16} /> },
     { id: "websites", name: "Websites", icon: <Globe size={16} /> },
+    { id: "coupons", name: "Coupons", icon: <TicketPercent size={16} /> },
     { id: "payouts", name: "Payouts", icon: <DollarSign size={16} /> },
     { id: "backup", name: "Backup", icon: <DatabaseBackup size={16} /> },
 ];

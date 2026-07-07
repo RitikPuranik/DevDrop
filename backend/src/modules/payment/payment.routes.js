@@ -5,6 +5,7 @@ const verifyEmail = require('../../shared/middleware/verifyEmail');
 const { paymentLimiter } = require('../../shared/middleware/rateLimit');
 const paymentController = require('./payment.controller');
 
+router.post('/quote',        auth, verifyEmail, paymentController.quoteOrder);
 router.post('/create-order', auth, verifyEmail, paymentLimiter, paymentController.createOrder);
 router.post('/verify',       auth, paymentController.verifyPayment);
 router.post('/webhook',      express.raw({ type: 'application/json' }), paymentController.handleWebhook);

@@ -4,7 +4,6 @@ import { X, Search, Loader2, Heart, User, ChevronRight, ShoppingBag, Gavel, Spar
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { websiteAPI } from "../../api/website";
 import { buyerAPI } from "../../api/buyer";
-import { paymentAPI } from "../../api/payment";
 import { toast } from 'sonner';
 
 const transition = {
@@ -55,26 +54,7 @@ export default function SmoothEliteGallery() {
         setPurchased(true);
         return;
       }
-      // Paid: create Razorpay order
-      const orderRes = await paymentAPI.createOrder({ websiteId: itemId });
-      const order = orderRes.data?.data;
-      if (!window.Razorpay) { toast.error("Payment gateway not loaded. Try the detail page."); return; }
-      const rzp = new window.Razorpay({
-        key: import.meta.env.VITE_RAZORPAY_KEY_ID,
-        amount: order.amount, currency: order.currency,
-        name: 'DevDrop', description: `Purchase: ${selectedId.name || selectedId.title}`,
-        order_id: order.razorpayOrderId,
-        handler: async (response) => {
-          try {
-            await paymentAPI.verifyPayment({ ...response, websiteId: itemId });
-            toast.success('Payment successful! View downloads on the detail page.');
-            setPurchased(true);
-          } catch { toast.error('Verification failed'); }
-        },
-        theme: { color: '#8b7355' },
-      });
-      rzp.on('payment.failed', () => toast.error("Payment failed"));
-      rzp.open();
+      navigate(`/checkout/${itemId}`);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Purchase failed');
     } finally { setBuying(false); }

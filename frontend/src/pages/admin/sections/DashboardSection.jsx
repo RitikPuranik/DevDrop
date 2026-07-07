@@ -165,6 +165,7 @@ export default function DashboardSection() {
               { label: 'Gross Revenue', value: revenue.totalGrossRevenue, icon: <ArrowUpRight size={14} />, color: 'text-emerald-400' },
               { label: 'Platform Fees', value: revenue.platformFees, icon: <TrendingUp size={14} />, color: 'text-[#8b7355]' },
               { label: 'Tax Collected', value: revenue.taxCollected, icon: <DollarSign size={14} />, color: 'text-amber-400' },
+              { label: 'Discounts Given', value: revenue.totalDiscounts, icon: <ArrowDownRight size={14} />, color: 'text-rose-300' },
               { label: 'Seller Payments', value: revenue.totalSellerPayments, icon: <ArrowDownRight size={14} />, color: 'text-blue-400' },
               { label: 'Net Profit', value: revenue.netProfit, icon: <TrendingUp size={14} />, color: 'text-emerald-400' },
             ].map((item) => (

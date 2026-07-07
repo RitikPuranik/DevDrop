@@ -29,10 +29,32 @@ const purchaseSchema = new mongoose.Schema(
     platformFee: { type: Number, required: true, min: 0 },
     tax:         { type: Number, required: true, min: 0 },
     totalPaid:   { type: Number, required: true, min: 0 },
+    subtotalBeforeDiscount: { type: Number, default: 0, min: 0 },
+    discountAmount:         { type: Number, default: 0, min: 0 },
+    subtotalAfterDiscount:  { type: Number, default: 0, min: 0 },
+    originalTotalPaid:      { type: Number, default: 0, min: 0 },
 
     // Exclusive/auction-only — platform's commission taken from the bidding premium
     // (finalBidAmount - startingPrice). Always 0 for paid/free listings.
     platformCommission: { type: Number, default: 0, min: 0 },
+
+    // Coupon snapshot
+    couponId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Coupon',
+      default: null,
+    },
+    couponCode: String,
+    discountType: {
+      type: String,
+      enum: ['percent', 'flat'],
+      default: undefined,
+    },
+    discountValue: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
 
     // Razorpay identifiers
     razorpayOrderId:   { type: String, index: true, sparse: true },
