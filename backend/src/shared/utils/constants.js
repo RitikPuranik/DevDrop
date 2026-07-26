@@ -92,7 +92,7 @@ const SIGNED_URL_EXPIRY = parseInt(process.env.SIGNED_URL_EXPIRY) || 604800; // 
 // Pagination defaults
 const PAGINATION = {
   DEFAULT_PAGE: 1,
-  DEFAULT_LIMIT: 20,
+  DEFAULT_LIMIT: 18,
   MAX_LIMIT: 100,
 };
 

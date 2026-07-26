@@ -25,7 +25,7 @@ const TECH_OPTIONS = {
   frontend: ['React', 'Vue', 'Next.js', 'Nuxt.js', 'Svelte', 'Angular', 'Gatsby', 'Tailwind', 'Bootstrap', 'Material UI', 'Chakra UI', 'Framer Motion', 'Three.js', 'GSAP', 'WebGL', 'HTML', 'CSS', 'JavaScript', 'TypeScript', 'Redux', 'Zustand', 'React Query'],
   backend: ['Node.js', 'Express', 'NestJS', 'Django', 'Flask', 'FastAPI', 'Laravel', 'PHP', 'Ruby on Rails', 'Spring Boot', 'Java', 'Go', 'Rust', 'C#', '.NET', 'GraphQL', 'Apollo', 'REST API', 'tRPC'],
   database: ['MongoDB', 'PostgreSQL', 'MySQL', 'SQLite', 'Firebase', 'Supabase', 'Redis', 'Cassandra', 'DynamoDB', 'Oracle', 'SQL Server', 'Elasticsearch', 'Neo4j'],
-  devops: ['Docker', 'Kubernetes', 'AWS', 'GCP', 'Azure', 'Vercel', 'Netlify', 'Heroku', 'DigitalOcean', 'GitHub Actions', 'GitLab CI', 'Jenkins', 'Terraform', 'Nginx', 'Apache', 'Cloudflare', 'Linux'],
+  devops: ['Docker', 'Kubernetes', 'AWS', 'GCP', 'Azure', 'Vercel', 'Render', 'Netlify', 'Heroku', 'DigitalOcean', 'GitHub Actions', 'GitLab CI', 'Jenkins', 'Terraform', 'Nginx', 'Apache', 'Cloudflare', 'Linux'],
 };
 
 const LISTING_TYPES = [

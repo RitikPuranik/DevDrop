@@ -26,7 +26,7 @@ const SERVICES_DATA = [
   { title: "Landing Page", desc: "We design captivating landing pages that help turn visitors into potential customers." },
   { title: "PSD to HTML", desc: "We convert your ideas into reality with a pixel perfect approach." }
 ];
-const Home = ({ preloadedVideoRef, introComplete, fromIntro }) => {
+const Home = ({ preloadedVideoRef, introComplete, fromIntro, useMobileHero }) => {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
@@ -43,6 +43,7 @@ const Home = ({ preloadedVideoRef, introComplete, fromIntro }) => {
         preloadedVideoRef={preloadedVideoRef}
         introComplete={showContent}
         fromIntro={fromIntro}
+        useMobileHero={useMobileHero}
       />
       
       <div className="relative z-10">
@@ -57,23 +58,25 @@ const Home = ({ preloadedVideoRef, introComplete, fromIntro }) => {
 };
 
 /* ─── VIDEO HERO ─── */
-const VideoHeroSection = ({ preloadedVideoRef, introComplete, fromIntro }) => {
+const VideoHeroSection = ({ preloadedVideoRef, introComplete, fromIntro, useMobileHero }) => {
   const wrapperRef = useRef(null);
   const [visible, setVisible] = useState(false);
   const { scrollY } = useScroll();
 
-  const videoScale = useTransform(scrollY, [0, 1000], [1.05, 1]);
-  const videoBlur   = useTransform(scrollY, [200, 800], ["blur(0px)", "blur(10px)"]);
-  const opacity     = useTransform(scrollY, [0, 800], [1, 0.55]);
+  const videoScale = useTransform(scrollY, [0, 1000], useMobileHero ? [1, 1.02] : [1.05, 1]);
+  const videoBlur   = useTransform(scrollY, [200, 800], useMobileHero ? ["blur(0px)", "blur(6px)"] : ["blur(0px)", "blur(10px)"]);
+  const opacity     = useTransform(scrollY, [0, 800], useMobileHero ? [1, 0.8] : [1, 0.55]);
 
   useEffect(() => {
     const wrapper = wrapperRef.current;
     const vid = preloadedVideoRef?.current;
     if (!wrapper || !vid) return;
 
-    vid.className = 'w-full h-full object-cover absolute inset-0 rounded-2xl md:rounded-none';
+    vid.className = useMobileHero
+      ? 'w-full h-full object-cover absolute inset-0 rounded-[2rem]'
+      : 'w-full h-full object-cover absolute inset-0 rounded-2xl md:rounded-none';
     if (!wrapper.contains(vid)) wrapper.appendChild(vid);
-  }, [preloadedVideoRef]);
+  }, [preloadedVideoRef, useMobileHero]);
 
   useEffect(() => {
     if (!introComplete) return;
@@ -98,15 +101,30 @@ const VideoHeroSection = ({ preloadedVideoRef, introComplete, fromIntro }) => {
 
   return (
     <motion.section 
-      className="relative md:sticky md:top-0 min-h-[40vh] sm:min-h-[50vh] md:h-screen w-full overflow-hidden z-0 flex flex-col justify-center items-center px-4 md:px-0 pt-8 md:pt-0" 
+      className={`relative md:sticky md:top-0 w-full overflow-hidden z-0 flex flex-col justify-center items-center px-4 md:px-0 ${
+        useMobileHero
+          ? 'min-h-[72vh] sm:min-h-[76vh] pt-24 pb-10'
+          : 'min-h-[40vh] sm:min-h-[50vh] md:h-screen pt-8 md:pt-0'
+      }`} 
       animate={{ opacity: visible ? 1 : 0 }}
       transition={{ duration: 1 }}
     >
       <motion.div 
         style={{ scale: videoScale, filter: videoBlur, opacity }} 
-        className="w-full max-w-[1200px] md:max-w-none aspect-[4/3] sm:aspect-video md:aspect-auto md:absolute md:inset-0 md:w-full md:h-full relative"
+        className={`relative ${
+          useMobileHero
+            ? 'w-full max-w-[22rem] sm:max-w-[25rem] aspect-[9/16]'
+            : 'w-full max-w-[1200px] md:max-w-none aspect-[4/3] sm:aspect-video md:aspect-auto md:absolute md:inset-0 md:w-full md:h-full'
+        }`}
       >
-        <div ref={wrapperRef} className="absolute inset-0 w-full h-full overflow-hidden rounded-2xl md:rounded-none shadow-2xl md:shadow-none" />
+        <div
+          ref={wrapperRef}
+          className={`absolute inset-0 w-full h-full overflow-hidden ${
+            useMobileHero
+              ? 'rounded-[2rem] border border-white/10 bg-[#0b0b0b] shadow-[0_24px_80px_rgba(0,0,0,0.55)]'
+              : 'rounded-2xl md:rounded-none shadow-2xl md:shadow-none'
+          }`}
+        />
       </motion.div>
     </motion.section>
   );
@@ -183,7 +201,7 @@ const TemplatesMasonry = ({ introComplete }) => {
           </h2>
         </div>
 
-        <div className="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
+        <div className="columns-2 gap-3 space-y-3 sm:columns-2 sm:gap-4 sm:space-y-4 md:columns-3 lg:columns-4">
           {ARTIFACTS.map((item, idx) => (
             <ArtifactCard key={item.id} item={item} index={idx} />
           ))}
@@ -398,24 +416,51 @@ const TemplatesGridReveal = ({ introComplete }) => {
           {/* Tile 8 */}
           <motion.div
             variants={structuralAnimationVariants} custom="bottom-wide" style={{ originX: 1, originY: 1 }}
-            className="sm:col-span-2 lg:col-span-2 lg:col-start-3 lg:row-start-3 min-h-[220px] sm:min-h-[240px] lg:min-h-0 bg-[#111115] rounded-3xl border border-white/5 p-6 md:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-6 overflow-hidden relative"
+            className="sm:col-span-2 lg:col-span-2 lg:col-start-3 lg:row-start-3 min-h-[320px] sm:min-h-[240px] lg:min-h-0 bg-gradient-to-br from-[#17171c] via-[#111115] to-[#0a0a0d] rounded-3xl border border-white/8 p-5 sm:p-6 md:p-8 flex flex-col justify-between gap-8 overflow-hidden relative"
           >
-            <div>
-              <span className="text-[10px] uppercase tracking-[0.3em] text-[#e8e2d6]/40 font-mono">WHY CHOOSE US</span>
-              <h2 className="mt-2 text-2xl md:text-4xl font-serif text-[#e8e2d6] leading-tight">Trusted Marketplace<br />For Premium Websites</h2>
+            <div className="absolute -top-12 right-[-20%] h-40 w-40 rounded-full bg-[#e8e2d6]/8 blur-3xl pointer-events-none" />
+            <div className="absolute bottom-0 left-0 h-28 w-full bg-gradient-to-t from-black/25 to-transparent pointer-events-none" />
+
+            <div className="relative z-10 max-w-md">
+              <span className="text-[10px] uppercase tracking-[0.3em] text-[#e8e2d6]/45 font-mono">WHY CHOOSE US</span>
+              <h2 className="mt-3 text-[1.85rem] leading-[0.95] sm:text-2xl md:text-4xl font-serif text-[#e8e2d6]">
+                Trusted Marketplace
+                <span className="block italic text-white/70 mt-2">for premium websites</span>
+              </h2>
+              <p className="mt-4 max-w-xs text-xs sm:text-sm font-mono leading-5 text-[#e8e2d6]/55">
+                Curated builds, verified access, and a smoother handoff after every purchase.
+              </p>
             </div>
-            <div className="grid grid-cols-3 gap-4 sm:gap-10">
-              <div>
-                <h3 className="text-2xl md:text-4xl font-serif text-[#e8e2d6]">500+</h3>
-                <p className="text-[10px] text-[#e8e2d6]/50">Projects</p>
+
+            <div className="relative z-10 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-10 w-full">
+              <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 sm:border-0 sm:bg-transparent sm:p-0">
+                <div className="flex items-end justify-between sm:block">
+                  <div>
+                    <h3 className="text-3xl md:text-4xl font-serif text-[#e8e2d6]">500+</h3>
+                    <p className="mt-1 text-[10px] uppercase tracking-[0.24em] text-[#e8e2d6]/45">Projects</p>
+                  </div>
+                  <span className="text-[11px] font-mono text-[#e8e2d6]/35 sm:hidden">Delivered</span>
+                </div>
               </div>
-              <div>
-                <h3 className="text-2xl md:text-4xl font-serif text-[#e8e2d6]">98%</h3>
-                <p className="text-[10px] text-[#e8e2d6]/50">Satisfaction</p>
+
+              <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 sm:border-0 sm:bg-transparent sm:p-0">
+                <div className="flex items-end justify-between sm:block">
+                  <div>
+                    <h3 className="text-3xl md:text-4xl font-serif text-[#e8e2d6]">98%</h3>
+                    <p className="mt-1 text-[10px] uppercase tracking-[0.24em] text-[#e8e2d6]/45">Satisfaction</p>
+                  </div>
+                  <span className="text-[11px] font-mono text-[#e8e2d6]/35 sm:hidden">Buyer love</span>
+                </div>
               </div>
-              <div>
-                <h3 className="text-2xl md:text-4xl font-serif text-[#e8e2d6]">24/7</h3>
-                <p className="text-[10px] text-[#e8e2d6]/50">Support</p>
+
+              <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 sm:border-0 sm:bg-transparent sm:p-0">
+                <div className="flex items-end justify-between sm:block">
+                  <div>
+                    <h3 className="text-3xl md:text-4xl font-serif text-[#e8e2d6]">24/7</h3>
+                    <p className="mt-1 text-[10px] uppercase tracking-[0.24em] text-[#e8e2d6]/45">Support</p>
+                  </div>
+                  <span className="text-[11px] font-mono text-[#e8e2d6]/35 sm:hidden">Always on</span>
+                </div>
               </div>
             </div>
           </motion.div>
