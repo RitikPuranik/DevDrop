@@ -2,6 +2,8 @@ import React, { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import gsap from 'gsap';
 
+const SKIP_LOADER_SESSION_KEY = 'devdrop_skip_next_loader';
+
 // suppressOnce is a ref passed from App — when true, skip the animation once
 const Loader = ({ suppressOnce }) => {
   const containerRef = useRef(null);
@@ -11,6 +13,8 @@ const Loader = ({ suppressOnce }) => {
   const isFirst = useRef(true);
 
   useEffect(() => {
+    const shouldSkipFromSession = sessionStorage.getItem(SKIP_LOADER_SESSION_KEY) === 'true';
+
     // On the very first location trigger (intro→home), skip animation
     if (isFirst.current && suppressOnce?.current) {
       isFirst.current = false;
@@ -18,6 +22,14 @@ const Loader = ({ suppressOnce }) => {
       if (containerRef.current) containerRef.current.style.display = 'none';
       return;
     }
+
+    if (shouldSkipFromSession) {
+      sessionStorage.removeItem(SKIP_LOADER_SESSION_KEY);
+      isFirst.current = false;
+      if (containerRef.current) containerRef.current.style.display = 'none';
+      return;
+    }
+
     isFirst.current = false;
 
     // FIX: Kill any previous animations to prevent glitching on rapid navigation

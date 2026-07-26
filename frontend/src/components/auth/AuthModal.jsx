@@ -14,6 +14,7 @@ import { toast } from "sonner";
 // ─── Google One-Tap / GSI button helper ───────────────────────────────────────
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 let gsiScriptPromise = null;
+const SKIP_LOADER_SESSION_KEY = "devdrop_skip_next_loader";
 
 function getApiErrorMessage(error, fallbackMessage) {
   const responseData = error?.response?.data;
@@ -69,6 +70,8 @@ export default function AuthModal({ isOpen, onClose }) {
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [signupLoading, setSignupLoading] = useState(false);
   const googleInitializedRef = useRef(false);
   const lastGoogleCredentialRef = useRef(null);
   const navigate = useNavigate();
@@ -78,6 +81,7 @@ export default function AuthModal({ isOpen, onClose }) {
 
   const handleLoginChange = (e) => setLoginData({ ...loginData, [e.target.name]: e.target.value });
   const handleSignupChange = (e) => setSignupData({ ...signupData, [e.target.name]: e.target.value });
+  const skipNextPageLoader = () => sessionStorage.setItem(SKIP_LOADER_SESSION_KEY, "true");
 
   // ── Google callback ──────────────────────────────────────────────────────────
   const handleGoogleCredential = useCallback(async (response) => {
@@ -99,6 +103,7 @@ export default function AuthModal({ isOpen, onClose }) {
       localStorage.setItem("user", JSON.stringify(user));
       window.dispatchEvent(new Event("auth-changed"));
       toast.success("Signed in with Google!");
+      skipNextPageLoader();
       onClose();
       if (user.role === "admin") navigate("/admin");
       else navigate("/profile");
@@ -155,17 +160,21 @@ export default function AuthModal({ isOpen, onClose }) {
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
+      setLoginLoading(true);
       const res = await authAPI.login(loginData);
       const { token, user } = res.data.data;
       localStorage.setItem("token", token);
       localStorage.setItem("user", JSON.stringify(user));
       window.dispatchEvent(new Event("auth-changed"));
       toast.success("Login successful!");
+      skipNextPageLoader();
       onClose();
       if (user.role === "admin") navigate("/admin");
       else navigate("/profile");
     } catch (err) {
       toast.error(getApiErrorMessage(err, "Login failed"));
+    } finally {
+      setLoginLoading(false);
     }
   };
 
@@ -173,6 +182,7 @@ export default function AuthModal({ isOpen, onClose }) {
   const handleSignup = async (e) => {
     e.preventDefault();
     try {
+      setSignupLoading(true);
       const res = await authAPI.register(signupData);
       const { token, user } = res.data.data;
       localStorage.setItem("token", token);
@@ -182,6 +192,8 @@ export default function AuthModal({ isOpen, onClose }) {
       setIsSignUp(false);
     } catch (err) {
       toast.error(getApiErrorMessage(err, "Signup failed"));
+    } finally {
+      setSignupLoading(false);
     }
   };
 
@@ -210,6 +222,8 @@ export default function AuthModal({ isOpen, onClose }) {
     setIsForgotPassword(false);
     setForgotEmail("");
     setForgotLoading(false);
+    setLoginLoading(false);
+    setSignupLoading(false);
     lastGoogleCredentialRef.current = null;
   }, [isOpen]);
 
@@ -278,7 +292,7 @@ export default function AuthModal({ isOpen, onClose }) {
                   <AuthInput icon={Phone} type="text" placeholder="Phone Number (optional)" name="phone" value={signupData.phone} onChange={handleSignupChange} />
                   <AuthInput icon={Mail} type="email" placeholder="Email" name="email" value={signupData.email} onChange={handleSignupChange} />
                   <AuthInput icon={Lock} type="password" placeholder="Password" name="password" value={signupData.password} onChange={handleSignupChange} />
-                  <SubmitBtn label="Sign Up" />
+                  <SubmitBtn label={signupLoading ? "Signing Up..." : "Sign Up"} disabled={signupLoading || googleLoading} />
                 </form>
               </>
             ) : isForgotPassword ? (
@@ -313,7 +327,7 @@ export default function AuthModal({ isOpen, onClose }) {
                   >
                     Forgot your password?
                   </button>
-                  <SubmitBtn label="Login" />
+                  <SubmitBtn label={loginLoading ? "Logging In..." : "Login"} disabled={loginLoading || googleLoading} />
                 </form>
               </>
             )}
@@ -340,7 +354,7 @@ export default function AuthModal({ isOpen, onClose }) {
               <AuthInput icon={Phone} type="text" placeholder="Phone Number (optional)" name="phone" value={signupData.phone} onChange={handleSignupChange} />
               <AuthInput icon={Mail} type="email" placeholder="Email" name="email" value={signupData.email} onChange={handleSignupChange} />
               <AuthInput icon={Lock} type="password" placeholder="Password" name="password" value={signupData.password} onChange={handleSignupChange} />
-              <SubmitBtn label="Sign Up" />
+              <SubmitBtn label={signupLoading ? "Signing Up..." : "Sign Up"} disabled={signupLoading || googleLoading} />
             </form>
           </div>
 
@@ -381,7 +395,7 @@ export default function AuthModal({ isOpen, onClose }) {
                   Forgot your password?
                 </button>
 
-                <SubmitBtn label="Login" extraClass="mt-8" />
+                <SubmitBtn label={loginLoading ? "Logging In..." : "Login"} disabled={loginLoading || googleLoading} extraClass="mt-8" />
               </form>
             )}
           </div>
