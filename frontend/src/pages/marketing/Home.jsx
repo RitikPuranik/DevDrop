@@ -26,7 +26,7 @@ const SERVICES_DATA = [
   { title: "Landing Page", desc: "We design captivating landing pages that help turn visitors into potential customers." },
   { title: "PSD to HTML", desc: "We convert your ideas into reality with a pixel perfect approach." }
 ];
-const Home = ({ preloadedVideoRef, introComplete, fromIntro, useMobileHero }) => {
+const Home = ({ preloadedVideoRef, introComplete, fromIntro }) => {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
@@ -43,7 +43,6 @@ const Home = ({ preloadedVideoRef, introComplete, fromIntro, useMobileHero }) =>
         preloadedVideoRef={preloadedVideoRef}
         introComplete={showContent}
         fromIntro={fromIntro}
-        useMobileHero={useMobileHero}
       />
       
       <div className="relative z-10">
@@ -58,25 +57,23 @@ const Home = ({ preloadedVideoRef, introComplete, fromIntro, useMobileHero }) =>
 };
 
 /* ─── VIDEO HERO ─── */
-const VideoHeroSection = ({ preloadedVideoRef, introComplete, fromIntro, useMobileHero }) => {
+const VideoHeroSection = ({ preloadedVideoRef, introComplete, fromIntro }) => {
   const wrapperRef = useRef(null);
   const [visible, setVisible] = useState(false);
   const { scrollY } = useScroll();
 
-  const videoScale = useTransform(scrollY, [0, 1000], useMobileHero ? [1, 1.02] : [1.05, 1]);
-  const videoBlur   = useTransform(scrollY, [200, 800], useMobileHero ? ["blur(0px)", "blur(6px)"] : ["blur(0px)", "blur(10px)"]);
-  const opacity     = useTransform(scrollY, [0, 800], useMobileHero ? [1, 0.8] : [1, 0.55]);
+  const videoScale = useTransform(scrollY, [0, 1000], [1.03, 1]);
+  const videoBlur = useTransform(scrollY, [200, 800], ["blur(0px)", "blur(8px)"]);
+  const opacity = useTransform(scrollY, [0, 800], [1, 0.62]);
 
   useEffect(() => {
     const wrapper = wrapperRef.current;
     const vid = preloadedVideoRef?.current;
     if (!wrapper || !vid) return;
 
-    vid.className = useMobileHero
-      ? 'w-full h-full object-cover absolute inset-0 rounded-[2rem]'
-      : 'w-full h-full object-cover absolute inset-0 rounded-2xl md:rounded-none';
+    vid.className = 'w-full h-full object-cover absolute inset-0 rounded-[1.75rem] sm:rounded-[2rem] lg:rounded-none';
     if (!wrapper.contains(vid)) wrapper.appendChild(vid);
-  }, [preloadedVideoRef, useMobileHero]);
+  }, [preloadedVideoRef]);
 
   useEffect(() => {
     if (!introComplete) return;
@@ -101,29 +98,17 @@ const VideoHeroSection = ({ preloadedVideoRef, introComplete, fromIntro, useMobi
 
   return (
     <motion.section 
-      className={`relative md:sticky md:top-0 w-full overflow-hidden z-0 flex flex-col justify-center items-center px-4 md:px-0 ${
-        useMobileHero
-          ? 'min-h-[72vh] sm:min-h-[76vh] pt-24 pb-10'
-          : 'min-h-[40vh] sm:min-h-[50vh] md:h-screen pt-8 md:pt-0'
-      }`} 
+      className="relative lg:sticky lg:top-0 w-full overflow-hidden z-0 flex flex-col justify-center items-center px-4 sm:px-5 md:px-6 lg:px-0 pt-24 sm:pt-28 md:pt-32 lg:pt-0 pb-8 sm:pb-10 lg:pb-0 min-h-[56vh] sm:min-h-[62vh] md:min-h-[72vh] lg:h-screen"
       animate={{ opacity: visible ? 1 : 0 }}
       transition={{ duration: 1 }}
     >
       <motion.div 
         style={{ scale: videoScale, filter: videoBlur, opacity }} 
-        className={`relative ${
-          useMobileHero
-            ? 'w-full max-w-[22rem] sm:max-w-[25rem] aspect-[9/16]'
-            : 'w-full max-w-[1200px] md:max-w-none aspect-[4/3] sm:aspect-video md:aspect-auto md:absolute md:inset-0 md:w-full md:h-full'
-        }`}
+        className="relative w-full max-w-[28rem] sm:max-w-[40rem] md:max-w-[56rem] lg:max-w-none aspect-[16/12] sm:aspect-[16/10] md:aspect-video lg:absolute lg:inset-0 lg:w-full lg:h-full"
       >
         <div
           ref={wrapperRef}
-          className={`absolute inset-0 w-full h-full overflow-hidden ${
-            useMobileHero
-              ? 'rounded-[2rem] border border-white/10 bg-[#0b0b0b] shadow-[0_24px_80px_rgba(0,0,0,0.55)]'
-              : 'rounded-2xl md:rounded-none shadow-2xl md:shadow-none'
-          }`}
+          className="absolute inset-0 w-full h-full overflow-hidden rounded-[1.75rem] sm:rounded-[2rem] border border-white/10 bg-[#0b0b0b] shadow-[0_24px_80px_rgba(0,0,0,0.42)] lg:rounded-none lg:border-0 lg:bg-transparent lg:shadow-none"
         />
       </motion.div>
     </motion.section>

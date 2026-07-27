@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { Toaster } from "sonner";
 
@@ -20,9 +20,7 @@ import Checkout from './pages/marketplace/Checkout';
 import VerifyEmail from './pages/auth/VerifyEmail';
 import ResetPassword from './pages/auth/ResetPassword';
 
-const DESKTOP_VIDEO_SRC = '/dewdrop.s3.mp4';
-const MOBILE_VIDEO_SRC = '/devdrophpone.mp4';
-const MOBILE_HERO_QUERY = '(max-width: 767px)';
+const HERO_VIDEO_SRC = '/dewdrop.s3.mp4';
 
 function AppContent() {
   const location = useLocation();
@@ -38,21 +36,15 @@ function AppContent() {
   const [showIntro, setShowIntro] = useState(false);
   const [appReady, setAppReady] = useState(false);
   const [introComplete, setIntroComplete] = useState(false);
-  const [useMobileHero, setUseMobileHero] = useState(false);
 
   const suppressNextLoader = useRef(false);
   const fromIntro = useRef(false);
   const preloadedVideoRef = useRef(null);
-  const introCompleteRef = useRef(false);
 
   const videoReadyRef = useRef({
     element: null,
     playAfterIntro: false,
   });
-
-  useEffect(() => {
-    introCompleteRef.current = introComplete;
-  }, [introComplete]);
 
   useEffect(() => {
     const seenIntro = sessionStorage.getItem('devdrop_intro_seen');
@@ -65,56 +57,19 @@ function AppContent() {
 
     setAppReady(true);
 
-    // Preload the hero video and swap sources when the mobile breakpoint changes.
-    const mediaQuery = window.matchMedia(MOBILE_HERO_QUERY);
+    // Preload the shared hero video once so every viewport uses the same asset.
     const vid = document.createElement('video');
     vid.muted = true;
     vid.playsInline = true;
     vid.preload = 'auto';
     vid.loop = false;
+    vid.src = HERO_VIDEO_SRC;
+    vid.load();
 
     preloadedVideoRef.current = vid;
     videoReadyRef.current.element = vid;
 
-    const setHeroVideoSource = (isMobileViewport) => {
-      const nextSrc = isMobileViewport ? MOBILE_VIDEO_SRC : DESKTOP_VIDEO_SRC;
-      const wasPlaying = !vid.paused && !vid.ended;
-
-      setUseMobileHero(isMobileViewport);
-
-      if (vid.dataset.activeSrc === nextSrc) {
-        return;
-      }
-
-      vid.pause();
-      vid.src = nextSrc;
-      vid.dataset.activeSrc = nextSrc;
-      vid.load();
-
-      if (wasPlaying || introCompleteRef.current) {
-        vid.play().catch(() => {});
-      }
-    };
-
-    setHeroVideoSource(mediaQuery.matches);
-
-    const handleViewportChange = (event) => {
-      setHeroVideoSource(event.matches);
-    };
-
-    if (mediaQuery.addEventListener) {
-      mediaQuery.addEventListener('change', handleViewportChange);
-    } else {
-      mediaQuery.addListener(handleViewportChange);
-    }
-
     return () => {
-      if (mediaQuery.addEventListener) {
-        mediaQuery.removeEventListener('change', handleViewportChange);
-      } else {
-        mediaQuery.removeListener(handleViewportChange);
-      }
-
       vid.pause();
     };
   }, []);
@@ -157,7 +112,6 @@ function AppContent() {
                     videoReadyRef={videoReadyRef}
                     introComplete={introComplete}
                     fromIntro={fromIntro}
-                    useMobileHero={useMobileHero}
                   />
                 }
               />
