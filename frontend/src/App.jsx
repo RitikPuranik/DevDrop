@@ -82,7 +82,7 @@ function AppContent() {
     const vid = preloadedVideoRef.current;
     if (vid) {
       vid.currentTime = 0;
-      vid.play().catch(() => {});
+      vid.play().catch(() => { });
     }
 
     setShowIntro(false);
