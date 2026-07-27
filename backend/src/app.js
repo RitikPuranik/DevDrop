@@ -72,6 +72,11 @@ app.use('/api/auctions',  require('./modules/auction'));
 app.use('/api/analytics', require('./modules/analytics'));
 app.use('/api/contact',   require('./modules/contact'));
 
+
+app.get("/debug-sentry", function mainHandler(req, res) {
+  throw new Error("My first Sentry error!");
+});
+
 app.use(notFound);
 
 if (process.env.SENTRY_DSN) {

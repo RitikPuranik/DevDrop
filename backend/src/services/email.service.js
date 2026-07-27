@@ -189,7 +189,7 @@ const sendStatusUpdateEmail = async (seller, website, status, comment = '') => {
             ${comment ? `<p><strong>Admin Comment:</strong> ${comment}</p>` : ''}
           </div>
           <div style="margin: 30px 0;">
-            <a href="${process.env.FRONTEND_URL}/dashboard/websites" style="background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">
+            <a href="${process.env.FRONTEND_URL}/template" style="background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">
               View Website
             </a>
           </div>
