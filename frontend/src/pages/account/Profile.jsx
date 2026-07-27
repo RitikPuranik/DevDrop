@@ -796,15 +796,48 @@ export default function Profile() {
               {wishlist.length === 0 ? (
                 <EmptyState icon={Heart} title="Wishlist empty" description="Save templates you love for later" action="Browse" onAction={() => navigate('/template')} />
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {wishlist.map((w) => (
-                    <div key={w._id} className="bg-[#111] border border-white/5 rounded-2xl p-5 group flex justify-between items-center">
-                      <span className="font-bold">{w.websiteId?.name}</span>
-                      <button onClick={() => handleRemoveWishlist(w.websiteId?._id)} className="p-2 hover:bg-red-500/10 text-red-400 rounded-lg">
-                        <Heart size={14} className="fill-current" />
-                      </button>
-                    </div>
-                  ))}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {wishlist.map((w) => {
+                    const web = w.websiteId || {};
+                    const cat = web.category || 'free';
+                    return (
+                      <div
+                        key={w._id}
+                        onClick={() => navigate(`/website/${web._id}`)}
+                        className="bg-[#111] border border-white/5 rounded-3xl p-6 hover:border-white/15 transition-all group cursor-pointer flex flex-col justify-between h-full"
+                      >
+                        <div>
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex-1 pr-4">
+                              <h3 className="font-bold text-lg tracking-tight line-clamp-1">{web.name || 'Template'}</h3>
+                              <p className="text-white/30 text-xs mt-1 line-clamp-2">{web.description || 'No description available.'}</p>
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemoveWishlist(web._id);
+                              }}
+                              className="p-2 bg-white/5 rounded-xl hover:bg-red-500/10 text-red-400 transition-all shrink-0"
+                            >
+                              <Heart size={16} className="fill-current" />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between pt-4 mt-4 border-t border-white/5">
+                          <span className="text-[#8b7355] font-bold text-sm">
+                            {cat === 'free' ? 'FREE' : `₹${web.price || 0}`}
+                          </span>
+                          <span className={`text-[8px] font-bold uppercase tracking-[0.2em] px-3 py-1 rounded-full ${
+                            cat === 'free' ? 'text-emerald-400 bg-emerald-500/10' :
+                            cat === 'exclusive' ? 'text-orange-400 bg-orange-500/10' :
+                            'text-[#8b7355] bg-[#8b7355]/10'
+                          }`}>
+                            {cat}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </motion.div>
