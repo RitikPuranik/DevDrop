@@ -5,6 +5,19 @@ const morgan = require('morgan');
 const compression = require('compression');
 const { errorHandler, notFound } = require('./shared/middleware/errorHandler');
 const { generalLimiter } = require('./shared/middleware/rateLimit');
+const Sentry = require('@sentry/node');
+const { nodeProfilingIntegration } = require('@sentry/profiling-node');
+
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    integrations: [
+      nodeProfilingIntegration(),
+    ],
+    tracesSampleRate: 1.0,
+    profilesSampleRate: 1.0,
+  });
+}
 
 const app = express();
 
@@ -60,6 +73,11 @@ app.use('/api/analytics', require('./modules/analytics'));
 app.use('/api/contact',   require('./modules/contact'));
 
 app.use(notFound);
+
+if (process.env.SENTRY_DSN) {
+  Sentry.setupExpressErrorHandler(app);
+}
+
 app.use(errorHandler);
 
 module.exports = app;

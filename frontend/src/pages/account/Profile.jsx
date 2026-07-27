@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   User, Package, Heart, DollarSign, Upload, ShoppingBag, 
   ExternalLink, Trash2, Loader2, LogOut, Plus, AlertCircle,
-  ArrowLeft, Download, CheckCircle, Landmark, Camera, X
+  ArrowLeft, Download, CheckCircle, Landmark, Camera, X, Eye
 } from 'lucide-react';
 import { userAPI } from '../../api/user';
 import { sellerAPI } from '../../api/seller';
@@ -800,37 +800,55 @@ export default function Profile() {
                   {wishlist.map((w) => {
                     const web = w.websiteId || {};
                     const cat = web.category || 'free';
+                    const previewVideo = web.files?.previewVideo?.url || null;
+
                     return (
                       <div
                         key={w._id}
                         onClick={() => navigate(`/website/${web._id}`)}
-                        className="bg-[#111] border border-white/5 rounded-3xl p-6 hover:border-white/15 transition-all group cursor-pointer flex flex-col justify-between h-full"
+                        className="bg-[#111] border border-white/5 rounded-[32px] p-4 hover:border-orange-100/20 transition-all duration-500 group cursor-pointer flex flex-col justify-between h-full"
                       >
                         <div>
-                          <div className="flex items-start justify-between mb-3">
+                          <div className="group/preview aspect-[12/11] rounded-[24px] mb-4 relative overflow-hidden flex items-center justify-center border border-white/5 bg-[#1a1a1a]">
+                            {previewVideo ? (
+                              <video
+                                src={previewVideo}
+                                autoPlay
+                                muted
+                                loop
+                                playsInline
+                                ref={(el) => { if(el) el.play().catch(()=>{}) }}
+                                className="absolute inset-0 h-full w-full object-contain transition-all duration-500 group-hover/preview:scale-[1.03] group-hover/preview:blur-sm group-hover/preview:brightness-[0.45]"
+                              />
+                            ) : (
+                              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.08),_transparent_42%),linear-gradient(180deg,_rgba(255,255,255,0.03),_rgba(0,0,0,0.35))] transition-all duration-500 group-hover/preview:blur-sm group-hover/preview:brightness-[0.45]" />
+                            )}
+                            {!previewVideo && <Eye className="text-white/10 transition-all duration-500 group-hover/preview:opacity-0" size={54} />}
+                          </div>
+
+                          <div className="flex items-start justify-between px-2 mb-1">
                             <div className="flex-1 pr-4">
-                              <h3 className="font-bold text-lg tracking-tight line-clamp-1">{web.name || 'Template'}</h3>
-                              <p className="text-white/30 text-xs mt-1 line-clamp-2">{web.description || 'No description available.'}</p>
+                              <h3 className="font-black text-lg tracking-tight line-clamp-1">{web.name || 'Template'}</h3>
                             </div>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleRemoveWishlist(web._id);
                               }}
-                              className="p-2 bg-white/5 rounded-xl hover:bg-red-500/10 text-red-400 transition-all shrink-0"
+                              className="p-2 -mr-2 -mt-2 rounded-xl hover:bg-red-500/10 text-red-400 transition-all shrink-0"
                             >
                               <Heart size={16} className="fill-current" />
                             </button>
                           </div>
                         </div>
-                        <div className="flex items-center justify-between pt-4 mt-4 border-t border-white/5">
-                          <span className="text-[#8b7355] font-bold text-sm">
+                        <div className="flex items-center justify-between mt-2 px-2 pb-2">
+                          <span className="text-[#8b7355] font-bold text-sm tracking-widest uppercase">
                             {cat === 'free' ? 'FREE' : `₹${web.price || 0}`}
                           </span>
-                          <span className={`text-[8px] font-bold uppercase tracking-[0.2em] px-3 py-1 rounded-full ${
-                            cat === 'free' ? 'text-emerald-400 bg-emerald-500/10' :
-                            cat === 'exclusive' ? 'text-orange-400 bg-orange-500/10' :
-                            'text-[#8b7355] bg-[#8b7355]/10'
+                          <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                            cat === 'free' ? 'bg-emerald-500/80 text-white' :
+                            cat === 'exclusive' ? 'bg-orange-500/80 text-white' :
+                            'bg-[#8b7355]/80 text-white'
                           }`}>
                             {cat}
                           </span>
