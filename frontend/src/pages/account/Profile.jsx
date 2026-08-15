@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   User, Package, Heart, DollarSign, Upload, ShoppingBag, 
   ExternalLink, Trash2, Loader2, LogOut, Plus, AlertCircle,
-  ArrowLeft, Download, CheckCircle, Landmark, Camera, X, Eye
+  ArrowLeft, Download, CheckCircle, Landmark, Camera, X, Eye,
+  ArrowUpRight, TrendingUp, XCircle, Clock, AlertTriangle
 } from 'lucide-react';
 import { userAPI } from '../../api/user';
 import { sellerAPI } from '../../api/seller';
@@ -689,33 +690,82 @@ export default function Profile() {
                 listings.length === 0 ? (
                   <EmptyState icon={Upload} title="No listings yet" description="Start selling your templates" action="Get Started" onAction={() => setIsAddingListing(true)} />
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {listings.map((item) => (
-                      <div key={item._id} className="bg-[#111] border border-white/5 rounded-3xl p-6 hover:border-white/15 transition-all group">
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex-1">
-                            <h3 className="font-bold text-lg tracking-tight">{item.name}</h3>
-                            <p className="text-white/30 text-xs mt-1 line-clamp-1">{item.description}</p>
+                      <div key={item._id} className="bg-[#111] border border-white/5 rounded-[32px] p-4 hover:border-orange-100/20 transition-all duration-500 group flex flex-col justify-between h-full">
+                        <div>
+                          <div className="relative">
+                            <WishlistPreview
+                              previewVideo={item.files?.previewVideo?.url || null}
+                              fallback={getListingPreviewFallback(item.status)}
+                            />
+                            <div className="absolute top-3 left-3 z-10">
+                              <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                                item.category === 'exclusive' ? 'bg-orange-500/80 text-white' :
+                                item.category === 'paid' ? 'bg-[#8b7355]/80 text-white' :
+                                'bg-emerald-500/80 text-white'
+                              }`}>
+                                {item.category}
+                              </span>
+                            </div>
+                            <div className="absolute top-3 right-3 z-10">
+                              <StatusBadge status={item.status} />
+                            </div>
                           </div>
-                          <StatusBadge status={item.status} />
+
+                          <div className="px-2">
+                            <h3 className="font-black text-lg tracking-tight line-clamp-1">{item.name}</h3>
+                            <p className="text-white/30 text-xs mt-1.5 leading-relaxed line-clamp-2">{item.description}</p>
+                          </div>
+
+                          {item.adminComment && (
+                            <div className={`mx-2 mt-3 rounded-2xl border px-4 py-3 ${
+                              item.status === 'rejected' ? 'border-red-500/15 bg-red-500/[0.05]' : 'border-sky-500/15 bg-sky-500/[0.05]'
+                            }`}>
+                              <p className={`flex items-center gap-1.5 text-[9px] uppercase tracking-[0.2em] font-bold mb-1.5 ${
+                                item.status === 'rejected' ? 'text-red-300/70' : 'text-sky-300/70'
+                              }`}>
+                                <AlertCircle size={10} /> Admin Note
+                              </p>
+                              <p className="text-xs text-white/50 leading-relaxed">{item.adminComment}</p>
+                            </div>
+                          )}
                         </div>
-                        {item.adminComment && (
-                          <div className="mb-4 rounded-2xl border border-white/5 bg-black/20 px-4 py-3">
-                            <p className="text-[9px] uppercase tracking-[0.2em] text-white/35 font-bold mb-2">Admin Note</p>
-                            <p className="text-xs text-white/55 leading-relaxed">{item.adminComment}</p>
+
+                        <div>
+                          <div className="flex items-center gap-4 px-2 mt-4 mb-3 text-white/25">
+                            <span className="flex items-center gap-1.5 text-[10px] font-bold" title="Views">
+                              <Eye size={11} /> {item.viewCount || 0}
+                            </span>
+                            <span className="flex items-center gap-1.5 text-[10px] font-bold" title="Wishlisted">
+                              <Heart size={11} /> {item.wishlistCount || 0}
+                            </span>
+                            <span className="flex items-center gap-1.5 text-[10px] font-bold" title="Sold">
+                              <TrendingUp size={11} /> {item.salesCount || 0}
+                            </span>
                           </div>
-                        )}
-                        <div className="flex items-center justify-between pt-4 border-t border-white/5">
-                          <span className="text-[#8b7355] font-bold text-sm">{item.price === 0 ? 'FREE' : `₹${item.price}`}</span>
-                          <div className="flex gap-2">
-                            {item.deployedUrl && (
-                              <a href={item.deployedUrl} target="_blank" rel="noreferrer" className="p-2 bg-white/5 rounded-xl hover:bg-white/10">
-                                <ExternalLink size={14} />
-                              </a>
-                            )}
-                            <button onClick={() => handleDeleteListing(item._id)} className="p-2 bg-white/5 rounded-xl hover:bg-red-500/20 hover:text-red-400 transition-all">
-                              <Trash2 size={14} />
-                            </button>
+
+                          <div className="flex items-center justify-between px-2 pb-2 pt-3 border-t border-white/5">
+                            <span className="text-[#8b7355] font-bold text-sm tracking-widest uppercase">{item.price === 0 ? 'FREE' : `₹${item.price}`}</span>
+                            <div className="flex gap-2">
+                              {item.status === 'approved' && (
+                                <button
+                                  onClick={() => navigate(`/website/${item._id}`)}
+                                  title="View live listing"
+                                  className="p-2 bg-white/5 rounded-xl hover:bg-white/10 transition-all"
+                                >
+                                  <ArrowUpRight size={14} />
+                                </button>
+                              )}
+                              {item.deployedUrl && (
+                                <a href={item.deployedUrl} target="_blank" rel="noreferrer" title="Open deployed site" className="p-2 bg-white/5 rounded-xl hover:bg-white/10 transition-all">
+                                  <ExternalLink size={14} />
+                                </a>
+                              )}
+                              <button onClick={() => handleDeleteListing(item._id)} title="Delete listing" className="p-2 bg-white/5 rounded-xl hover:bg-red-500/20 hover:text-red-400 transition-all">
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -731,44 +781,51 @@ export default function Profile() {
               {purchases.length === 0 ? (
                 <EmptyState icon={ShoppingBag} title="No purchases yet" description="Browse templates to find your next project" action="Browse" onAction={() => navigate('/template')} />
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {purchases.map((p) => {
                     const web = p.websiteId || {};
                     const cat = web.category || 'paid';
+                    const previewVideo = web.files?.previewVideo?.url || null;
                     return (
                       <div
                         key={p._id}
                         onClick={() => navigate(`/purchases/${p._id}`)}
-                        className="bg-[#111] border border-white/5 rounded-3xl p-6 hover:border-white/15 transition-all group cursor-pointer"
+                        className="bg-[#111] border border-white/5 rounded-[32px] p-4 hover:border-orange-100/20 transition-all duration-500 group cursor-pointer flex flex-col justify-between h-full"
                       >
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex-1">
-                            <h3 className="font-bold text-lg tracking-tight">{web.name || 'Template'}</h3>
-                            <p className="text-white/20 text-[10px] mt-1">
-                              {p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Recently'}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-[0.15em] px-2.5 py-1 rounded-full text-emerald-400 bg-emerald-500/10">
+                        <div>
+                          <WishlistPreview previewVideo={previewVideo} />
+
+                          <div className="flex items-start justify-between px-2 mb-1">
+                            <div className="flex-1 pr-4">
+                              <h3 className="font-black text-lg tracking-tight line-clamp-1">{web.name || 'Template'}</h3>
+                              <p className="text-white/20 text-[10px] mt-1">
+                                {p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Recently'}
+                              </p>
+                            </div>
+                            <span className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-[0.15em] px-2.5 py-1 rounded-full text-emerald-400 bg-emerald-500/10 shrink-0">
                               <CheckCircle size={8} /> Owned
                             </span>
-                            <span className={`text-[8px] font-bold uppercase tracking-[0.2em] px-3 py-1 rounded-full ${
-                              cat === 'free' ? 'text-emerald-400 bg-emerald-500/10' :
-                              cat === 'exclusive' ? 'text-orange-400 bg-orange-500/10' :
-                              'text-[#8b7355] bg-[#8b7355]/10'
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="flex items-center justify-between px-2 mb-3">
+                            <span className="text-[#8b7355] font-bold text-sm tracking-widest uppercase">
+                              {p.amount ? `₹${p.amount}` : cat === 'free' ? 'FREE' : `₹${web.price || 0}`}
+                            </span>
+                            <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                              cat === 'free' ? 'bg-emerald-500/80 text-white' :
+                              cat === 'exclusive' ? 'bg-orange-500/80 text-white' :
+                              'bg-[#8b7355]/80 text-white'
                             }`}>
                               {cat}
                             </span>
                           </div>
-                        </div>
-                        <div className="flex items-center justify-between pt-4 border-t border-white/5">
-                          <span className="text-[#8b7355] font-bold text-sm">
-                            {p.amount ? `₹${p.amount}` : cat === 'free' ? 'FREE' : `₹${web.price || 0}`}
-                          </span>
-                          <div className="flex gap-2">
+
+                          <div className="flex gap-2 px-2 pb-2">
                             {web.deployedUrl && (
                               <a onClick={(e) => e.stopPropagation()} href={web.deployedUrl} target="_blank" rel="noreferrer"
-                                className="flex items-center gap-1.5 px-3 py-2 bg-white/5 rounded-xl text-[10px] font-bold text-white/40 hover:text-white hover:bg-white/10 transition-all">
+                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 bg-white/5 rounded-xl text-[10px] font-bold text-white/40 hover:text-white hover:bg-white/10 transition-all">
                                 <ExternalLink size={11} /> Preview
                               </a>
                             )}
@@ -777,7 +834,7 @@ export default function Profile() {
                                 e.stopPropagation();
                                 navigate(`/purchases/${p._id}`);
                               }}
-                              className="flex items-center gap-1.5 px-4 py-2 bg-emerald-500 text-black rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-emerald-600 transition-all"
+                              className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 bg-emerald-500 text-black rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-emerald-600 transition-all"
                             >
                               <Download size={11} /> Open Access
                             </button>
@@ -809,22 +866,7 @@ export default function Profile() {
                         className="bg-[#111] border border-white/5 rounded-[32px] p-4 hover:border-orange-100/20 transition-all duration-500 group cursor-pointer flex flex-col justify-between h-full"
                       >
                         <div>
-                          <div className="group/preview aspect-[12/11] rounded-[24px] mb-4 relative overflow-hidden flex items-center justify-center border border-white/5 bg-[#1a1a1a]">
-                            {previewVideo ? (
-                              <video
-                                src={previewVideo}
-                                autoPlay
-                                muted
-                                loop
-                                playsInline
-                                ref={(el) => { if(el) el.play().catch(()=>{}) }}
-                                className="absolute inset-0 h-full w-full object-contain transition-all duration-500 group-hover/preview:scale-[1.03] group-hover/preview:blur-sm group-hover/preview:brightness-[0.45]"
-                              />
-                            ) : (
-                              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.08),_transparent_42%),linear-gradient(180deg,_rgba(255,255,255,0.03),_rgba(0,0,0,0.35))] transition-all duration-500 group-hover/preview:blur-sm group-hover/preview:brightness-[0.45]" />
-                            )}
-                            {!previewVideo && <Eye className="text-white/10 transition-all duration-500 group-hover/preview:opacity-0" size={54} />}
-                          </div>
+                          <WishlistPreview previewVideo={previewVideo} />
 
                           <div className="flex items-start justify-between px-2 mb-1">
                             <div className="flex-1 pr-4">
@@ -922,15 +964,77 @@ export default function Profile() {
 
 // --- HELPER COMPONENTS ---
 
+function WishlistPreview({ previewVideo, fallback }) {
+  const videoRef = useRef(null);
+
+  return (
+    <div
+      className="group/preview aspect-square rounded-[24px] mb-4 relative overflow-hidden flex items-center justify-center border border-white/5 bg-[#1a1a1a]"
+      onMouseEnter={() => videoRef.current?.play().catch(() => {})}
+      onMouseLeave={() => videoRef.current?.pause()}
+    >
+      {previewVideo ? (
+        <video
+          ref={videoRef}
+          src={previewVideo}
+          muted
+          loop
+          playsInline
+          preload="metadata"
+          className="absolute inset-0 h-full w-full object-contain transition-all duration-500 group-hover/preview:scale-[1.03]"
+        />
+      ) : fallback ? (
+        <div className="absolute inset-0 flex items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.05),_transparent_42%)] px-4 text-center">
+          {fallback}
+        </div>
+      ) : (
+        <>
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.08),_transparent_42%),linear-gradient(180deg,_rgba(255,255,255,0.03),_rgba(0,0,0,0.35))] transition-all duration-500 group-hover/preview:blur-sm group-hover/preview:brightness-[0.45]" />
+          <Eye className="text-white/10 transition-all duration-500 group-hover/preview:opacity-0" size={54} />
+        </>
+      )}
+    </div>
+  );
+}
+
+function getListingPreviewFallback(status) {
+  const config = {
+    rejected: { icon: XCircle, label: 'Listing rejected', tone: 'text-red-400/70' },
+    pending_review: { icon: Clock, label: 'Awaiting review', tone: 'text-amber-400/70' },
+    changes_requested: { icon: AlertTriangle, label: 'Changes requested', tone: 'text-sky-400/70' },
+  };
+  const c = config[status];
+  if (!c) return null;
+  const Icon = c.icon;
+  return (
+    <div className={`flex flex-col items-center gap-2.5 ${c.tone}`}>
+      <Icon size={30} strokeWidth={1.5} />
+      <span className="text-[10px] font-bold uppercase tracking-[0.15em]">{c.label}</span>
+    </div>
+  );
+}
+
 function StatusBadge({ status }) {
   const config = {
-    approved: { label: 'Live', color: 'text-emerald-400 bg-emerald-500/10' },
-    pending_review: { label: 'Pending', color: 'text-amber-400 bg-amber-500/10' },
-    changes_requested: { label: 'Changes', color: 'text-sky-300 bg-sky-500/10' },
-    rejected: { label: 'Rejected', color: 'text-red-400 bg-red-500/10' },
+    approved: { label: 'Live', color: 'bg-emerald-500/85 text-white', pulse: true },
+    pending_review: { label: 'Pending', color: 'bg-amber-500/85 text-white' },
+    changes_requested: { label: 'Changes', color: 'bg-sky-500/85 text-white' },
+    rejected: { label: 'Rejected', color: 'bg-red-500/85 text-white' },
+    in_auction: { label: 'In Auction', color: 'bg-orange-500/85 text-white' },
+    sold: { label: 'Sold', color: 'bg-white/85 text-black' },
   };
-  const c = config[status] || { label: status, color: 'text-white/40 bg-white/5' };
-  return <span className={`text-[8px] font-bold uppercase tracking-[0.2em] px-3 py-1 rounded-full ${c.color}`}>{c.label}</span>;
+  const c = config[status] || { label: status, color: 'bg-white/15 text-white' };
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider backdrop-blur-md ${c.color}`}>
+      {c.pulse && (
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white" />
+        </span>
+      )}
+      {c.label}
+    </span>
+  );
 }
 
 function EmptyState({ icon: Icon, title, description, action, onAction }) {

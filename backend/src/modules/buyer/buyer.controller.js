@@ -6,10 +6,15 @@ const emailService = require('../../services/email.service');
 const { getPaginationMetadata } = require('../../shared/utils/helpers');
 const supabaseService = require('../../services/supabase.service');
 
-const getPublicAssetUrl = (filePath) => {
+const getPublicAssetUrl = async (filePath) => {
   if (!filePath) return null;
   if (/^https?:\/\//.test(filePath)) return filePath;
-  return supabaseService.getPublicUrl(filePath);
+  try {
+    return await supabaseService.createSignedUrl(filePath, 7200);
+  } catch (err) {
+    console.error('Error generating signed URL:', err);
+    return null;
+  }
 };
 
 const getPreviewVideoAccessUrl = async (filePath) => {
@@ -40,10 +45,10 @@ const hydratePurchaseWebsite = async (purchaseDoc) => {
   }
 
   if (website?.sellerId?.avatar) {
-    website.sellerId.avatar = getPublicAssetUrl(website.sellerId.avatar);
+    website.sellerId.avatar = await getPublicAssetUrl(website.sellerId.avatar);
   }
   if (purchase.sellerId && purchase.sellerId.avatar) {
-    purchase.sellerId.avatar = getPublicAssetUrl(purchase.sellerId.avatar);
+    purchase.sellerId.avatar = await getPublicAssetUrl(purchase.sellerId.avatar);
   }
 
   return purchase;

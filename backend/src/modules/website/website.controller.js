@@ -158,4 +158,4 @@ const searchWebsites = async (req, res) => {
   }
 };
 
-module.exports = { browseWebsites, getWebsiteDetails, getByCategory, searchWebsites };
+module.exports = { browseWebsites, getWebsiteDetails, getByCategory, searchWebsites, hydrateWebsitePreviewsAsync };

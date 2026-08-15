@@ -4,6 +4,7 @@ const Purchase = require('../payment/purchase.model');
 const Payout = require('../payout/payout.model');
 const { WEBSITE_STATUS, WEBSITE_CATEGORIES } = require('../../shared/utils/constants');
 const { getPaginationMetadata } = require('../../shared/utils/helpers');
+const { hydrateWebsitePreviewsAsync } = require('../website/website.controller');
 
 const submitWebsite = async (req, res) => {
   try {
@@ -65,7 +66,9 @@ const getMyWebsites = async (req, res) => {
       salesCount: salesMap[w._id.toString()] || 0,
     }));
 
-    res.json({ success: true, data: websitesWithStats, pagination: getPaginationMetadata(parseInt(page), parseInt(limit), total) });
+    const data = await hydrateWebsitePreviewsAsync(websitesWithStats);
+
+    res.json({ success: true, data, pagination: getPaginationMetadata(parseInt(page), parseInt(limit), total) });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error fetching websites', error: error.message });
   }

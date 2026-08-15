@@ -1,5 +1,6 @@
 const Wishlist = require('./wishlist.model');
 const Website = require('../website/website.model');
+const { hydrateWebsitePreviewsAsync } = require('../website/website.controller');
 const { getPaginationMetadata } = require('../../shared/utils/helpers');
 
 /**
@@ -115,7 +116,7 @@ const getWishlist = async (req, res) => {
     const wishlists = await Wishlist.find({ userId: req.userId })
       .populate({
         path: 'websiteId',
-        select: 'name description category price deployedUrl status',
+        select: 'name description category price deployedUrl previewUrl previewVideoUrl status wishlistCount',
         match: { isDeleted: false }, // Only get non-deleted websites
       })
       .sort({ addedAt: -1 })
@@ -125,11 +126,19 @@ const getWishlist = async (req, res) => {
     // Filter out null websites (deleted ones)
     const validWishlists = wishlists.filter(w => w.websiteId !== null);
 
+    // Build signed preview video URLs the same way the marketplace listing does,
+    // otherwise files.previewVideo.url never gets set and cards fall back to the empty state
+    const hydratedWebsites = await hydrateWebsitePreviewsAsync(validWishlists.map(w => w.websiteId));
+    const data = validWishlists.map((w, i) => ({
+      ...w.toObject(),
+      websiteId: hydratedWebsites[i],
+    }));
+
     const total = await Wishlist.countDocuments({ userId: req.userId });
 
     res.json({
       success: true,
-      data: validWishlists,
+      data,
       pagination: getPaginationMetadata(parseInt(page), parseInt(limit), total),
     });
   } catch (error) {
