@@ -133,6 +133,10 @@ export default function Profile() {
   const [purchases, setPurchases] = useState([]);
   const [wishlist, setWishlist] = useState([]);
   const [loading, setLoading] = useState(true);
+  // Per-tab loading flags — drive the skeleton state shown while that tab's data is in flight
+  const [listingsLoading, setListingsLoading] = useState(false);
+  const [purchasesLoading, setPurchasesLoading] = useState(false);
+  const [wishlistLoading, setWishlistLoading] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const avatarInputRef = useRef(null);
 
@@ -212,23 +216,29 @@ export default function Profile() {
 
   const fetchListings = async () => {
     try {
+      setListingsLoading(true);
       const res = await sellerAPI.getMyWebsites();
       setListings(res.data?.data || []);
     } catch { setListings([]); }
+    finally { setListingsLoading(false); }
   };
 
   const fetchPurchases = async () => {
     try {
+      setPurchasesLoading(true);
       const res = await buyerAPI.getMyPurchases();
       setPurchases(res.data?.data || []);
     } catch { setPurchases([]); }
+    finally { setPurchasesLoading(false); }
   };
 
   const fetchWishlist = async () => {
     try {
+      setWishlistLoading(true);
       const res = await wishlistAPI.getWishlist();
       setWishlist(res.data?.data || []);
     } catch { setWishlist([]); }
+    finally { setWishlistLoading(false); }
   };
 
   const fetchBankDetails = async () => {
@@ -687,9 +697,17 @@ export default function Profile() {
                 </motion.div>
               ) : (
                 /* ── LISTINGS GRID ── */
-                listings.length === 0 ? (
-                  <EmptyState icon={Upload} title="No listings yet" description="Start selling your templates" action="Get Started" onAction={() => setIsAddingListing(true)} />
+                <AnimatePresence mode="wait">
+                {listingsLoading ? (
+                  <motion.div key="listings-skeleton" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+                    <CardGridSkeleton count={Math.min(listings.length || 6, 6)} />
+                  </motion.div>
+                ) : listings.length === 0 ? (
+                  <motion.div key="listings-empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+                    <EmptyState icon={Upload} title="No listings yet" description="Start selling your templates" action="Get Started" onAction={() => setIsAddingListing(true)} />
+                  </motion.div>
                 ) : (
+                  <motion.div key="listings-grid" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {listings.map((item) => (
                       <div key={item._id} className="bg-[#111] border border-white/5 rounded-[32px] p-4 hover:border-orange-100/20 transition-all duration-500 group flex flex-col justify-between h-full">
@@ -771,16 +789,26 @@ export default function Profile() {
                       </div>
                     ))}
                   </div>
-                )
+                  </motion.div>
+                )}
+                </AnimatePresence>
               )}
             </motion.div>
           )}
 
           {activeTab === 'purchases' && (
             <motion.div key="purchases" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-              {purchases.length === 0 ? (
-                <EmptyState icon={ShoppingBag} title="No purchases yet" description="Browse templates to find your next project" action="Browse" onAction={() => navigate('/template')} />
+              <AnimatePresence mode="wait">
+              {purchasesLoading ? (
+                <motion.div key="purchases-skeleton" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+                  <CardGridSkeleton count={Math.min(purchases.length || 6, 6)} />
+                </motion.div>
+              ) : purchases.length === 0 ? (
+                <motion.div key="purchases-empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+                  <EmptyState icon={ShoppingBag} title="No purchases yet" description="Browse templates to find your next project" action="Browse" onAction={() => navigate('/template')} />
+                </motion.div>
               ) : (
+                <motion.div key="purchases-grid" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {purchases.map((p) => {
                     const web = p.websiteId || {};
@@ -844,15 +872,25 @@ export default function Profile() {
                     );
                   })}
                 </div>
+                </motion.div>
               )}
+              </AnimatePresence>
             </motion.div>
           )}
 
           {activeTab === 'wishlist' && (
             <motion.div key="wishlist" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-              {wishlist.length === 0 ? (
-                <EmptyState icon={Heart} title="Wishlist empty" description="Save templates you love for later" action="Browse" onAction={() => navigate('/template')} />
+              <AnimatePresence mode="wait">
+              {wishlistLoading ? (
+                <motion.div key="wishlist-skeleton" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+                  <CardGridSkeleton count={Math.min(wishlist.length || 6, 6)} />
+                </motion.div>
+              ) : wishlist.length === 0 ? (
+                <motion.div key="wishlist-empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+                  <EmptyState icon={Heart} title="Wishlist empty" description="Save templates you love for later" action="Browse" onAction={() => navigate('/template')} />
+                </motion.div>
               ) : (
+                <motion.div key="wishlist-grid" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {wishlist.map((w) => {
                     const web = w.websiteId || {};
@@ -899,7 +937,9 @@ export default function Profile() {
                     );
                   })}
                 </div>
+                </motion.div>
               )}
+              </AnimatePresence>
             </motion.div>
           )}
 
@@ -911,11 +951,13 @@ export default function Profile() {
                   <p className="text-white/40 text-xs mt-1">Manage your payout account information. We use UPI and Phone Number for payments.</p>
                 </div>
                 
+                <AnimatePresence mode="wait">
                 {loadingBankDetails ? (
-                  <div className="flex justify-center py-10">
-                    <Loader2 className="animate-spin text-[#8b7355]" size={32} />
-                  </div>
+                  <motion.div key="bank-skeleton" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+                    <BankDetailsSkeleton />
+                  </motion.div>
                 ) : (
+                  <motion.div key="bank-form" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
                   <form onSubmit={handleSaveBankDetails} className="space-y-6">
                     <div className="bg-[#111] border border-white/5 rounded-3xl p-6 md:p-8 space-y-6 hover:border-white/10 transition-all">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -952,7 +994,9 @@ export default function Profile() {
                       {savingBankDetails ? <Loader2 className="animate-spin" size={16} /> : <><CheckCircle size={16} /> Save Payout Details</>}
                     </button>
                   </form>
+                  </motion.div>
                 )}
+                </AnimatePresence>
               </div>
             </motion.div>
           )}
@@ -981,7 +1025,7 @@ function WishlistPreview({ previewVideo, fallback }) {
           loop
           playsInline
           preload="metadata"
-          className="absolute inset-0 h-full w-full object-contain transition-all duration-500 group-hover/preview:scale-[1.03]"
+          className="absolute inset-0 h-full w-full object-cover transition-all duration-500 group-hover/preview:scale-[1.03]"
         />
       ) : fallback ? (
         <div className="absolute inset-0 flex items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.05),_transparent_42%)] px-4 text-center">
@@ -1034,6 +1078,67 @@ function StatusBadge({ status }) {
       )}
       {c.label}
     </span>
+  );
+}
+
+// --- LOADING SKELETONS ---
+
+function Skeleton({ className = '' }) {
+  return <div className={`skeleton-shimmer ${className}`} />;
+}
+
+function CardSkeleton() {
+  return (
+    <div className="bg-[#111] border border-white/5 rounded-[32px] p-4 flex flex-col justify-between h-full">
+      <div>
+        <Skeleton className="aspect-square rounded-[24px] mb-4" />
+        <div className="px-2 space-y-2.5">
+          <Skeleton className="h-4 w-2/3 rounded-full" />
+          <Skeleton className="h-2.5 w-full rounded-full" />
+          <Skeleton className="h-2.5 w-4/5 rounded-full" />
+        </div>
+      </div>
+      <div className="flex items-center justify-between px-2 mt-5 pt-3 border-t border-white/5">
+        <Skeleton className="h-4 w-14 rounded-full" />
+        <div className="flex gap-2">
+          <Skeleton className="h-8 w-8 rounded-xl" />
+          <Skeleton className="h-8 w-8 rounded-xl" />
+          <Skeleton className="h-8 w-8 rounded-xl" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CardGridSkeleton({ count = 6 }) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {Array.from({ length: count }).map((_, i) => (
+        <motion.div key={i} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06, duration: 0.35 }}>
+          <CardSkeleton />
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+function BankDetailsSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="bg-[#111] border border-white/5 rounded-3xl p-6 md:p-8 space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-2.5">
+            <Skeleton className="h-2.5 w-16 rounded-full" />
+            <Skeleton className="h-[46px] w-full rounded-2xl" />
+          </div>
+          <div className="space-y-2.5">
+            <Skeleton className="h-2.5 w-24 rounded-full" />
+            <Skeleton className="h-[46px] w-full rounded-2xl" />
+          </div>
+        </div>
+      </div>
+      <Skeleton className="h-[52px] w-full rounded-3xl" />
+    </div>
   );
 }
 
