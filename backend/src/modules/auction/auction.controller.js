@@ -142,7 +142,7 @@ const placeBid = async (req, res) => {
     }
 
     // Check if bidder is already the current bidder
-    if (auction.currentBidderId && auction.currentBidderId.toString() === bidderId) {
+    if (auction.currentBidderId && auction.currentBidderId.toString() === bidderId.toString()) {
       return res.status(400).json({
         success: false,
         message: 'You are already the highest bidder',
@@ -214,7 +214,7 @@ const placeBid = async (req, res) => {
     await bid.populate('bidderId', 'name email');
 
     // Send email to previous bidder (they've been outbid)
-    if (previousBidderId) {
+    if (previousBidderId && previousBidderId.toString() !== bidderId.toString()) {
       try {
         const previousBidder = await User.findById(previousBidderId);
         if (previousBidder) {
