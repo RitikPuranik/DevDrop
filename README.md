@@ -178,10 +178,6 @@ git commit -m "feat: add your feature"
 
 6. Push the branch and open a pull request.
 
-## 📄 License
-
-Add the project's intended license here before distributing DevDrop publicly.
-
 ## 👤 Author
 
 **Ritik Puranik**
