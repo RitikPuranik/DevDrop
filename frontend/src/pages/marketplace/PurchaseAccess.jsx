@@ -8,12 +8,14 @@ import {
   FileCode,
   FileText,
   Film,
+  GitBranch,
   Loader2,
   ShieldCheck,
 } from 'lucide-react';
 import { buyerAPI } from '../../api/buyer';
 import { assetAPI } from '../../api/asset';
 import { toast } from 'sonner';
+import PushToGithubModal from '../../components/github/PushToGithubModal';
 
 export default function PurchaseAccess() {
   const { purchaseId } = useParams();
@@ -26,6 +28,7 @@ export default function PurchaseAccess() {
   const [assets, setAssets] = useState(null);
   const [previewVideoUrl, setPreviewVideoUrl] = useState('');
   const [previewFallbackTried, setPreviewFallbackTried] = useState(false);
+  const [githubModalOpen, setGithubModalOpen] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -334,6 +337,14 @@ export default function PurchaseAccess() {
                     loading={loadingAssets}
                     variant="info"
                   />
+                  <ActionButton
+                    icon={GitBranch}
+                    label="Push to GitHub"
+                    helper="Export this project into a repository in your own GitHub account"
+                    onClick={() => setGithubModalOpen(true)}
+                    loading={false}
+                    variant="brand"
+                  />
                 </div>
 
                 <div className="mt-6 rounded-2xl border border-white/8 bg-white/[0.03] p-4">
@@ -365,6 +376,12 @@ export default function PurchaseAccess() {
           </div>
         </motion.div>
       </div>
+
+      <PushToGithubModal
+        open={githubModalOpen}
+        onClose={() => setGithubModalOpen(false)}
+        website={website}
+      />
     </div>
   );
 }
@@ -401,6 +418,7 @@ function ActionButton({ icon: Icon, label, helper, onClick, loading, variant = '
     neutral: 'bg-white/5 text-white hover:bg-white/10',
     success: 'bg-emerald-500 text-black hover:bg-emerald-400',
     info: 'bg-blue-500 text-black hover:bg-blue-400',
+    brand: 'bg-[#8b7355] text-white hover:bg-[#725e46]',
   };
 
   return (
@@ -416,7 +434,7 @@ function ActionButton({ icon: Icon, label, helper, onClick, loading, variant = '
         </div>
         <div>
           <p className="text-xs font-black uppercase tracking-[0.18em]">{label}</p>
-          <p className={`text-[11px] mt-2 leading-relaxed ${variant === 'neutral' ? 'text-white/45' : 'text-black/70'}`}>{helper}</p>
+          <p className={`text-[11px] mt-2 leading-relaxed ${variant === 'neutral' || variant === 'brand' ? 'text-white/45' : 'text-black/70'}`}>{helper}</p>
         </div>
       </div>
     </button>

@@ -23,6 +23,8 @@ const DOWNLOAD_RATE_LIMIT_WINDOW_MS = readEnvNumber('DOWNLOAD_RATE_LIMIT_WINDOW_
 const DOWNLOAD_RATE_LIMIT_MAX_REQUESTS = readEnvNumber('DOWNLOAD_RATE_LIMIT_MAX_REQUESTS', 50);
 const PAYMENT_RATE_LIMIT_WINDOW_MS = readEnvNumber('PAYMENT_RATE_LIMIT_WINDOW_MS', 60 * 1000);
 const PAYMENT_RATE_LIMIT_MAX_REQUESTS = readEnvNumber('PAYMENT_RATE_LIMIT_MAX_REQUESTS', 3);
+const EXPORT_RATE_LIMIT_WINDOW_MS = readEnvNumber('EXPORT_RATE_LIMIT_WINDOW_MS', 60 * 60 * 1000);
+const EXPORT_RATE_LIMIT_MAX_REQUESTS = readEnvNumber('EXPORT_RATE_LIMIT_MAX_REQUESTS', 5);
 
 // General API rate limiter
 const generalLimiter = rateLimit({
@@ -73,9 +75,24 @@ const paymentLimiter = rateLimit({
   },
 });
 
+// GitHub export creation limiter (per user) — repo creation + file uploads
+// are expensive on both our server and the GitHub API, so keep this tight.
+const exportLimiter = rateLimit({
+  windowMs: EXPORT_RATE_LIMIT_WINDOW_MS,
+  max: EXPORT_RATE_LIMIT_MAX_REQUESTS,
+  keyGenerator: (req) => {
+    return req.userId ? req.userId.toString() : req.ip;
+  },
+  message: {
+    success: false,
+    message: `Too many export attempts, please try again after ${formatWindowLabel(EXPORT_RATE_LIMIT_WINDOW_MS)}.`,
+  },
+});
+
 module.exports = {
   generalLimiter,
   authLimiter,
   downloadLimiter,
   paymentLimiter,
+  exportLimiter,
 };

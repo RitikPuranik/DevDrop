@@ -127,7 +127,50 @@ const RATE_LIMITS = {
     WINDOW_MS: readEnvNumber('PAYMENT_RATE_LIMIT_WINDOW_MS', 60 * 1000),
     MAX_REQUESTS: readEnvNumber('PAYMENT_RATE_LIMIT_MAX_REQUESTS', 3),
   },
+  EXPORT: {
+    WINDOW_MS: readEnvNumber('EXPORT_RATE_LIMIT_WINDOW_MS', 60 * 60 * 1000),
+    MAX_REQUESTS: readEnvNumber('EXPORT_RATE_LIMIT_MAX_REQUESTS', 5),
+  },
 };
+
+// GitHub project export
+const EXPORT_STATUS = {
+  PENDING: 'pending',
+  PROCESSING: 'processing',
+  SUCCESS: 'success',
+  FAILED: 'failed',
+};
+
+const EXPORT_VISIBILITY = {
+  PUBLIC: 'public',
+  PRIVATE: 'private',
+};
+
+// Directory/file names excluded from every GitHub export, regardless of
+// the purchased project's own .gitignore. Matched against each path
+// SEGMENT (not substrings), so e.g. "my-dist-tool/" is not excluded
+// just because it contains "dist".
+const EXCLUDED_EXPORT_DIR_NAMES = [
+  'node_modules',
+  '.git',
+  '.next',
+  '.nuxt',
+  '.turbo',
+  '.vercel',
+  '.netlify',
+  'dist',
+  'build',
+  'out',
+  'coverage',
+  '.cache',
+  '__pycache__',
+  '.venv',
+  'venv',
+];
+
+// Exact file names always excluded (in addition to the .env.* pattern
+// handled separately so .env.example can be allowed through).
+const EXCLUDED_EXPORT_FILE_NAMES = ['.DS_Store', 'Thumbs.db'];
 
 module.exports = {
   USER_ROLES,
@@ -146,4 +189,8 @@ module.exports = {
   PAGINATION,
   EMAIL_SUBJECTS,
   RATE_LIMITS,
+  EXPORT_STATUS,
+  EXPORT_VISIBILITY,
+  EXCLUDED_EXPORT_DIR_NAMES,
+  EXCLUDED_EXPORT_FILE_NAMES,
 };
