@@ -3,9 +3,8 @@ const axios = require('axios');
 /**
  * Vercel grants third-party access through an Integration installation. For
  * external installations Vercel supports `next` and `state` query parameters
- * on /integrations/:slug/new. DevDrop uses both: `state` binds the callback to
- * the authenticated DevDrop user and `next` sends Vercel to our frontend
- * callback after installation. See the current Vercel integration docs.
+ * on /integrations/:slug/new. DevDrop uses `next` to make the post-install
+ * handoff explicit and reserves `state` for the authenticated CSRF binding.
  */
 
 const getClientId = () => {
@@ -32,9 +31,18 @@ const isConfigured = () => Boolean(
   process.env.VERCEL_INTEGRATION_SLUG
 );
 
+const getFrontendCallbackUrl = () => {
+  try {
+    return new URL('/deploy/vercel-callback', process.env.FRONTEND_URL).toString();
+  } catch {
+    return null;
+  }
+};
+
 const getInstallUrl = ({ next, state } = {}) => {
   const url = new URL(`https://vercel.com/integrations/${getIntegrationSlug()}/new`);
-  if (next) url.searchParams.set('next', next);
+  const completionUrl = next || getFrontendCallbackUrl();
+  if (completionUrl) url.searchParams.set('next', completionUrl);
   if (state) url.searchParams.set('state', state);
   return url.toString();
 };
