@@ -80,6 +80,34 @@ const getAuthenticatedUser = async (accessToken) => {
   return { id: data.id, username: data.login, avatarUrl: data.avatar_url, name: data.name };
 };
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * GitHub's repo-creation API responds before the repository is fully
+ * provisioned on their backend. Hitting the Git Data API (blobs/trees/
+ * commits/refs) immediately afterward can return 409 Conflict for a
+ * brand-new repo even though nothing is actually wrong — it just isn't
+ * ready yet. Retry with backoff instead of failing the whole export.
+ */
+const withRetryOn409 = async (fn, { attempts = 5, baseDelayMs = 700 } = {}) => {
+  let lastError;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (error?.response?.status !== 409 || attempt === attempts - 1) throw error;
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[github.service] 409 on attempt ${attempt + 1}/${attempts}, retrying:`,
+        error?.response?.data
+      );
+      await sleep(baseDelayMs * 2 ** attempt);
+    }
+  }
+  throw lastError;
+};
+
 /** True when the GitHub API rejected repo creation because the name is taken. */
 const isRepoNameTakenError = (error) => {
   const errors = error?.response?.data?.errors;
@@ -91,11 +119,16 @@ const isRepoNameTakenError = (error) => {
 const isAuthError = (error) => error?.response?.status === 401;
 
 const createRepository = async (accessToken, { name, description, isPrivate }) => {
+  // auto_init: true — GitHub's Git Data API (blobs/trees/commits) refuses
+  // to write to a repository with zero commits ("Git Repository is empty"),
+  // no matter how long you wait. Auto-initializing gives the repo a real
+  // first commit (a bare README) so the API accepts writes immediately;
+  // updateRef() below then force-moves the branch to our real commit.
   const { data } = await githubApi(accessToken).post('/user/repos', {
     name,
     description: description || undefined,
     private: isPrivate,
-    auto_init: false,
+    auto_init: true,
   });
 
   return {
@@ -107,35 +140,45 @@ const createRepository = async (accessToken, { name, description, isPrivate }) =
   };
 };
 
-const createBlob = async (accessToken, owner, repo, base64Content) => {
-  const { data } = await githubApi(accessToken).post(`/repos/${owner}/${repo}/git/blobs`, {
-    content: base64Content,
-    encoding: 'base64',
+const createBlob = async (accessToken, owner, repo, base64Content) =>
+  withRetryOn409(async () => {
+    const { data } = await githubApi(accessToken).post(`/repos/${owner}/${repo}/git/blobs`, {
+      content: base64Content,
+      encoding: 'base64',
+    });
+    return data.sha;
   });
-  return data.sha;
-};
 
-const createTree = async (accessToken, owner, repo, tree) => {
-  const { data } = await githubApi(accessToken).post(`/repos/${owner}/${repo}/git/trees`, { tree });
-  return data.sha;
-};
-
-const createCommit = async (accessToken, owner, repo, { message, treeSha, parents = [] }) => {
-  const { data } = await githubApi(accessToken).post(`/repos/${owner}/${repo}/git/commits`, {
-    message,
-    tree: treeSha,
-    parents,
+const createTree = async (accessToken, owner, repo, tree) =>
+  withRetryOn409(async () => {
+    const { data } = await githubApi(accessToken).post(`/repos/${owner}/${repo}/git/trees`, { tree });
+    return data.sha;
   });
-  return data.sha;
-};
 
-/** Creates the ref for a brand-new repo that has no commits/branches yet. */
-const createRef = async (accessToken, owner, repo, branch, commitSha) => {
-  await githubApi(accessToken).post(`/repos/${owner}/${repo}/git/refs`, {
-    ref: `refs/heads/${branch}`,
-    sha: commitSha,
+const createCommit = async (accessToken, owner, repo, { message, treeSha, parents = [] }) =>
+  withRetryOn409(async () => {
+    const { data } = await githubApi(accessToken).post(`/repos/${owner}/${repo}/git/commits`, {
+      message,
+      tree: treeSha,
+      parents,
+    });
+    return data.sha;
   });
-};
+
+/**
+ * Force-moves the branch ref created by auto_init to point at our real
+ * export commit. The ref already exists (auto_init created it pointing at
+ * the README commit), so this is a PATCH, not the POST used to create a
+ * ref from scratch — using POST here would 422 with "Reference already
+ * exists".
+ */
+const updateRef = async (accessToken, owner, repo, branch, commitSha) =>
+  withRetryOn409(async () => {
+    await githubApi(accessToken).patch(`/repos/${owner}/${repo}/git/refs/heads/${branch}`, {
+      sha: commitSha,
+      force: true,
+    });
+  });
 
 // --- Read-only helpers used by the deployment repository analyzer ---
 // (backend/src/services/deployment/analyzer.js). These reuse the same
@@ -204,7 +247,7 @@ module.exports = {
   createBlob,
   createTree,
   createCommit,
-  createRef,
+  updateRef,
   isRepoNameTakenError,
   isAuthError,
   getRepository,

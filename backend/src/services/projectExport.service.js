@@ -254,20 +254,30 @@ const runExport = async (exportId) => {
       throw err;
     }
 
+    // GitHub's repo-creation response can arrive before the repo is fully
+    // provisioned on their backend; hitting the Git Data API immediately
+    // can 409. A brief head start here reduces how often createBlob's own
+    // retry-on-409 logic has to kick in.
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
     // 4. Upload blobs (bounded concurrency to stay friendly to GitHub's API).
     const blobEntries = await mapWithConcurrency(files, BLOB_UPLOAD_CONCURRENCY, async (file) => {
       const sha = await githubService.createBlob(accessToken, repo.owner, repo.name, file.buffer.toString('base64'));
       return { path: file.relativePath, mode: '100644', type: 'blob', sha };
     });
 
-    // 5. Create tree -> commit -> ref (this is a brand-new repo, so no base tree/parents).
+    // 5. Create tree -> commit -> ref. The repo already has an auto_init
+    // README commit (needed so the Git Data API accepts writes at all —
+    // see createRepository's comment), but our export commit is built as
+    // its own orphan commit (no parents) and then force-pushed over the
+    // branch via updateRef, so the exported project's history starts clean.
     const treeSha = await githubService.createTree(accessToken, repo.owner, repo.name, blobEntries);
     const commitSha = await githubService.createCommit(accessToken, repo.owner, repo.name, {
       message: `Initial commit — exported from DevDrop (${website.name})`,
       treeSha,
       parents: [],
     });
-    await githubService.createRef(accessToken, repo.owner, repo.name, repo.defaultBranch, commitSha);
+    await githubService.updateRef(accessToken, repo.owner, repo.name, repo.defaultBranch, commitSha);
 
     // 6. Record success.
     exportDoc.status = EXPORT_STATUS.SUCCESS;
@@ -280,6 +290,12 @@ const runExport = async (exportId) => {
     await exportDoc.save();
   } catch (error) {
     console.error(`GitHub export ${exportId} failed:`, error.message);
+    if (error?.response) {
+      console.error(`GitHub export ${exportId} - GitHub response:`, {
+        status: error.response.status,
+        data: error.response.data,
+      });
+    }
 
     const friendlyMessages = {
       OWNERSHIP_LOST: 'We could no longer verify your purchase of this project.',
@@ -290,7 +306,13 @@ const runExport = async (exportId) => {
       AUTH_EXPIRED: 'Your GitHub authorization has expired. Please reconnect GitHub and try again.',
     };
 
-    const safeMessage = friendlyMessages[error.message] || 'We hit an unexpected error while exporting this project to GitHub. Please try again.';
+    let safeMessage = friendlyMessages[error.message];
+    if (!safeMessage && error?.response?.status === 409) {
+      safeMessage = 'GitHub was still setting up the new repository and kept rejecting the upload. Please try again in a minute.';
+    }
+    if (!safeMessage) {
+      safeMessage = 'We hit an unexpected error while exporting this project to GitHub. Please try again.';
+    }
     await markFailed(exportDoc, safeMessage);
   }
 };

@@ -3,24 +3,18 @@ import { CheckCircle2, ChevronDown, KeyRound, Loader2, Triangle, Server, Unplug 
 import { toast } from 'sonner';
 import { deploymentAPI } from '../../api/deployment';
 
-const getBackendOrigin = () => {
-  try {
-    return new URL(import.meta.env.VITE_API_URL).origin;
-  } catch {
-    return null;
-  }
-};
-
 const PROVIDER_META = {
   vercel: { label: 'Vercel', icon: Triangle, blurb: 'Hosts your frontend build.' },
   render: { label: 'Render', icon: Server, blurb: 'Hosts your backend API.' },
 };
 
 /**
- * Connect/disconnect card for one deployment provider. Vercel uses the same
- * popup + postMessage OAuth pattern as PushToGithubModal's GitHub connect;
- * Render has no OAuth flow, so it opens a small inline API-key form instead
- * (see render.provider.js for why).
+ * Connect/disconnect card for one deployment provider. Vercel opens a popup
+ * that lands on a page of our own (VercelOAuthCallback.jsx) once it's done —
+ * that page finishes the connection itself and best-effort postMessages this
+ * tab to refresh instantly; see that component for why the connection can't
+ * depend on window.opener alone. Render has no OAuth flow, so it opens a
+ * small inline API-key form instead (see render.provider.js for why).
  */
 export default function ProviderConnectCard({ provider, status, onChange }) {
   const meta = PROVIDER_META[provider];
@@ -44,41 +38,32 @@ export default function ProviderConnectCard({ provider, status, onChange }) {
 
   useEffect(() => {
     if (provider !== 'vercel') return undefined;
-    const backendOrigin = getBackendOrigin();
 
-    const handleMessage = async (event) => {
-      if (backendOrigin && event.origin !== backendOrigin) return;
-      const { type, code, teamId, message } = event.data || {};
-      if (type !== 'vercel-oauth-code' && type !== 'vercel-oauth-error') return;
+    // The popup itself now finishes the connection (see
+    // VercelOAuthCallback.jsx / deployment.controller.js's vercelCallback
+    // for why) — it's a page on our own origin, so it posts back to us
+    // with window.location.origin as the target. This message is purely a
+    // "refresh now" notification; if it never arrives (e.g. the popup's
+    // trip through vercel.com severed window.opener along the way), the
+    // popup.closed fallback below re-checks provider status instead of
+    // assuming failure.
+    const handleMessage = (event) => {
+      if (event.origin !== window.location.origin) return;
+      const { type, accountLabel, message } = event.data || {};
+      if (type !== 'vercel-oauth-code-connected' && type !== 'vercel-oauth-error') return;
 
-      // Claim this attempt and stop the popup.closed watcher BEFORE the
-      // `await` below, not after — otherwise the watcher's next 800ms tick
-      // can still slip in while finish-connect is pending (see the ref's
-      // comment above) and close it out from under us.
       messageHandledRef.current = true;
       clearInterval(popupWatcherRef.current);
       if (popupRef.current && !popupRef.current.closed) {
         popupRef.current.close();
       }
+      setConnecting(false);
 
-      if (type === 'vercel-oauth-code') {
-        // The callback route can't identify a user (Vercel doesn't echo
-        // back a state param), so the exchange happens here instead, on
-        // the authenticated SPA — see deployment.controller.js's
-        // finishConnectVercel for why.
-        try {
-          const res = await deploymentAPI.finishConnectVercel(code, teamId);
-          const accountLabel = res.data?.data?.accountLabel;
-          toast.success(`Vercel connected${accountLabel ? ` as ${accountLabel}` : ''}`);
-          onChange?.();
-        } catch (err) {
-          toast.error(err.response?.data?.message || 'Vercel connection failed');
-        } finally {
-          setConnecting(false);
-        }
+      if (type === 'vercel-oauth-code-connected') {
+        toast.success(`Vercel connected${accountLabel ? ` as ${accountLabel}` : ''}`);
+        onChange?.();
       } else {
         toast.error(message || 'Vercel connection failed');
-        setConnecting(false);
       }
     };
 
@@ -105,23 +90,32 @@ export default function ProviderConnectCard({ provider, status, onChange }) {
         return;
       }
 
-      // Fallback: if the callback page's postMessage never arrives at all
-      // (e.g. a proxy/CDN re-adds a strict Cross-Origin-Opener-Policy
-      // header and severs window.opener, or the redirect never lands on
-      // our callback route in the first place), detect the popup closing
-      // and re-sync status so the "Waiting…" state doesn't hang forever.
-      // Gated on messageHandledRef so this doesn't fire — and wrongly
-      // report a failed connection — while a finish-connect call from a
-      // message that DID arrive is still in flight; see that ref's
-      // comment for why the popup closing is not on its own proof that
-      // nothing happened.
+      // Fallback: the popup finishes the connection itself (see
+      // VercelOAuthCallback.jsx), so postMessage is only needed to refresh
+      // THIS tab instantly. If it never arrives — e.g. vercel.com's own
+      // Cross-Origin-Opener-Policy severed window.opener before the popup
+      // ever reached our pages, or the user just closed the popup by hand —
+      // re-check provider status directly once the popup closes rather than
+      // assuming failure; the connection may well have already succeeded
+      // server-side even though we were never notified. Gated on
+      // messageHandledRef so this doesn't double-report once a message DID
+      // arrive.
       clearInterval(popupWatcherRef.current);
-      popupWatcherRef.current = setInterval(() => {
+      popupWatcherRef.current = setInterval(async () => {
         if (popup.closed) {
           clearInterval(popupWatcherRef.current);
           if (!messageHandledRef.current) {
             setConnecting(false);
-            toast.error("Vercel didn't confirm the connection. If you finished setup on Vercel, the popup may not have redirected back to DevDrop — double-check the integration's redirect URL, then try again.");
+            try {
+              const res = await deploymentAPI.getProviders();
+              if (res.data?.data?.vercel?.connected) {
+                toast.success('Vercel connected');
+              } else {
+                toast.error("Vercel connection wasn't completed. If you finished setup on Vercel, try connecting again.");
+              }
+            } catch {
+              toast.error("Couldn't confirm the Vercel connection. Refresh the page to check its status.");
+            }
             onChange?.();
           }
         }

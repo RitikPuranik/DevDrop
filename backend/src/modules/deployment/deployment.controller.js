@@ -32,6 +32,9 @@ const toScriptLiteral = (value) => JSON.stringify(value).replace(/</g, '\\u003c'
 
 // Same popup-closing pattern as github.controller.js's renderOAuthResultPage
 // — kept local rather than imported since the message "type" values differ.
+// Used only as a last-resort fallback (see vercelCallback) if FRONTEND_URL
+// isn't configured/parseable, since the normal path now redirects to a real
+// frontend page instead of relying on window.opener from this backend origin.
 const renderOAuthResultPage = (payload) => `<!DOCTYPE html>
 <html>
   <head><meta charset="utf-8" /><title>Vercel connection</title></head>
@@ -51,6 +54,16 @@ const renderOAuthResultPage = (payload) => `<!DOCTYPE html>
     </script>
   </body>
 </html>`;
+
+// Where the callback hands off to on the frontend. Returns null if
+// FRONTEND_URL isn't configured/parseable so callers can fall back.
+const getFrontendVercelCallbackUrl = () => {
+  try {
+    return new URL('/deploy/vercel-callback', process.env.FRONTEND_URL);
+  } catch {
+    return null;
+  }
+};
 
 // ─────────────────────────────────────────
 // SHARED HELPERS
@@ -156,18 +169,49 @@ const connectVercel = async (req, res) => {
 
 /** GET /api/deployments/providers/vercel/callback — public; no Authorization
  * header or session reaches this route (Vercel's browser redirect carries
- * neither), so it can't identify a user or save anything itself. It just
- * relays the code back to the opener tab; the authenticated SPA finishes
- * the exchange via finishConnectVercel below. */
+ * neither), so it can't identify a user or save anything itself.
+ *
+ * This used to render a same-origin HTML page here that relied entirely on
+ * `window.opener.postMessage(...)` to hand the code back to the tab that
+ * opened the popup. That's fragile in a way that isn't fixable from this
+ * page alone: the popup's *first* stop is vercel.com itself, and if that
+ * origin sends a strict Cross-Origin-Opener-Policy header (common on major
+ * sites), the browser permanently severs the window.opener link the moment
+ * the popup lands there — before it ever reaches us. Setting a permissive
+ * COOP header on this route (see app.js) can't undo a severance that
+ * already happened one hop earlier, so the popup would land here, silently
+ * fail to postMessage anything, and just sit open — which is exactly the
+ * "says Waiting… forever, nothing happens" symptom.
+ *
+ * So instead: redirect to a real page on the FRONTEND. That page shares the
+ * same-origin localStorage (and therefore the user's JWT) as the tab that
+ * opened the popup, so it can call finishConnectVercel itself — no
+ * window.opener required for the actual connection to succeed. It still
+ * best-effort postMessages the opener afterwards purely so the original tab
+ * can refresh instantly, but nothing depends on that working anymore.
+ */
 const vercelCallback = async (req, res) => {
   const { code, teamId, configurationId, error: oauthError } = req.query;
+  const target = getFrontendVercelCallbackUrl();
+
+  if (!target) {
+    // FRONTEND_URL isn't configured/parseable — fall back to the old
+    // same-page postMessage approach rather than hard-failing outright.
+    if (oauthError) return res.send(renderOAuthResultPage({ type: 'vercel-oauth-error', message: 'Vercel authorization was cancelled or denied.' }));
+    if (!code) return res.send(renderOAuthResultPage({ type: 'vercel-oauth-error', message: 'Missing authorization code.' }));
+    return res.send(renderOAuthResultPage({ type: 'vercel-oauth-code', code, teamId: teamId || null, configurationId: configurationId || null }));
+  }
+
   if (oauthError) {
-    return res.send(renderOAuthResultPage({ type: 'vercel-oauth-error', message: 'Vercel authorization was cancelled or denied.' }));
+    target.searchParams.set('error', 'Vercel authorization was cancelled or denied.');
+  } else if (!code) {
+    target.searchParams.set('error', 'Missing authorization code.');
+  } else {
+    target.searchParams.set('code', code);
+    if (teamId) target.searchParams.set('teamId', teamId);
+    if (configurationId) target.searchParams.set('configurationId', configurationId);
   }
-  if (!code) {
-    return res.send(renderOAuthResultPage({ type: 'vercel-oauth-error', message: 'Missing authorization code.' }));
-  }
-  res.send(renderOAuthResultPage({ type: 'vercel-oauth-code', code, teamId: teamId || null, configurationId: configurationId || null }));
+  res.redirect(target.toString());
 };
 
 /** POST /api/deployments/providers/vercel/finish-connect  body: { code, teamId? }

@@ -16,6 +16,7 @@ import Profile from './pages/account/Profile';
 import PurchaseAccess from './pages/marketplace/PurchaseAccess';
 import DeployProject from './pages/deployment/DeployProject';
 import DeploymentDetails from './pages/deployment/DeploymentDetails';
+import VercelOAuthCallback from './pages/deployment/VercelOAuthCallback';
 import AdminPanel from "./pages/admin/AdminPanelPage";
 import WebsiteDetail from './pages/marketplace/WebsiteDetail';
 import Checkout from './pages/marketplace/Checkout';
@@ -32,7 +33,8 @@ function AppContent() {
   const isBuilder = location.pathname === "/website";
   const isVerifyEmail = location.pathname === "/verify-email";
   const isResetPassword = location.pathname === "/reset-password";
-  const isStandaloneAuthPage = isVerifyEmail || isResetPassword;
+  const isVercelCallback = location.pathname === "/deploy/vercel-callback";
+  const isStandaloneAuthPage = isVerifyEmail || isResetPassword || isVercelCallback;
 
   if (isStandaloneAuthPage) {
     sessionStorage.setItem('devdrop_intro_seen', 'true');
@@ -129,6 +131,7 @@ function AppContent() {
               <Route path="/review" element={<ReviewPage />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/purchases/:purchaseId" element={<PurchaseAccess />} />
+              <Route path="/deploy/vercel-callback" element={<VercelOAuthCallback />} />
               <Route path="/deploy/:purchaseId" element={<DeployProject />} />
               <Route path="/deployments/:deploymentId" element={<DeploymentDetails />} />
               <Route path="/admin" element={<AdminPanel />} />
