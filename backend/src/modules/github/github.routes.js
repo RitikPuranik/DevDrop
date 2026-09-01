@@ -16,6 +16,7 @@ router.use(auth);
 
 router.post('/connect', authLimiter, githubController.connect);
 router.get('/status', githubController.status);
+router.get('/repositories', githubController.listRepositories);
 router.delete('/disconnect', githubController.disconnect);
 
 router.post(

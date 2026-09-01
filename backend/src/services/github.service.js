@@ -75,6 +75,40 @@ const githubApi = (accessToken) =>
     timeout: 30000,
   });
 
+
+/** List repositories accessible to the authenticated GitHub user. */
+const listRepositories = async (accessToken, { page = 1, perPage = 50, search = '' } = {}) => {
+  const safePage = Math.max(1, Number(page) || 1);
+  const safePerPage = Math.min(100, Math.max(1, Number(perPage) || 50));
+  const { data, headers } = await githubApi(accessToken).get('/user/repos', {
+    params: {
+      affiliation: 'owner,collaborator,organization_member',
+      visibility: 'all',
+      sort: 'updated',
+      direction: 'desc',
+      page: safePage,
+      per_page: safePerPage,
+    },
+  });
+
+  const needle = String(search || '').trim().toLowerCase();
+  const repositories = (data || [])
+    .filter((repo) => !needle || repo.full_name?.toLowerCase().includes(needle) || repo.description?.toLowerCase().includes(needle))
+    .map((repo) => ({
+      id: repo.id,
+      name: repo.name,
+      fullName: repo.full_name,
+      owner: repo.owner?.login,
+      defaultBranch: repo.default_branch || 'main',
+      private: Boolean(repo.private),
+      htmlUrl: repo.html_url,
+      description: repo.description || '',
+      updatedAt: repo.updated_at,
+    }));
+
+  return { repositories, hasNextPage: /rel="next"/.test(headers?.link || '') };
+};
+
 const getAuthenticatedUser = async (accessToken) => {
   const { data } = await githubApi(accessToken).get('/user');
   return { id: data.id, username: data.login, avatarUrl: data.avatar_url, name: data.name };
@@ -243,6 +277,7 @@ module.exports = {
   getAuthorizeUrl,
   exchangeCodeForToken,
   getAuthenticatedUser,
+  listRepositories,
   createRepository,
   createBlob,
   createTree,

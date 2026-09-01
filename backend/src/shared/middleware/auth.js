@@ -12,6 +12,7 @@ const auth = async (req, res, next) => {
       return res.status(401).json({
         success: false,
         message: 'Access denied. No token provided.',
+        code: 'AUTH_TOKEN_MISSING',
       });
     }
 
@@ -23,6 +24,7 @@ const auth = async (req, res, next) => {
       return res.status(401).json({
         success: false,
         message: 'Invalid token. User not found.',
+        code: 'AUTH_TOKEN_USER_NOT_FOUND',
       });
     }
 
@@ -32,10 +34,10 @@ const auth = async (req, res, next) => {
     next();
   } catch (error) {
     if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({ success: false, message: 'Invalid token.' });
+      return res.status(401).json({ success: false, message: 'Invalid token.', code: 'AUTH_TOKEN_INVALID' });
     }
     if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({ success: false, message: 'Token expired. Please login again.' });
+      return res.status(401).json({ success: false, message: 'Token expired. Please login again.', code: 'AUTH_TOKEN_EXPIRED' });
     }
     return res.status(500).json({ success: false, message: 'Authentication error.' });
   }

@@ -6,24 +6,17 @@ const {
 } = require('../../shared/utils/constants');
 
 // One entry per environment variable the analyzer found the project reading.
-// Never holds the actual secret value. It records enough metadata to render
-// the configuration form and to know which automatic values must be re-synced.
+// Never holds the actual secret value — just enough to render the "what do
+// you need to fill in" form and to know, later, whether it was ever
+// successfully pushed to the provider.
 const envPlanEntrySchema = new mongoose.Schema(
   {
     key: { type: String, required: true, trim: true },
     target: { type: String, enum: ['frontend', 'backend'], required: true },
-    // 'auto' -> DevDrop generates/synchronizes this itself.
-    // 'user' -> the buyer must supply the value.
+    // 'auto'  -> DevDrop generates/synchronizes this itself (NODE_ENV, the
+    //            frontend<->backend URL pair) and never asks the buyer for it.
+    // 'user'  -> the buyer must supply the value (DATABASE_URL, JWT_SECRET, ...).
     source: { type: String, enum: ['auto', 'user'], required: true },
-    // The analyzer uses this to distinguish automatic values such as the
-    // deployed frontend/backend URL pair. It MUST survive persistence so the
-    // orchestrator can detect when a second synchronization phase is needed.
-    autoRole: {
-      type: String,
-      enum: ['frontend-url', 'backend-url', 'static'],
-      required: false,
-      default: undefined,
-    },
     required: { type: Boolean, default: true },
     configured: { type: Boolean, default: false },
   },
@@ -52,23 +45,36 @@ const deploymentSchema = new mongoose.Schema(
     projectExportId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'ProjectExport',
-      required: true,
+      required: false,
+      default: null,
     },
+
+    // Snapshot of the GitHub repo this deployment targets. projectExportId
+    // is populated for DevDrop-published repos; externally-selected GitHub
+    // repos are supported too, so this snapshot is the deployment source of truth.
     repository: {
       owner: String,
       name: String,
       url: String,
       defaultBranch: String,
     },
+
     architecture: {
       type: String,
       enum: Object.values(DEPLOYMENT_ARCHITECTURE),
       default: DEPLOYMENT_ARCHITECTURE.UNKNOWN,
     },
+
+    // Structured analyzer output (frameworks, root dirs, build/start
+    // commands, detected architecture) — see services/deployment/analyzer.js.
+    // Snapshotted once analysis completes so re-opening a deployment's
+    // details doesn't require re-analyzing the repo.
     analysis: { type: mongoose.Schema.Types.Mixed, default: null },
+
     envPlan: { type: [envPlanEntrySchema], default: [] },
-    // Buyer-supplied secret values, encrypted and cleared after a successful
-    // deployment. Never returned by API responses.
+    // Buyer-supplied secret values, held encrypted only long enough for the
+    // orchestrator to push them to Vercel/Render, then cleared. Never
+    // returned by any API response (select: false).
     pendingSecretsEncrypted: { type: String, select: false, default: null },
 
     frontendProvider: {
@@ -103,7 +109,10 @@ const deploymentSchema = new mongoose.Schema(
       index: true,
     },
     errorMessage: String,
+    // Which orchestration phase failed (e.g. "DEPLOYING_BACKEND") — shown in
+    // the UI so a retry / support request knows where things stopped.
     errorStep: String,
+
     lastDeployedAt: Date,
   },
   { timestamps: true }
@@ -111,24 +120,5 @@ const deploymentSchema = new mongoose.Schema(
 
 deploymentSchema.index({ userId: 1, createdAt: -1 });
 deploymentSchema.index({ userId: 1, websiteId: 1, createdAt: -1 });
-
-deploymentSchema.index(
-  { userId: 1, websiteId: 1, status: 1 },
-  {
-    name: 'deployment_active_lookup',
-    partialFilterExpression: {
-      status: {
-        $in: [
-          DEPLOYMENT_STATUS.QUEUED,
-          DEPLOYMENT_STATUS.ANALYZING,
-          DEPLOYMENT_STATUS.SYNCHRONIZING_ENV,
-          DEPLOYMENT_STATUS.DEPLOYING_BACKEND,
-          DEPLOYMENT_STATUS.DEPLOYING_FRONTEND,
-          DEPLOYMENT_STATUS.REDEPLOYING_BACKEND,
-        ],
-      },
-    },
-  }
-);
 
 module.exports = mongoose.model('Deployment', deploymentSchema);

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
@@ -18,6 +18,7 @@ import {
 import { toast } from 'sonner';
 import { buyerAPI } from '../../api/buyer';
 import { deploymentAPI } from '../../api/deployment';
+import { githubAPI } from '../../api/github';
 import ProviderConnectCard from '../../components/deployment/ProviderConnectCard';
 
 const ARCHITECTURE_LABEL = {
@@ -30,6 +31,7 @@ const ARCHITECTURE_LABEL = {
 export default function DeployProject() {
   const { purchaseId } = useParams();
   const navigate = useNavigate();
+  const initializedPurchaseRef = useRef(null);
 
   const [loading, setLoading] = useState(true);
   const [purchase, setPurchase] = useState(null);
@@ -39,8 +41,17 @@ export default function DeployProject() {
   const [analyzeError, setAnalyzeError] = useState('');
   const [envValues, setEnvValues] = useState({});
   const [creating, setCreating] = useState(false);
+  const [repositories, setRepositories] = useState([]);
+  const [selectedRepository, setSelectedRepository] = useState(null);
+  const [repoLoading, setRepoLoading] = useState(false);
+  const [repoSearch, setRepoSearch] = useState('');
+  const [githubConnecting, setGithubConnecting] = useState(false);
+  const [githubError, setGithubError] = useState('');
+  const githubErrorRef = useRef('');
 
   useEffect(() => {
+    if (initializedPurchaseRef.current === purchaseId) return;
+    initializedPurchaseRef.current = purchaseId;
     init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [purchaseId]);
@@ -63,9 +74,42 @@ export default function DeployProject() {
       }
 
       const providersRes = await deploymentAPI.getProviders();
-      setProviders(providersRes.data?.data || null);
+      const providerData = providersRes.data?.data || null;
+      setProviders(providerData);
 
-      await runAnalysis(website._id);
+      if (providerData?.github?.connected) {
+        const repos = await loadRepositories();
+        // If GitHub's provider token is expired/revoked, loadRepositories()
+        // records a provider-specific error. Do not make a second authenticated
+        // request for the export and turn a provider problem into an apparent
+        // DevDrop logout.
+        if (githubErrorRef.current) {
+          setAnalyzeError(githubErrorRef.current);
+          return;
+        }
+        let preferred = repos[0] || null;
+        try {
+          const exportRes = await githubAPI.getExportForWebsite(website._id);
+          const exportData = exportRes.data?.data;
+          if (exportData?.repositoryName) {
+            preferred = repos.find((repo) => repo.name === exportData.repositoryName) || preferred;
+          }
+        } catch (err) {
+          // A normal DevDrop 401 is handled by the global auth interceptor.
+          // Other export errors should not prevent repository selection.
+          if (err.response?.status !== 401) {
+            console.warn('Could not load previous GitHub export:', err.response?.data?.message || err.message);
+          }
+        }
+        if (preferred) {
+          setSelectedRepository(preferred);
+          await runAnalysis(website._id, preferred);
+        } else {
+          setAnalyzeError('No GitHub repositories are available. Create or authorize a repository, then refresh.');
+        }
+      } else {
+        setAnalyzeError('Connect GitHub to choose a repository for deployment.');
+      }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Could not load this project');
       navigate('/profile', { replace: true });
@@ -74,16 +118,91 @@ export default function DeployProject() {
     }
   };
 
+  const loadRepositories = async (search = '') => {
+    try {
+      setRepoLoading(true);
+      setGithubError('');
+      githubErrorRef.current = '';
+      const res = await githubAPI.listRepositories({ perPage: 100, search });
+      const repos = res.data?.data || [];
+      setRepositories(repos);
+      return repos;
+    } catch (err) {
+      const code = err.response?.data?.code;
+      if (code === 'GITHUB_CONNECTION_EXPIRED') {
+        const message = 'Your GitHub connection has expired or was revoked. Reconnect GitHub to load your repositories.';
+        setGithubError(message);
+        githubErrorRef.current = message;
+      } else if (err.response?.status === 401) {
+        // Do not clear the DevDrop login here. This is a defensive fallback
+        // for older backend responses that did not include a provider code.
+        const message = 'GitHub could not authorize repository access. Reconnect GitHub and try again.';
+        setGithubError(message);
+        githubErrorRef.current = message;
+      } else {
+        toast.error(err.response?.data?.message || 'Could not load GitHub repositories');
+      }
+      return [];
+    } finally {
+      setRepoLoading(false);
+    }
+  };
+
+  const connectGithub = async () => {
+    try {
+      setGithubConnecting(true);
+      const res = await githubAPI.connect();
+      const url = res.data?.data?.authorizeUrl;
+      if (!url) throw new Error('Missing GitHub authorization URL');
+      const popup = window.open(url, 'devdrop-github-connect', 'width=700,height=760');
+      if (!popup) throw new Error('Please allow popups to connect GitHub');
+
+      const onMessage = async (event) => {
+        if (event.origin !== window.location.origin) return;
+        if (event.data?.type === 'github-oauth-success') {
+          window.removeEventListener('message', onMessage);
+          setGithubConnecting(false);
+          setGithubError('');
+          githubErrorRef.current = '';
+          const providersRes = await deploymentAPI.getProviders();
+          setProviders(providersRes.data?.data || null);
+          const repos = await loadRepositories();
+          const first = repos[0] || null;
+          setSelectedRepository(first);
+          if (first && website?._id) await runAnalysis(website._id, first);
+          toast.success('GitHub connected');
+        } else if (event.data?.type === 'github-oauth-error') {
+          window.removeEventListener('message', onMessage);
+          setGithubConnecting(false);
+          toast.error(event.data?.message || 'GitHub authorization failed');
+        }
+      };
+      window.addEventListener('message', onMessage);
+    } catch (err) {
+      setGithubConnecting(false);
+      toast.error(err.response?.data?.message || err.message || 'Could not connect GitHub');
+    }
+  };
+
+  const handleRepositoryChange = async (fullName) => {
+    const repo = repositories.find((item) => item.fullName === fullName);
+    if (!repo || !website?._id) return;
+    setSelectedRepository(repo);
+    setEnvValues({});
+    await runAnalysis(website._id, repo);
+  };
+
   const refreshProviders = async () => {
     const res = await deploymentAPI.getProviders();
     setProviders(res.data?.data || null);
   };
 
-  const runAnalysis = async (websiteId) => {
+  const runAnalysis = async (websiteId, repository = selectedRepository) => {
     try {
       setAnalyzing(true);
       setAnalyzeError('');
-      const res = await deploymentAPI.analyze(websiteId);
+      if (!repository) throw new Error('Choose a GitHub repository first.');
+      const res = await deploymentAPI.analyze(websiteId, repository);
       setAnalysis(res.data?.data || null);
     } catch (err) {
       setAnalyzeError(err.response?.data?.message || 'Could not analyze this repository.');
@@ -107,7 +226,7 @@ export default function DeployProject() {
     }
     try {
       setCreating(true);
-      const res = await deploymentAPI.create(website._id, envValues);
+      const res = await deploymentAPI.create(website._id, envValues, selectedRepository);
       const { deploymentId } = res.data?.data || {};
       navigate(`/deployments/${deploymentId}`, { replace: true });
     } catch (err) {
@@ -147,10 +266,39 @@ export default function DeployProject() {
         </div>
         <p className="text-white/35 text-sm mb-10 ml-[52px]">{website?.name}</p>
 
+        <div className="rounded-[26px] border border-white/8 bg-[#0b0b0b] p-6 mb-6">
+          <p className="text-[10px] uppercase tracking-[0.3em] text-[#8b7355] font-bold mb-4">GitHub Repository</p>
+          {!providers?.github?.connected ? (
+            <button type="button" onClick={connectGithub} disabled={githubConnecting} className="w-full py-3 rounded-xl bg-white text-black text-xs font-black uppercase tracking-widest disabled:opacity-50">
+              {githubConnecting ? 'Connecting…' : 'Connect GitHub'}
+            </button>
+          ) : (
+            <div className="space-y-3">
+              {githubError && (
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+                  <p className="text-xs text-amber-200/80 leading-relaxed">{githubError}</p>
+                  <button type="button" onClick={connectGithub} disabled={githubConnecting} className="mt-2 text-[11px] font-black uppercase tracking-wider text-white underline underline-offset-4 disabled:opacity-50">
+                    {githubConnecting ? 'Reconnecting…' : 'Reconnect GitHub'}
+                  </button>
+                </div>
+              )}
+              <div className="flex gap-2">
+                <input value={repoSearch} onChange={(e) => setRepoSearch(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && loadRepositories(repoSearch)} placeholder="Search repositories" autoComplete="off" className="flex-1 px-4 py-3 rounded-xl bg-white/[0.03] border border-white/10 text-sm focus:outline-none focus:border-[#8b7355]/50" />
+                <button type="button" onClick={() => loadRepositories(repoSearch)} disabled={repoLoading} className="px-4 rounded-xl bg-white/5 border border-white/10 text-xs font-bold disabled:opacity-50">{repoLoading ? 'Loading…' : 'Search'}</button>
+              </div>
+              <select value={selectedRepository?.fullName || ''} onChange={(e) => handleRepositoryChange(e.target.value)} disabled={repoLoading || repositories.length === 0} className="w-full px-4 py-3 rounded-xl bg-[#111] border border-white/10 text-sm focus:outline-none focus:border-[#8b7355]/50 disabled:opacity-50">
+                <option value="">{repositories.length ? 'Choose repository' : 'No repositories found'}</option>
+                {repositories.map((repo) => <option key={repo.id} value={repo.fullName}>{repo.fullName} · {repo.defaultBranch}{repo.private ? ' · Private' : ''}</option>)}
+              </select>
+              {selectedRepository && <p className="text-[11px] text-white/35">Deploying <span className="text-white/65 font-mono">{selectedRepository.fullName}</span> from <span className="font-mono">{selectedRepository.defaultBranch}</span>. This list comes from GitHub, not existing Vercel projects.</p>}
+            </div>
+          )}
+        </div>
+
         {analyzing ? (
           <AnalyzingCard />
         ) : analyzeError ? (
-          <ErrorCard message={analyzeError} onRetry={() => runAnalysis(website._id)} />
+          <ErrorCard message={analyzeError} onRetry={() => selectedRepository ? runAnalysis(website._id, selectedRepository) : loadRepositories(repoSearch)} />
         ) : analysis?.architecture === 'UNKNOWN' ? (
           <UnknownArchitectureCard analysis={analysis} />
         ) : (

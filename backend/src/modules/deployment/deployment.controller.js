@@ -91,6 +91,66 @@ const getVerifiedExportForDeployment = async (userId, websiteId) => {
   return { purchase, projectExport };
 };
 
+const getVerifiedPurchaseForDeployment = async (userId, websiteId) => {
+  const purchase = await Purchase.findOne({ websiteId, buyerId: userId, paymentStatus: PAYMENT_STATUS.COMPLETED });
+  if (!purchase) {
+    const err = new Error('You do not own this project.');
+    err.status = 403;
+    throw err;
+  }
+  return purchase;
+};
+
+const normalizeRepositoryInput = (repository) => {
+  if (!repository || typeof repository !== 'object') return null;
+  const owner = String(repository.owner || '').trim();
+  const name = String(repository.name || '').trim();
+  const defaultBranch = String(repository.defaultBranch || 'main').trim() || 'main';
+  if (!/^[A-Za-z0-9_.-]+$/.test(owner) || !/^[A-Za-z0-9_.-]+$/.test(name)) {
+    const err = new Error('Invalid GitHub repository selection.');
+    err.status = 400;
+    throw err;
+  }
+  return { owner, name, defaultBranch };
+};
+
+const resolveRepositoryForDeployment = async ({ userId, websiteId, repository, accessToken }) => {
+  const selected = normalizeRepositoryInput(repository);
+  if (selected) {
+    try {
+      const metadata = await githubService.getRepository(accessToken, selected.owner, selected.name);
+      return {
+        projectExport: null,
+        repository: {
+          owner: selected.owner,
+          name: selected.name,
+          url: metadata.htmlUrl,
+          defaultBranch: metadata.defaultBranch || selected.defaultBranch,
+        },
+      };
+    } catch (error) {
+      if (error?.response?.status === 404) {
+        const err = new Error('DevDrop cannot access that GitHub repository. Check your GitHub permissions.');
+        err.status = 403;
+        throw err;
+      }
+      throw error;
+    }
+  }
+
+  const { projectExport } = await getVerifiedExportForDeployment(userId, websiteId);
+  return {
+    projectExport,
+    repository: {
+      owner: projectExport.repositoryOwner,
+      name: projectExport.repositoryName,
+      url: projectExport.repositoryUrl,
+      defaultBranch: projectExport.defaultBranch,
+    },
+  };
+};
+
+
 const serializeProviders = async (userId) => {
   const [githubConnection, deployConnections] = await Promise.all([
     GithubConnection.findOne({ userId }),
@@ -342,7 +402,7 @@ const disconnectRender = async (req, res) => {
 const analyze = async (req, res) => {
   try {
     const { websiteId } = req.params;
-    const { projectExport } = await getVerifiedExportForDeployment(req.userId, websiteId);
+    await getVerifiedPurchaseForDeployment(req.userId, websiteId);
 
     const connection = await GithubConnection.findOne({ userId: req.userId }).select('+accessTokenEncrypted');
     if (!connection) {
@@ -350,9 +410,15 @@ const analyze = async (req, res) => {
     }
 
     const accessToken = cryptoUtil.decrypt(connection.accessTokenEncrypted);
-    const analysis = await analyzeRepository({ accessToken, owner: projectExport.repositoryOwner, repo: projectExport.repositoryName, branch: projectExport.defaultBranch });
+    const { repository } = await resolveRepositoryForDeployment({
+      userId: req.userId,
+      websiteId,
+      repository: req.body?.repository,
+      accessToken,
+    });
+    const analysis = await analyzeRepository({ accessToken, owner: repository.owner, repo: repository.name, branch: repository.defaultBranch });
 
-    res.json({ success: true, data: analysis });
+    res.json({ success: true, data: { ...analysis, repository } });
   } catch (error) {
     res.status(error.status || 500).json({
       success: false,
@@ -372,7 +438,7 @@ const createDeployment = async (req, res) => {
   try {
     const { websiteId } = req.params;
     const userId = req.userId;
-    const { purchase, projectExport } = await getVerifiedExportForDeployment(userId, websiteId);
+    const purchase = await getVerifiedPurchaseForDeployment(userId, websiteId);
 
     // Idempotency (§39): don't spin up a second deployment while one for
     // this project is still in flight — hand back the existing one instead.
@@ -387,11 +453,17 @@ const createDeployment = async (req, res) => {
     }
 
     const accessToken = cryptoUtil.decrypt(githubConnection.accessTokenEncrypted);
+    const { projectExport, repository } = await resolveRepositoryForDeployment({
+      userId,
+      websiteId,
+      repository: req.body?.repository,
+      accessToken,
+    });
     const analysis = await analyzeRepository({
       accessToken,
-      owner: projectExport.repositoryOwner,
-      repo: projectExport.repositoryName,
-      branch: projectExport.defaultBranch,
+      owner: repository.owner,
+      repo: repository.name,
+      branch: repository.defaultBranch,
     });
 
     if (analysis.architecture === 'UNKNOWN') {
@@ -444,13 +516,8 @@ const createDeployment = async (req, res) => {
       userId,
       websiteId,
       purchaseId: purchase._id,
-      projectExportId: projectExport._id,
-      repository: {
-        owner: projectExport.repositoryOwner,
-        name: projectExport.repositoryName,
-        url: projectExport.repositoryUrl,
-        defaultBranch: projectExport.defaultBranch,
-      },
+      projectExportId: projectExport?._id || null,
+      repository,
       architecture: analysis.architecture,
       analysis: { frontend: analysis.frontend, backend: analysis.backend },
       envPlan: analysis.envPlan,

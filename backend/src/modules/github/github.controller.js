@@ -136,6 +136,30 @@ const status = async (req, res) => {
   }
 };
 
+
+/** GET /api/github/repositories — repositories available to deploy. */
+const listRepositories = async (req, res) => {
+  try {
+    const connection = await GithubConnection.findOne({ userId: req.userId }).select('+accessTokenEncrypted');
+    if (!connection) {
+      return res.status(400).json({ success: false, message: 'Connect your GitHub account first.', requiresGithubConnection: true });
+    }
+
+    const accessToken = cryptoUtil.decrypt(connection.accessTokenEncrypted);
+    const result = await githubService.listRepositories(accessToken, {
+      page: req.query.page,
+      perPage: req.query.perPage,
+      search: req.query.search,
+    });
+    res.json({ success: true, data: result.repositories, pagination: { hasNextPage: result.hasNextPage } });
+  } catch (error) {
+    if (githubService.isAuthError(error)) {
+      return res.status(401).json({ success: false, message: 'GitHub connection expired or was revoked. Please reconnect GitHub.', code: 'GITHUB_CONNECTION_EXPIRED', requiresGithubConnection: true });
+    }
+    res.status(500).json({ success: false, message: 'Could not load GitHub repositories.', error: error.message });
+  }
+};
+
 /**
  * DELETE /api/github/disconnect
  */
@@ -274,6 +298,7 @@ module.exports = {
   connect,
   callback,
   status,
+  listRepositories,
   disconnect,
   createExport,
   getExportStatus,
