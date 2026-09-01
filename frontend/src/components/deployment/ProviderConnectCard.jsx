@@ -29,6 +29,7 @@ export default function ProviderConnectCard({ provider, status, onChange }) {
   const [apiKey, setApiKey] = useState('');
   const [showOwnerPicker, setShowOwnerPicker] = useState(false);
   const popupRef = useRef(null);
+  const popupWatcherRef = useRef(null);
 
   useEffect(() => {
     if (provider !== 'vercel') return undefined;
@@ -44,11 +45,24 @@ export default function ProviderConnectCard({ provider, status, onChange }) {
       } else if (type === 'vercel-oauth-error') {
         toast.error(message || 'Vercel connection failed');
         setConnecting(false);
+      } else {
+        return;
+      }
+
+      // Message arrived, so stop waiting on the popup.closed watcher and
+      // close it via our own handle — unaffected by any COOP isolation on
+      // the popup's own side.
+      clearInterval(popupWatcherRef.current);
+      if (popupRef.current && !popupRef.current.closed) {
+        popupRef.current.close();
       }
     };
 
     window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      clearInterval(popupWatcherRef.current);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider]);
 
@@ -58,11 +72,26 @@ export default function ProviderConnectCard({ provider, status, onChange }) {
       const res = await deploymentAPI.connectVercel();
       const authorizeUrl = res.data?.data?.authorizeUrl;
       if (!authorizeUrl) throw new Error('No authorization URL returned');
-      popupRef.current = window.open(authorizeUrl, 'vercel-oauth', 'width=600,height=720');
-      if (!popupRef.current) {
+      const popup = window.open(authorizeUrl, 'vercel-oauth', 'width=600,height=720');
+      popupRef.current = popup;
+      if (!popup) {
         toast.error('Please allow popups to connect Vercel');
         setConnecting(false);
+        return;
       }
+
+      // Fallback: if the callback page's postMessage never arrives (e.g. a
+      // proxy/CDN re-adds a strict Cross-Origin-Opener-Policy header and
+      // severs window.opener), detect the popup closing and re-sync status
+      // so the "Waiting…" state doesn't hang forever.
+      clearInterval(popupWatcherRef.current);
+      popupWatcherRef.current = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(popupWatcherRef.current);
+          setConnecting(false);
+          onChange?.();
+        }
+      }, 800);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Could not start Vercel connection');
       setConnecting(false);

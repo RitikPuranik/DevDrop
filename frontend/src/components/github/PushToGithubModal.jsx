@@ -52,6 +52,7 @@ export default function PushToGithubModal({ open, onClose, website }) {
 
   const popupRef = useRef(null);
   const pollTimerRef = useRef(null);
+  const popupWatcherRef = useRef(null);
 
   useEffect(() => {
     if (!open || !website?._id) return;
@@ -64,6 +65,7 @@ export default function PushToGithubModal({ open, onClose, website }) {
 
     return () => {
       clearTimeout(pollTimerRef.current);
+      clearInterval(popupWatcherRef.current);
       if (popupRef.current && !popupRef.current.closed) {
         popupRef.current.close();
       }
@@ -85,6 +87,17 @@ export default function PushToGithubModal({ open, onClose, website }) {
       } else if (type === 'github-oauth-error') {
         toast.error(message || 'GitHub connection failed');
         setConnecting(false);
+      } else {
+        return;
+      }
+
+      // The message got through, so we don't need the popup.closed watcher
+      // anymore — close the popup ourselves. This uses our own handle
+      // (popupRef.current), not the popup's own window.close(), so it isn't
+      // affected by any Cross-Origin-Opener-Policy isolation on the popup's side.
+      clearInterval(popupWatcherRef.current);
+      if (popupRef.current && !popupRef.current.closed) {
+        popupRef.current.close();
       }
     };
 
@@ -124,7 +137,22 @@ export default function PushToGithubModal({ open, onClose, website }) {
       if (!popup) {
         toast.error('Please allow popups to connect GitHub');
         setConnecting(false);
+        return;
       }
+
+      // Fallback in case the postMessage from the callback page never arrives
+      // (e.g. a proxy/CDN re-adds a strict Cross-Origin-Opener-Policy header
+      // and severs window.opener). Once the popup closes — whether it closed
+      // itself or the user closed it — re-check status so the UI never gets
+      // stuck on "Waiting for GitHub…" forever.
+      clearInterval(popupWatcherRef.current);
+      popupWatcherRef.current = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(popupWatcherRef.current);
+          setConnecting(false);
+          refreshStatus();
+        }
+      }, 800);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Could not start GitHub connection');
       setConnecting(false);

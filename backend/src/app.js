@@ -30,6 +30,21 @@ app.use(helmet({
   crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
   crossOriginResourcePolicy: { policy: 'cross-origin' },
 }));
+
+// The GitHub/Vercel OAuth callback pages are rendered on THIS (backend) origin
+// but exist purely to call `window.opener.postMessage(...)` back to the
+// frontend, which is a *different* origin. `same-origin-allow-popups` only
+// preserves that link for a popup document whose own COOP is `unsafe-none`;
+// since helmet applies its stricter policy to every route including these,
+// the callback page gets isolated into a new browsing context group the
+// moment it loads. That silently nulls `window.opener` (so postMessage never
+// arrives and the opener spins forever) and also revokes the tab's permission
+// to call `window.close()` on itself (so the user has to close it by hand).
+// Overriding it back to `unsafe-none` for just these two routes fixes both.
+app.use(['/api/github/callback', '/api/deployments/providers/vercel/callback'], (req, res, next) => {
+  res.setHeader('Cross-Origin-Opener-Policy', 'unsafe-none');
+  next();
+});
 const allowedOrigins = [
   process.env.FRONTEND_URL,
   "http://localhost:5173",
