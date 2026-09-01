@@ -912,15 +912,28 @@ export default function Profile() {
               <div className="rounded-[28px] border border-white/8 bg-[#0c0c0c] p-6 mb-6">
                 <p className="text-[10px] uppercase tracking-[0.3em] text-[#8b7355] font-bold mb-4">Connected Accounts</p>
                 <div className="space-y-3">
-                  <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4 flex items-center justify-between">
-                    <span className="text-sm font-bold">GitHub</span>
-                    {deploymentProviders?.github?.connected ? (
-                      <span className="inline-flex items-center gap-1.5 text-[11px] text-emerald-400">
-                        <CheckCircle size={12} /> @{deploymentProviders.github.username}
-                      </span>
-                    ) : (
-                      <span className="text-[11px] text-white/30">Not connected — use Push to GitHub on any purchase</span>
-                    )}
+                  <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4 flex items-center justify-between gap-4">
+                    <div>
+                      <span className="text-sm font-bold">GitHub</span>
+                      {deploymentProviders?.github?.connected ? (
+                        <span className="ml-3 inline-flex items-center gap-1.5 text-[11px] text-emerald-400">
+                          <CheckCircle size={12} /> @{deploymentProviders.github.username}
+                        </span>
+                      ) : (
+                        <span className="ml-3 text-[11px] text-white/30">Not connected</span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // The deployment page owns the GitHub OAuth popup flow.
+                        // Send the user there so they can reconnect safely.
+                        navigate('/deployments');
+                      }}
+                      className="shrink-0 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white/55 text-[10px] font-black uppercase tracking-wider hover:text-white hover:bg-white/10 transition-colors"
+                    >
+                      {deploymentProviders?.github?.connected ? 'Reconnect' : 'Connect'}
+                    </button>
                   </div>
                   <ProviderConnectCard provider="vercel" status={deploymentProviders?.vercel} onChange={fetchDeployments} />
                   <ProviderConnectCard provider="render" status={deploymentProviders?.render} onChange={fetchDeployments} />

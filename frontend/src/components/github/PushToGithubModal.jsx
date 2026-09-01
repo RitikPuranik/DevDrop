@@ -282,6 +282,8 @@ export default function PushToGithubModal({ open, onClose, website }) {
               submitting={submitting}
               errorMessage={isFailed ? exportState?.errorMessage : null}
               previousExport={previousExport}
+              onReconnect={handleConnect}
+              reconnecting={connecting}
             />
           )}
         </motion.div>
@@ -325,13 +327,26 @@ function ExportForm({
   submitting,
   errorMessage,
   previousExport,
+  onReconnect,
+  reconnecting,
 }) {
   const cleanPreview = sanitizeRepoName(repositoryName);
 
   return (
     <form onSubmit={onSubmit} className="space-y-5">
-      <div className="flex items-center gap-2 text-emerald-400 text-[10px] font-bold uppercase tracking-[0.18em]">
-        <CheckCircle2 size={12} /> GitHub Connected · @{githubUsername}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-emerald-400 text-[10px] font-bold uppercase tracking-[0.18em]">
+          <CheckCircle2 size={12} /> GitHub Connected · @{githubUsername}
+        </div>
+        <button
+          type="button"
+          onClick={onReconnect}
+          disabled={reconnecting || submitting}
+          className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white/55 text-[10px] font-black uppercase tracking-wider hover:text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+        >
+          {reconnecting ? <Loader2 size={11} className="animate-spin" /> : <GitBranch size={11} />}
+          {reconnecting ? 'Reconnecting…' : 'Reconnect'}
+        </button>
       </div>
 
       {previousExport?.status === 'success' && previousExport?.repositoryUrl && (

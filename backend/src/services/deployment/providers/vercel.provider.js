@@ -83,12 +83,12 @@ const exchangeCodeForToken = async (code, configurationId) => {
     redirect_uri: getRedirectUri(),
   });
 
-  // IMPORTANT: configurationId identifies the installed configuration, but
-  // it is NOT part of Vercel's /v2/oauth/access_token request body. Vercel's
-  // documented exchange requires client_id, client_secret, code and
-  // redirect_uri. Sending configurationId here can cause the provider to
-  // reject an otherwise valid installation. We persist configurationId
-  // separately after the exchange.
+  // Vercel returns configurationId for integration installations. Sending
+  // it during the exchange binds the resulting credential to the selected
+  // installation and avoids the invalid/Access Denied behavior seen when a
+  // configuration is already installed. Older Vercel responses may omit it,
+  // so only include it when supplied.
+  if (configurationId) body.set('configurationId', configurationId);
 
   try {
     const { data } = await axios.post(
