@@ -4,20 +4,24 @@ import {
   User, Package, Heart, DollarSign, Upload, ShoppingBag, 
   ExternalLink, Trash2, Loader2, LogOut, Plus, AlertCircle,
   ArrowLeft, Download, CheckCircle, Landmark, Camera, X, Eye,
-  ArrowUpRight, TrendingUp, XCircle, Clock, AlertTriangle
+  ArrowUpRight, TrendingUp, XCircle, Clock, AlertTriangle, Rocket
 } from 'lucide-react';
 import { userAPI } from '../../api/user';
 import { sellerAPI } from '../../api/seller';
 import { buyerAPI } from '../../api/buyer';
 import { wishlistAPI } from '../../api/wishlist';
 import { authAPI } from '../../api/auth';
+import { deploymentAPI } from '../../api/deployment';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import ProviderConnectCard from '../../components/deployment/ProviderConnectCard';
+import DeploymentCard from '../../components/deployment/DeploymentCard';
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: User },
   { id: 'listings', label: 'My Listings', icon: Upload },
   { id: 'purchases', label: 'Purchases', icon: ShoppingBag },
+  { id: 'deployments', label: 'Deployments', icon: Rocket },
   { id: 'wishlist', label: 'Wishlist', icon: Heart },
   { id: 'bankDetails', label: 'Payout Details', icon: Landmark },
 ];
@@ -140,6 +144,12 @@ export default function Profile() {
   const [avatarUploading, setAvatarUploading] = useState(false);
   const avatarInputRef = useRef(null);
 
+  // --- DEPLOYMENTS STATE ---
+  const [deployments, setDeployments] = useState([]);
+  const [deploymentsLoading, setDeploymentsLoading] = useState(false);
+  const [deploymentProviders, setDeploymentProviders] = useState(null);
+  const [deploymentFilter, setDeploymentFilter] = useState('all');
+
 
   // --- BANK DETAILS STATE ---
   const [bankDetails, setBankDetails] = useState({
@@ -175,6 +185,7 @@ export default function Profile() {
   useEffect(() => {
     if (activeTab === 'listings') fetchListings();
     else if (activeTab === 'purchases') fetchPurchases();
+    else if (activeTab === 'deployments') fetchDeployments();
     else if (activeTab === 'wishlist') fetchWishlist();
     else if (activeTab === 'bankDetails') fetchBankDetails();
   }, [activeTab]);
@@ -231,6 +242,24 @@ export default function Profile() {
     } catch { setPurchases([]); }
     finally { setPurchasesLoading(false); }
   };
+
+  const fetchDeployments = async () => {
+    try {
+      setDeploymentsLoading(true);
+      const [deploymentsRes, providersRes] = await Promise.all([
+        deploymentAPI.list({ status: deploymentFilter === 'all' ? undefined : deploymentFilter, limit: 20 }),
+        deploymentAPI.getProviders(),
+      ]);
+      setDeployments(deploymentsRes.data?.data || []);
+      setDeploymentProviders(providersRes.data?.data || null);
+    } catch { setDeployments([]); }
+    finally { setDeploymentsLoading(false); }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'deployments') fetchDeployments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deploymentFilter]);
 
   const fetchWishlist = async () => {
     try {
@@ -875,6 +904,66 @@ export default function Profile() {
                 </motion.div>
               )}
               </AnimatePresence>
+            </motion.div>
+          )}
+
+          {activeTab === 'deployments' && (
+            <motion.div key="deployments" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+              <div className="rounded-[28px] border border-white/8 bg-[#0c0c0c] p-6 mb-6">
+                <p className="text-[10px] uppercase tracking-[0.3em] text-[#8b7355] font-bold mb-4">Connected Accounts</p>
+                <div className="space-y-3">
+                  <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4 flex items-center justify-between">
+                    <span className="text-sm font-bold">GitHub</span>
+                    {deploymentProviders?.github?.connected ? (
+                      <span className="inline-flex items-center gap-1.5 text-[11px] text-emerald-400">
+                        <CheckCircle size={12} /> @{deploymentProviders.github.username}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-white/30">Not connected — use Push to GitHub on any purchase</span>
+                    )}
+                  </div>
+                  <ProviderConnectCard provider="vercel" status={deploymentProviders?.vercel} onChange={fetchDeployments} />
+                  <ProviderConnectCard provider="render" status={deploymentProviders?.render} onChange={fetchDeployments} />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between mb-5">
+                <p className="text-[10px] uppercase tracking-[0.3em] text-white/40 font-bold">
+                  {deployments.length} Deployment{deployments.length === 1 ? '' : 's'}
+                </p>
+                <div className="flex gap-1.5">
+                  {['all', 'successful', 'failed', 'deploying'].map((f) => (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => setDeploymentFilter(f)}
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors ${
+                        deploymentFilter === f ? 'bg-white text-black' : 'bg-white/5 text-white/40 hover:text-white/70'
+                      }`}
+                    >
+                      {f}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {deploymentsLoading ? (
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 className="animate-spin text-white/30" size={22} />
+                </div>
+              ) : deployments.length === 0 ? (
+                <div className="rounded-[28px] border border-dashed border-white/10 bg-white/[0.01] p-12 text-center">
+                  <Rocket className="mx-auto mb-4 text-white/20" size={28} />
+                  <p className="text-white/40 text-sm mb-1">No deployments yet</p>
+                  <p className="text-white/25 text-xs">Publish a purchased project to GitHub, then hit Deploy from its access page.</p>
+                </div>
+              ) : (
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {deployments.map((d) => (
+                    <DeploymentCard key={d.id} deployment={d} />
+                  ))}
+                </div>
+              )}
             </motion.div>
           )}
 

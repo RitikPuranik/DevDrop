@@ -1,0 +1,124 @@
+const mongoose = require('mongoose');
+const {
+  DEPLOYMENT_STATUS,
+  DEPLOYMENT_ARCHITECTURE,
+  DEPLOYMENT_PROVIDERS,
+} = require('../../shared/utils/constants');
+
+// One entry per environment variable the analyzer found the project reading.
+// Never holds the actual secret value — just enough to render the "what do
+// you need to fill in" form and to know, later, whether it was ever
+// successfully pushed to the provider.
+const envPlanEntrySchema = new mongoose.Schema(
+  {
+    key: { type: String, required: true, trim: true },
+    target: { type: String, enum: ['frontend', 'backend'], required: true },
+    // 'auto'  -> DevDrop generates/synchronizes this itself (NODE_ENV, the
+    //            frontend<->backend URL pair) and never asks the buyer for it.
+    // 'user'  -> the buyer must supply the value (DATABASE_URL, JWT_SECRET, ...).
+    source: { type: String, enum: ['auto', 'user'], required: true },
+    required: { type: Boolean, default: true },
+    configured: { type: Boolean, default: false },
+  },
+  { _id: false }
+);
+
+const deploymentSchema = new mongoose.Schema(
+  {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+      index: true,
+    },
+    websiteId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Website',
+      required: true,
+      index: true,
+    },
+    purchaseId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Purchase',
+      required: true,
+    },
+    projectExportId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'ProjectExport',
+      required: true,
+    },
+
+    // Snapshot of the GitHub repo this deployment targets, copied from the
+    // ProjectExport at creation time so a past deployment's history stays
+    // accurate even if the project is re-published under a different name
+    // later. Source of truth for "which repo" is still ProjectExport.
+    repository: {
+      owner: String,
+      name: String,
+      url: String,
+      defaultBranch: String,
+    },
+
+    architecture: {
+      type: String,
+      enum: Object.values(DEPLOYMENT_ARCHITECTURE),
+      default: DEPLOYMENT_ARCHITECTURE.UNKNOWN,
+    },
+
+    // Structured analyzer output (frameworks, root dirs, build/start
+    // commands, detected architecture) — see services/deployment/analyzer.js.
+    // Snapshotted once analysis completes so re-opening a deployment's
+    // details doesn't require re-analyzing the repo.
+    analysis: { type: mongoose.Schema.Types.Mixed, default: null },
+
+    envPlan: { type: [envPlanEntrySchema], default: [] },
+    // Buyer-supplied secret values, held encrypted only long enough for the
+    // orchestrator to push them to Vercel/Render, then cleared. Never
+    // returned by any API response (select: false).
+    pendingSecretsEncrypted: { type: String, select: false, default: null },
+
+    frontendProvider: {
+      type: String,
+      enum: [...Object.values(DEPLOYMENT_PROVIDERS), null],
+      default: null,
+    },
+    backendProvider: {
+      type: String,
+      enum: [...Object.values(DEPLOYMENT_PROVIDERS), null],
+      default: null,
+    },
+
+    vercel: {
+      projectId: String,
+      projectName: String,
+      deploymentId: String,
+      teamId: String,
+      url: String,
+    },
+    render: {
+      serviceId: String,
+      deployId: String,
+      ownerId: String,
+      url: String,
+    },
+
+    status: {
+      type: String,
+      enum: Object.values(DEPLOYMENT_STATUS),
+      default: DEPLOYMENT_STATUS.ANALYZING,
+      index: true,
+    },
+    errorMessage: String,
+    // Which orchestration phase failed (e.g. "DEPLOYING_BACKEND") — shown in
+    // the UI so a retry / support request knows where things stopped.
+    errorStep: String,
+
+    lastDeployedAt: Date,
+  },
+  { timestamps: true }
+);
+
+deploymentSchema.index({ userId: 1, createdAt: -1 });
+deploymentSchema.index({ userId: 1, websiteId: 1, createdAt: -1 });
+
+module.exports = mongoose.model('Deployment', deploymentSchema);

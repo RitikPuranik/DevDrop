@@ -10,10 +10,13 @@ import {
   Film,
   GitBranch,
   Loader2,
+  Rocket,
   ShieldCheck,
 } from 'lucide-react';
 import { buyerAPI } from '../../api/buyer';
 import { assetAPI } from '../../api/asset';
+import { githubAPI } from '../../api/github';
+import { deploymentAPI } from '../../api/deployment';
 import { toast } from 'sonner';
 import PushToGithubModal from '../../components/github/PushToGithubModal';
 
@@ -29,6 +32,8 @@ export default function PurchaseAccess() {
   const [previewVideoUrl, setPreviewVideoUrl] = useState('');
   const [previewFallbackTried, setPreviewFallbackTried] = useState(false);
   const [githubModalOpen, setGithubModalOpen] = useState(false);
+  const [githubExport, setGithubExport] = useState(null);
+  const [latestDeployment, setLatestDeployment] = useState(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -81,6 +86,8 @@ export default function PurchaseAccess() {
         await Promise.all([
           fetchAssets(website._id),
           !website?.files?.previewVideo?.url ? fetchPreviewFallback(website._id) : Promise.resolve(),
+          fetchGithubExport(website._id),
+          fetchLatestDeployment(website._id),
         ]);
       }
     } catch (err) {
@@ -90,6 +97,57 @@ export default function PurchaseAccess() {
       setLoading(false);
     }
   };
+
+  // Whether "Deploy" should go straight to the deployment wizard or explain
+  // the GitHub-publishing prerequisite first (spec: publish before deploy).
+  const fetchGithubExport = async (websiteId) => {
+    try {
+      const res = await githubAPI.getExportForWebsite(websiteId);
+      setGithubExport(res.data?.data || null);
+    } catch {
+      setGithubExport(null);
+    }
+  };
+
+  const fetchLatestDeployment = async (websiteId) => {
+    try {
+      const res = await deploymentAPI.getForWebsite(websiteId);
+      setLatestDeployment(res.data?.data || null);
+    } catch {
+      setLatestDeployment(null);
+    }
+  };
+
+  const isPublishedToGithub = githubExport?.status === 'success';
+
+  const handleDeployClick = () => {
+    if (!isPublishedToGithub) {
+      toast.info('Publish this project to GitHub first — DevDrop deploys from your repository.');
+      setGithubModalOpen(true);
+      return;
+    }
+    if (latestDeployment) {
+      navigate(`/deployments/${latestDeployment.id}`);
+    } else {
+      navigate(`/deploy/${purchaseId}`);
+    }
+  };
+
+  const deployButtonProps = (() => {
+    if (!isPublishedToGithub) {
+      return { label: 'Deploy', helper: 'Publish to GitHub first to unlock deployment', variant: 'neutral' };
+    }
+    if (latestDeployment?.status === 'SUCCESS') {
+      return { label: 'View Deployment', helper: latestDeployment.vercel?.url || latestDeployment.render?.url || 'Live — manage or redeploy', variant: 'success' };
+    }
+    if (latestDeployment?.isActive) {
+      return { label: 'Deployment In Progress', helper: 'View live progress', variant: 'info' };
+    }
+    if (latestDeployment?.status === 'FAILED') {
+      return { label: 'View Deployment', helper: 'Last attempt failed — view details to retry', variant: 'neutral' };
+    }
+    return { label: 'Deploy', helper: 'Deploy to your own Vercel & Render accounts', variant: 'brand' };
+  })();
 
   const fetchAssets = async (websiteId) => {
     try {
@@ -344,6 +402,14 @@ export default function PurchaseAccess() {
                     onClick={() => setGithubModalOpen(true)}
                     loading={false}
                     variant="brand"
+                  />
+                  <ActionButton
+                    icon={Rocket}
+                    label={deployButtonProps.label}
+                    helper={deployButtonProps.helper}
+                    onClick={handleDeployClick}
+                    loading={false}
+                    variant={deployButtonProps.variant}
                   />
                 </div>
 

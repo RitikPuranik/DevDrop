@@ -1,8 +1,11 @@
 const crypto = require('crypto');
 
 /**
- * AES-256-GCM helpers for encrypting sensitive tokens (e.g. GitHub OAuth
- * access tokens) before they're persisted to the database.
+ * AES-256-GCM helpers for encrypting sensitive tokens before they're
+ * persisted to the database — GitHub OAuth access tokens, and (as of
+ * DevDrop Deploy) each user's Vercel OAuth access token and Render API key.
+ * One key encrypts all connected-provider credentials; there's no
+ * provider-specific derivation.
  *
  * Storage format: "<ivHex>:<authTagHex>:<ciphertextHex>"
  *
@@ -15,13 +18,16 @@ const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12; // recommended IV length for GCM
 
 const getKey = () => {
-  const hex = process.env.GITHUB_TOKEN_ENCRYPTION_KEY;
+  // TOKEN_ENCRYPTION_KEY is the preferred name now that this key protects
+  // more than just GitHub tokens. GITHUB_TOKEN_ENCRYPTION_KEY is still read
+  // as a fallback so existing deployments don't need to rotate anything.
+  const hex = process.env.TOKEN_ENCRYPTION_KEY || process.env.GITHUB_TOKEN_ENCRYPTION_KEY;
   if (!hex) {
-    throw new Error('GITHUB_TOKEN_ENCRYPTION_KEY is not configured.');
+    throw new Error('TOKEN_ENCRYPTION_KEY (or legacy GITHUB_TOKEN_ENCRYPTION_KEY) is not configured.');
   }
   const key = Buffer.from(hex, 'hex');
   if (key.length !== 32) {
-    throw new Error('GITHUB_TOKEN_ENCRYPTION_KEY must be a 32-byte hex string (64 hex characters).');
+    throw new Error('TOKEN_ENCRYPTION_KEY must be a 32-byte hex string (64 hex characters).');
   }
   return key;
 };

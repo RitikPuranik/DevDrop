@@ -137,6 +137,64 @@ const createRef = async (accessToken, owner, repo, branch, commitSha) => {
   });
 };
 
+// --- Read-only helpers used by the deployment repository analyzer ---
+// (backend/src/services/deployment/analyzer.js). These reuse the same
+// githubApi() client/token as the export flow above; nothing new to
+// authenticate.
+
+/** Current repo metadata — used to confirm the default branch is still
+ * accurate before analyzing (a ProjectExport snapshot could be stale if the
+ * user renamed branches on GitHub directly). */
+const getRepository = async (accessToken, owner, repo) => {
+  const { data } = await githubApi(accessToken).get(`/repos/${owner}/${repo}`);
+  return { defaultBranch: data.default_branch, private: Boolean(data.private), htmlUrl: data.html_url };
+};
+
+/**
+ * Full recursive file tree for a branch. GitHub's Trees API resolves a
+ * branch/tag name directly as the ":tree_sha" path segment, so no separate
+ * "resolve ref to commit to tree sha" round trip is needed.
+ * Returns [{ path, type: 'blob'|'tree', size }].
+ */
+const getRepoTree = async (accessToken, owner, repo, branch) => {
+  const { data } = await githubApi(accessToken).get(`/repos/${owner}/${repo}/git/trees/${encodeURIComponent(branch)}`, {
+    params: { recursive: 1 },
+  });
+
+  if (data.truncated) {
+    // Extremely large repo — the analyzer works off a bounded subset anyway,
+    // so this is a soft warning rather than a hard failure.
+    // eslint-disable-next-line no-console
+    console.warn(`[github.service] Tree for ${owner}/${repo}@${branch} was truncated by GitHub's API.`);
+  }
+
+  return (data.tree || [])
+    .filter((entry) => entry.type === 'blob' || entry.type === 'tree')
+    .map((entry) => ({ path: entry.path, type: entry.type, size: entry.size }));
+};
+
+/** Decoded UTF-8 text content of a single file at a given ref, or null if it
+ * doesn't exist / isn't a regular file. */
+const getFileContent = async (accessToken, owner, repo, path, ref) => {
+  try {
+    const { data } = await githubApi(accessToken).get(`/repos/${owner}/${repo}/contents/${path}`, {
+      params: { ref },
+      headers: { Accept: 'application/vnd.github.raw+json' },
+    });
+    // With the "raw" media type GitHub returns the file body directly as a
+    // string for text files; fall back to base64-decoding the JSON shape in
+    // case a proxy/cache strips the custom Accept header.
+    if (typeof data === 'string') return data;
+    if (data && typeof data.content === 'string') {
+      return Buffer.from(data.content, data.encoding || 'base64').toString('utf8');
+    }
+    return null;
+  } catch (error) {
+    if (error?.response?.status === 404) return null;
+    throw error;
+  }
+};
+
 module.exports = {
   isGithubConfigured,
   getAuthorizeUrl,
@@ -149,4 +207,7 @@ module.exports = {
   createRef,
   isRepoNameTakenError,
   isAuthError,
+  getRepository,
+  getRepoTree,
+  getFileContent,
 };

@@ -14,6 +14,8 @@ import ContactUs from './pages/marketing/ContactUs';
 import ReviewPage from './pages/marketing/Review';
 import Profile from './pages/account/Profile';
 import PurchaseAccess from './pages/marketplace/PurchaseAccess';
+import DeployProject from './pages/deployment/DeployProject';
+import DeploymentDetails from './pages/deployment/DeploymentDetails';
 import AdminPanel from "./pages/admin/AdminPanelPage";
 import WebsiteDetail from './pages/marketplace/WebsiteDetail';
 import Checkout from './pages/marketplace/Checkout';
@@ -121,6 +123,8 @@ function AppContent() {
               <Route path="/review" element={<ReviewPage />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/purchases/:purchaseId" element={<PurchaseAccess />} />
+              <Route path="/deploy/:purchaseId" element={<DeployProject />} />
+              <Route path="/deployments/:deploymentId" element={<DeploymentDetails />} />
               <Route path="/admin" element={<AdminPanel />} />
               <Route path="/website/:id" element={<WebsiteDetail />} />
               <Route path="/checkout/:id" element={<Checkout />} />

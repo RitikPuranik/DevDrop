@@ -72,6 +72,7 @@ app.use('/api/auctions',  require('./modules/auction'));
 app.use('/api/analytics', require('./modules/analytics'));
 app.use('/api/contact',   require('./modules/contact'));
 app.use('/api/github',    require('./modules/github'));
+app.use('/api/deployments', require('./modules/deployment'));
 
 
 app.get("/debug-sentry", function mainHandler(req, res) {

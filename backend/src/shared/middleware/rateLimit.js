@@ -25,6 +25,8 @@ const PAYMENT_RATE_LIMIT_WINDOW_MS = readEnvNumber('PAYMENT_RATE_LIMIT_WINDOW_MS
 const PAYMENT_RATE_LIMIT_MAX_REQUESTS = readEnvNumber('PAYMENT_RATE_LIMIT_MAX_REQUESTS', 3);
 const EXPORT_RATE_LIMIT_WINDOW_MS = readEnvNumber('EXPORT_RATE_LIMIT_WINDOW_MS', 60 * 60 * 1000);
 const EXPORT_RATE_LIMIT_MAX_REQUESTS = readEnvNumber('EXPORT_RATE_LIMIT_MAX_REQUESTS', 5);
+const DEPLOY_RATE_LIMIT_WINDOW_MS = readEnvNumber('DEPLOY_RATE_LIMIT_WINDOW_MS', 60 * 60 * 1000);
+const DEPLOY_RATE_LIMIT_MAX_REQUESTS = readEnvNumber('DEPLOY_RATE_LIMIT_MAX_REQUESTS', 10);
 
 // General API rate limiter
 const generalLimiter = rateLimit({
@@ -89,10 +91,25 @@ const exportLimiter = rateLimit({
   },
 });
 
+// Deployment creation/redeploy limiter (per user) — each call fans out to
+// Vercel/Render API calls and kicks off a background orchestration run.
+const deployLimiter = rateLimit({
+  windowMs: DEPLOY_RATE_LIMIT_WINDOW_MS,
+  max: DEPLOY_RATE_LIMIT_MAX_REQUESTS,
+  keyGenerator: (req) => {
+    return req.userId ? req.userId.toString() : req.ip;
+  },
+  message: {
+    success: false,
+    message: `Too many deployment attempts, please try again after ${formatWindowLabel(DEPLOY_RATE_LIMIT_WINDOW_MS)}.`,
+  },
+});
+
 module.exports = {
   generalLimiter,
   authLimiter,
   downloadLimiter,
   paymentLimiter,
   exportLimiter,
+  deployLimiter,
 };
