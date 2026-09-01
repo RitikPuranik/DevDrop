@@ -1,12 +1,11 @@
 const axios = require('axios');
 
 /**
- * Vercel deployment provider.
- *
- * Vercel grants third-party access through an Integration installation. The
- * browser is sent to the integration install page, Vercel redirects to the
- * registered callback with a short-lived code, and DevDrop exchanges that
- * code server-side for the user's OAuth access token.
+ * Vercel grants third-party access through an Integration installation. For
+ * external installations Vercel supports `next` and `state` query parameters
+ * on /integrations/:slug/new. DevDrop uses both: `state` binds the callback to
+ * the authenticated DevDrop user and `next` sends Vercel to our frontend
+ * callback after installation. See the current Vercel integration docs.
  */
 
 const getClientId = () => {
@@ -33,7 +32,12 @@ const isConfigured = () => Boolean(
   process.env.VERCEL_INTEGRATION_SLUG
 );
 
-const getInstallUrl = () => `https://vercel.com/integrations/${getIntegrationSlug()}/new`;
+const getInstallUrl = ({ next, state } = {}) => {
+  const url = new URL(`https://vercel.com/integrations/${getIntegrationSlug()}/new`);
+  if (next) url.searchParams.set('next', next);
+  if (state) url.searchParams.set('state', state);
+  return url.toString();
+};
 
 const exchangeCodeForToken = async (code) => {
   const { data } = await axios.post(
@@ -148,7 +152,6 @@ const validateConnection = async (credential, metadata) => {
   }
 };
 
-/** Creates or adopts the Vercel project used by the deployment. */
 const ensureProject = async (credential, metadata, config, existing) => {
   const api = vercelApi(credential, metadata?.teamId);
 
@@ -247,7 +250,6 @@ const getDeploymentStatus = async (credential, metadata, deployId) => {
   }
 };
 
-/** Best-effort cancellation for in-progress Vercel deployments. */
 const cancelDeployment = async (credential, metadata, deployId) => {
   try {
     await vercelApi(credential, metadata?.teamId).patch(`/v12/deployments/${deployId}/cancel`);
