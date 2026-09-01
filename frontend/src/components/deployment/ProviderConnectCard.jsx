@@ -35,13 +35,24 @@ export default function ProviderConnectCard({ provider, status, onChange }) {
     if (provider !== 'vercel') return undefined;
     const backendOrigin = getBackendOrigin();
 
-    const handleMessage = (event) => {
+    const handleMessage = async (event) => {
       if (backendOrigin && event.origin !== backendOrigin) return;
-      const { type, accountLabel, message } = event.data || {};
-      if (type === 'vercel-oauth-success') {
-        toast.success(`Vercel connected${accountLabel ? ` as ${accountLabel}` : ''}`);
-        setConnecting(false);
-        onChange?.();
+      const { type, code, teamId, message } = event.data || {};
+      if (type === 'vercel-oauth-code') {
+        // The callback route can't identify a user (Vercel doesn't echo
+        // back a state param), so the exchange happens here instead, on
+        // the authenticated SPA — see deployment.controller.js's
+        // finishConnectVercel for why.
+        try {
+          const res = await deploymentAPI.finishConnectVercel(code, teamId);
+          const accountLabel = res.data?.data?.accountLabel;
+          toast.success(`Vercel connected${accountLabel ? ` as ${accountLabel}` : ''}`);
+          onChange?.();
+        } catch (err) {
+          toast.error(err.response?.data?.message || 'Vercel connection failed');
+        } finally {
+          setConnecting(false);
+        }
       } else if (type === 'vercel-oauth-error') {
         toast.error(message || 'Vercel connection failed');
         setConnecting(false);

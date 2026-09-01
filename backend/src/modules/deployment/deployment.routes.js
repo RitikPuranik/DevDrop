@@ -9,8 +9,9 @@ const deploymentController = require('./deployment.controller');
 
 // Vercel redirects the user's browser here directly — no Authorization
 // header will be present, so this must stay outside router.use(auth).
-// Identity comes from the signed state token in `next`, not a session
-// cookie (see deployment.controller.js's vercelCallback).
+// This route can't identify a user at all (see vercel.provider.js); it
+// only relays the code back to the opener tab. finish-connect (below,
+// inside router.use(auth)) does the actual identified exchange + save.
 router.get('/providers/vercel/callback', deploymentController.vercelCallback);
 
 router.use(auth);
@@ -21,6 +22,7 @@ router.use(auth);
 // routes avoid with '/exports/website/:websiteId' vs '/exports/:exportId').
 router.get('/providers', deploymentController.getProviders);
 router.post('/providers/vercel/connect', authLimiter, deploymentController.connectVercel);
+router.post('/providers/vercel/finish-connect', authLimiter, deploymentController.finishConnectVercel);
 router.delete('/providers/vercel/disconnect', deploymentController.disconnectVercel);
 
 router.post('/providers/render/connect', authLimiter, deploymentController.connectRender);

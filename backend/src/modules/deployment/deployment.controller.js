@@ -1,6 +1,3 @@
-const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
-
 const Website = require('../website/website.model');
 const Purchase = require('../payment/purchase.model');
 const GithubConnection = require('../github/githubConnection.model');
@@ -22,8 +19,6 @@ const {
   DEPLOYMENT_ACTIVE_STATUSES,
   DEPLOYMENT_PROVIDERS,
 } = require('../../shared/utils/constants');
-
-const OAUTH_STATE_EXPIRY = '10m';
 
 const getFrontendOrigin = () => {
   try {
@@ -150,60 +145,68 @@ const connectVercel = async (req, res) => {
     if (!vercelProvider.isConfigured()) {
       return res.status(503).json({ success: false, message: 'Vercel integration is not configured on this server yet.' });
     }
-    const state = jwt.sign(
-      { userId: req.userId.toString(), purpose: 'vercel_oauth', nonce: crypto.randomBytes(8).toString('hex') },
-      process.env.JWT_SECRET,
-      { expiresIn: OAUTH_STATE_EXPIRY }
-    );
-    res.json({ success: true, data: { authorizeUrl: vercelProvider.getInstallUrl(state) } });
+    // No state param here — Vercel's install flow doesn't echo one back
+    // (see vercel.provider.js). Identity is established later, when the
+    // authenticated SPA calls finishConnectVercel with the code.
+    res.json({ success: true, data: { authorizeUrl: vercelProvider.getInstallUrl() } });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Could not start Vercel connection.', error: error.message });
   }
 };
 
-/** GET /api/deployments/providers/vercel/callback — public; Vercel echoes
- * our signed state token back on the `next` param (see vercel.provider.js). */
+/** GET /api/deployments/providers/vercel/callback — public; no Authorization
+ * header or session reaches this route (Vercel's browser redirect carries
+ * neither), so it can't identify a user or save anything itself. It just
+ * relays the code back to the opener tab; the authenticated SPA finishes
+ * the exchange via finishConnectVercel below. */
 const vercelCallback = async (req, res) => {
-  const { code, next: state, error: oauthError } = req.query;
+  const { code, teamId, configurationId, error: oauthError } = req.query;
+  if (oauthError) {
+    return res.send(renderOAuthResultPage({ type: 'vercel-oauth-error', message: 'Vercel authorization was cancelled or denied.' }));
+  }
+  if (!code) {
+    return res.send(renderOAuthResultPage({ type: 'vercel-oauth-error', message: 'Missing authorization code.' }));
+  }
+  res.send(renderOAuthResultPage({ type: 'vercel-oauth-code', code, teamId: teamId || null, configurationId: configurationId || null }));
+};
+
+/** POST /api/deployments/providers/vercel/finish-connect  body: { code, teamId? }
+ * Called by the SPA once ProviderConnectCard receives the code via
+ * postMessage from the callback popup. This is where identity is actually
+ * established (req.userId, from the normal auth middleware) and the
+ * connection gets saved — see the header comment in vercel.provider.js. */
+const finishConnectVercel = async (req, res) => {
   try {
-    if (oauthError) {
-      return res.send(renderOAuthResultPage({ type: 'vercel-oauth-error', message: 'Vercel authorization was cancelled or denied.' }));
-    }
-    if (!code || !state) {
-      return res.send(renderOAuthResultPage({ type: 'vercel-oauth-error', message: 'Missing authorization code.' }));
+    const { code, teamId } = req.body || {};
+    if (!code) {
+      return res.status(400).json({ success: false, message: 'Missing authorization code.' });
     }
 
-    let decoded;
-    try {
-      decoded = jwt.verify(state, process.env.JWT_SECRET);
-    } catch {
-      return res.send(renderOAuthResultPage({ type: 'vercel-oauth-error', message: 'This connection request expired. Please try again.' }));
-    }
-    if (decoded.purpose !== 'vercel_oauth' || !decoded.userId) {
-      return res.send(renderOAuthResultPage({ type: 'vercel-oauth-error', message: 'Invalid connection request.' }));
-    }
-
-    const { accessToken, teamId } = await vercelProvider.exchangeCodeForToken(code);
+    const { accessToken, teamId: exchangedTeamId } = await vercelProvider.exchangeCodeForToken(code);
+    const effectiveTeamId = teamId || exchangedTeamId || null;
     const user = await vercelProvider.getAuthenticatedUser(accessToken);
-    const team = teamId ? await vercelProvider.getTeam(accessToken, teamId).catch(() => null) : null;
+    const team = effectiveTeamId ? await vercelProvider.getTeam(accessToken, effectiveTeamId).catch(() => null) : null;
+    const accountLabel = team?.name || user.username || user.email || 'Vercel account';
 
     await DeploymentProviderConnection.findOneAndUpdate(
-      { userId: decoded.userId, provider: DEPLOYMENT_PROVIDERS.VERCEL },
+      { userId: req.userId, provider: DEPLOYMENT_PROVIDERS.VERCEL },
       {
-        userId: decoded.userId,
+        userId: req.userId,
         provider: DEPLOYMENT_PROVIDERS.VERCEL,
-        accountLabel: team?.name || user.username || user.email || 'Vercel account',
+        accountLabel,
         credentialEncrypted: cryptoUtil.encrypt(accessToken),
-        metadata: { vercelUserId: user.id, teamId: teamId || null, teamName: team?.name || null },
+        metadata: { vercelUserId: user.id, teamId: effectiveTeamId, teamName: team?.name || null },
         connectedAt: new Date(),
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    res.send(renderOAuthResultPage({ type: 'vercel-oauth-success', accountLabel: team?.name || user.username }));
+    res.json({ success: true, data: { accountLabel } });
   } catch (error) {
-    console.error('Vercel OAuth callback error:', error.message);
-    res.send(renderOAuthResultPage({ type: 'vercel-oauth-error', message: 'Could not complete Vercel authorization. Please try again.' }));
+    console.error('Vercel finish-connect error:', error.message);
+    // A Vercel OAuth `code` is single-use and short-lived — surface a
+    // message that nudges toward retrying rather than a raw API error.
+    res.status(400).json({ success: false, message: 'Could not complete Vercel authorization. Please try connecting again.' });
   }
 };
 
@@ -539,6 +542,7 @@ module.exports = {
   getProviders,
   connectVercel,
   vercelCallback,
+  finishConnectVercel,
   disconnectVercel,
   connectRender,
   setRenderOwner,

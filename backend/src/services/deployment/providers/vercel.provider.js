@@ -3,10 +3,9 @@ const axios = require('axios');
 /**
  * Vercel deployment provider.
  *
- * IMPORTANT — how Vercel's OAuth differs from GitHub's (verified against
- * Vercel's current docs while building this; re-check against a live
- * Integration Console app before shipping, since this is the one piece
- * that's hardest to fully confirm without dashboard access):
+ * IMPORTANT — how Vercel's OAuth differs from GitHub's (confirmed against
+ * a live Integration Console app + Vercel's own example-integration repo
+ * after the `next`-as-state approach below turned out not to work):
  *
  * Vercel's third-party API access isn't a generic "build an /authorize URL
  * with client_id+redirect_uri" flow like GitHub's. It's granted through an
@@ -19,19 +18,27 @@ const axios = require('axios');
  * a `code` (plus `teamId`/`configurationId`). We exchange that code for an
  * access token server-side.
  *
- * Because Vercel — not us — controls when/how the redirect fires, we can't
- * build a `state` param into the URL the same way the GitHub flow does
- * (client_id + redirect_uri + state, all on one authorize link we control).
- * What Vercel's install flow does pass through untouched is `next`: whatever
- * we put on the install link's `?next=` shows up again as a query param on
- * the callback. So the deployment controller reuses the exact same
- * short-lived signed-JWT approach github.controller.js uses for `state`,
- * just carried in `next` instead — see deployment.controller.js's
- * connectVercel/vercelCallback. That keeps identity verification here
- * independent of whether the session cookie survives the round trip through
- * vercel.com. (This is the one part of the Vercel integration that's hardest
- * to fully confirm without a live Integration Console app — smoke-test the
- * `next` echo-back before shipping.)
+ * There is NO `state` passthrough on this flow — `next` is NOT an echo of
+ * whatever we put on the install link. Per Vercel's own example-integration
+ * docs, `next` is "the URL we're redirecting [the user] to once setup is
+ * done" — i.e. it's Vercel telling *us* where to send the browser when
+ * we're finished, not a value we control that comes back untouched. A
+ * previous version of this code tried to smuggle a signed JWT through it
+ * expecting an echo-back; in production `next` came back as a Vercel
+ * dashboard URL instead (with `source=external`), so `jwt.verify` on it
+ * always failed and the connection was never saved even though the Vercel
+ * install itself succeeded.
+ *
+ * Because there's no reliable way to identify "which of our users is this"
+ * from the callback request alone (no state param, and auth here is
+ * Bearer-token-in-header, so no session cookie rides along on Vercel's
+ * redirect either), identity verification happens on the FRONTEND side
+ * instead: the public callback route just relays `code`/`teamId` back to
+ * the opener tab via postMessage (see deployment.controller.js's
+ * vercelCallback), and the already-authenticated SPA calls
+ * POST /providers/vercel/finish-connect (protected by the normal `auth`
+ * middleware, so `req.userId` is known) to do the actual token exchange
+ * and save the connection.
  */
 
 const getClientId = () => {
@@ -59,13 +66,9 @@ const isConfigured = () =>
       process.env.VERCEL_INTEGRATION_SLUG
   );
 
-/** Where the "Connect Vercel" button sends the user's browser (popup).
- * `next` is echoed back verbatim as a query param on our redirect URL once
- * install completes — the controller puts its signed state token there. */
-const getInstallUrl = (next) => {
-  const params = new URLSearchParams({ next });
-  return `https://vercel.com/integrations/${getIntegrationSlug()}/new?${params.toString()}`;
-};
+/** Where the "Connect Vercel" button sends the user's browser (popup). No
+ * state param here — see the header comment above for why. */
+const getInstallUrl = () => `https://vercel.com/integrations/${getIntegrationSlug()}/new`;
 
 const exchangeCodeForToken = async (code) => {
   const { data } = await axios.post(
