@@ -38,10 +38,9 @@ const DevDropCompactFooter = () => {
           <h5 className="text-[12px] font-mono text-[#8b7355] uppercase tracking-[0.3em]">Navigation</h5>
           <ul className="space-y-2">
             {['Templates', 'Archive', 'Components'].map(link => (
-              <li key={link} className="text-xs font-serif italic text-[#e8e2d6]/40 hover:text-[#e8e2d6] cursor-pointer transition-colors">
-                {link}
-              </li>
+              <li key={link} className="text-xs font-serif italic text-[#e8e2d6]/40 hover:text-[#e8e2d6] cursor-pointer transition-colors">{link}</li>
             ))}
+            <li><a href="/docs" className="text-xs font-serif italic text-[#e8e2d6]/40 hover:text-[#e8e2d6] transition-colors">Documentation</a></li>
           </ul>
         </div>
 

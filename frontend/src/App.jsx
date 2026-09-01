@@ -21,6 +21,7 @@ import WebsiteDetail from './pages/marketplace/WebsiteDetail';
 import Checkout from './pages/marketplace/Checkout';
 import VerifyEmail from './pages/auth/VerifyEmail';
 import ResetPassword from './pages/auth/ResetPassword';
+import Documentation from './pages/marketing/Documentation';
 
 const HERO_VIDEO_SRC = '/dewdrop.s3.mp4';
 
@@ -120,6 +121,7 @@ function AppContent() {
               <Route path="/about" element={<About />} />
               <Route path="/template" element={<TemplatesPage />} />
               <Route path="/contact" element={<ContactUs />} />
+              <Route path="/docs" element={<Documentation />} />
               <Route path="/review" element={<ReviewPage />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/purchases/:purchaseId" element={<PurchaseAccess />} />
