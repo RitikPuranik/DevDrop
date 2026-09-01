@@ -47,8 +47,7 @@ export default function Privacy() {
       <p className="font-mono text-[10px] uppercase tracking-[0.32em] text-[#8b7355]">Legal</p>
       <h1 className="mt-4 max-w-3xl font-serif text-5xl italic tracking-tighter sm:text-7xl">Privacy Policy</h1>
       <p className="mt-5 max-w-2xl text-sm leading-7 text-white/50">How DevDrop handles the information needed to operate its developer-project marketplace, account tools, publishing, and deployment workflows.</p>
-      <p className="mt-5 font-mono text-[10px] uppercase tracking-[0.2em] text-white/35">Effective Date: [INSERT DATE]</p>
-      <p className="mt-4 max-w-3xl rounded-xl border border-[#8b7355]/30 bg-[#8b7355]/10 px-4 py-3 text-xs leading-6 text-[#e8e2d6]/80">Owner note: replace the effective-date and privacy-contact placeholders before publishing this draft as final legal text.</p>
+      <p className="mt-5 font-mono text-[10px] uppercase tracking-[0.2em] text-white/35">Effective Date: September 1, 2026</p>
     </div></header>
     <div className="mx-auto max-w-7xl px-[6vw] py-8 lg:grid lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-16">
       <div className="lg:hidden"><button type="button" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)} className="mb-6 flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs font-mono uppercase tracking-widest text-white/70">On this page {menuOpen ? <X size={15} /> : <Menu size={15} />}</button>{menuOpen && <div className="mb-8 rounded-xl border border-white/10 bg-[#0b0b0b] p-2">{navigation}</div>}</div>
@@ -69,7 +68,7 @@ export default function Privacy() {
         <Section id="children" title="13. Children’s Privacy"><p>DevDrop is not intended for children below the applicable minimum age to use online services. We do not knowingly seek to collect personal information from children in a manner prohibited by applicable law.</p></Section>
         <Section id="security" title="14. Security Disclaimer"><p>DevDrop uses reasonable technical and organizational measures designed to protect information, including password hashing, encrypted connected-provider credentials, access controls, and security middleware. No internet service, storage system, or transmission can be guaranteed absolutely secure.</p></Section>
         <Section id="changes" title="15. Changes to This Privacy Policy"><p>We may update this Privacy Policy as DevDrop or applicable requirements change. When we do, we will update the effective date shown at the top of this page.</p></Section>
-        <Section id="contact" title="16. Contact"><p>For privacy questions or requests, use DevDrop’s <a href="/contact" className="text-[#e8e2d6] underline decoration-[#8b7355]/70 underline-offset-4 hover:text-white">Contact page</a>.</p><p><strong className="text-white/80">Privacy email:</strong> [INSERT PRIVACY CONTACT EMAIL]</p></Section>
+        <Section id="contact" title="16. Contact"><p>For privacy questions or requests, use DevDrop’s <a href="/contact" className="text-[#e8e2d6] underline decoration-[#8b7355]/70 underline-offset-4 hover:text-white">Contact page</a>.</p><p><strong className="text-white/80">Privacy email:</strong> devdrop2026@gmail.com</p></Section>
       </article>
     </div>
   </div>;
