@@ -30,6 +30,17 @@ export default function ProviderConnectCard({ provider, status, onChange }) {
   const [showOwnerPicker, setShowOwnerPicker] = useState(false);
   const popupRef = useRef(null);
   const popupWatcherRef = useRef(null);
+  // True once a postMessage from the callback popup has been received for
+  // the current attempt. The popup.closed watcher below polls every 800ms
+  // and, on its own, can't distinguish "user closed the popup without
+  // finishing" from "the callback page closed itself right after posting
+  // a message whose finish-connect call is still in flight" — the latter
+  // is the common case, since finish-connect does a token exchange + a
+  // couple of Vercel API calls + a DB write, which routinely takes longer
+  // than 800ms. Without this flag the watcher can fire mid-flight and
+  // report "disconnected" (via onChange) before finish-connect has even
+  // resolved, right as it was about to succeed.
+  const messageHandledRef = useRef(false);
 
   useEffect(() => {
     if (provider !== 'vercel') return undefined;
@@ -38,6 +49,18 @@ export default function ProviderConnectCard({ provider, status, onChange }) {
     const handleMessage = async (event) => {
       if (backendOrigin && event.origin !== backendOrigin) return;
       const { type, code, teamId, message } = event.data || {};
+      if (type !== 'vercel-oauth-code' && type !== 'vercel-oauth-error') return;
+
+      // Claim this attempt and stop the popup.closed watcher BEFORE the
+      // `await` below, not after — otherwise the watcher's next 800ms tick
+      // can still slip in while finish-connect is pending (see the ref's
+      // comment above) and close it out from under us.
+      messageHandledRef.current = true;
+      clearInterval(popupWatcherRef.current);
+      if (popupRef.current && !popupRef.current.closed) {
+        popupRef.current.close();
+      }
+
       if (type === 'vercel-oauth-code') {
         // The callback route can't identify a user (Vercel doesn't echo
         // back a state param), so the exchange happens here instead, on
@@ -53,19 +76,9 @@ export default function ProviderConnectCard({ provider, status, onChange }) {
         } finally {
           setConnecting(false);
         }
-      } else if (type === 'vercel-oauth-error') {
+      } else {
         toast.error(message || 'Vercel connection failed');
         setConnecting(false);
-      } else {
-        return;
-      }
-
-      // Message arrived, so stop waiting on the popup.closed watcher and
-      // close it via our own handle — unaffected by any COOP isolation on
-      // the popup's own side.
-      clearInterval(popupWatcherRef.current);
-      if (popupRef.current && !popupRef.current.closed) {
-        popupRef.current.close();
       }
     };
 
@@ -80,6 +93,7 @@ export default function ProviderConnectCard({ provider, status, onChange }) {
   const handleConnectVercel = async () => {
     try {
       setConnecting(true);
+      messageHandledRef.current = false;
       const res = await deploymentAPI.connectVercel();
       const authorizeUrl = res.data?.data?.authorizeUrl;
       if (!authorizeUrl) throw new Error('No authorization URL returned');
@@ -91,16 +105,25 @@ export default function ProviderConnectCard({ provider, status, onChange }) {
         return;
       }
 
-      // Fallback: if the callback page's postMessage never arrives (e.g. a
-      // proxy/CDN re-adds a strict Cross-Origin-Opener-Policy header and
-      // severs window.opener), detect the popup closing and re-sync status
-      // so the "Waiting…" state doesn't hang forever.
+      // Fallback: if the callback page's postMessage never arrives at all
+      // (e.g. a proxy/CDN re-adds a strict Cross-Origin-Opener-Policy
+      // header and severs window.opener, or the redirect never lands on
+      // our callback route in the first place), detect the popup closing
+      // and re-sync status so the "Waiting…" state doesn't hang forever.
+      // Gated on messageHandledRef so this doesn't fire — and wrongly
+      // report a failed connection — while a finish-connect call from a
+      // message that DID arrive is still in flight; see that ref's
+      // comment for why the popup closing is not on its own proof that
+      // nothing happened.
       clearInterval(popupWatcherRef.current);
       popupWatcherRef.current = setInterval(() => {
         if (popup.closed) {
           clearInterval(popupWatcherRef.current);
-          setConnecting(false);
-          onChange?.();
+          if (!messageHandledRef.current) {
+            setConnecting(false);
+            toast.error("Vercel didn't confirm the connection. If you finished setup on Vercel, the popup may not have redirected back to DevDrop — double-check the integration's redirect URL, then try again.");
+            onChange?.();
+          }
         }
       }, 800);
     } catch (err) {
