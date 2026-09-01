@@ -42,6 +42,7 @@ const DevDropCompactFooter = () => {
             ))}
             <li><a href="/docs" className="text-xs font-serif italic text-[#e8e2d6]/40 hover:text-[#e8e2d6] transition-colors">Documentation</a></li>
             <li><a href="/terms" className="text-xs font-serif italic text-[#e8e2d6]/40 hover:text-[#e8e2d6] transition-colors">Terms of Service</a></li>
+            <li><a href="/privacy" className="text-xs font-serif italic text-[#e8e2d6]/40 hover:text-[#e8e2d6] transition-colors">Privacy Policy</a></li>
           </ul>
         </div>
 
