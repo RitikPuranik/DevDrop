@@ -218,100 +218,128 @@ const connectVercel = async (req, res) => {
     if (!vercelProvider.isConfigured()) {
       return res.status(503).json({ success: false, message: 'Vercel integration is not configured on this server yet.' });
     }
-    // No state param here — Vercel's install flow doesn't echo one back
-    // (see vercel.provider.js). Identity is established later, when the
-    // authenticated SPA calls finishConnectVercel with the code.
-    res.json({ success: true, data: { authorizeUrl: vercelProvider.getInstallUrl() } });
+
+    const state = vercelProvider.createConnectState(req.userId);
+    const callbackPage = new URL('/deploy/vercel-callback', process.env.FRONTEND_URL);
+    const authorizeUrl = vercelProvider.getInstallUrl({
+      state,
+      next: callbackPage.toString(),
+    });
+
+    res.json({ success: true, data: { authorizeUrl } });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Could not start Vercel connection.', error: error.message });
+    console.error('Vercel connect-start error:', error.message);
+    res.status(500).json({ success: false, message: 'Could not start Vercel connection.' });
   }
 };
 
-/** GET /api/deployments/providers/vercel/callback — public; no Authorization
- * header or session reaches this route (Vercel's browser redirect carries
- * neither), so it can't identify a user or save anything itself.
+/**
+ * GET /api/deployments/providers/vercel/callback
  *
- * This used to render a same-origin HTML page here that relied entirely on
- * `window.opener.postMessage(...)` to hand the code back to the tab that
- * opened the popup. That's fragile in a way that isn't fixable from this
- * page alone: the popup's *first* stop is vercel.com itself, and if that
- * origin sends a strict Cross-Origin-Opener-Policy header (common on major
- * sites), the browser permanently severs the window.opener link the moment
- * the popup lands there — before it ever reaches us. Setting a permissive
- * COOP header on this route (see app.js) can't undo a severance that
- * already happened one hop earlier, so the popup would land here, silently
- * fail to postMessage anything, and just sit open — which is exactly the
- * "says Waiting… forever, nothing happens" symptom.
+ * This is the actual Vercel External Integration Redirect URL. Vercel calls
+ * it after the user has selected the personal account/team and project scope.
+ * The callback is intentionally PUBLIC because Vercel does not send the
+ * DevDrop JWT. Authentication is instead bound to the signed `state` created
+ * by connectVercel().
  *
- * So instead: redirect to a real page on the FRONTEND. That page shares the
- * same-origin localStorage (and therefore the user's JWT) as the tab that
- * opened the popup, so it can call finishConnectVercel itself — no
- * window.opener required for the actual connection to succeed. It still
- * best-effort postMessages the opener afterwards purely so the original tab
- * can refresh instantly, but nothing depends on that working anymore.
+ * Vercel's documented flow expects the redirect URL to perform the code
+ * exchange and finish the installation before sending the browser to `next`.
+ * Do that server-side here; do not make the frontend exchange the code.
  */
 const vercelCallback = async (req, res) => {
-  const { code, teamId, configurationId, error: oauthError } = req.query;
-  const target = getFrontendVercelCallbackUrl();
+  const { code, teamId, configurationId, state, next, error: oauthError } = req.query;
+  const frontendCallback = getFrontendVercelCallbackUrl();
 
-  if (!target) {
-    // FRONTEND_URL isn't configured/parseable — fall back to the old
-    // same-page postMessage approach rather than hard-failing outright.
-    if (oauthError) return res.send(renderOAuthResultPage({ type: 'vercel-oauth-error', message: 'Vercel authorization was cancelled or denied.' }));
-    if (!code) return res.send(renderOAuthResultPage({ type: 'vercel-oauth-error', message: 'Missing authorization code.' }));
-    return res.send(renderOAuthResultPage({ type: 'vercel-oauth-code', code, teamId: teamId || null, configurationId: configurationId || null }));
-  }
+  const finishUrl = (params = {}) => {
+    const target = new URL(frontendCallback || process.env.FRONTEND_URL || 'http://localhost:5173');
+    if (frontendCallback) {
+      target.searchParams.set('provider', 'vercel');
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') target.searchParams.set(key, String(value));
+      });
+    }
+    return target.toString();
+  };
 
   if (oauthError) {
-    target.searchParams.set('error', 'Vercel authorization was cancelled or denied.');
-  } else if (!code) {
-    target.searchParams.set('error', 'Missing authorization code.');
-  } else {
-    target.searchParams.set('code', code);
-    if (teamId) target.searchParams.set('teamId', teamId);
-    if (configurationId) target.searchParams.set('configurationId', configurationId);
+    return res.redirect(finishUrl({ error: 'Vercel authorization was cancelled or denied.' }));
   }
-  res.redirect(target.toString());
-};
 
-/** POST /api/deployments/providers/vercel/finish-connect  body: { code, teamId? }
- * Called by the SPA once ProviderConnectCard receives the code via
- * postMessage from the callback popup. This is where identity is actually
- * established (req.userId, from the normal auth middleware) and the
- * connection gets saved — see the header comment in vercel.provider.js. */
-const finishConnectVercel = async (req, res) => {
+  if (!code || !state) {
+    return res.redirect(finishUrl({ error: 'Vercel did not return the required authorization data. Please try again.' }));
+  }
+
+  let stateUser;
   try {
-    const { code, teamId } = req.body || {};
-    if (!code) {
-      return res.status(400).json({ success: false, message: 'Missing authorization code.' });
-    }
+    stateUser = vercelProvider.verifyConnectState(state);
+  } catch {
+    return res.redirect(finishUrl({ error: 'Vercel connection expired or invalid. Please start the connection again.' }));
+  }
 
-    const { accessToken, teamId: exchangedTeamId } = await vercelProvider.exchangeCodeForToken(code);
-    const effectiveTeamId = teamId || exchangedTeamId || null;
-    const user = await vercelProvider.getAuthenticatedUser(accessToken);
-    const team = effectiveTeamId ? await vercelProvider.getTeam(accessToken, effectiveTeamId).catch(() => null) : null;
+  try {
+    // Exchange on the backend. The browser never receives the Vercel token.
+    // configurationId is stored as installation metadata, not sent to the
+    // OAuth token endpoint.
+    const exchanged = await vercelProvider.exchangeCodeForToken(code);
+    const effectiveTeamId = teamId || exchanged.teamId || null;
+    const user = await vercelProvider.getAuthenticatedUser(exchanged.accessToken);
+    const team = effectiveTeamId
+      ? await vercelProvider.getTeam(exchanged.accessToken, effectiveTeamId).catch(() => null)
+      : null;
     const accountLabel = team?.name || user.username || user.email || 'Vercel account';
 
     await DeploymentProviderConnection.findOneAndUpdate(
-      { userId: req.userId, provider: DEPLOYMENT_PROVIDERS.VERCEL },
+      { userId: stateUser.userId, provider: DEPLOYMENT_PROVIDERS.VERCEL },
       {
-        userId: req.userId,
+        userId: stateUser.userId,
         provider: DEPLOYMENT_PROVIDERS.VERCEL,
         accountLabel,
-        credentialEncrypted: cryptoUtil.encrypt(accessToken),
-        metadata: { vercelUserId: user.id, teamId: effectiveTeamId, teamName: team?.name || null },
+        credentialEncrypted: cryptoUtil.encrypt(exchanged.accessToken),
+        metadata: {
+          vercelUserId: user.id,
+          teamId: effectiveTeamId,
+          teamName: team?.name || null,
+          configurationId: configurationId || exchanged.configurationId || null,
+          installationId: exchanged.installationId || null,
+        },
         connectedAt: new Date(),
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    res.json({ success: true, data: { accountLabel } });
+    // Vercel's `next` is only a completion target. Never redirect to an
+    // arbitrary URL supplied by a request; DevDrop owns the final target.
+    return res.redirect(finishUrl({ status: 'success', accountLabel }));
   } catch (error) {
-    console.error('Vercel finish-connect error:', error.message);
-    // A Vercel OAuth `code` is single-use and short-lived — surface a
-    // message that nudges toward retrying rather than a raw API error.
-    res.status(400).json({ success: false, message: 'Could not complete Vercel authorization. Please try connecting again.' });
+    console.error('Vercel callback error:', {
+      status: error.status,
+      message: error.message,
+      provider: error.provider,
+      teamId: teamId || null,
+      configurationId: configurationId || null,
+    });
+
+    let message = 'Could not complete Vercel authorization. Please try again.';
+    if (error.status === 403) {
+      message = 'Vercel denied the selected account or team. Make sure you selected a team/account you can administer and that DevDrop has the required scopes.';
+    } else if (error.status === 401) {
+      message = 'Vercel rejected the authorization code. Start a fresh connection; authorization codes are single-use.';
+    }
+    return res.redirect(finishUrl({ error: message }));
   }
+};
+
+/**
+ * Legacy endpoint retained for compatibility with older frontend builds.
+ * New builds should never call this because the public callback now performs
+ * the token exchange itself, as required by Vercel's External Integration
+ * installation flow.
+ */
+const finishConnectVercel = async (req, res) => {
+  return res.status(410).json({
+    success: false,
+    message: 'This Vercel connection flow has been upgraded. Start Connect Vercel again from DevDrop.',
+  });
 };
 
 /** DELETE /api/deployments/providers/vercel/disconnect */

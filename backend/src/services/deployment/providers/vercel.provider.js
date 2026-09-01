@@ -1,44 +1,18 @@
 const axios = require('axios');
+const jwt = require('jsonwebtoken');
 
 /**
  * Vercel deployment provider.
  *
- * IMPORTANT — how Vercel's OAuth differs from GitHub's (confirmed against
- * a live Integration Console app + Vercel's own example-integration repo
- * after the `next`-as-state approach below turned out not to work):
+ * Vercel Integration Console installations use the external installation
+ * flow: /integrations/:slug/new. Vercel sends `code`, `teamId`,
+ * `configurationId`, `state` and `next` back to the configured redirect URL.
+ * The `code` is exchanged server-side for a long-lived access token.
  *
- * Vercel's third-party API access isn't a generic "build an /authorize URL
- * with client_id+redirect_uri" flow like GitHub's. It's granted through an
- * "Integration" registered in Vercel's Integration Console, which issues a
- * client_id/client_secret and a FIXED redirect URL (configured in the
- * console itself, not passed per-request). Users start the connection from
- * Vercel's own install page for that integration
- * (https://vercel.com/integrations/<slug>/new), pick an account/team scope
- * there, and Vercel redirects back to the pre-registered redirect URL with
- * a `code` (plus `teamId`/`configurationId`). We exchange that code for an
- * access token server-side.
- *
- * There is NO `state` passthrough on this flow — `next` is NOT an echo of
- * whatever we put on the install link. Per Vercel's own example-integration
- * docs, `next` is "the URL we're redirecting [the user] to once setup is
- * done" — i.e. it's Vercel telling *us* where to send the browser when
- * we're finished, not a value we control that comes back untouched. A
- * previous version of this code tried to smuggle a signed JWT through it
- * expecting an echo-back; in production `next` came back as a Vercel
- * dashboard URL instead (with `source=external`), so `jwt.verify` on it
- * always failed and the connection was never saved even though the Vercel
- * install itself succeeded.
- *
- * Because there's no reliable way to identify "which of our users is this"
- * from the callback request alone (no state param, and auth here is
- * Bearer-token-in-header, so no session cookie rides along on Vercel's
- * redirect either), identity verification happens on the FRONTEND side
- * instead: the public callback route just relays `code`/`teamId` back to
- * the opener tab via postMessage (see deployment.controller.js's
- * vercelCallback), and the already-authenticated SPA calls
- * POST /providers/vercel/finish-connect (protected by the normal `auth`
- * middleware, so `req.userId` is known) to do the actual token exchange
- * and save the connection.
+ * IMPORTANT: `configurationId` is retained because it identifies the exact
+ * installation/configuration whose project permissions were selected by the
+ * user. `state` is also used to bind the callback to the DevDrop user who
+ * started the connection.
  */
 
 const getClientId = () => {
@@ -66,29 +40,79 @@ const isConfigured = () =>
       process.env.VERCEL_INTEGRATION_SLUG
   );
 
-/** Where the "Connect Vercel" button sends the user's browser (popup). No
- * state param here — see the header comment above for why. */
-const getInstallUrl = () => `https://vercel.com/integrations/${getIntegrationSlug()}/new`;
+const getStateSecret = () => {
+  if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET is not configured.');
+  return process.env.JWT_SECRET;
+};
 
-const exchangeCodeForToken = async (code) => {
-  const { data } = await axios.post(
-    'https://api.vercel.com/v2/oauth/access_token',
-    new URLSearchParams({
-      client_id: getClientId(),
-      client_secret: getClientSecret(),
-      code,
-      redirect_uri: getRedirectUri(),
-    }).toString(),
-    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-  );
+/** Create a short-lived state value bound to the currently authenticated
+ * DevDrop user. Vercel's external installation flow returns this state. */
+const createConnectState = (userId) => jwt.sign(
+  {
+    purpose: 'vercel-connect',
+    userId: String(userId),
+  },
+  getStateSecret(),
+  { expiresIn: '10m' }
+);
 
-  if (!data.access_token) throw new Error('Vercel did not return an access token.');
-  return {
-    accessToken: data.access_token,
-    teamId: data.team_id || null,
-    vercelUserId: data.user_id || null,
-    installationId: data.installation_id || null,
-  };
+const verifyConnectState = (state) => {
+  const decoded = jwt.verify(state, getStateSecret());
+  if (decoded?.purpose !== 'vercel-connect' || !decoded?.userId) {
+    throw new Error('Invalid Vercel connection state.');
+  }
+  return { userId: String(decoded.userId) };
+};
+
+/** Where the "Connect Vercel" button sends the user's browser. The
+ * external installation flow explicitly supports `state` and `next`; use
+ * them so the callback can be tied to the initiating DevDrop user and the
+ * popup knows which page should receive the result. */
+const getInstallUrl = ({ state, next } = {}) => {
+  const url = new URL(`https://vercel.com/integrations/${getIntegrationSlug()}/new`);
+  if (state) url.searchParams.set('state', state);
+  if (next) url.searchParams.set('next', next);
+  return url.toString();
+};
+
+const exchangeCodeForToken = async (code, configurationId) => {
+  const body = new URLSearchParams({
+    client_id: getClientId(),
+    client_secret: getClientSecret(),
+    code,
+    redirect_uri: getRedirectUri(),
+  });
+
+  // IMPORTANT: configurationId identifies the installed configuration, but
+  // it is NOT part of Vercel's /v2/oauth/access_token request body. Vercel's
+  // documented exchange requires client_id, client_secret, code and
+  // redirect_uri. Sending configurationId here can cause the provider to
+  // reject an otherwise valid installation. We persist configurationId
+  // separately after the exchange.
+
+  try {
+    const { data } = await axios.post(
+      'https://api.vercel.com/v2/oauth/access_token',
+      body.toString(),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    );
+
+    if (!data.access_token) throw new Error('Vercel did not return an access token.');
+    return {
+      accessToken: data.access_token,
+      teamId: data.team_id || null,
+      vercelUserId: data.user_id || null,
+      installationId: data.installation_id || null,
+      configurationId: configurationId || data.configuration_id || null,
+    };
+  } catch (error) {
+    const status = error?.response?.status;
+    const providerMessage = error?.response?.data?.error?.message || error?.response?.data?.error || error?.message;
+    const err = new Error(providerMessage || 'Vercel token exchange failed.');
+    err.status = status || 502;
+    err.provider = 'vercel';
+    throw err;
+  }
 };
 
 const vercelApi = (accessToken, teamId) =>
@@ -245,6 +269,8 @@ const cancelDeployment = async (credential, metadata, deployId) => {
 module.exports = {
   isConfigured,
   getInstallUrl,
+  createConnectState,
+  verifyConnectState,
   exchangeCodeForToken,
   getAuthenticatedUser,
   getTeam,

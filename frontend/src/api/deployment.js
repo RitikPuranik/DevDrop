@@ -4,7 +4,6 @@ export const deploymentAPI = {
   // Connected accounts
   getProviders: () => api.get("/deployments/providers"),
   connectVercel: () => api.post("/deployments/providers/vercel/connect"),
-  finishConnectVercel: (code, teamId) => api.post("/deployments/providers/vercel/finish-connect", { code, teamId }),
   disconnectVercel: () => api.delete("/deployments/providers/vercel/disconnect"),
   connectRender: (apiKey) => api.post("/deployments/providers/render/connect", { apiKey }),
   setRenderOwner: (ownerId) => api.patch("/deployments/providers/render/owner", { ownerId }),
