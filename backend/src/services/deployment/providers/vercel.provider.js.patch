@@ -1,0 +1,44 @@
+diff --git a/backend/src/services/deployment/providers/vercel.provider.js b/backend/src/services/deployment/providers/vercel.provider.js
+--- a/backend/src/services/deployment/providers/vercel.provider.js
++++ b/backend/src/services/deployment/providers/vercel.provider.js
+@@
+- * (https://vercel.com/integrations/<slug>/new), pick an account/team scope
+- * there, and Vercel redirects back to the pre-registered redirect URL with
+- * a `code` (plus `teamId`/`configurationId`). We exchange that code for an
+- * access token server-side.
++ * (https://vercel.com/integrations/<slug>/new), pick an account/team scope,
++ * and Vercel redirects back to the pre-registered redirect URL with a
++ * `code`, `state`, `teamId`, and `configurationId`. We exchange that code
++ * for an access token server-side.
+@@
+- * Because Vercel — not us — controls when/how the redirect fires, we can't
+- * build a `state` param into the URL the same way the GitHub flow does
+- * (client_id + redirect_uri + state, all on one authorize link we control).
+- * What Vercel's install flow does pass through untouched is `next`: whatever
+- * we put on the install link's `?next=` shows up again as a query param on
+- * the callback. So the deployment controller reuses the exact same
+- * short-lived signed-JWT approach github.controller.js uses for `state`,
+- * just carried in `next` instead — see deployment.controller.js's
+- * connectVercel/vercelCallback. That keeps identity verification here
+- * independent of whether the session cookie survives the round trip through
+- * vercel.com. (This is the one part of the Vercel integration that's hardest
+- * to fully confirm without a live Integration Console app — smoke-test the
+- * `next` echo-back before shipping.)
++ * The External Installation Flow supports a standard `state` query parameter
++ * for CSRF protection. The deployment controller signs that state and Vercel
++ * returns it to the configured callback. Do not use `next` as application
++ * state: Vercel uses `next` as the post-install return URL and may replace it
++ * with its own Vercel dashboard URL.
+@@
+-/** Where the "Connect Vercel" button sends the user's browser (popup).
+- * `next` is echoed back verbatim as a query param on our redirect URL once
+- * install completes — the controller puts its signed state token there. */
+-const getInstallUrl = (next) => {
+-  const params = new URLSearchParams({ next });
++/** Where the "Connect Vercel" button sends the user's browser (popup).
++ * `state` is returned by Vercel on the callback and is verified by the
++ * deployment controller. */
++const getInstallUrl = (state) => {
++  const params = new URLSearchParams({ state });
+   return `https://vercel.com/integrations/${getIntegrationSlug()}/new?${params.toString()}`;
+ };
