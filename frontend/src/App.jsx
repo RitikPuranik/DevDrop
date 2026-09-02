@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { Toaster } from "sonner";
 
@@ -13,9 +13,10 @@ import TemplatesPage from './pages/marketplace/Templates';
 import ContactUs from './pages/marketing/ContactUs';
 import ReviewPage from './pages/marketing/Review';
 import Profile from './pages/account/Profile';
-import Dashboard from './pages/account/Dashboard';
+import Workspace from './pages/account/Workspace';
 import PurchaseAccess from './pages/marketplace/PurchaseAccess';
 import DeployProject from './pages/deployment/DeployProject';
+import DeployOwnProject from './pages/deployment/DeployOwnProject';
 import DeploymentDetails from './pages/deployment/DeploymentDetails';
 import VercelOAuthCallback from './pages/deployment/VercelOAuthCallback';
 import AdminPanel from "./pages/admin/AdminPanelPage";
@@ -32,7 +33,7 @@ const HERO_VIDEO_SRC = '/dewdrop.s3.mp4';
 function AppContent() {
   const location = useLocation();
   const isBuilder = location.pathname === "/website";
-  const isDashboard = location.pathname.startsWith("/dashboard");
+  const isWorkspace = location.pathname.startsWith("/workspace") || location.pathname.startsWith("/dashboard");
   const isVerifyEmail = location.pathname === "/verify-email";
   const isResetPassword = location.pathname === "/reset-password";
   const isVercelCallback = location.pathname === "/deploy/vercel-callback";
@@ -110,7 +111,6 @@ function AppContent() {
         <>
           {!isStandaloneAuthPage && <Loader suppressOnce={suppressNextLoader} />}
           {!isBuilder && !isStandaloneAuthPage && <Navbar />}
-
           <main className="bg-black min-h-screen">
             <Routes>
               <Route
@@ -132,9 +132,11 @@ function AppContent() {
               <Route path="/privacy" element={<Privacy />} />
               <Route path="/review" element={<ReviewPage />} />
               <Route path="/profile" element={<Profile />} />
-              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/workspace" element={<Workspace />} />
+              <Route path="/dashboard" element={<Navigate to="/workspace" replace />} />
               <Route path="/purchases/:purchaseId" element={<PurchaseAccess />} />
               <Route path="/deploy/vercel-callback" element={<VercelOAuthCallback />} />
+              <Route path="/deploy-own" element={<DeployOwnProject />} />
               <Route path="/deploy/:purchaseId" element={<DeployProject />} />
               <Route path="/deployments/:deploymentId" element={<DeploymentDetails />} />
               <Route path="/admin" element={<AdminPanel />} />
@@ -158,7 +160,7 @@ function AppContent() {
             />
           </main>
 
-          {!isBuilder && !isDashboard && !isStandaloneAuthPage && <Footer />}
+          {!isBuilder && !isWorkspace && !isStandaloneAuthPage && <Footer />}
         </>
       )}
     </>

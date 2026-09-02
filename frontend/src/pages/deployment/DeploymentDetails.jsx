@@ -67,7 +67,7 @@ export default function DeploymentDetails() {
       }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Deployment not found');
-      navigate('/dashboard', { replace: true });
+      navigate('/workspace', { replace: true });
     } finally {
       setLoading(false);
     }
@@ -100,10 +100,10 @@ export default function DeploymentDetails() {
       <div className="max-w-3xl mx-auto px-4 md:px-6 py-10 md:py-14">
         <button
           type="button"
-          onClick={() => navigate('/dashboard')}
+          onClick={() => navigate('/workspace')}
           className="inline-flex items-center gap-2 text-white/35 hover:text-white text-xs font-bold uppercase tracking-widest mb-8 transition-colors"
         >
-          <ArrowLeft size={14} /> Back to Dashboard
+          <ArrowLeft size={14} /> Back to Workspace
         </button>
 
         <h1 className="text-2xl font-black tracking-tight mb-1">{deployment.repository?.name}</h1>

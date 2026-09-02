@@ -29,6 +29,13 @@ router.post('/providers/render/connect', authLimiter, deploymentController.conne
 router.patch('/providers/render/owner', deploymentController.setRenderOwner);
 router.delete('/providers/render/disconnect', deploymentController.disconnectRender);
 
+// Personal projects — deploy the user's own GitHub repo with no purchase
+// involved. Literal segments, so (like '/providers') these MUST be
+// registered before the '/analyze/:websiteId' and '/:websiteId' patterns
+// below, or Express would try to match "personal" as a :websiteId value.
+router.post('/personal/analyze', verifyEmail, deploymentController.analyzePersonalRepository);
+router.post('/personal', verifyEmail, deployLimiter, deploymentController.createPersonalDeployment);
+
 router.post('/analyze/:websiteId', validators.mongoId('websiteId'), handleValidationErrors, deploymentController.analyze);
 
 // Must come before '/:deploymentId' for the same reason as '/providers' above.

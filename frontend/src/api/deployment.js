@@ -13,6 +13,12 @@ export const deploymentAPI = {
   // Analysis + deployment lifecycle
   analyze: (websiteId, repository) => api.post(`/deployments/analyze/${websiteId}`, { repository }),
   create: (websiteId, envValues, repository) => api.post(`/deployments/${websiteId}`, { envValues, repository }),
+
+  // Personal projects — the user's own GitHub repo, deployed with no
+  // DevDrop purchase involved at all.
+  analyzePersonal: (repository) => api.post("/deployments/personal/analyze", { repository }),
+  createPersonal: (repository, envValues) => api.post("/deployments/personal", { repository, envValues }),
+
   list: (params) => api.get("/deployments", { params }),
   getForWebsite: (websiteId) => api.get(`/deployments/website/${websiteId}`),
   getById: (deploymentId) => api.get(`/deployments/${deploymentId}`),

@@ -88,7 +88,7 @@ const Navbar = () => {
         ...menuItems,
       
         {
-          to: "/dashboard",
+          to: "/workspace",
           label: "Workspace",
           src: "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?q=80&w=1000",
           hasSubMenu: false,

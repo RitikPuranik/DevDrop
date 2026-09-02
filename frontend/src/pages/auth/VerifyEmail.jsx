@@ -200,7 +200,7 @@ function SuccessState({ countdown, onAction }) {
       </p>
 
       <button className="btn-primary" onClick={onAction}>
-        Enter Dashboard
+        Enter Workspace
       </button>
 
       <div className="mono" style={{ marginTop: 24, fontSize: 10, color: '#f97316', opacity: 0.8 }}>

@@ -153,24 +153,25 @@ export default function Profile() {
 
         {/* ── HEADER ── */}
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
-          <h1 className="text-2xl md:text-3xl font-black tracking-tight text-white">Account Settings</h1>
-          <p className="text-white/55 text-sm mt-1.5">Manage your profile, verification, and appearance.</p>
+          <p className="text-[10px] uppercase tracking-[0.25em] text-white/35 font-semibold mb-3">Account</p>
+          <h1 className="text-3xl md:text-4xl font-serif italic tracking-tight text-white">{profile?.name || 'Your Profile'}</h1>
+          <p className="text-white/50 text-sm mt-2">Manage your profile, verification, and appearance.</p>
         </motion.div>
 
-        {/* ── GO TO DASHBOARD ── */}
+        {/* ── GO TO WORKSPACE ── */}
         <motion.button
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.03 }}
-          onClick={() => navigate('/dashboard')}
+          onClick={() => navigate('/workspace')}
           className="w-full flex items-center gap-4 rounded-[28px] border border-white/10 bg-gradient-to-br from-[#141210] via-[#0e0d0c] to-[#0a0a0a] p-5 mb-6 text-left hover:border-[var(--accent)]/40 transition-all shadow-lg shadow-black/20 group"
         >
           <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0" style={{ backgroundColor: 'var(--accent-soft)' }}>
             <LayoutGrid size={18} className="text-[var(--accent)]" />
           </div>
           <div className="flex-1">
-            <p className="font-bold text-white text-sm">Go to Dashboard</p>
-            <p className="text-white/55 text-xs mt-0.5">Listings, purchases, deployments, wishlist &amp; payouts</p>
+            <p className="font-semibold text-white text-sm">Go to Workspace</p>
+            <p className="text-white/50 text-xs mt-0.5">Listings, purchases, deployments, wishlist &amp; payouts</p>
           </div>
           <ChevronRight size={18} className="text-white/40 group-hover:text-white group-hover:translate-x-0.5 transition-all" />
         </motion.button>
@@ -182,7 +183,7 @@ export default function Profile() {
           transition={{ delay: 0.06 }}
           className="rounded-[28px] border border-white/8 bg-[#121110] shadow-lg shadow-black/20 p-6 md:p-8 mb-6"
         >
-          <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--accent)] font-bold mb-6 flex items-center gap-2">
+          <p className="text-[10px] uppercase tracking-[0.25em] text-[var(--accent)] font-semibold mb-6 flex items-center gap-2">
             <UserIcon size={12} /> Profile
           </p>
 
@@ -309,10 +310,10 @@ export default function Profile() {
           transition={{ delay: 0.09 }}
           className="rounded-[28px] border border-white/8 bg-[#121110] shadow-lg shadow-black/20 p-6 md:p-8 mb-6"
         >
-          <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--accent)] font-bold mb-1.5 flex items-center gap-2">
+          <p className="text-[10px] uppercase tracking-[0.25em] text-[var(--accent)] font-semibold mb-1.5 flex items-center gap-2">
             <Palette size={12} /> Appearance
           </p>
-          <p className="text-white/55 text-xs mb-5">Choose an accent color for your Profile &amp; Dashboard.</p>
+          <p className="text-white/50 text-xs mb-5">Choose an accent color for your Profile &amp; Workspace.</p>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {themes.map((t) => {

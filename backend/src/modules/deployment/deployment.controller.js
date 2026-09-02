@@ -182,6 +182,7 @@ const serializeProviders = async (userId) => {
 const serializeDeployment = (deployment) => ({
   id: deployment._id,
   websiteId: deployment.websiteId,
+  source: deployment.source || 'marketplace',
   repository: deployment.repository,
   architecture: deployment.architecture,
   analysis: deployment.analysis,
@@ -566,6 +567,189 @@ const createDeployment = async (req, res) => {
   }
 };
 
+// ─────────────────────────────────────────
+// PERSONAL PROJECTS — deploy any of the user's own GitHub repositories
+// directly, with no DevDrop purchase involved at all.
+// ─────────────────────────────────────────
+
+const getGithubAccessToken = async (userId) => {
+  const connection = await GithubConnection.findOne({ userId }).select('+accessTokenEncrypted');
+  if (!connection) {
+    const err = new Error('Connect your GitHub account first.');
+    err.status = 400;
+    err.requiresGithubConnection = true;
+    throw err;
+  }
+  return cryptoUtil.decrypt(connection.accessTokenEncrypted);
+};
+
+/** POST /api/deployments/personal/analyze  body: { repository: { owner, name, defaultBranch } } */
+const analyzePersonalRepository = async (req, res) => {
+  try {
+    const accessToken = await getGithubAccessToken(req.userId);
+    const selected = normalizeRepositoryInput(req.body?.repository);
+    if (!selected) {
+      return res.status(400).json({ success: false, message: 'Choose a GitHub repository to analyze.' });
+    }
+
+    let metadata;
+    try {
+      metadata = await githubService.getRepository(accessToken, selected.owner, selected.name);
+    } catch (error) {
+      if (error?.response?.status === 404) {
+        const err = new Error('DevDrop cannot access that GitHub repository. Check your GitHub permissions.');
+        err.status = 403;
+        throw err;
+      }
+      throw error;
+    }
+
+    const repository = {
+      owner: selected.owner,
+      name: selected.name,
+      url: metadata.htmlUrl,
+      defaultBranch: metadata.defaultBranch || selected.defaultBranch,
+    };
+    const analysis = await analyzeRepository({ accessToken, owner: repository.owner, repo: repository.name, branch: repository.defaultBranch });
+
+    res.json({ success: true, data: { ...analysis, repository } });
+  } catch (error) {
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.status ? error.message : 'Error analyzing repository',
+      error: error.status ? undefined : error.message,
+      requiresGithubConnection: error.requiresGithubConnection || undefined,
+    });
+  }
+};
+
+/** POST /api/deployments/personal  body: { repository, envValues? }
+ * Same pipeline as createDeployment (analyze -> validate providers/env ->
+ * queue), but with no purchase/website ownership check at all — this is
+ * for a user's own repository, purchased from nowhere. */
+const createPersonalDeployment = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const accessToken = await getGithubAccessToken(userId);
+    const selected = normalizeRepositoryInput(req.body?.repository);
+    if (!selected) {
+      return res.status(400).json({ success: false, message: 'Choose a GitHub repository to deploy.' });
+    }
+
+    let metadata;
+    try {
+      metadata = await githubService.getRepository(accessToken, selected.owner, selected.name);
+    } catch (error) {
+      if (error?.response?.status === 404) {
+        const err = new Error('DevDrop cannot access that GitHub repository. Check your GitHub permissions.');
+        err.status = 403;
+        throw err;
+      }
+      throw error;
+    }
+    const repository = {
+      owner: selected.owner,
+      name: selected.name,
+      url: metadata.htmlUrl,
+      defaultBranch: metadata.defaultBranch || selected.defaultBranch,
+    };
+
+    // Idempotency: don't queue a second deployment for the same personal
+    // repo while one is already in flight.
+    const existingActive = await Deployment.findOne({
+      userId,
+      source: 'personal',
+      'repository.owner': repository.owner,
+      'repository.name': repository.name,
+      status: { $in: DEPLOYMENT_ACTIVE_STATUSES },
+    });
+    if (existingActive) {
+      return res.status(200).json({ success: true, data: { deploymentId: existingActive._id, status: existingActive.status, resumed: true } });
+    }
+
+    const analysis = await analyzeRepository({
+      accessToken,
+      owner: repository.owner,
+      repo: repository.name,
+      branch: repository.defaultBranch,
+    });
+
+    if (analysis.architecture === 'UNKNOWN') {
+      return res.status(422).json({
+        success: false,
+        message: "We couldn't automatically determine how to deploy this project. Please review the detected configuration manually.",
+        data: analysis,
+      });
+    }
+
+    const neededProviders = [analysis.frontend?.provider, analysis.backend?.provider].filter(Boolean);
+    const connections = await DeploymentProviderConnection.find({ userId, provider: { $in: neededProviders } });
+    const connectedProviders = new Set(connections.map((c) => c.provider));
+    const missingProviders = neededProviders.filter((p) => !connectedProviders.has(p));
+    if (missingProviders.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Connect ${missingProviders.map((p) => (p === 'vercel' ? 'Vercel' : 'Render')).join(' and ')} under Connected Accounts before deploying.`,
+        missingProviders,
+      });
+    }
+    const renderConnection = connections.find((c) => c.provider === DEPLOYMENT_PROVIDERS.RENDER);
+    if (analysis.backend && !renderConnection?.metadata?.ownerId) {
+      return res.status(400).json({ success: false, message: 'Select a Render workspace under Connected Accounts before deploying.' });
+    }
+
+    const requestedValues = req.body?.envValues && typeof req.body.envValues === 'object' ? req.body.envValues : {};
+    const userVarEntries = analysis.envPlan.filter((e) => e.source === 'user');
+    const missingRequired = userVarEntries.filter((e) => e.required && !String(requestedValues[e.key] || '').trim());
+    if (missingRequired.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please fill in the required environment variables before deploying.',
+        missingVariables: missingRequired.map((e) => e.key),
+      });
+    }
+
+    const secretsToStore = {};
+    userVarEntries.forEach((e) => {
+      const value = requestedValues[e.key];
+      if (value !== undefined && value !== null && String(value).trim() !== '') {
+        secretsToStore[e.key] = String(value);
+      }
+    });
+
+    const deployment = await Deployment.create({
+      userId,
+      websiteId: null,
+      purchaseId: null,
+      projectExportId: null,
+      source: 'personal',
+      repository,
+      architecture: analysis.architecture,
+      analysis: { frontend: analysis.frontend, backend: analysis.backend },
+      envPlan: analysis.envPlan,
+      frontendProvider: analysis.frontend?.provider || null,
+      backendProvider: analysis.backend?.provider || null,
+      status: DEPLOYMENT_STATUS.QUEUED,
+      pendingSecretsEncrypted: Object.keys(secretsToStore).length > 0 ? cryptoUtil.encrypt(JSON.stringify(secretsToStore)) : null,
+    });
+
+    setImmediate(() => {
+      runDeployment(deployment._id).catch((err) => {
+        console.error(`Unhandled error running personal deployment ${deployment._id}:`, err);
+      });
+    });
+
+    res.status(202).json({ success: true, data: { deploymentId: deployment._id, status: deployment.status } });
+  } catch (error) {
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.status ? error.message : 'Error starting deployment',
+      error: error.status ? undefined : error.message,
+      requiresGithubConnection: error.requiresGithubConnection || undefined,
+    });
+  }
+};
+
 /** GET /api/deployments  query: page, limit, status=all|successful|failed|deploying */
 const listDeployments = async (req, res) => {
   try {
@@ -682,6 +866,8 @@ module.exports = {
   disconnectRender,
   analyze,
   createDeployment,
+  analyzePersonalRepository,
+  createPersonalDeployment,
   listDeployments,
   getDeploymentForWebsite,
   getDeployment,

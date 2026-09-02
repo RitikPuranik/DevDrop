@@ -31,16 +31,32 @@ const deploymentSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    // Optional: only marketplace-sourced deployments (see `source` below)
+    // are tied to a purchased listing. A "personal" deployment — the user's
+    // own GitHub repository, deployed without ever buying it from DevDrop —
+    // has neither a websiteId nor a purchaseId.
     websiteId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Website',
-      required: true,
+      required: false,
+      default: null,
       index: true,
     },
     purchaseId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Purchase',
-      required: true,
+      required: false,
+      default: null,
+    },
+    // 'marketplace' -> deploying a project purchased on DevDrop (websiteId/
+    //                   purchaseId set, ownership re-verified server-side).
+    // 'personal'    -> deploying the user's own GitHub repository directly;
+    //                   never gated on having purchased anything.
+    source: {
+      type: String,
+      enum: ['marketplace', 'personal'],
+      default: 'marketplace',
+      index: true,
     },
     projectExportId: {
       type: mongoose.Schema.Types.ObjectId,

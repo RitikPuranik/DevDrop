@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
   ArrowLeft,
@@ -16,7 +16,6 @@ import {
   Triangle,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { buyerAPI } from '../../api/buyer';
 import { deploymentAPI } from '../../api/deployment';
 import { githubAPI } from '../../api/github';
 import ProviderConnectCard from '../../components/deployment/ProviderConnectCard';
@@ -28,13 +27,13 @@ const ARCHITECTURE_LABEL = {
   UNKNOWN: 'Unknown',
 };
 
-export default function DeployProject() {
-  const { purchaseId } = useParams();
+// Deploy a repository the user already owns on GitHub — a personal side
+// project, an experiment, anything — with no DevDrop listing or purchase
+// involved anywhere in the flow.
+export default function DeployOwnProject() {
   const navigate = useNavigate();
-  const initializedPurchaseRef = useRef(null);
 
   const [loading, setLoading] = useState(true);
-  const [purchase, setPurchase] = useState(null);
   const [providers, setProviders] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState(null);
@@ -47,72 +46,21 @@ export default function DeployProject() {
   const [repoSearch, setRepoSearch] = useState('');
   const [githubConnecting, setGithubConnecting] = useState(false);
   const [githubError, setGithubError] = useState('');
-  const githubErrorRef = useRef('');
 
   useEffect(() => {
-    if (initializedPurchaseRef.current === purchaseId) return;
-    initializedPurchaseRef.current = purchaseId;
     init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [purchaseId]);
+  }, []);
 
   const init = async () => {
     try {
       setLoading(true);
-      const res = await buyerAPI.getPurchaseDetails(purchaseId);
-      const purchaseData = res.data?.data;
-      const website = purchaseData?.websiteId;
-      if (!website?._id) throw new Error('Project not found');
-      setPurchase(purchaseData);
-
-      // A deployment already exists for this project — manage it from its
-      // own details page instead of restarting the wizard.
-      const existing = await deploymentAPI.getForWebsite(website._id).then((r) => r.data?.data).catch(() => null);
-      if (existing) {
-        navigate(`/deployments/${existing.id}`, { replace: true });
-        return;
-      }
-
       const providersRes = await deploymentAPI.getProviders();
       const providerData = providersRes.data?.data || null;
       setProviders(providerData);
-
       if (providerData?.github?.connected) {
-        const repos = await loadRepositories();
-        // If GitHub's provider token is expired/revoked, loadRepositories()
-        // records a provider-specific error. Do not make a second authenticated
-        // request for the export and turn a provider problem into an apparent
-        // DevDrop logout.
-        if (githubErrorRef.current) {
-          setAnalyzeError(githubErrorRef.current);
-          return;
-        }
-        let preferred = repos[0] || null;
-        try {
-          const exportRes = await githubAPI.getExportForWebsite(website._id);
-          const exportData = exportRes.data?.data;
-          if (exportData?.repositoryName) {
-            preferred = repos.find((repo) => repo.name === exportData.repositoryName) || preferred;
-          }
-        } catch (err) {
-          // A normal DevDrop 401 is handled by the global auth interceptor.
-          // Other export errors should not prevent repository selection.
-          if (err.response?.status !== 401) {
-            console.warn('Could not load previous GitHub export:', err.response?.data?.message || err.message);
-          }
-        }
-        if (preferred) {
-          setSelectedRepository(preferred);
-          await runAnalysis(website._id, preferred);
-        } else {
-          setAnalyzeError('No GitHub repositories are available. Create or authorize a repository, then refresh.');
-        }
-      } else {
-        setAnalyzeError('Connect GitHub to choose a repository for deployment.');
+        await loadRepositories();
       }
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Could not load this project');
-      navigate('/workspace', { replace: true });
     } finally {
       setLoading(false);
     }
@@ -122,23 +70,14 @@ export default function DeployProject() {
     try {
       setRepoLoading(true);
       setGithubError('');
-      githubErrorRef.current = '';
       const res = await githubAPI.listRepositories({ perPage: 100, search });
       const repos = res.data?.data || [];
       setRepositories(repos);
       return repos;
     } catch (err) {
       const code = err.response?.data?.code;
-      if (code === 'GITHUB_CONNECTION_EXPIRED') {
-        const message = 'Your GitHub connection has expired or was revoked. Reconnect GitHub to load your repositories.';
-        setGithubError(message);
-        githubErrorRef.current = message;
-      } else if (err.response?.status === 401) {
-        // Do not clear the DevDrop login here. This is a defensive fallback
-        // for older backend responses that did not include a provider code.
-        const message = 'GitHub could not authorize repository access. Reconnect GitHub and try again.';
-        setGithubError(message);
-        githubErrorRef.current = message;
+      if (code === 'GITHUB_CONNECTION_EXPIRED' || err.response?.status === 401) {
+        setGithubError('Your GitHub connection has expired or was revoked. Reconnect GitHub to load your repositories.');
       } else {
         toast.error(err.response?.data?.message || 'Could not load GitHub repositories');
       }
@@ -163,13 +102,9 @@ export default function DeployProject() {
           window.removeEventListener('message', onMessage);
           setGithubConnecting(false);
           setGithubError('');
-          githubErrorRef.current = '';
           const providersRes = await deploymentAPI.getProviders();
           setProviders(providersRes.data?.data || null);
-          const repos = await loadRepositories();
-          const first = repos[0] || null;
-          setSelectedRepository(first);
-          if (first && website?._id) await runAnalysis(website._id, first);
+          await loadRepositories();
           toast.success('GitHub connected');
         } else if (event.data?.type === 'github-oauth-error') {
           window.removeEventListener('message', onMessage);
@@ -186,10 +121,10 @@ export default function DeployProject() {
 
   const handleRepositoryChange = async (fullName) => {
     const repo = repositories.find((item) => item.fullName === fullName);
-    if (!repo || !website?._id) return;
+    if (!repo) return;
     setSelectedRepository(repo);
     setEnvValues({});
-    await runAnalysis(website._id, repo);
+    await runAnalysis(repo);
   };
 
   const refreshProviders = async () => {
@@ -197,12 +132,12 @@ export default function DeployProject() {
     setProviders(res.data?.data || null);
   };
 
-  const runAnalysis = async (websiteId, repository = selectedRepository) => {
+  const runAnalysis = async (repository = selectedRepository) => {
     try {
       setAnalyzing(true);
       setAnalyzeError('');
       if (!repository) throw new Error('Choose a GitHub repository first.');
-      const res = await deploymentAPI.analyze(websiteId, repository);
+      const res = await deploymentAPI.analyzePersonal(repository);
       setAnalysis(res.data?.data || null);
     } catch (err) {
       setAnalyzeError(err.response?.data?.message || 'Could not analyze this repository.');
@@ -211,7 +146,6 @@ export default function DeployProject() {
     }
   };
 
-  const website = purchase?.websiteId;
   const userVars = (analysis?.envPlan || []).filter((v) => v.source === 'user');
   const autoVars = (analysis?.envPlan || []).filter((v) => v.source === 'auto');
 
@@ -226,7 +160,7 @@ export default function DeployProject() {
     }
     try {
       setCreating(true);
-      const res = await deploymentAPI.create(website._id, envValues, selectedRepository);
+      const res = await deploymentAPI.createPersonal(selectedRepository, envValues);
       const { deploymentId } = res.data?.data || {};
       navigate(`/deployments/${deploymentId}`, { replace: true });
     } catch (err) {
@@ -252,19 +186,21 @@ export default function DeployProject() {
       <div className="max-w-3xl mx-auto px-4 md:px-6 py-10 md:py-14">
         <button
           type="button"
-          onClick={() => navigate(-1)}
+          onClick={() => navigate('/workspace')}
           className="inline-flex items-center gap-2 text-white/35 hover:text-white text-xs font-bold uppercase tracking-widest mb-8 transition-colors"
         >
-          <ArrowLeft size={14} /> Back
+          <ArrowLeft size={14} /> Back to Workspace
         </button>
 
         <div className="flex items-center gap-3 mb-1">
           <div className="w-10 h-10 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
             <Rocket size={18} className="text-[#8b7355]" />
           </div>
-          <h1 className="text-2xl font-black tracking-tight">Deploy Project</h1>
+          <h1 className="text-2xl font-serif italic tracking-tight">Deploy Your Own Project</h1>
         </div>
-        <p className="text-white/35 text-sm mb-10 ml-[52px]">{website?.name}</p>
+        <p className="text-white/35 text-sm mb-10 ml-[52px] max-w-md">
+          Any repository in your GitHub account — no DevDrop listing or purchase required.
+        </p>
 
         <div className="rounded-[26px] border border-white/8 bg-[#0b0b0b] p-6 mb-6">
           <p className="text-[10px] uppercase tracking-[0.3em] text-[#8b7355] font-bold mb-4">GitHub Repository</p>
@@ -290,7 +226,7 @@ export default function DeployProject() {
                 <option value="">{repositories.length ? 'Choose repository' : 'No repositories found'}</option>
                 {repositories.map((repo) => <option key={repo.id} value={repo.fullName}>{repo.fullName} · {repo.defaultBranch}{repo.private ? ' · Private' : ''}</option>)}
               </select>
-              {selectedRepository && <p className="text-[11px] text-white/35">Deploying <span className="text-white/65 font-mono">{selectedRepository.fullName}</span> from <span className="font-mono">{selectedRepository.defaultBranch}</span>. This list comes from GitHub, not existing Vercel projects.</p>}
+              {selectedRepository && <p className="text-[11px] text-white/35">Deploying <span className="text-white/65 font-mono">{selectedRepository.fullName}</span> from <span className="font-mono">{selectedRepository.defaultBranch}</span>.</p>}
             </div>
           )}
         </div>
@@ -298,7 +234,7 @@ export default function DeployProject() {
         {analyzing ? (
           <AnalyzingCard />
         ) : analyzeError ? (
-          <ErrorCard message={analyzeError} onRetry={() => selectedRepository ? runAnalysis(website._id, selectedRepository) : loadRepositories(repoSearch)} />
+          <ErrorCard message={analyzeError} onRetry={() => selectedRepository ? runAnalysis(selectedRepository) : loadRepositories(repoSearch)} />
         ) : analysis?.architecture === 'UNKNOWN' ? (
           <UnknownArchitectureCard analysis={analysis} />
         ) : (

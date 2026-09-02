@@ -89,7 +89,7 @@ export default function Checkout() {
 
       if (orderData?.mode === 'free_after_coupon') {
         toast.success('Purchase completed! Redirecting to dashboard...');
-        setTimeout(() => navigate('/dashboard'), 1500);
+        setTimeout(() => navigate('/workspace'), 1500);
         return;
       }
 
@@ -119,7 +119,7 @@ export default function Checkout() {
             });
             toast.dismiss();
             toast.success('Payment successful! Redirecting to dashboard...');
-            setTimeout(() => navigate('/dashboard'), 2000);
+            setTimeout(() => navigate('/workspace'), 2000);
           } catch (error) {
             toast.dismiss();
             toast.error(error.response?.data?.message || 'Payment verification failed');

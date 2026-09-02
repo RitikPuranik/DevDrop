@@ -11,7 +11,7 @@ const leaders = [
   { id: 7,  name: "David",   img: "https://i.pravatar.cc/150?u=17", pos: { top: '45%', left: '8%'  }, review: "Incredible support and features." },
   { id: 8,  name: "Amara",   img: "https://i.pravatar.cc/150?u=18", pos: { top: '45%', left: '92%' }, review: "A game changer for workflow." },
   { id: 9,  name: "Leo",     img: "https://i.pravatar.cc/150?u=19", pos: { top: '75%', left: '25%' }, review: "Recommended for tech teams." },
-  { id: 10, name: "Maya",    img: "https://i.pravatar.cc/150?u=20", pos: { top: '75%', left: '75%' }, review: "Dashboard is a masterpiece." },
+  { id: 10, name: "Maya",    img: "https://i.pravatar.cc/150?u=20", pos: { top: '75%', left: '75%' }, review: "Workspace is a masterpiece." },
   { id: 11, name: "Kenji",   img: "https://i.pravatar.cc/150?u=21", pos: { top: '88%', left: '50%' }, review: "Security and speed in one." },
 ];
 
