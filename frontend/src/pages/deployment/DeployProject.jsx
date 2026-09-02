@@ -112,7 +112,7 @@ export default function DeployProject() {
       }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Could not load this project');
-      navigate('/profile', { replace: true });
+      navigate('/dashboard', { replace: true });
     } finally {
       setLoading(false);
     }

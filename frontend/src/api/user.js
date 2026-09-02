@@ -2,6 +2,7 @@ import api from "./axios";
 
 export const userAPI = {
   getProfile: () => api.get("/user/profile"),
+  updateProfile: (data) => api.put("/user/profile", data),
   getDashboard: () => api.get("/user/dashboard"),
   getPurchases: (page = 1) => api.get(`/user/purchases?page=${page}`),
   getBankDetails: () => api.get("/user/bank-details"),

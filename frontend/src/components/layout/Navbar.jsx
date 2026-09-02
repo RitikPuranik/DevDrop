@@ -80,24 +80,19 @@ const Navbar = () => {
       src: "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?q=80&w=870",
       hasSubMenu: false,
     },
-    {
-      to: "/review",
-      label: "People's Love",
-      src: "https://plus.unsplash.com/premium_photo-1739436074076-3c6d73478d59?q=80&w=812",
-      hasSubMenu: false,
-    },
-    {
-      to: "/contact",
-      label: "Contact Us",
-      src: "https://images.unsplash.com/photo-1534536281715-e28d76689b4d?q=80&w=870",
-      hasSubMenu: false,
-    },
+  
   ];
 
   const finalMenuItems = isLoggedIn
     ? [
         ...menuItems,
+      
         {
+          to: "/dashboard",
+          label: "Workspace",
+          src: "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?q=80&w=1000",
+          hasSubMenu: false,
+        },  {
           to: "/profile",
           label: "Profile",
           src: "https://images.unsplash.com/photo-1511367461989-f85a21fda167?q=80&w=1000",
@@ -334,8 +329,8 @@ const MenuItem = ({ item, onHover, onLeave, onClick, closeMenu, isDimmed }) => (
       {item.hasSubMenu ? (
         <span
           className={`
-            text-[11vw] sm:text-[8vw] lg:text-[5.0vw]
-            leading-[0.9] font-serif italic tracking-tighter
+            text-[10vw] sm:text-[5vw] lg:text-[4.0vw]
+            leading-[1.0] font-serif italic tracking-tighter
             block transition-all duration-300 cursor-pointer select-none text-black
             ${isDimmed ? 'opacity-20' : 'opacity-100'}
           `}
@@ -347,8 +342,8 @@ const MenuItem = ({ item, onHover, onLeave, onClick, closeMenu, isDimmed }) => (
           to={item.to}
           onClick={closeMenu}
           className={`
-            text-[11vw] sm:text-[8vw] lg:text-[5.0vw]
-            leading-[0.9] font-serif italic tracking-tighter
+            text-[10vw] sm:text-[5vw] lg:text-[4.0vw]
+            leading-[1.3] font-serif italic tracking-tighter
             block transition-all duration-300 cursor-pointer text-black
             ${isDimmed ? 'opacity-20' : 'opacity-100'}
           `}

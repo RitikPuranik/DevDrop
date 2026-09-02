@@ -10,6 +10,7 @@ import {
   Globe,
   AlertCircle,
   ArrowRight,
+  RefreshCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { githubAPI } from '../../api/github';
@@ -331,6 +332,7 @@ function ExportForm({
   reconnecting,
 }) {
   const cleanPreview = sanitizeRepoName(repositoryName);
+  const hasPreviousSuccess = previousExport?.status === 'success' && Boolean(previousExport?.repositoryUrl);
 
   return (
     <form onSubmit={onSubmit} className="space-y-5">
@@ -416,8 +418,14 @@ function ExportForm({
         disabled={submitting}
         className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-[#8b7355] text-white text-xs font-black uppercase tracking-[0.2em] hover:bg-[#725e46] transition-colors disabled:opacity-60"
       >
-        {submitting ? <Loader2 size={14} className="animate-spin" /> : <ArrowRight size={14} />}
-        {submitting ? 'Creating…' : 'Create & Push'}
+        {submitting ? (
+          <Loader2 size={14} className="animate-spin" />
+        ) : hasPreviousSuccess ? (
+          <RefreshCw size={14} />
+        ) : (
+          <ArrowRight size={14} />
+        )}
+        {submitting ? (hasPreviousSuccess ? 'Re-pushing…' : 'Creating…') : hasPreviousSuccess ? 'Re-push to GitHub' : 'Create & Push'}
       </button>
     </form>
   );

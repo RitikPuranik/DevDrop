@@ -13,6 +13,7 @@ import TemplatesPage from './pages/marketplace/Templates';
 import ContactUs from './pages/marketing/ContactUs';
 import ReviewPage from './pages/marketing/Review';
 import Profile from './pages/account/Profile';
+import Dashboard from './pages/account/Dashboard';
 import PurchaseAccess from './pages/marketplace/PurchaseAccess';
 import DeployProject from './pages/deployment/DeployProject';
 import DeploymentDetails from './pages/deployment/DeploymentDetails';
@@ -31,6 +32,7 @@ const HERO_VIDEO_SRC = '/dewdrop.s3.mp4';
 function AppContent() {
   const location = useLocation();
   const isBuilder = location.pathname === "/website";
+  const isDashboard = location.pathname.startsWith("/dashboard");
   const isVerifyEmail = location.pathname === "/verify-email";
   const isResetPassword = location.pathname === "/reset-password";
   const isVercelCallback = location.pathname === "/deploy/vercel-callback";
@@ -130,6 +132,7 @@ function AppContent() {
               <Route path="/privacy" element={<Privacy />} />
               <Route path="/review" element={<ReviewPage />} />
               <Route path="/profile" element={<Profile />} />
+              <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/purchases/:purchaseId" element={<PurchaseAccess />} />
               <Route path="/deploy/vercel-callback" element={<VercelOAuthCallback />} />
               <Route path="/deploy/:purchaseId" element={<DeployProject />} />
@@ -155,7 +158,7 @@ function AppContent() {
             />
           </main>
 
-          {!isBuilder && !isStandaloneAuthPage && <Footer />}
+          {!isBuilder && !isDashboard && !isStandaloneAuthPage && <Footer />}
         </>
       )}
     </>

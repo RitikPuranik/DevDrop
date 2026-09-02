@@ -8,6 +8,7 @@ const { uploadAvatar, handleMulterError } = require('../../shared/middleware/upl
 router.use(auth);
 
 router.get('/profile', userController.getProfile);
+router.put('/profile', userController.updateProfile);
 router.put('/profile/avatar', uploadAvatar.single('avatar'), handleMulterError, userController.updateProfilePicture);
 router.delete('/profile/avatar', userController.removeProfilePicture);
 router.get('/dashboard', userController.getDashboard);

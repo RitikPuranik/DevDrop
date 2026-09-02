@@ -92,7 +92,7 @@ export default function PurchaseAccess() {
       }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Purchase not found');
-      navigate('/profile', { replace: true });
+      navigate('/dashboard', { replace: true });
     } finally {
       setLoading(false);
     }
@@ -230,10 +230,10 @@ export default function PurchaseAccess() {
         <motion.button
           initial={{ opacity: 0, x: -10 }}
           animate={{ opacity: 1, x: 0 }}
-          onClick={() => navigate('/profile')}
+          onClick={() => navigate('/dashboard')}
           className="flex items-center gap-2 text-white/25 text-[10px] font-bold uppercase tracking-[0.2em] mb-8 hover:text-white transition-colors"
         >
-          <ArrowLeft size={12} /> Back To Profile
+          <ArrowLeft size={12} /> Back To Dashboard
         </motion.button>
 
         <motion.div

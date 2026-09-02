@@ -88,8 +88,8 @@ export default function Checkout() {
       const orderData = res.data?.data;
 
       if (orderData?.mode === 'free_after_coupon') {
-        toast.success('Purchase completed! Redirecting to profile...');
-        setTimeout(() => navigate('/profile'), 1500);
+        toast.success('Purchase completed! Redirecting to dashboard...');
+        setTimeout(() => navigate('/dashboard'), 1500);
         return;
       }
 
@@ -118,8 +118,8 @@ export default function Checkout() {
               websiteId: id,
             });
             toast.dismiss();
-            toast.success('Payment successful! Redirecting to profile...');
-            setTimeout(() => navigate('/profile'), 2000);
+            toast.success('Payment successful! Redirecting to dashboard...');
+            setTimeout(() => navigate('/dashboard'), 2000);
           } catch (error) {
             toast.dismiss();
             toast.error(error.response?.data?.message || 'Payment verification failed');

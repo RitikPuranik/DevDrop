@@ -49,6 +49,32 @@ const getProfile = async (req, res) => {
   }
 };
 
+const updateProfile = async (req, res) => {
+  try {
+    const { name, phone } = req.body;
+
+    if (name !== undefined && !String(name).trim()) {
+      return res.status(400).json({ success: false, message: 'Name cannot be empty' });
+    }
+
+    const user = await User.findById(req.userId);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    if (name !== undefined) user.name = String(name).trim().slice(0, 80);
+    if (phone !== undefined) user.phone = String(phone).trim().slice(0, 20);
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Profile updated successfully',
+      data: { name: user.name, phone: user.phone },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error updating profile', error: error.message });
+  }
+};
+
 const saveBankDetails = async (req, res) => {
   try {
     const userId = req.userId;
@@ -177,4 +203,4 @@ const removeProfilePicture = async (req, res) => {
   }
 };
 
-module.exports = { getProfile, saveBankDetails, getBankDetails, getDashboard, getPurchases, updateProfilePicture, removeProfilePicture };
+module.exports = { getProfile, updateProfile, saveBankDetails, getBankDetails, getDashboard, getPurchases, updateProfilePicture, removeProfilePicture };
