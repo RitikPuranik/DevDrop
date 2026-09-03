@@ -175,14 +175,14 @@ export default function DeployOwnProject() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+      <div className="ui-surface min-h-screen bg-[#08090a] flex items-center justify-center">
         <Loader2 className="animate-spin text-white/30" size={28} />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#050505] text-[#ece5d8]">
+    <div className="ui-surface min-h-screen bg-[#08090a] text-[#e7e9ea]">
       <div className="max-w-3xl mx-auto px-4 md:px-6 py-10 md:py-14">
         <button
           type="button"
@@ -196,23 +196,23 @@ export default function DeployOwnProject() {
           <div className="w-10 h-10 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
             <Rocket size={18} className="text-[#8b7355]" />
           </div>
-          <h1 className="text-2xl font-serif italic tracking-tight">Deploy Your Own Project</h1>
+          <h1 className="text-[22px] font-bold tracking-tight">Deploy your own project</h1>
         </div>
         <p className="text-white/35 text-sm mb-10 ml-[52px] max-w-md">
           Any repository in your GitHub account — no DevDrop listing or purchase required.
         </p>
 
         <div className="rounded-[26px] border border-white/8 bg-[#0b0b0b] p-6 mb-6">
-          <p className="text-[10px] uppercase tracking-[0.3em] text-[#8b7355] font-bold mb-4">GitHub Repository</p>
+          <p className="text-[13px] font-semibold text-[#c9a876] mb-4">GitHub Repository</p>
           {!providers?.github?.connected ? (
-            <button type="button" onClick={connectGithub} disabled={githubConnecting} className="w-full py-3 rounded-xl bg-white text-black text-xs font-black uppercase tracking-widest disabled:opacity-50">
+            <button type="button" onClick={connectGithub} disabled={githubConnecting} className="w-full py-3 rounded-xl bg-white text-black text-[13px] font-bold tracking-wide disabled:opacity-50">
               {githubConnecting ? 'Connecting…' : 'Connect GitHub'}
             </button>
           ) : (
             <div className="space-y-3">
               {githubError && (
-                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">
-                  <p className="text-xs text-amber-200/80 leading-relaxed">{githubError}</p>
+                <div className="rounded-xl border border-[#a6603f]/20 bg-[#a6603f]/5 px-4 py-3">
+                  <p className="text-xs text-[#d8b899]/80 leading-relaxed">{githubError}</p>
                   <button type="button" onClick={connectGithub} disabled={githubConnecting} className="mt-2 text-[11px] font-black uppercase tracking-wider text-white underline underline-offset-4 disabled:opacity-50">
                     {githubConnecting ? 'Reconnecting…' : 'Reconnect GitHub'}
                   </button>
@@ -264,7 +264,7 @@ export default function DeployOwnProject() {
                               <span className="font-mono text-white/70">{v.key}</span>
                               <TargetTag target={v.target} />
                             </div>
-                            <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-emerald-400/80 font-bold shrink-0">
+                            <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-[#cbb392]/80 font-bold shrink-0">
                               <Sparkles size={10} /> Generated automatically
                             </span>
                           </div>
@@ -301,7 +301,7 @@ export default function DeployOwnProject() {
                 type="button"
                 onClick={handleDeploy}
                 disabled={creating || !providersReady}
-                className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-[#8b7355] text-white text-xs font-black uppercase tracking-[0.22em] hover:bg-[#725e46] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-[#8b7355] text-white text-[14px] font-bold hover:bg-[#725e46] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {creating ? <Loader2 size={15} className="animate-spin" /> : <Rocket size={15} />}
                 {creating ? 'Starting Deployment…' : 'Start Deployment'}
@@ -320,7 +320,7 @@ export default function DeployOwnProject() {
 function Section({ title, children }) {
   return (
     <div className="rounded-[26px] border border-white/8 bg-[#0b0b0b] p-6">
-      <p className="text-[10px] uppercase tracking-[0.3em] text-[#8b7355] font-bold mb-4">{title}</p>
+      <p className="text-[13px] font-semibold text-[#c9a876] mb-4">{title}</p>
       {children}
     </div>
   );
@@ -328,7 +328,7 @@ function Section({ title, children }) {
 
 function TargetTag({ target }) {
   return (
-    <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${target === 'frontend' ? 'bg-blue-500/10 text-blue-300' : 'bg-purple-500/10 text-purple-300'}`}>
+    <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${target === 'frontend' ? 'bg-[#cbb392]/10 text-[#cbb392]' : 'bg-[#c98a5e]/10 text-[#c98a5e]'}`}>
       {target}
     </span>
   );
@@ -348,7 +348,7 @@ function RepositoryCard({ analysis }) {
           <p className="text-[11px] text-white/30">Branch: {analysis.repository.branch}</p>
         </div>
       </div>
-      <span className="shrink-0 inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-full">
+      <span className="shrink-0 inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-[#cbb392] bg-[#cbb392]/10 border border-[#cbb392]/20 px-3 py-1.5 rounded-full">
         <CheckCircle2 size={11} /> Detected
       </span>
     </div>
@@ -359,7 +359,7 @@ function TargetsCard({ analysis }) {
   return (
     <div className="rounded-[26px] border border-white/8 bg-[#0b0b0b] p-6">
       <div className="flex items-center justify-between mb-5">
-        <p className="text-[10px] uppercase tracking-[0.3em] text-[#8b7355] font-bold">Deployment Targets</p>
+        <p className="text-[13px] font-semibold text-[#c9a876]">Deployment Targets</p>
         <span className="text-[10px] uppercase tracking-wider text-white/40 font-bold">{ARCHITECTURE_LABEL[analysis.architecture]}</span>
       </div>
       <div className="grid sm:grid-cols-2 gap-4">
@@ -377,7 +377,7 @@ function TargetsCard({ analysis }) {
       {analysis.warnings?.length > 0 && (
         <div className="mt-4 space-y-1.5">
           {analysis.warnings.map((w, i) => (
-            <p key={i} className="flex items-start gap-2 text-[11px] text-amber-300/70">
+            <p key={i} className="flex items-start gap-2 text-[11px] text-[#d8b899]/70">
               <AlertCircle size={12} className="mt-0.5 shrink-0" /> {w}
             </p>
           ))}
@@ -438,7 +438,7 @@ function ErrorCard({ message, onRetry }) {
       <button
         type="button"
         onClick={onRetry}
-        className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-white/5 text-white text-xs font-black uppercase tracking-widest hover:bg-white/10 transition-colors"
+        className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-white/5 text-white text-[13px] font-bold tracking-wide hover:bg-white/10 transition-colors"
       >
         <RefreshCw size={13} /> Try Again
       </button>
@@ -448,14 +448,14 @@ function ErrorCard({ message, onRetry }) {
 
 function UnknownArchitectureCard({ analysis }) {
   return (
-    <div className="rounded-[26px] border border-amber-400/20 bg-amber-500/5 p-8 text-center">
-      <AlertCircle className="mx-auto mb-4 text-amber-300" size={26} />
+    <div className="rounded-[26px] border border-[#a6603f]/20 bg-[#a6603f]/5 p-8 text-center">
+      <AlertCircle className="mx-auto mb-4 text-[#d8b899]" size={26} />
       <h3 className="font-bold text-base mb-2">We couldn't automatically determine how to deploy this project</h3>
       <p className="text-white/40 text-sm mb-4 max-w-md mx-auto leading-relaxed">Please review the detected configuration manually.</p>
       {analysis?.warnings?.length > 0 && (
         <div className="max-w-md mx-auto text-left space-y-1.5">
           {analysis.warnings.map((w, i) => (
-            <p key={i} className="text-[11px] text-amber-300/70">{w}</p>
+            <p key={i} className="text-[11px] text-[#d8b899]/70">{w}</p>
           ))}
         </div>
       )}

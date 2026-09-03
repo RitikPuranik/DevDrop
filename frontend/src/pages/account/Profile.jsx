@@ -141,21 +141,21 @@ export default function Profile() {
 
   if (loading) {
     return (
-      <div style={cssVars} className="min-h-screen bg-[#050505] flex items-center justify-center">
+      <div style={cssVars} className="ui-surface min-h-screen bg-[#08090a] flex items-center justify-center">
         <Loader2 className="animate-spin text-[var(--accent)]" size={36} />
       </div>
     );
   }
 
   return (
-    <div style={cssVars} className="min-h-screen bg-[#050505] text-[#f1ece2] pt-28 pb-20 px-6 antialiased">
+    <div style={cssVars} className="ui-surface min-h-screen bg-[#08090a] text-[#e7e9ea] pt-28 pb-20 px-6 antialiased">
       <div className="max-w-2xl mx-auto">
 
         {/* ── HEADER ── */}
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
-          <p className="text-[10px] uppercase tracking-[0.25em] text-white/35 font-semibold mb-3">Account</p>
-          <h1 className="text-3xl md:text-4xl font-serif italic tracking-tight text-white">{profile?.name || 'Your Profile'}</h1>
-          <p className="text-white/50 text-sm mt-2">Manage your profile, verification, and appearance.</p>
+          <p className="text-[13px] text-white/40 font-medium mb-2">Account</p>
+          <h1 className="text-[28px] md:text-[32px] font-bold tracking-tight text-white">{profile?.name || 'Your Profile'}</h1>
+          <p className="text-white/50 text-[15px] mt-2">Manage your profile, verification, and appearance.</p>
         </motion.div>
 
         {/* ── GO TO WORKSPACE ── */}
@@ -164,14 +164,14 @@ export default function Profile() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.03 }}
           onClick={() => navigate('/workspace')}
-          className="w-full flex items-center gap-4 rounded-[28px] border border-white/10 bg-gradient-to-br from-[#141210] via-[#0e0d0c] to-[#0a0a0a] p-5 mb-6 text-left hover:border-[var(--accent)]/40 transition-all shadow-lg shadow-black/20 group"
+          className="w-full flex items-center gap-4 rounded-xl border border-white/[0.1] bg-[#0e0f10] p-5 mb-6 text-left hover:border-white/[0.2] transition-all group"
         >
-          <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0" style={{ backgroundColor: 'var(--accent-soft)' }}>
+          <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: 'var(--accent-soft)' }}>
             <LayoutGrid size={18} className="text-[var(--accent)]" />
           </div>
           <div className="flex-1">
-            <p className="font-semibold text-white text-sm">Go to Workspace</p>
-            <p className="text-white/50 text-xs mt-0.5">Listings, purchases, deployments, wishlist &amp; payouts</p>
+            <p className="font-semibold text-white text-[14px]">Go to workspace</p>
+            <p className="text-white/50 text-[13px] mt-0.5">Listings, purchases, deployments, wishlist &amp; payouts</p>
           </div>
           <ChevronRight size={18} className="text-white/40 group-hover:text-white group-hover:translate-x-0.5 transition-all" />
         </motion.button>
@@ -181,11 +181,11 @@ export default function Profile() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.06 }}
-          className="rounded-[28px] border border-white/8 bg-[#121110] shadow-lg shadow-black/20 p-6 md:p-8 mb-6"
+          className="rounded-xl border border-white/[0.08] bg-[#0e0f10] p-6 md:p-8 mb-6 shadow-lg shadow-black/20"
         >
-          <p className="text-[10px] uppercase tracking-[0.25em] text-[var(--accent)] font-semibold mb-6 flex items-center gap-2">
-            <UserIcon size={12} /> Profile
-          </p>
+          <h2 className="text-[15px] font-semibold text-white mb-6 flex items-center gap-2">
+            <UserIcon size={15} className="text-[var(--accent)]" /> Profile
+          </h2>
 
           <div className="flex items-center gap-5 mb-8">
             {/* ── INTERACTIVE AVATAR ── */}
@@ -198,9 +198,9 @@ export default function Profile() {
                 onChange={handleAvatarUpload}
               />
 
-              <div className="w-20 h-20 rounded-full overflow-hidden shadow-xl shadow-black/40 ring-4 ring-[var(--accent-soft)] ring-offset-4 ring-offset-[#121110]">
+              <div className="w-20 h-20 rounded-full overflow-hidden ring-4 ring-[var(--accent-soft)] ring-offset-4 ring-offset-[#0e0f10]">
                 {avatarUploading ? (
-                  <div className="w-full h-full bg-gradient-to-br from-[var(--accent)] to-black/40 flex items-center justify-center">
+                  <div className="w-full h-full bg-[var(--accent)] flex items-center justify-center">
                     <Loader2 className="animate-spin text-white" size={22} />
                   </div>
                 ) : profile?.avatar ? (
@@ -212,8 +212,8 @@ export default function Profile() {
                   />
                 ) : null}
                 <div
-                  className="w-full h-full bg-gradient-to-br from-[var(--accent)] to-black/40 flex items-center justify-center text-2xl font-serif italic text-white"
-                  style={{ display: (!avatarUploading && !profile?.avatar) ? 'flex' : 'none' }}
+                  className="w-full h-full flex items-center justify-center text-2xl font-bold text-black"
+                  style={{ display: (!avatarUploading && !profile?.avatar) ? 'flex' : 'none', backgroundColor: 'var(--accent)' }}
                 >
                   {profile?.name?.[0]?.toUpperCase() || 'U'}
                 </div>
@@ -241,17 +241,17 @@ export default function Profile() {
             </div>
 
             <div className="min-w-0">
-              <p className="text-white/50 text-xs mb-1">Profile photo</p>
-              <p className="text-white/70 text-xs leading-relaxed">JPG, PNG or WebP.<br className="hidden sm:block" /> Max 5MB.</p>
+              <p className="text-white/60 text-[13px] font-medium mb-1">Profile photo</p>
+              <p className="text-white/40 text-[12px] leading-relaxed">JPG, PNG or WebP.<br className="hidden sm:block" /> Max 5MB.</p>
             </div>
           </div>
 
           {/* ── NAME ── */}
           <form onSubmit={handleSaveName} className="mb-6">
-            <label className="text-[10px] uppercase tracking-widest text-white/60 block mb-2 font-bold">Display Name</label>
-            <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/25 px-4 py-3.5 transition-colors focus-within:border-[var(--accent)]/60">
+            <label className="text-[13px] text-white/60 font-medium block mb-2">Display name</label>
+            <div className="flex items-center gap-3 rounded-lg border border-white/[0.1] bg-black/25 px-4 py-3 transition-colors focus-within:border-[var(--accent)]/60">
               <input
-                className="flex-1 bg-transparent text-base font-semibold text-white outline-none placeholder:text-white/30"
+                className="flex-1 bg-transparent text-[15px] font-medium text-white outline-none placeholder:text-white/30"
                 placeholder="Your name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -260,9 +260,9 @@ export default function Profile() {
               <button
                 type="submit"
                 disabled={!nameChanged || savingName}
-                className="shrink-0 px-4 py-2 rounded-xl bg-[var(--accent)] text-white text-[10px] font-black uppercase tracking-wider hover:bg-[var(--accent-hover)] active:bg-[var(--accent-active)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5"
+                className="shrink-0 px-4 py-2 rounded-lg bg-[var(--accent)] text-white text-[13px] font-semibold hover:bg-[var(--accent-hover)] active:bg-[var(--accent-active)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5"
               >
-                {savingName ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                {savingName ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
                 Save
               </button>
             </div>
@@ -270,32 +270,32 @@ export default function Profile() {
 
           {/* ── EMAIL ── */}
           <div>
-            <label className="text-[10px] uppercase tracking-widest text-white/60 block mb-2 font-bold">Email Address</label>
-            <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/25 px-4 py-3.5">
+            <label className="text-[13px] text-white/60 font-medium block mb-2">Email address</label>
+            <div className="flex items-center gap-3 rounded-lg border border-white/[0.1] bg-black/25 px-4 py-3">
               <Mail size={16} className="text-white/40 shrink-0" />
-              <span className="flex-1 text-sm text-white/85 truncate">{profile?.email}</span>
+              <span className="flex-1 text-[14px] text-white/85 truncate">{profile?.email}</span>
               {profile?.isVerified ? (
-                <span className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-400/20 text-emerald-300 text-[9px] font-black uppercase tracking-wider">
-                  <CheckCircle size={10} /> Verified
+                <span className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#cbb392]/15 border border-[#cbb392]/20 text-[#cbb392] text-[11px] font-semibold">
+                  <CheckCircle size={11} /> Verified
                 </span>
               ) : (
-                <span className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-400/20 text-amber-300 text-[9px] font-black uppercase tracking-wider">
-                  <AlertCircle size={10} /> Unverified
+                <span className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#a6603f]/15 border border-[#a6603f]/20 text-[#d8b899] text-[11px] font-semibold">
+                  <AlertCircle size={11} /> Unverified
                 </span>
               )}
             </div>
 
             {!profile?.isVerified && (
-              <div className="mt-3 rounded-2xl border border-amber-400/20 bg-amber-500/10 p-4 flex items-start gap-3">
-                <ShieldAlert size={16} className="text-amber-300 mt-0.5 shrink-0" />
+              <div className="mt-3 rounded-lg border border-[#a6603f]/20 bg-[#a6603f]/10 p-4 flex items-start gap-3">
+                <ShieldAlert size={16} className="text-[#d8b899] mt-0.5 shrink-0" />
                 <div className="flex-1">
-                  <p className="text-amber-100/85 text-xs leading-relaxed">Verify your email to unlock selling and other account features.</p>
+                  <p className="text-[#d8b899]/85 text-[13px] leading-relaxed">Verify your email to unlock selling and other account features.</p>
                   <button
                     onClick={handleSendVerification}
                     disabled={sendingVerification}
-                    className="mt-3 px-4 py-2 rounded-xl bg-amber-300 text-black text-[10px] font-black uppercase tracking-wider hover:bg-amber-200 transition-colors disabled:opacity-60"
+                    className="mt-3 px-4 py-2 rounded-lg bg-[#a6603f] text-black text-[13px] font-semibold hover:bg-[#a6603f] transition-colors disabled:opacity-60"
                   >
-                    {sendingVerification ? 'Sending…' : 'Send Verification Email'}
+                    {sendingVerification ? 'Sending…' : 'Send verification email'}
                   </button>
                 </div>
               </div>
@@ -308,12 +308,12 @@ export default function Profile() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.09 }}
-          className="rounded-[28px] border border-white/8 bg-[#121110] shadow-lg shadow-black/20 p-6 md:p-8 mb-6"
+          className="rounded-xl border border-white/[0.08] bg-[#0e0f10] p-6 md:p-8 mb-6 shadow-lg shadow-black/20"
         >
-          <p className="text-[10px] uppercase tracking-[0.25em] text-[var(--accent)] font-semibold mb-1.5 flex items-center gap-2">
-            <Palette size={12} /> Appearance
-          </p>
-          <p className="text-white/50 text-xs mb-5">Choose an accent color for your Profile &amp; Workspace.</p>
+          <h2 className="text-[15px] font-semibold text-white mb-1.5 flex items-center gap-2">
+            <Palette size={15} className="text-[var(--accent)]" /> Appearance
+          </h2>
+          <p className="text-white/50 text-[13px] mb-5">Choose an accent color for your Profile &amp; Workspace.</p>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {themes.map((t) => {
@@ -322,8 +322,8 @@ export default function Profile() {
                 <button
                   key={t.id}
                   onClick={() => setTheme(t.id)}
-                  className={`relative flex flex-col items-center gap-2.5 rounded-2xl border p-4 transition-all ${
-                    isActive ? 'border-white/25 bg-white/[0.04]' : 'border-white/8 hover:border-white/20'
+                  className={`relative flex flex-col items-center gap-2.5 rounded-lg border p-4 transition-all ${
+                    isActive ? 'border-white/25 bg-white/[0.04]' : 'border-white/[0.08] hover:border-white/20'
                   }`}
                 >
                   <span
@@ -332,7 +332,7 @@ export default function Profile() {
                   >
                     {isActive && <Check size={14} className="text-white" />}
                   </span>
-                  <span className="text-[11px] font-bold text-white/80">{t.label}</span>
+                  <span className="text-[13px] font-semibold text-white/80">{t.label}</span>
                 </button>
               );
             })}
@@ -345,9 +345,9 @@ export default function Profile() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.12 }}
           onClick={handleLogout}
-          className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-white/[0.04] border border-white/12 rounded-2xl text-xs font-bold uppercase tracking-[0.15em] text-white/75 hover:text-white hover:bg-white/10 hover:border-white/25 transition-all"
+          className="w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-white/[0.04] border border-white/[0.12] rounded-lg text-[14px] font-semibold text-white/75 hover:text-white hover:bg-white/[0.08] hover:border-white/20 transition-all"
         >
-          <LogOut size={14} /> Logout
+          <LogOut size={15} /> Log out
         </motion.button>
       </div>
     </div>

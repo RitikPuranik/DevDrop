@@ -3,11 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { AlertCircle, ExternalLink, GitBranch, Loader2, Server, Triangle } from 'lucide-react';
 
 const STATUS_META = {
-  SUCCESS: { label: 'Live', className: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' },
+  SUCCESS: { label: 'Live', className: 'text-[#cbb392] bg-[#cbb392]/10 border-[#cbb392]/20' },
   FAILED: { label: 'Failed', className: 'text-red-300 bg-red-500/10 border-red-400/20' },
   CANCELLED: { label: 'Cancelled', className: 'text-white/40 bg-white/5 border-white/10' },
 };
-const ACTIVE_META = { label: 'Deploying', className: 'text-blue-300 bg-blue-500/10 border-blue-400/20' };
+const ACTIVE_META = { label: 'Deploying', className: 'text-[#cbb392] bg-[#cbb392]/10 border-[#cbb392]/20' };
 
 export default function DeploymentCard({ deployment }) {
   const navigate = useNavigate();

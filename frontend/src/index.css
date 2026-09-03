@@ -1,6 +1,22 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import "tailwindcss";
+
+:root {
+  --font-ui: 'Inter', ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono-ui: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+}
+
+/* Product-UI surfaces (Workspace, Profile, Deploy flows) use a plain,
+   high-legibility sans stack — deliberately NOT the marketing site's
+   serif/editorial voice. This is meant to read like a real dev tool. */
+.ui-surface {
+  font-family: var(--font-ui);
+}
+.ui-surface .font-mono {
+  font-family: var(--font-mono-ui);
+}
 
 .stroke-beige {
   -webkit-text-stroke: 1px rgba(232, 226, 214, 0.3);

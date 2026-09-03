@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 
-// A small, tasteful set of accent palettes — muted, professional tones.
-// Deliberately avoids saturated/neon colors.
+// A small, tasteful set of accent palettes — solid, muted beige/brown/black
+// tones only. No greens, no saturated or neon colors.
 export const ACCENT_THEMES = {
   gold: {
     id: 'gold',
@@ -11,29 +11,29 @@ export const ACCENT_THEMES = {
     accentActive: '#725e46',
     accentSoft: 'rgba(139, 115, 85, 0.14)',
   },
-  emerald: {
-    id: 'emerald',
-    label: 'Emerald',
-    accent: '#3f7a5f',
-    accentHover: '#4c8f70',
-    accentActive: '#33654e',
-    accentSoft: 'rgba(63, 122, 95, 0.14)',
+  beige: {
+    id: 'beige',
+    label: 'Beige',
+    accent: '#cbb392',
+    accentHover: '#d8c4a6',
+    accentActive: '#b39d7d',
+    accentSoft: 'rgba(203, 179, 146, 0.16)',
   },
-  slate: {
-    id: 'slate',
-    label: 'Slate',
-    accent: '#5b6b7c',
-    accentHover: '#6b7d90',
-    accentActive: '#495566',
-    accentSoft: 'rgba(91, 107, 124, 0.16)',
-  },
-  clay: {
-    id: 'clay',
-    label: 'Clay',
+  brown: {
+    id: 'brown',
+    label: 'Brown',
     accent: '#a6603f',
     accentHover: '#b8734f',
     accentActive: '#8a4e33',
     accentSoft: 'rgba(166, 96, 63, 0.14)',
+  },
+  charcoal: {
+    id: 'charcoal',
+    label: 'Charcoal',
+    accent: '#9a9a94',
+    accentHover: '#aaaaa4',
+    accentActive: '#83837e',
+    accentSoft: 'rgba(154, 154, 148, 0.14)',
   },
 };
 

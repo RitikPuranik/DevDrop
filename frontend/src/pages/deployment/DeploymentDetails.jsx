@@ -88,7 +88,7 @@ export default function DeploymentDetails() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+      <div className="ui-surface min-h-screen bg-[#08090a] flex items-center justify-center">
         <Loader2 className="animate-spin text-white/30" size={28} />
       </div>
     );
@@ -96,7 +96,7 @@ export default function DeploymentDetails() {
   if (!deployment) return null;
 
   return (
-    <div className="min-h-screen bg-[#050505] text-[#ece5d8]">
+    <div className="ui-surface min-h-screen bg-[#08090a] text-[#e7e9ea]">
       <div className="max-w-3xl mx-auto px-4 md:px-6 py-10 md:py-14">
         <button
           type="button"
@@ -137,7 +137,7 @@ function ProgressView({ deployment }) {
           return (
             <div key={step.status} className="flex items-center gap-3 text-sm">
               {done ? (
-                <span className="w-5 h-5 rounded-full bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0"><Check size={12} /></span>
+                <span className="w-5 h-5 rounded-full bg-[#cbb392]/15 text-[#cbb392] flex items-center justify-center shrink-0"><Check size={12} /></span>
               ) : current ? (
                 <span className="w-5 h-5 flex items-center justify-center shrink-0"><Loader2 size={14} className="animate-spin text-[#8b7355]" /></span>
               ) : (
@@ -158,9 +158,9 @@ function ProgressView({ deployment }) {
 
 function SuccessView({ deployment, onRedeploy, redeploying }) {
   return (
-    <div className="rounded-[26px] border border-emerald-500/20 bg-emerald-500/5 p-8 text-center">
-      <div className="w-14 h-14 mx-auto rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-5">
-        <PartyPopper size={24} className="text-emerald-400" />
+    <div className="rounded-[26px] border border-[#cbb392]/20 bg-[#cbb392]/5 p-8 text-center">
+      <div className="w-14 h-14 mx-auto rounded-2xl bg-[#cbb392]/10 border border-[#cbb392]/20 flex items-center justify-center mb-5">
+        <PartyPopper size={24} className="text-[#cbb392]" />
       </div>
       <h3 className="font-bold text-lg mb-6">Deployment Successful</h3>
 

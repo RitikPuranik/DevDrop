@@ -140,8 +140,8 @@ export function WishlistPreview({ previewVideo, fallback }) {
 export function getListingPreviewFallback(status) {
   const config = {
     rejected: { icon: XCircle, label: 'Listing rejected', tone: 'text-red-400/70' },
-    pending_review: { icon: Clock, label: 'Awaiting review', tone: 'text-amber-400/70' },
-    changes_requested: { icon: AlertTriangle, label: 'Changes requested', tone: 'text-sky-400/70' },
+    pending_review: { icon: Clock, label: 'Awaiting review', tone: 'text-[#d8b899]/70' },
+    changes_requested: { icon: AlertTriangle, label: 'Changes requested', tone: 'text-[#c98a5e]/80' },
   };
   const c = config[status];
   if (!c) return null;
@@ -156,11 +156,11 @@ export function getListingPreviewFallback(status) {
 
 export function StatusBadge({ status }) {
   const config = {
-    approved: { label: 'Live', color: 'bg-emerald-500/85 text-white', pulse: true },
-    pending_review: { label: 'Pending', color: 'bg-amber-500/85 text-white' },
-    changes_requested: { label: 'Changes', color: 'bg-sky-500/85 text-white' },
+    approved: { label: 'Live', color: 'bg-[#cbb392]/90 text-black', pulse: true },
+    pending_review: { label: 'Pending', color: 'bg-[#a6603f]/85 text-white' },
+    changes_requested: { label: 'Changes', color: 'bg-[#c98a5e]/85 text-black' },
     rejected: { label: 'Rejected', color: 'bg-red-500/85 text-white' },
-    in_auction: { label: 'In Auction', color: 'bg-orange-500/85 text-white' },
+    in_auction: { label: 'In Auction', color: 'bg-[#5c3a24]/85 text-white' },
     sold: { label: 'Sold', color: 'bg-white/85 text-black' },
   };
   const c = config[status] || { label: status, color: 'bg-white/15 text-white' };
@@ -260,12 +260,12 @@ export function EmptyState({ icon: Icon, title, description, action, onAction })
 export function GuidancePanel({ tone = 'warning', title, messages, actionLabel, onAction, actionDisabled = false }) {
   const styles = {
     warning: {
-      wrapper: 'border-amber-400/20 bg-amber-500/10',
-      icon: 'text-amber-300',
-      title: 'text-amber-200',
-      text: 'text-amber-100/80',
-      bullet: 'bg-amber-300',
-      button: 'bg-amber-300 text-black hover:bg-amber-200',
+      wrapper: 'border-[#a6603f]/20 bg-[#a6603f]/10',
+      icon: 'text-[#d8b899]',
+      title: 'text-[#d8b899]',
+      text: 'text-[#d8b899]/80',
+      bullet: 'bg-[#a6603f]',
+      button: 'bg-[#a6603f] text-black hover:bg-[#a6603f]',
     },
     error: {
       wrapper: 'border-red-400/20 bg-red-500/10',

@@ -181,7 +181,7 @@ export default function ProviderConnectCard({ provider, status, onChange }) {
             <p className="text-sm font-bold">{meta.label}</p>
             <p className="text-[11px] text-white/35">
               {connected ? (
-                <span className="inline-flex items-center gap-1.5 text-emerald-400">
+                <span className="inline-flex items-center gap-1.5 text-[#cbb392]">
                   <CheckCircle2 size={11} /> Connected{status.accountLabel ? ` · ${status.accountLabel}` : ''}
                 </span>
               ) : (
