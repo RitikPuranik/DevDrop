@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle, ChevronDown, ChevronUp, Loader2, ShieldCheck, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 

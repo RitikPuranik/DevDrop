@@ -234,7 +234,7 @@ export default function About() {
             fontFamily: "'Playfair Display', serif", fontStyle: 'italic',
             fontSize: '14vw', lineHeight: 0.85, margin: 0,
           }}>
-            Since <span style={{ color: '#8b7355' }}>'26</span>
+            Since <span style={{ color: '#8b7355' }}>&apos;26</span>
           </h1>
         </motion.div>
 

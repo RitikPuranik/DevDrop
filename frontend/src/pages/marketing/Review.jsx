@@ -115,7 +115,7 @@ const LeaderCard = ({ person, isAutoFlipped }) => {
           className="hidden md:block"
         >
           <div style={{ color: '#f59e0b', fontSize: 10, marginBottom: 4, letterSpacing: 1 }}>★★★★★</div>
-          <p style={{ fontSize: 9, lineHeight: 1.4, fontWeight: 700, color: '#1e293b', margin: 0 }}>"{person.review}"</p>
+          <p style={{ fontSize: 9, lineHeight: 1.4, fontWeight: 700, color: '#1e293b', margin: 0 }}>&quot;{person.review}&quot;</p>
           <p style={{ fontSize: 8, marginTop: 8, color: '#94a3b8', fontWeight: 700, letterSpacing: '0.15em' }}>{person.name.toUpperCase()}</p>
         </div>
       </motion.div>
@@ -131,7 +131,6 @@ function GallerySection() {
   const headX  = useTransform(s, [0.22, 0.68], [0, -320]);
   const headOp = useTransform(s, [0.22, 0.60], [1, 0]);
   const t      = useTransform(s, [0.24, 0.80], [0, 1]);
-  const hintOp = useTransform(s, [0, 0.08], [1, 0]);
 
   return (
     <div ref={ref} style={{ height: '300vh' }} className="relative bg-black">
@@ -152,7 +151,7 @@ function GallerySection() {
               className="font-black text-white leading-[0.88] tracking-tight"
               style={{ fontSize: 'clamp(34px, 4vw, 62px)' }}
             >
-              People's<br />
+              People&apos;s<br />
               <span style={{ color: '#e07b39' }}>Appreci­ations</span>
             </motion.h2>
             <motion.p
@@ -293,6 +292,11 @@ function MotionCard({ card, t, fanX, fanY, fanScale, fanRotate, gridX, gridY, ca
   const opacity = useTransform(t, [0, 0.15, 1], [fanScale > 0.3 ? 1 : 0, fanScale > 0.3 ? 1 : 0.6, 1]);
   const br      = useTransform(t, [0, 1], [18, 16]);
   const brPx    = useTransform(br, v => `${v}px`);
+  // Hooks must run unconditionally on every render (Rules of Hooks) — this
+  // was previously called inline inside `{isFeatured && (...)}`, which
+  // skipped the hook call whenever isFeatured was false and could corrupt
+  // hook state if a card's featured status ever changed between renders.
+  const badgeOpacity = useTransform(t, [0, 0.3], [1, 0]);
 
   return (
     <motion.div
@@ -332,13 +336,13 @@ function MotionCard({ card, t, fanX, fanY, fanScale, fanRotate, gridX, gridY, ca
       {isFeatured && (
         <>
           <motion.div
-            style={{ opacity: useTransform(t, [0, 0.3], [1, 0]), position: 'absolute', top: 26, right: 12, zIndex: 10 }}
+            style={{ opacity: badgeOpacity, position: 'absolute', top: 26, right: 12, zIndex: 10 }}
             className="bg-white rounded-full px-2.5 py-1 flex items-center gap-1 shadow text-[10px] font-bold text-rose-500 whitespace-nowrap"
           >
             ♥ Like
           </motion.div>
           <motion.div
-            style={{ opacity: useTransform(t, [0, 0.3], [1, 0]) }}
+            style={{ opacity: badgeOpacity }}
             className="absolute top-3 left-3 z-10 bg-orange-700/80 rounded-full px-2.5 py-1 text-[10px] font-bold text-white whitespace-nowrap"
           >
             @artist
@@ -397,7 +401,7 @@ export default function IndustryLeaders() {
       <div key={person.id} className="flex items-center gap-4 bg-zinc-900/90 border border-zinc-800/60 rounded-xl p-3.5">
         <img src={person.img} className="w-12 h-12 rounded-xl object-cover border border-white/10" alt={person.name} />
         <div className="flex-1 min-w-0">
-          <p className="text-white text-xs font-bold leading-snug">"{person.review}"</p>
+          <p className="text-white text-xs font-bold leading-snug">&quot;{person.review}&quot;</p>
           <p className="text-amber-400 text-[9px] uppercase tracking-wider font-bold mt-1">{person.name}</p>
         </div>
       </div>
@@ -454,7 +458,7 @@ export default function IndustryLeaders() {
     <div className="mb-8">
       <p className="text-amber-400 text-[10px] tracking-[0.35em] uppercase font-semibold mb-4">What they say</p>
       <h2 className="font-black text-white leading-[0.88] tracking-tight text-4xl">
-        People's<br /><span style={{ color: '#e07b39' }}>Appreci­ations</span>
+        People&apos;s<br /><span style={{ color: '#e07b39' }}>Appreci­ations</span>
       </h2>
       <p className="text-white/30 text-sm mt-5 leading-relaxed max-w-xs">Real voices from teams who trust us every day.</p>
     </div>

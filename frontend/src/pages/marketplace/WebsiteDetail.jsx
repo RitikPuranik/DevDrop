@@ -9,7 +9,6 @@ import {
 import { websiteAPI } from '../../api/website';
 import { wishlistAPI } from '../../api/wishlist';
 import { buyerAPI } from '../../api/buyer';
-import { paymentAPI } from '../../api/payment';
 import { assetAPI } from '../../api/asset';
 import { auctionAPI } from '../../api/auction';
 import { toast } from 'sonner';
@@ -48,8 +47,11 @@ export default function WebsiteDetail() {
           .join('')
       );
       loggedInUserId = JSON.parse(jsonPayload).userId;
-      // Debug: only log once in development to avoid spamming console
-      if (process.env.NODE_ENV === 'development' && !window.__loggedWebsiteDetailUser) {
+      // Debug: only log once in development to avoid spamming console.
+      // (Vite exposes build-mode flags via import.meta.env, not Node's
+      // `process.env` — the previous `process.env.NODE_ENV` check referenced
+      // an undefined global and would throw in the browser.)
+      if (import.meta.env.DEV && !window.__loggedWebsiteDetailUser) {
         console.log('Logged in user ID:', loggedInUserId);
         window.__loggedWebsiteDetailUser = true;
       }
@@ -110,12 +112,14 @@ export default function WebsiteDetail() {
           const has = pr.data?.data?.hasPurchased || false;
           setPurchased(has);
           if (has) fetchAssets();
-        } catch {}
+        } catch {
+          // Non-fatal: purchase-status check failing shouldn't block the page.
+        }
       }
 
       // Fetch auction for exclusive
       if (data?.category === 'exclusive') fetchAuction(data._id);
-    } catch (err) {
+    } catch {
       toast.error('Website not found');
       navigate('/template');
     } finally {
@@ -466,7 +470,7 @@ export default function WebsiteDetail() {
                           ) : (
                             <div className="p-4 bg-white/5 border border-white/10 rounded-2xl text-center">
                               <p className="text-xs text-white/60 font-bold">Assigned to Winner</p>
-                              <p className="text-[10px] text-white/40 mt-1">If the winner doesn't pay in time, the template will return to the open listing.</p>
+                              <p className="text-[10px] text-white/40 mt-1">If the winner doesn&apos;t pay in time, the template will return to the open listing.</p>
                             </div>
                           )}
                         </div>
@@ -560,7 +564,7 @@ export default function WebsiteDetail() {
                     <div className="py-6 text-center">
                       <Gavel size={24} className="text-white/10 mx-auto mb-3" />
                       <p className="text-sm text-white/30">No active listing</p>
-                      <p className="text-[10px] text-white/15 mt-1">Listing hasn't started yet</p>
+                      <p className="text-[10px] text-white/15 mt-1">Listing hasn&apos;t started yet</p>
                     </div>
                   )}
                 </div>

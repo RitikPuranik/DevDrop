@@ -299,7 +299,7 @@ export default function AuthModal({ isOpen, onClose }) {
               <>
                 <h2 className="text-3xl font-serif font-bold text-[#3d342b] mb-2">Reset Password</h2>
                 <p className="text-[#8b7355] mb-6 text-sm leading-relaxed text-center">
-                  Enter the email linked to your account and we'll send you a reset link.
+                  Enter the email linked to your account and we&apos;ll send you a reset link.
                 </p>
                 <form className="w-full" onSubmit={handleForgotPassword}>
                   <AuthInput icon={Mail} type="email" placeholder="Email" name="forgotEmail" value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)} />
@@ -367,7 +367,7 @@ export default function AuthModal({ isOpen, onClose }) {
               <form className="flex flex-col items-center justify-center h-full px-12 text-center" onSubmit={handleForgotPassword}>
                 <h2 className="text-4xl font-serif font-bold text-[#3d342b] mb-2">Reset Password</h2>
                 <p className="text-[#8b7355] mb-8 text-sm leading-relaxed">
-                  Enter the email linked to your account and we'll send you a reset link.
+                  Enter the email linked to your account and we&apos;ll send you a reset link.
                 </p>
                 <AuthInput icon={Mail} type="email" placeholder="Email" name="forgotEmail" value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)} />
                 <SubmitBtn label={forgotLoading ? "Sending…" : "Send Reset Link"} disabled={forgotLoading} extraClass="mt-4" />

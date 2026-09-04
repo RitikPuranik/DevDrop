@@ -373,7 +373,7 @@ const TemplatesGridReveal = ({ introComplete }) => {
           >
             <div>
               <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-[#e8e2d6]/30 block mb-2">CRITIQUE PRESS</span>
-              <p className="text-xs italic font-serif text-[#e8e2d6]/80 line-clamp-4">"{REVIEWS[1].quote}"</p>
+              <p className="text-xs italic font-serif text-[#e8e2d6]/80 line-clamp-4">&quot;{REVIEWS[1].quote}&quot;</p>
             </div>
             <span className="text-[9px] font-mono uppercase tracking-widest text-[#e8e2d6]/40 mt-4 lg:mt-0">{REVIEWS[1].author}</span>
           </motion.div>

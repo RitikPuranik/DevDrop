@@ -353,7 +353,7 @@ export default function DeployProject() {
                           </div>
                         ))}
                         <p className="text-[11px] text-white/25 leading-relaxed">
-                          These couldn't be generated automatically — DevDrop never reads your repository's actual secret values, only the variable names it references.
+                          These couldn&apos;t be generated automatically — DevDrop never reads your repository&apos;s actual secret values, only the variable names it references.
                         </p>
                       </div>
                     )}
@@ -514,7 +514,7 @@ function UnknownArchitectureCard({ analysis }) {
   return (
     <div className="rounded-[26px] border border-[#a6603f]/20 bg-[#a6603f]/5 p-8 text-center">
       <AlertCircle className="mx-auto mb-4 text-[#d8b899]" size={26} />
-      <h3 className="font-bold text-base mb-2">We couldn't automatically determine how to deploy this project</h3>
+      <h3 className="font-bold text-base mb-2">We couldn&apos;t automatically determine how to deploy this project</h3>
       <p className="text-white/40 text-sm mb-4 max-w-md mx-auto leading-relaxed">Please review the detected configuration manually.</p>
       {analysis?.warnings?.length > 0 && (
         <div className="max-w-md mx-auto text-left space-y-1.5">

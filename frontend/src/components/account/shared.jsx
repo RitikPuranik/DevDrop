@@ -1,3 +1,8 @@
+/* eslint-disable react-refresh/only-export-components -- this module intentionally
+   shares small constants/helpers alongside a few tiny presentational components used
+   across the account section; splitting it into component-only files isn't worth the
+   churn for this codebase, and it doesn't affect anything but Vite Fast Refresh
+   granularity in dev. */
 import React, { useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Eye, XCircle, Clock, AlertTriangle, AlertCircle } from 'lucide-react';

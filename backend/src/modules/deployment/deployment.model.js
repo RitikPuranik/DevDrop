@@ -17,6 +17,11 @@ const envPlanEntrySchema = new mongoose.Schema(
     //            frontend<->backend URL pair) and never asks the buyer for it.
     // 'user'  -> the buyer must supply the value (DATABASE_URL, JWT_SECRET, ...).
     source: { type: String, enum: ['auto', 'user'], required: true },
+    // Only meaningful when source === 'auto'. Tells the orchestrator *which*
+    // auto-managed value this is so it knows when the value becomes
+    // resolvable (e.g. only after the frontend has its own deployed URL) —
+    // see envSync.resolveVariableValue and orchestrator's frontend-url sync.
+    autoRole: { type: String, enum: ['frontend-url', 'backend-url', 'static'] },
     required: { type: Boolean, default: true },
     configured: { type: Boolean, default: false },
   },
