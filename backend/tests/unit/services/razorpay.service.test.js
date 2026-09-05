@@ -97,7 +97,14 @@ describe('razorpay.service signature verification', () => {
       delete process.env.RAZORPAY_KEY_SECRET;
       jest.resetModules();
       const freshService = require('../../../src/services/razorpay.service');
-      await expect(freshService.createOrder('receipt-3', 100)).rejects.toThrow(/Razorpay keys not configured/);
+      // createOrder logs this expected failure via console.error before
+      // re-throwing — suppress only for this test, restore immediately after.
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        await expect(freshService.createOrder('receipt-3', 100)).rejects.toThrow(/Razorpay keys not configured/);
+      } finally {
+        consoleErrorSpy.mockRestore();
+      }
     });
   });
 });

@@ -172,18 +172,25 @@ describe('Deployment orchestration (integration)', () => {
       isTerminal: true, isSuccess: false, state: 'build_failed',
     });
 
-    await runDeployment(deployment._id);
+    // The orchestrator intentionally logs this failure via console.error —
+    // expected negative-path logging, suppressed only for this test.
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await runDeployment(deployment._id);
 
-    const finalDoc = Deployment.__get(deployment._id);
-    expect(finalDoc.status).toBe('FAILED');
-    expect(finalDoc.errorStep).toBe('DEPLOYING_BACKEND');
-    expect(finalDoc.errorMessage).toMatch(/Deploying backend/);
-    expect(finalDoc.errorMessage).toMatch(/did not succeed/);
+      const finalDoc = Deployment.__get(deployment._id);
+      expect(finalDoc.status).toBe('FAILED');
+      expect(finalDoc.errorStep).toBe('DEPLOYING_BACKEND');
+      expect(finalDoc.errorMessage).toMatch(/Deploying backend/);
+      expect(finalDoc.errorMessage).toMatch(/did not succeed/);
 
-    // Failure must stop the chain — the frontend phase (a genuinely
-    // different provider/module) must never run.
-    expect(mockVercelProvider.ensureProject).not.toHaveBeenCalled();
-    expect(mockVercelProvider.deploy).not.toHaveBeenCalled();
+      // Failure must stop the chain — the frontend phase (a genuinely
+      // different provider/module) must never run.
+      expect(mockVercelProvider.ensureProject).not.toHaveBeenCalled();
+      expect(mockVercelProvider.deploy).not.toHaveBeenCalled();
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
   });
 
   it('fails cleanly with a friendly message when the provider was never connected, without calling any provider method', async () => {
@@ -196,14 +203,21 @@ describe('Deployment orchestration (integration)', () => {
       envPlan: [{ key: 'NODE_ENV', target: 'backend', source: 'auto', autoRole: 'static', required: true, configured: false }],
     });
 
-    await runDeployment(deployment._id);
+    // The orchestrator intentionally logs this failure via console.error —
+    // expected negative-path logging, suppressed only for this test.
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await runDeployment(deployment._id);
 
-    const finalDoc = Deployment.__get(deployment._id);
-    expect(finalDoc.status).toBe('FAILED');
-    expect(finalDoc.errorMessage).toMatch(/Render isn't connected yet/);
+      const finalDoc = Deployment.__get(deployment._id);
+      expect(finalDoc.status).toBe('FAILED');
+      expect(finalDoc.errorMessage).toMatch(/Render isn't connected yet/);
 
-    expect(mockRenderProvider.ensureProject).not.toHaveBeenCalled();
-    expect(mockRenderProvider.configureEnvironment).not.toHaveBeenCalled();
+      expect(mockRenderProvider.ensureProject).not.toHaveBeenCalled();
+      expect(mockRenderProvider.configureEnvironment).not.toHaveBeenCalled();
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
   });
 
   it('is idempotent on redeploy: looks up the existing Render service by stored ID instead of creating a second one', async () => {

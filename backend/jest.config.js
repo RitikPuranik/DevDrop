@@ -13,6 +13,18 @@ module.exports = {
   collectCoverageFrom: [
     'src/**/*.js',
   ],
+  // src/modules/*/index.js are pure one-line re-export barrels
+  // (`module.exports = require('./x.routes')`) with zero executable
+  // logic of their own — the routes file they re-export is already
+  // measured directly. Excluding them stops the report from being
+  // diluted by files that can never be meaningfully "covered".
+  // src/services/deployment/analyzer/index.js is NOT excluded: unlike
+  // the barrels, it contains real business logic (analyzeRepository)
+  // and is intentionally still counted as untested surface area.
+  coveragePathIgnorePatterns: [
+    '/node_modules/',
+    '^<rootDir>/src/modules/[^/]+/index\\.js$',
+  ],
   clearMocks: true,
   verbose: true,
 };

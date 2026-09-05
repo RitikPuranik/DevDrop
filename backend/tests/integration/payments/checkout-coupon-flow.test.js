@@ -211,11 +211,19 @@ describe('Checkout coupon reservation → payment verification → purchase/payo
 
     // Same coupon code, two different buyers checking out two different
     // websites at (logically) the same time — the reservation must only
-    // ever succeed for one of them, never both.
-    const [resA, resB] = await Promise.all([
-      request(app).post('/api/payment/create-order').set('Authorization', authHeaderFor(buyer)).send({ websiteId: website._id, couponCode: 'ONCE' }),
-      request(app).post('/api/payment/create-order').set('Authorization', authHeaderFor(otherBuyer)).send({ websiteId: otherWebsite._id, couponCode: 'ONCE' }),
-    ]);
+    // ever succeed for one of them, never both. The loser hits the same
+    // expected console.error as the single-checkout rejection case above.
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    let resA;
+    let resB;
+    try {
+      [resA, resB] = await Promise.all([
+        request(app).post('/api/payment/create-order').set('Authorization', authHeaderFor(buyer)).send({ websiteId: website._id, couponCode: 'ONCE' }),
+        request(app).post('/api/payment/create-order').set('Authorization', authHeaderFor(otherBuyer)).send({ websiteId: otherWebsite._id, couponCode: 'ONCE' }),
+      ]);
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
 
     const statuses = [resA.status, resB.status].sort();
     // One request reserves the coupon (201); the other must be rejected —
@@ -270,10 +278,18 @@ describe('Checkout coupon reservation → payment verification → purchase/payo
     activeCoupon.reservationExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
     await activeCoupon.save();
 
-    const res = await request(app)
-      .post('/api/payment/create-order')
-      .set('Authorization', authHeaderFor(buyer))
-      .send({ websiteId: website._id, couponCode: 'HELD' });
+    // payment.controller intentionally logs this expected rejection via
+    // console.error before responding 409 — suppressed only for this test.
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    let res;
+    try {
+      res = await request(app)
+        .post('/api/payment/create-order')
+        .set('Authorization', authHeaderFor(buyer))
+        .send({ websiteId: website._id, couponCode: 'HELD' });
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
 
     expect(res.status).toBe(409);
     expect(Payment.__all()).toHaveLength(0);
