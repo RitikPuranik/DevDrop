@@ -123,6 +123,16 @@ describe('envSync.resolveVariableValue', () => {
     expect(resolveVariableValue(entry, { userSecrets: secrets })).toBe('postgres://example');
     expect(resolveVariableValue(entry, { userSecrets: new Map() })).toBeNull();
   });
+
+  it('always resolves PORT to null — the provider assigns it, DevDrop never pushes a value', () => {
+    const entry = { key: 'PORT', target: 'backend', source: 'auto' };
+    expect(resolveVariableValue(entry, { userSecrets: new Map() })).toBeNull();
+  });
+
+  it('resolves an "auto" entry with no recognized autoRole to null rather than guessing', () => {
+    const entry = { key: 'SOME_AUTO_VAR', target: 'backend', source: 'auto', autoRole: 'static' };
+    expect(resolveVariableValue(entry, { userSecrets: new Map() })).toBeNull();
+  });
 });
 
 describe('envSync.buildVariableList', () => {

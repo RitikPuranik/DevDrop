@@ -253,4 +253,185 @@ describe('Deployment orchestration (integration)', () => {
     expect(existingIdHint).toEqual({ serviceId: 'render-svc-existing' });
     expect(Deployment.__get(deployment._id).status).toBe('SUCCESS');
   });
+
+  it('propagates a frontend build failure without ever reaching the phase-3 backend resync', async () => {
+    DeploymentProviderConnection.__seed({ userId: USER_ID, provider: 'render', credentialEncrypted: cryptoUtil.encrypt('render-api-key') });
+    DeploymentProviderConnection.__seed({ userId: USER_ID, provider: 'vercel', credentialEncrypted: cryptoUtil.encrypt('vercel-oauth-token') });
+
+    const deployment = Deployment.__seed({
+      userId: USER_ID,
+      repository: { owner: 'acme', name: 'my-app', defaultBranch: 'main' },
+      backendProvider: 'render',
+      frontendProvider: 'vercel',
+      envPlan: baseEnvPlan(),
+      pendingSecretsEncrypted: cryptoUtil.encrypt(JSON.stringify({ DATABASE_URL: 'postgres://x' })),
+    });
+
+    mockRenderProvider.ensureProject.mockResolvedValue({ serviceId: 'render-svc-1' });
+    mockRenderProvider.deploy.mockResolvedValue({ deployId: 'render-deploy-1' });
+    mockRenderProvider.getDeploymentStatus.mockResolvedValue({ isTerminal: true, isSuccess: true, state: 'live', url: 'https://api.example.com' });
+    mockVercelProvider.ensureProject.mockResolvedValue({ projectId: 'vercel-proj-1', projectName: 'my-app' });
+    mockVercelProvider.deploy.mockResolvedValue({ deployId: 'vercel-deploy-1' });
+    mockVercelProvider.getDeploymentStatus.mockResolvedValue({ isTerminal: true, isSuccess: false, state: 'ERROR' });
+
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await runDeployment(deployment._id);
+
+      const finalDoc = Deployment.__get(deployment._id);
+      expect(finalDoc.status).toBe('FAILED');
+      expect(finalDoc.errorStep).toBe('DEPLOYING_FRONTEND');
+      expect(finalDoc.errorMessage).toMatch(/Deploying frontend/);
+      expect(finalDoc.errorMessage).toMatch(/did not succeed/);
+      // Backend already deployed successfully in phase 1 (its URL is real),
+      // but phase 3 (resync) must never run once phase 2 fails.
+      expect(mockRenderProvider.configureEnvironment).toHaveBeenCalledTimes(1);
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
+  it('propagates a phase-3 backend resync failure (both legs deployed, but the redeploy itself does not succeed)', async () => {
+    DeploymentProviderConnection.__seed({ userId: USER_ID, provider: 'render', credentialEncrypted: cryptoUtil.encrypt('render-api-key') });
+    DeploymentProviderConnection.__seed({ userId: USER_ID, provider: 'vercel', credentialEncrypted: cryptoUtil.encrypt('vercel-oauth-token') });
+
+    const deployment = Deployment.__seed({
+      userId: USER_ID,
+      repository: { owner: 'acme', name: 'my-app', defaultBranch: 'main' },
+      backendProvider: 'render',
+      frontendProvider: 'vercel',
+      envPlan: baseEnvPlan(),
+      pendingSecretsEncrypted: cryptoUtil.encrypt(JSON.stringify({ DATABASE_URL: 'postgres://x' })),
+    });
+
+    mockRenderProvider.ensureProject.mockResolvedValue({ serviceId: 'render-svc-1' });
+    mockRenderProvider.deploy.mockResolvedValueOnce({ deployId: 'render-deploy-1' }).mockResolvedValueOnce({ deployId: 'render-deploy-2' });
+    mockRenderProvider.getDeploymentStatus
+      .mockResolvedValueOnce({ isTerminal: true, isSuccess: true, state: 'live', url: 'https://api.example.com' }) // phase 1
+      .mockResolvedValueOnce({ isTerminal: true, isSuccess: false, state: 'build_failed' }); // phase 3 resync
+    mockVercelProvider.ensureProject.mockResolvedValue({ projectId: 'vercel-proj-1', projectName: 'my-app' });
+    mockVercelProvider.deploy.mockResolvedValue({ deployId: 'vercel-deploy-1' });
+    mockVercelProvider.getDeploymentStatus.mockResolvedValue({ isTerminal: true, isSuccess: true, state: 'READY', url: 'https://my-app.vercel.app' });
+
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await runDeployment(deployment._id);
+
+      const finalDoc = Deployment.__get(deployment._id);
+      expect(finalDoc.status).toBe('FAILED');
+      expect(finalDoc.errorStep).toBe('REDEPLOYING_BACKEND');
+      expect(finalDoc.errorMessage).toMatch(/Redeploying backend/);
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
+  it('maps a 401/403 provider rejection to a reconnect-focused friendly message naming the provider', async () => {
+    DeploymentProviderConnection.__seed({ userId: USER_ID, provider: 'render', credentialEncrypted: cryptoUtil.encrypt('render-api-key') });
+    const deployment = Deployment.__seed({
+      userId: USER_ID,
+      repository: { owner: 'acme', name: 'solo-api', defaultBranch: 'main' },
+      backendProvider: 'render',
+      frontendProvider: null,
+      envPlan: [{ key: 'NODE_ENV', target: 'backend', source: 'auto', autoRole: 'static', required: true, configured: false }],
+    });
+
+    mockRenderProvider.ensureProject.mockRejectedValue(Object.assign(new Error('token revoked'), { status: 401, provider: 'render' }));
+
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await runDeployment(deployment._id);
+      const finalDoc = Deployment.__get(deployment._id);
+      expect(finalDoc.errorMessage).toMatch(/DevDrop's connection to Render was rejected/i);
+      expect(finalDoc.errorMessage).toMatch(/Reconnect it under Connected Accounts/i);
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
+  it('maps a 429 provider rejection to a rate-limit friendly message naming the provider', async () => {
+    DeploymentProviderConnection.__seed({ userId: USER_ID, provider: 'render', credentialEncrypted: cryptoUtil.encrypt('render-api-key') });
+    const deployment = Deployment.__seed({
+      userId: USER_ID,
+      repository: { owner: 'acme', name: 'solo-api', defaultBranch: 'main' },
+      backendProvider: 'render',
+      frontendProvider: null,
+      envPlan: [{ key: 'NODE_ENV', target: 'backend', source: 'auto', autoRole: 'static', required: true, configured: false }],
+    });
+
+    mockRenderProvider.ensureProject.mockRejectedValue(Object.assign(new Error('too many requests'), { status: 429, provider: 'render' }));
+
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await runDeployment(deployment._id);
+      const finalDoc = Deployment.__get(deployment._id);
+      expect(finalDoc.errorMessage).toMatch(/Render rate-limited this request/i);
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
+  it('treats an undecryptable/corrupt pendingSecretsEncrypted blob as "no secrets" rather than crashing the whole run', async () => {
+    DeploymentProviderConnection.__seed({ userId: USER_ID, provider: 'render', credentialEncrypted: cryptoUtil.encrypt('render-api-key') });
+    const deployment = Deployment.__seed({
+      userId: USER_ID,
+      repository: { owner: 'acme', name: 'solo-api', defaultBranch: 'main' },
+      backendProvider: 'render',
+      frontendProvider: null,
+      envPlan: [{ key: 'NODE_ENV', target: 'backend', source: 'auto', autoRole: 'static', required: true, configured: false }],
+      // Decrypts fine (real AES-GCM round-trip) but is not valid JSON —
+      // exercises the JSON.parse catch inside decryptPendingSecrets.
+      pendingSecretsEncrypted: cryptoUtil.encrypt('not valid json{'),
+    });
+
+    mockRenderProvider.ensureProject.mockResolvedValue({ serviceId: 'render-svc-1' });
+    mockRenderProvider.deploy.mockResolvedValue({ deployId: 'render-deploy-1' });
+    mockRenderProvider.getDeploymentStatus.mockResolvedValue({ isTerminal: true, isSuccess: true, state: 'live', url: 'https://api.example.com' });
+
+    await runDeployment(deployment._id);
+
+    expect(Deployment.__get(deployment._id).status).toBe('SUCCESS');
+  });
+
+  it('logs (but does not throw out of runDeployment) when even the failure-state save itself fails', async () => {
+    DeploymentProviderConnection.__seed({ userId: USER_ID, provider: 'render', credentialEncrypted: cryptoUtil.encrypt('render-api-key') });
+    const deployment = Deployment.__seed({
+      userId: USER_ID,
+      repository: { owner: 'acme', name: 'solo-api', defaultBranch: 'main' },
+      backendProvider: 'render',
+      frontendProvider: null,
+      envPlan: [],
+    });
+
+    // First save (setting status to DEPLOYING_BACKEND) succeeds; the
+    // second — the catch block's own rescue save — fails.
+    let saveCount = 0;
+    const realSave = deployment.save.bind(deployment);
+    deployment.save = jest.fn(() => {
+      saveCount += 1;
+      return saveCount === 1 ? realSave() : Promise.reject(new Error('db unreachable'));
+    });
+
+    mockRenderProvider.ensureProject.mockRejectedValue(new Error('ensureProject boom'));
+
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await expect(runDeployment(deployment._id)).resolves.toBeUndefined();
+      // Both the original failure AND the failed rescue-save got logged.
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('failed at'), expect.any(Error));
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to persist failure state'), expect.any(Error));
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
+  // A timeout-branch test would need a fresh, isolated orchestrator module
+  // instance with its own tiny DEPLOY_POLL_TIMEOUT_MS (the real value is
+  // read once at module load). Attempting that via jest.isolateModules
+  // alongside this file's file-level jest.mock() of the provider modules
+  // proved unreliable — the isolated registry didn't consistently pick up
+  // fresh provider mocks distinct from the outer ones, so a false pass/fail
+  // risked asserting something not actually exercised. Left untested here;
+  // see the Phase 6+ remaining-gaps note for a suggested fix (extract
+  // POLL_TIMEOUT_MS into a parameter or re-read it lazily).
 });

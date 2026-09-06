@@ -98,6 +98,195 @@ describe('deployment.controller', () => {
     });
   });
 
+  describe('vercelCallback (public OAuth redirect target)', () => {
+    // res.send/res.redirect aren't in the shared mockRes helper (nothing
+    // else needs them), so build a small local variant just for this block.
+    const mockRedirectRes = () => ({ send: jest.fn(), redirect: jest.fn() });
+
+    it('redirects to the frontend callback page with the code (and optional teamId/configurationId/state) attached', async () => {
+      const req = mockReq({ query: { code: 'abc123', teamId: 't1', configurationId: 'c1', state: 's1' } });
+      const res = mockRedirectRes();
+
+      await deploymentController.vercelCallback(req, res);
+
+      expect(res.redirect).toHaveBeenCalledTimes(1);
+      const redirectUrl = new URL(res.redirect.mock.calls[0][0]);
+      expect(redirectUrl.origin + redirectUrl.pathname).toBe('https://devdrop.example.com/deploy/vercel-callback');
+      expect(redirectUrl.searchParams.get('code')).toBe('abc123');
+      expect(redirectUrl.searchParams.get('teamId')).toBe('t1');
+      expect(redirectUrl.searchParams.get('configurationId')).toBe('c1');
+      expect(redirectUrl.searchParams.get('state')).toBe('s1');
+    });
+
+    it('redirects with an error query param when Vercel reports the user cancelled/denied authorization', async () => {
+      const req = mockReq({ query: { error: 'access_denied' } });
+      const res = mockRedirectRes();
+
+      await deploymentController.vercelCallback(req, res);
+
+      const redirectUrl = new URL(res.redirect.mock.calls[0][0]);
+      expect(redirectUrl.searchParams.get('error')).toMatch(/cancelled or denied/i);
+    });
+
+    it('redirects with an error query param when no code is present at all', async () => {
+      const req = mockReq({ query: {} });
+      const res = mockRedirectRes();
+
+      await deploymentController.vercelCallback(req, res);
+
+      const redirectUrl = new URL(res.redirect.mock.calls[0][0]);
+      expect(redirectUrl.searchParams.get('error')).toMatch(/missing authorization code/i);
+    });
+
+    it('falls back to the inline postMessage HTML page when FRONTEND_URL is not configured', async () => {
+      delete process.env.FRONTEND_URL;
+      const req = mockReq({ query: { code: 'abc123' } });
+      const res = mockRedirectRes();
+
+      await deploymentController.vercelCallback(req, res);
+
+      expect(res.redirect).not.toHaveBeenCalled();
+      expect(res.send).toHaveBeenCalledWith(expect.stringContaining('vercel-oauth-code'));
+      process.env.FRONTEND_URL = 'https://devdrop.example.com';
+    });
+
+    it('falls back to an inline error page (still no redirect) when FRONTEND_URL is unset and Vercel reported an error', async () => {
+      delete process.env.FRONTEND_URL;
+      const req = mockReq({ query: { error: 'access_denied' } });
+      const res = mockRedirectRes();
+
+      await deploymentController.vercelCallback(req, res);
+
+      expect(res.redirect).not.toHaveBeenCalled();
+      expect(res.send).toHaveBeenCalledWith(expect.stringContaining('vercel-oauth-error'));
+      process.env.FRONTEND_URL = 'https://devdrop.example.com';
+    });
+  });
+
+  describe('finishConnectVercel', () => {
+    it('requires an authorization code', async () => {
+      const req = mockReq({ body: { state: 's1' } });
+      const res = mockRes();
+
+      await deploymentController.finishConnectVercel(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(vercelProvider.verifyConnectState).not.toHaveBeenCalled();
+    });
+
+    it('requires connection state', async () => {
+      const req = mockReq({ body: { code: 'abc' } });
+      const res = mockRes();
+
+      await deploymentController.finishConnectVercel(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringMatching(/missing vercel connection state/i) }));
+    });
+
+    it('rejects an expired/invalid state token before ever exchanging the code', async () => {
+      vercelProvider.verifyConnectState.mockImplementation(() => { throw new Error('bad state'); });
+      const req = mockReq({ body: { code: 'abc', state: 'garbage' } });
+      const res = mockRes();
+
+      await deploymentController.finishConnectVercel(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(vercelProvider.exchangeCodeForToken).not.toHaveBeenCalled();
+    });
+
+    it('rejects with 403 when the state was minted for a different DevDrop user (cross-session/cross-user protection)', async () => {
+      vercelProvider.verifyConnectState.mockReturnValue({ userId: 'someone-else' });
+      const req = mockReq({ userId: 'user-1', body: { code: 'abc', state: 's1' } });
+      const res = mockRes();
+
+      await deploymentController.finishConnectVercel(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(vercelProvider.exchangeCodeForToken).not.toHaveBeenCalled();
+    });
+
+    it('exchanges the code, encrypts the token before persisting, and upserts the connection', async () => {
+      vercelProvider.verifyConnectState.mockReturnValue({ userId: 'user-1' });
+      vercelProvider.exchangeCodeForToken.mockResolvedValue({ accessToken: 'raw-token', teamId: null, configurationId: 'cfg-1' });
+      vercelProvider.getAuthenticatedUser.mockResolvedValue({ id: 'vu-1', username: 'octocat', email: 'oct@example.com' });
+      const req = mockReq({ userId: 'user-1', body: { code: 'abc', state: 's1' } });
+      const res = mockRes();
+
+      await deploymentController.finishConnectVercel(req, res);
+
+      expect(DeploymentProviderConnection.findOneAndUpdate).toHaveBeenCalledWith(
+        { userId: 'user-1', provider: 'vercel' },
+        expect.objectContaining({ credentialEncrypted: 'enc(raw-token)', accountLabel: 'octocat' }),
+        expect.objectContaining({ upsert: true })
+      );
+      expect(res.json).toHaveBeenCalledWith({ success: true, data: { accountLabel: 'octocat', teamId: null } });
+    });
+
+    it('prefers the team name over username for accountLabel when a team is resolved', async () => {
+      vercelProvider.verifyConnectState.mockReturnValue({ userId: 'user-1' });
+      vercelProvider.exchangeCodeForToken.mockResolvedValue({ accessToken: 'raw-token', teamId: 't1', configurationId: 'cfg-1' });
+      vercelProvider.getAuthenticatedUser.mockResolvedValue({ id: 'vu-1', username: 'octocat' });
+      vercelProvider.getTeam.mockResolvedValue({ name: 'Acme Team' });
+      const req = mockReq({ userId: 'user-1', body: { code: 'abc', teamId: 't1', state: 's1' } });
+      const res = mockRes();
+
+      await deploymentController.finishConnectVercel(req, res);
+
+      expect(res.json).toHaveBeenCalledWith({ success: true, data: { accountLabel: 'Acme Team', teamId: 't1' } });
+    });
+
+    it('does not fail the whole request if the team lookup itself fails (falls back to user identity)', async () => {
+      vercelProvider.verifyConnectState.mockReturnValue({ userId: 'user-1' });
+      vercelProvider.exchangeCodeForToken.mockResolvedValue({ accessToken: 'raw-token', teamId: 't1', configurationId: 'cfg-1' });
+      vercelProvider.getAuthenticatedUser.mockResolvedValue({ id: 'vu-1', username: 'octocat' });
+      vercelProvider.getTeam.mockRejectedValue(new Error('team lookup failed'));
+      const req = mockReq({ userId: 'user-1', body: { code: 'abc', teamId: 't1', state: 's1' } });
+      const res = mockRes();
+
+      await deploymentController.finishConnectVercel(req, res);
+
+      expect(res.json).toHaveBeenCalledWith({ success: true, data: { accountLabel: 'octocat', teamId: 't1' } });
+    });
+
+    it('maps a 403 from Vercel to a permissions-focused message', async () => {
+      vercelProvider.verifyConnectState.mockReturnValue({ userId: 'user-1' });
+      const providerError = Object.assign(new Error('forbidden'), { status: 403 });
+      vercelProvider.exchangeCodeForToken.mockRejectedValue(providerError);
+      const req = mockReq({ userId: 'user-1', body: { code: 'abc', state: 's1' } });
+      const res = mockRes();
+
+      await deploymentController.finishConnectVercel(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringMatching(/check the integration permissions/i) }));
+    });
+
+    it('maps a 401 from Vercel to a stale-installation message', async () => {
+      vercelProvider.verifyConnectState.mockReturnValue({ userId: 'user-1' });
+      const providerError = Object.assign(new Error('unauthorized'), { status: 401 });
+      vercelProvider.exchangeCodeForToken.mockRejectedValue(providerError);
+      const req = mockReq({ userId: 'user-1', body: { code: 'abc', state: 's1' } });
+      const res = mockRes();
+
+      await deploymentController.finishConnectVercel(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringMatching(/stale/i) }));
+    });
+
+    it('defaults to 400 with a generic retry message for any other failure', async () => {
+      vercelProvider.verifyConnectState.mockReturnValue({ userId: 'user-1' });
+      vercelProvider.exchangeCodeForToken.mockRejectedValue(new Error('network blip'));
+      const req = mockReq({ userId: 'user-1', body: { code: 'abc', state: 's1' } });
+      const res = mockRes();
+
+      await deploymentController.finishConnectVercel(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+    });
+  });
+
   describe('disconnectVercel / disconnectRender', () => {
     it('deletes the Vercel connection', async () => {
       DeploymentProviderConnection.deleteOne.mockResolvedValue({ deletedCount: 1 });
@@ -736,6 +925,94 @@ describe('deployment.controller', () => {
       await deploymentController.createPersonalDeployment(req, res);
 
       expect(res.status).toHaveBeenCalledWith(400);
+    });
+
+    it('maps a 404 from GitHub (no repo access) to a 403 with a permissions message', async () => {
+      GithubConnection.findOne.mockReturnValue(createQueryMock({ accessTokenEncrypted: 'enc(tok)' }));
+      githubService.getRepository.mockRejectedValue({ response: { status: 404 } });
+      const req = mockReq({ body: { repository: { owner: 'me', name: 'app' } } });
+      const res = mockRes();
+
+      await deploymentController.createPersonalDeployment(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringMatching(/check your github permissions/i) }));
+    });
+
+    it('returns 422 when the architecture cannot be determined', async () => {
+      GithubConnection.findOne.mockReturnValue(createQueryMock({ accessTokenEncrypted: 'enc(tok)' }));
+      githubService.getRepository.mockResolvedValue({ htmlUrl: 'u', defaultBranch: 'main' });
+      Deployment.findOne.mockResolvedValue(null);
+      analyzeRepository.mockResolvedValue({ architecture: 'UNKNOWN', envPlan: [] });
+
+      const req = mockReq({ body: { repository: { owner: 'me', name: 'app' } } });
+      const res = mockRes();
+
+      await deploymentController.createPersonalDeployment(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(422);
+    });
+
+    it('requires the needed provider(s) to be connected first', async () => {
+      GithubConnection.findOne.mockReturnValue(createQueryMock({ accessTokenEncrypted: 'enc(tok)' }));
+      githubService.getRepository.mockResolvedValue({ htmlUrl: 'u', defaultBranch: 'main' });
+      Deployment.findOne.mockResolvedValue(null);
+      analyzeRepository.mockResolvedValue({ architecture: 'FRONTEND_ONLY', frontend: { provider: 'vercel' }, backend: null, envPlan: [] });
+      DeploymentProviderConnection.find.mockResolvedValue([]);
+
+      const req = mockReq({ body: { repository: { owner: 'me', name: 'app' } } });
+      const res = mockRes();
+
+      await deploymentController.createPersonalDeployment(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json.mock.calls[0][0].missingProviders).toEqual(['vercel']);
+    });
+
+    it('requires a Render workspace to be selected when the project has a backend', async () => {
+      GithubConnection.findOne.mockReturnValue(createQueryMock({ accessTokenEncrypted: 'enc(tok)' }));
+      githubService.getRepository.mockResolvedValue({ htmlUrl: 'u', defaultBranch: 'main' });
+      Deployment.findOne.mockResolvedValue(null);
+      analyzeRepository.mockResolvedValue({ architecture: 'BACKEND_ONLY', frontend: null, backend: { provider: 'render' }, envPlan: [] });
+      DeploymentProviderConnection.find.mockResolvedValue([{ provider: 'render', metadata: {} }]);
+
+      const req = mockReq({ body: { repository: { owner: 'me', name: 'app' } } });
+      const res = mockRes();
+
+      await deploymentController.createPersonalDeployment(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json.mock.calls[0][0].message).toMatch(/select a render workspace/i);
+    });
+
+    it('requires values for missing required user env vars', async () => {
+      GithubConnection.findOne.mockReturnValue(createQueryMock({ accessTokenEncrypted: 'enc(tok)' }));
+      githubService.getRepository.mockResolvedValue({ htmlUrl: 'u', defaultBranch: 'main' });
+      Deployment.findOne.mockResolvedValue(null);
+      analyzeRepository.mockResolvedValue({
+        architecture: 'FRONTEND_ONLY', frontend: { provider: 'vercel' }, backend: null,
+        envPlan: [{ key: 'API_KEY', source: 'user', required: true }],
+      });
+      DeploymentProviderConnection.find.mockResolvedValue([{ provider: 'vercel', metadata: {} }]);
+
+      const req = mockReq({ body: { repository: { owner: 'me', name: 'app' }, envValues: {} } });
+      const res = mockRes();
+
+      await deploymentController.createPersonalDeployment(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json.mock.calls[0][0].missingVariables).toEqual(['API_KEY']);
+    });
+
+    it('returns a generic 500 for an unexpected failure with no status code', async () => {
+      GithubConnection.findOne.mockReturnValue(createQueryMock({ accessTokenEncrypted: 'enc(tok)' }));
+      githubService.getRepository.mockRejectedValue(new Error('unexpected'));
+      const req = mockReq({ body: { repository: { owner: 'me', name: 'app' } } });
+      const res = mockRes();
+
+      await deploymentController.createPersonalDeployment(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
     });
   });
 });
