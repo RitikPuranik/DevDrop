@@ -1,0 +1,18 @@
+{
+  "websiteType": "portfolio",
+  "userData": {
+    "name": "Ritik Puranik",
+    "role": "Full Stack Developer",
+    "bio": "Developer building modern applications.",
+    "skills": ["React", "Node.js", "Python"],
+    "socialLinks": {
+      "github": "https://github.com/example",
+      "linkedin": "https://linkedin.com/in/example"
+    }
+  },
+  "preferences": {
+    "theme": "dark",
+    "style": "modern",
+    "animations": true
+  }
+}
