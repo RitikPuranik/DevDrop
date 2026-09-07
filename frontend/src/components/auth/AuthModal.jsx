@@ -6,6 +6,7 @@ import {
   Phone,
   X,
   ArrowRight,
+  Loader2,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { authAPI } from "../../api/auth";
@@ -15,6 +16,14 @@ import { toast } from "sonner";
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 let gsiScriptPromise = null;
 const SKIP_LOADER_SESSION_KEY = "devdrop_skip_next_loader";
+
+function getBackendOrigin() {
+  try {
+    return new URL(import.meta.env.VITE_API_URL).origin;
+  } catch {
+    return null;
+  }
+}
 
 function getApiErrorMessage(error, fallbackMessage) {
   const responseData = error?.response?.data;
@@ -62,6 +71,16 @@ const GoogleIcon = () => (
   </svg>
 );
 
+// ─── GitHub SVG Icon ──────────────────────────────────────────────────────────
+// lucide-react (this project's icon set) dropped brand/logo glyphs, so this
+// uses GitHub's own MIT-licensed Octicons "mark-github" path — inherits the
+// button's text color via currentColor, same as any other icon here.
+const GithubIcon = (props) => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg" {...props}>
+    <path fillRule="evenodd" clipRule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+  </svg>
+);
+
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function AuthModal({ isOpen, onClose }) {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -70,10 +89,13 @@ export default function AuthModal({ isOpen, onClose }) {
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [githubLoading, setGithubLoading] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [signupLoading, setSignupLoading] = useState(false);
   const googleInitializedRef = useRef(false);
   const lastGoogleCredentialRef = useRef(null);
+  const githubPopupRef = useRef(null);
+  const githubPopupWatcherRef = useRef(null);
   const navigate = useNavigate();
 
   const [loginData, setLoginData] = useState({ emailOrPhone: "", password: "" });
@@ -156,6 +178,70 @@ export default function AuthModal({ isOpen, onClose }) {
     return () => window.clearTimeout(timer);
   }, [isOpen, shouldRender, initGoogleButtons]);
 
+  // ── GitHub OAuth (popup + postMessage) ───────────────────────────────────────
+  // Mirrors the popup pattern used for the GitHub *integration* connect flow
+  // (components/github/PushToGithubModal.jsx) — separate message types
+  // ("github-auth-*" vs "github-oauth-*") so the two flows never cross wires.
+  const finishGithubSignIn = useCallback((token, user) => {
+    localStorage.setItem("token", token);
+    localStorage.setItem("user", JSON.stringify(user));
+    window.dispatchEvent(new Event("auth-changed"));
+    toast.success("Signed in with GitHub!");
+    skipNextPageLoader();
+    onClose();
+    if (user.role === "admin") navigate("/admin");
+    else navigate("/profile");
+  }, [navigate, onClose]);
+
+  useEffect(() => {
+    const backendOrigin = getBackendOrigin();
+
+    const handleMessage = (event) => {
+      if (backendOrigin && event.origin !== backendOrigin) return;
+      const { type, token, user, message } = event.data || {};
+
+      if (type === "github-auth-success") {
+        finishGithubSignIn(token, user);
+      } else if (type === "github-auth-error") {
+        toast.error(message || "GitHub sign-in failed");
+      } else {
+        return;
+      }
+
+      setGithubLoading(false);
+      clearInterval(githubPopupWatcherRef.current);
+      if (githubPopupRef.current && !githubPopupRef.current.closed) {
+        githubPopupRef.current.close();
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [finishGithubSignIn]);
+
+  const handleGithubAuth = () => {
+    setGithubLoading(true);
+    const popup = window.open(authAPI.githubAuthUrl(), "github-login-oauth", "width=600,height=720");
+    githubPopupRef.current = popup;
+
+    if (!popup) {
+      toast.error("Please allow popups to sign in with GitHub");
+      setGithubLoading(false);
+      return;
+    }
+
+    // Fallback in case the postMessage from the callback page never arrives
+    // (e.g. the user closes the popup themselves) — don't leave the button
+    // stuck in a loading state forever.
+    clearInterval(githubPopupWatcherRef.current);
+    githubPopupWatcherRef.current = setInterval(() => {
+      if (popup.closed) {
+        clearInterval(githubPopupWatcherRef.current);
+        setGithubLoading(false);
+      }
+    }, 800);
+  };
+
   // ── Local login ──────────────────────────────────────────────────────────────
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -224,7 +310,12 @@ export default function AuthModal({ isOpen, onClose }) {
     setForgotLoading(false);
     setLoginLoading(false);
     setSignupLoading(false);
+    setGithubLoading(false);
     lastGoogleCredentialRef.current = null;
+    clearInterval(githubPopupWatcherRef.current);
+    if (githubPopupRef.current && !githubPopupRef.current.closed) {
+      githubPopupRef.current.close();
+    }
   }, [isOpen]);
 
   if (!shouldRender) return null;
@@ -284,7 +375,10 @@ export default function AuthModal({ isOpen, onClose }) {
                 <h2 className="text-3xl font-serif font-bold text-[#3d342b] mb-1">Create Account</h2>
                 <p className="text-[#8b7355] text-sm mb-5">Join DevDrop today</p>
 
-                <div data-google-button className="w-full mb-4 flex justify-center" />
+                <div className="w-full flex flex-col gap-2.5 mb-4">
+                  <div data-google-button className="w-full flex justify-center" />
+                  <GithubAuthButton loading={githubLoading} disabled={githubLoading || googleLoading} onClick={handleGithubAuth} />
+                </div>
                 <Divider />
 
                 <form className="w-full" onSubmit={handleSignup}>
@@ -292,7 +386,7 @@ export default function AuthModal({ isOpen, onClose }) {
                   <AuthInput icon={Phone} type="text" placeholder="Phone Number (optional)" name="phone" value={signupData.phone} onChange={handleSignupChange} />
                   <AuthInput icon={Mail} type="email" placeholder="Email" name="email" value={signupData.email} onChange={handleSignupChange} />
                   <AuthInput icon={Lock} type="password" placeholder="Password" name="password" value={signupData.password} onChange={handleSignupChange} />
-                  <SubmitBtn label={signupLoading ? "Signing Up..." : "Sign Up"} disabled={signupLoading || googleLoading} />
+                  <SubmitBtn label={signupLoading ? "Signing Up..." : "Sign Up"} disabled={signupLoading || googleLoading || githubLoading} />
                 </form>
               </>
             ) : isForgotPassword ? (
@@ -314,7 +408,10 @@ export default function AuthModal({ isOpen, onClose }) {
                 <h2 className="text-3xl font-serif font-bold text-[#3d342b] mb-1">Welcome</h2>
                 <p className="text-[#8b7355] text-sm mb-5">Please enter your credentials</p>
 
-                <div data-google-button className="w-full mb-4 flex justify-center" />
+                <div className="w-full flex flex-col gap-2.5 mb-4">
+                  <div data-google-button className="w-full flex justify-center" />
+                  <GithubAuthButton loading={githubLoading} disabled={githubLoading || googleLoading} onClick={handleGithubAuth} />
+                </div>
                 <Divider />
 
                 <form className="w-full" onSubmit={handleLogin}>
@@ -327,7 +424,7 @@ export default function AuthModal({ isOpen, onClose }) {
                   >
                     Forgot your password?
                   </button>
-                  <SubmitBtn label={loginLoading ? "Logging In..." : "Login"} disabled={loginLoading || googleLoading} />
+                  <SubmitBtn label={loginLoading ? "Logging In..." : "Login"} disabled={loginLoading || googleLoading || githubLoading} />
                 </form>
               </>
             )}
@@ -346,15 +443,18 @@ export default function AuthModal({ isOpen, onClose }) {
               <h2 className="mt-5 text-4xl font-serif font-bold text-[#3d342b] mb-1">Create Account</h2>
               <p className="text-[#8b7355] text-sm mb-4">Join DevDrop today</p>
 
-              {/* Google button */}
-              <div data-google-button className="w-full mb-3 flex justify-center" />
+              {/* Google + GitHub buttons */}
+              <div className="w-full flex flex-col gap-2.5 mb-3">
+                <div data-google-button className="w-full flex justify-center" />
+                <GithubAuthButton loading={githubLoading} disabled={githubLoading || googleLoading} onClick={handleGithubAuth} />
+              </div>
               <Divider />
 
               <AuthInput icon={User} type="text" placeholder="Full Name" name="name" value={signupData.name} onChange={handleSignupChange} />
               <AuthInput icon={Phone} type="text" placeholder="Phone Number (optional)" name="phone" value={signupData.phone} onChange={handleSignupChange} />
               <AuthInput icon={Mail} type="email" placeholder="Email" name="email" value={signupData.email} onChange={handleSignupChange} />
               <AuthInput icon={Lock} type="password" placeholder="Password" name="password" value={signupData.password} onChange={handleSignupChange} />
-              <SubmitBtn label={signupLoading ? "Signing Up..." : "Sign Up"} disabled={signupLoading || googleLoading} />
+              <SubmitBtn label={signupLoading ? "Signing Up..." : "Sign Up"} disabled={signupLoading || googleLoading || githubLoading} />
             </form>
           </div>
 
@@ -380,8 +480,11 @@ export default function AuthModal({ isOpen, onClose }) {
                 <h2 className="text-4xl font-serif font-bold text-[#3d342b] mb-1">Welcome</h2>
                 <p className="text-[#8b7355] mb-4 text-sm">Please enter your credentials</p>
 
-                {/* Google button */}
-                <div data-google-button className="w-full mb-3 flex justify-center" />
+                {/* Google + GitHub buttons */}
+                <div className="w-full flex flex-col gap-2.5 mb-3">
+                  <div data-google-button className="w-full flex justify-center" />
+                  <GithubAuthButton loading={githubLoading} disabled={githubLoading || googleLoading} onClick={handleGithubAuth} />
+                </div>
                 <Divider />
 
                 <AuthInput icon={Mail} type="text" placeholder="Email or Phone" name="emailOrPhone" value={loginData.emailOrPhone} onChange={handleLoginChange} />
@@ -395,7 +498,7 @@ export default function AuthModal({ isOpen, onClose }) {
                   Forgot your password?
                 </button>
 
-                <SubmitBtn label={loginLoading ? "Logging In..." : "Login"} disabled={loginLoading || googleLoading} extraClass="mt-8" />
+                <SubmitBtn label={loginLoading ? "Logging In..." : "Login"} disabled={loginLoading || googleLoading || githubLoading} extraClass="mt-8" />
               </form>
             )}
           </div>
@@ -436,6 +539,19 @@ export default function AuthModal({ isOpen, onClose }) {
 }
 
 // ─── Small shared components ──────────────────────────────────────────────────
+
+const GithubAuthButton = ({ loading, disabled, onClick }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    disabled={disabled}
+    aria-label="Continue with GitHub"
+    className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl border-2 border-[#8b7355]/20 bg-white text-[#3d342b] text-xs font-bold uppercase tracking-widest hover:bg-[#EAE3D8]/50 hover:border-[#8b7355]/30 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+  >
+    {loading ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <GithubIcon aria-hidden="true" />}
+    {loading ? "Connecting…" : "Continue with GitHub"}
+  </button>
+);
 
 const Divider = () => (
   <div className="flex items-center gap-3 w-full mb-4">

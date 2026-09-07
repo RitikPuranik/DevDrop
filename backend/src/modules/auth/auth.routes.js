@@ -22,6 +22,13 @@ router.post('/login', authLimiter, [body('emailOrPhone').trim().notEmpty().withM
 // Google OAuth
 router.post('/google', authLimiter, [body('credential').notEmpty().withMessage('Google credential is required'), handleValidationErrors], authController.googleAuth);
 
+// GitHub OAuth ("Continue with GitHub") — separate from the GitHub
+// *integration* OAuth under /api/github (repo export), which has its own
+// state/scope/callback. GitHub redirects the browser straight to /callback
+// with no Authorization header, so that route must stay public.
+router.get('/github', authLimiter, authController.githubAuthRedirect);
+router.get('/github/callback', authController.githubAuthCallback);
+
 router.post('/send-verification', auth, authController.sendVerificationEmail);
 router.post('/verify-email', authController.verifyEmail);
 router.post('/resend-verification', auth, authController.resendVerification);

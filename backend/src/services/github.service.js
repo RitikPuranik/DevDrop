@@ -6,6 +6,12 @@ const axios = require('axios');
 // would require migrating to a GitHub App, which is out of scope here.
 const OAUTH_SCOPE = 'repo';
 
+// "Continue with GitHub" (sign in/sign up) needs none of the above — just
+// enough to identify the person and read a verified email address. Kept
+// deliberately narrower than OAUTH_SCOPE so a login-only user never grants
+// DevDrop repo access just by signing in.
+const LOGIN_OAUTH_SCOPE = 'read:user user:email';
+
 const getClientId = () => {
   if (!process.env.GITHUB_CLIENT_ID) throw new Error('GITHUB_CLIENT_ID is not configured.');
   return process.env.GITHUB_CLIENT_ID;
@@ -21,35 +27,59 @@ const getRedirectUri = () => {
   return process.env.GITHUB_OAUTH_REDIRECT_URI;
 };
 
+// Separate callback URL for "Continue with GitHub" sign-in, registered as an
+// additional callback URL on the SAME GitHub OAuth App used for repo export
+// (GitHub OAuth Apps support up to 10 callback URLs). Kept distinct from
+// GITHUB_OAUTH_REDIRECT_URI so GitHub always tells us which flow a given
+// redirect belongs to, on top of the `state.purpose` check each callback
+// already does.
+const getLoginRedirectUri = () => {
+  if (!process.env.GITHUB_AUTH_REDIRECT_URI) throw new Error('GITHUB_AUTH_REDIRECT_URI is not configured.');
+  return process.env.GITHUB_AUTH_REDIRECT_URI;
+};
+
 const isGithubConfigured = () =>
   Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET && process.env.GITHUB_OAUTH_REDIRECT_URI);
 
+const isGithubLoginConfigured = () =>
+  Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET && process.env.GITHUB_AUTH_REDIRECT_URI);
+
 /**
  * Build the URL the user's browser (popup) should be sent to in order to
- * authorize DevDrop's GitHub OAuth app.
+ * authorize DevDrop's GitHub OAuth app. Defaults to the repo-export flow's
+ * scope/redirect; pass `options` to point at a different flow (see
+ * getLoginAuthorizeUrl below) while reusing the same client id/secret.
  */
-const getAuthorizeUrl = (state) => {
+const getAuthorizeUrl = (state, options = {}) => {
+  const { scope = OAUTH_SCOPE, redirectUri = getRedirectUri() } = options;
   const params = new URLSearchParams({
     client_id: getClientId(),
-    redirect_uri: getRedirectUri(),
-    scope: OAUTH_SCOPE,
+    redirect_uri: redirectUri,
+    scope,
     state,
     allow_signup: 'true',
   });
   return `https://github.com/login/oauth/authorize?${params.toString()}`;
 };
 
+/** Authorize URL for "Continue with GitHub" sign-in/sign-up — identity-only scope. */
+const getLoginAuthorizeUrl = (state) =>
+  getAuthorizeUrl(state, { scope: LOGIN_OAUTH_SCOPE, redirectUri: getLoginRedirectUri() });
+
 /**
  * Exchange the OAuth "code" GitHub sent to our callback for an access token.
+ * `redirectUri` must match whatever redirect_uri was used to obtain the
+ * code — defaults to the repo-export callback; the login callback passes
+ * its own.
  */
-const exchangeCodeForToken = async (code) => {
+const exchangeCodeForToken = async (code, redirectUri = getRedirectUri()) => {
   const { data } = await axios.post(
     'https://github.com/login/oauth/access_token',
     {
       client_id: getClientId(),
       client_secret: getClientSecret(),
       code,
-      redirect_uri: getRedirectUri(),
+      redirect_uri: redirectUri,
     },
     { headers: { Accept: 'application/json' } }
   );
@@ -112,6 +142,32 @@ const listRepositories = async (accessToken, { page = 1, perPage = 50, search = 
 const getAuthenticatedUser = async (accessToken) => {
   const { data } = await githubApi(accessToken).get('/user');
   return { id: data.id, username: data.login, avatarUrl: data.avatar_url, name: data.name };
+};
+
+/**
+ * GitHub's `/user` endpoint only includes `email` when the user has made
+ * one public — most accounts keep it private. `/user/emails` (requires the
+ * `user:email` scope) is the reliable way to read every address the user
+ * has verified, regardless of visibility.
+ */
+const getUserEmails = async (accessToken) => {
+  const { data } = await githubApi(accessToken).get('/user/emails');
+  return Array.isArray(data) ? data : [];
+};
+
+/**
+ * Best available verified email for sign-in/account linking: the user's
+ * primary verified address, or their next-best verified address if for
+ * some reason none is marked primary. Returns null if GitHub reports no
+ * verified email at all, so callers can decline gracefully instead of
+ * creating a broken account.
+ */
+const getPrimaryVerifiedEmail = async (accessToken) => {
+  const emails = await getUserEmails(accessToken);
+  const primary = emails.find((entry) => entry.primary && entry.verified);
+  if (primary) return primary.email;
+  const anyVerified = emails.find((entry) => entry.verified);
+  return anyVerified ? anyVerified.email : null;
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -274,9 +330,14 @@ const getFileContent = async (accessToken, owner, repo, path, ref) => {
 
 module.exports = {
   isGithubConfigured,
+  isGithubLoginConfigured,
   getAuthorizeUrl,
+  getLoginAuthorizeUrl,
+  getLoginRedirectUri,
   exchangeCodeForToken,
   getAuthenticatedUser,
+  getUserEmails,
+  getPrimaryVerifiedEmail,
   listRepositories,
   createRepository,
   createBlob,
