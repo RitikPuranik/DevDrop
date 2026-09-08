@@ -9,6 +9,7 @@ module.exports = {
     '<rootDir>/tests/unit/**/*.test.js',
     '<rootDir>/tests/api/**/*.test.js',
     '<rootDir>/tests/integration/**/*.test.js',
+    '<rootDir>/tests/contract/**/*.test.js',
   ],
   collectCoverageFrom: [
     'src/**/*.js',

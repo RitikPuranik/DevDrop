@@ -83,6 +83,8 @@ const Navbar = () => {
   
   ];
 
+  const AI_STUDIO_ENABLED = import.meta.env.VITE_AI_STUDIO_ENABLED !== 'false';
+
   const finalMenuItems = isLoggedIn
     ? [
         ...menuItems,
@@ -92,7 +94,16 @@ const Navbar = () => {
           label: "Workspace",
           src: "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?q=80&w=1000",
           hasSubMenu: false,
-        },  {
+        },
+        ...(AI_STUDIO_ENABLED
+          ? [{
+              to: "/ai-studio",
+              label: "AI Studio",
+              src: "https://images.unsplash.com/photo-1677442136019-21780ecad995?q=80&w=1000",
+              hasSubMenu: false,
+            }]
+          : []),
+        {
           to: "/profile",
           label: "Profile",
           src: "https://images.unsplash.com/photo-1511367461989-f85a21fda167?q=80&w=1000",

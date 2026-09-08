@@ -84,6 +84,7 @@ const SUPABASE_FOLDERS = {
   VIDEOS: 'videos',
   PREVIEW_VIDEOS: 'preview-videos',
   AVATARS: 'avatars',
+  AI_STUDIO_ASSETS: 'ai-studio-assets',
 };
 
 // Signed URL expiry (in seconds)

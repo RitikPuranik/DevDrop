@@ -27,6 +27,11 @@ const EXPORT_RATE_LIMIT_WINDOW_MS = readEnvNumber('EXPORT_RATE_LIMIT_WINDOW_MS',
 const EXPORT_RATE_LIMIT_MAX_REQUESTS = readEnvNumber('EXPORT_RATE_LIMIT_MAX_REQUESTS', 5);
 const DEPLOY_RATE_LIMIT_WINDOW_MS = readEnvNumber('DEPLOY_RATE_LIMIT_WINDOW_MS', 60 * 60 * 1000);
 const DEPLOY_RATE_LIMIT_MAX_REQUESTS = readEnvNumber('DEPLOY_RATE_LIMIT_MAX_REQUESTS', 10);
+// AI Studio generation limiter (per user) — each call triggers a full
+// Requirements -> Design -> Architecture -> Code Gen -> Build pipeline run
+// on the AI service, so this is kept as tight as deployments.
+const AI_GENERATION_RATE_LIMIT_WINDOW_MS = readEnvNumber('AI_GENERATION_RATE_LIMIT_WINDOW_MS', 60 * 60 * 1000);
+const AI_GENERATION_RATE_LIMIT_MAX_REQUESTS = readEnvNumber('AI_GENERATION_RATE_LIMIT_MAX_REQUESTS', 10);
 
 // General API rate limiter
 const generalLimiter = rateLimit({
@@ -105,6 +110,19 @@ const deployLimiter = rateLimit({
   },
 });
 
+// AI Studio generation limiter (per user)
+const aiGenerationLimiter = rateLimit({
+  windowMs: AI_GENERATION_RATE_LIMIT_WINDOW_MS,
+  max: AI_GENERATION_RATE_LIMIT_MAX_REQUESTS,
+  keyGenerator: (req) => {
+    return req.userId ? req.userId.toString() : req.ip;
+  },
+  message: {
+    success: false,
+    message: `Too many generation attempts, please try again after ${formatWindowLabel(AI_GENERATION_RATE_LIMIT_WINDOW_MS)}.`,
+  },
+});
+
 module.exports = {
   generalLimiter,
   authLimiter,
@@ -112,4 +130,5 @@ module.exports = {
   paymentLimiter,
   exportLimiter,
   deployLimiter,
+  aiGenerationLimiter,
 };
