@@ -32,11 +32,13 @@ from config import get_settings
 from logging_config import configure_logging
 from routes.build import router as build_router
 from routes.generation import router as generation_router
+from routes.gemini_pool_admin import router as gemini_pool_admin_router
 from routes.health import router as health_router
 from routes.jobs import router as jobs_router
 from routes.planning import router as planning_router
 from routes.projects import router as projects_router
-from storage.factory import get_repository
+from storage.factory import get_gemini_pool_repository, get_repository
+from storage.gemini_pool_mongo import MongoGeminiPoolRepository
 from storage.mongo import MongoRepository
 
 configure_logging()
@@ -53,6 +55,20 @@ async def lifespan(app: FastAPI):
         # request. The in-memory repository has no equivalent concept.
         await repository.ensure_indexes()
         logger.info("mongo_indexes_ensured")
+
+    gemini_pool_repository = get_gemini_pool_repository(settings)
+    if isinstance(gemini_pool_repository, MongoGeminiPoolRepository):
+        await gemini_pool_repository.ensure_indexes()
+        logger.info("gemini_pool_mongo_indexes_ensured")
+    if settings.gemini_pool_enabled:
+        # Section 4/26: a legacy GEMINI_API_KEY/GEMINI_MODEL becomes one
+        # pool entry the first time the pool is turned on, so enabling it
+        # never means losing a credential that already worked. No-op once
+        # the pool has any project at all — see
+        # gemini_pool/lifecycle.py:ensure_legacy_credential_migrated.
+        from gemini_pool.lifecycle import ensure_legacy_credential_migrated
+
+        await ensure_legacy_credential_migrated(gemini_pool_repository, settings)
     yield
 
 
@@ -125,3 +141,4 @@ app.include_router(generation_router)
 app.include_router(build_router)
 app.include_router(jobs_router)
 app.include_router(projects_router)
+app.include_router(gemini_pool_admin_router)

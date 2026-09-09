@@ -33,6 +33,56 @@ class Settings(BaseSettings):
     gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
     gemini_model: str | None = Field(default=None, alias="GEMINI_MODEL")
 
+    # --- Gemini Project Pool ---
+    # Opt-in on purpose: default False means every existing deployment
+    # (and test_provider_factory_gemini, which constructs a plain
+    # Settings() and expects a plain GeminiProvider back) keeps its exact
+    # current behavior. Set true once at least one project has been added
+    # to the pool (via POST /v1/admin/gemini-projects, or let the
+    # provider auto-migrate GEMINI_API_KEY/GEMINI_MODEL into a single
+    # pool entry the first time it runs — see
+    # gemini_pool/lifecycle.py:ensure_legacy_credential_migrated).
+    gemini_pool_enabled: bool = Field(default=False, alias="GEMINI_POOL_ENABLED")
+    # Bounds Section 17's failover loop: this many *additional* projects
+    # are tried after the first, so total attempts per request = this + 1.
+    gemini_max_project_failovers: int = Field(default=2, alias="GEMINI_MAX_PROJECT_FAILOVERS")
+    # Used when a caller doesn't pin a specific model — currently no
+    # caller does (agents just call ai_gateway.generate(), Section 32),
+    # so this is what selects which pool entries are eligible for every
+    # request today. A future caller could pass a model explicitly
+    # without any other code changing.
+    gemini_default_model: str | None = Field(default=None, alias="GEMINI_DEFAULT_MODEL")
+    gemini_request_timeout_ms: int = Field(default=60_000, alias="GEMINI_REQUEST_TIMEOUT_MS")
+    gemini_cooldown_default_ms: int = Field(default=30_000, alias="GEMINI_COOLDOWN_DEFAULT_MS")
+    gemini_cooldown_max_ms: int = Field(default=15 * 60_000, alias="GEMINI_COOLDOWN_MAX_MS")
+    gemini_budget_guard_enabled: bool = Field(default=True, alias="GEMINI_BUDGET_GUARD_ENABLED")
+    gemini_budget_warning_threshold: float = Field(default=0.7, alias="GEMINI_BUDGET_WARNING_THRESHOLD")
+    gemini_budget_critical_threshold: float = Field(default=0.9, alias="GEMINI_BUDGET_CRITICAL_THRESHOLD")
+    # How long a reservation holds a project before it's treated as an
+    # abandoned/crashed worker's lease and freed automatically (Section 15).
+    gemini_lease_ttl_seconds: int = Field(default=120, alias="GEMINI_LEASE_TTL_SECONDS")
+    # See gemini_pool/scheduler.py's next_daily_boundary — Section 12
+    # explicitly warns against assuming a reset timezone without
+    # verifying it against Gemini's current documented behavior. This is
+    # a deliberately-conservative placeholder (UTC midnight), not a
+    # verified claim; confirm before relying on it in production. See
+    # docs/GEMINI_PROJECT_POOL.md.
+    gemini_daily_reset_hour_utc: int = Field(default=0, alias="GEMINI_DAILY_RESET_HOUR_UTC")
+    # A rough chars-per-token constant for the pre-request token estimate
+    # the scheduler uses for TPM eligibility/scoring (Section 11) — not a
+    # real tokenizer call, which would mean a second network round trip
+    # per request just to estimate the first one. Corrected to Gemini's
+    # own reported usage_metadata token counts after every real call.
+    gemini_estimated_chars_per_token: float = Field(default=4.0, alias="GEMINI_ESTIMATED_CHARS_PER_TOKEN")
+    gemini_estimated_output_tokens: int = Field(default=2000, alias="GEMINI_ESTIMATED_OUTPUT_TOKENS")
+    # Internal cost-estimate rates for the budget guard (Section 13) — 0
+    # means "don't estimate cost," which effectively disables budget
+    # tracking for monthlyUsage even if a monthlyBudget is configured on
+    # a project (documented in docs/GEMINI_PROJECT_POOL.md: this is
+    # always an estimate, never Google's authoritative billing).
+    gemini_estimated_cost_per_1k_input_tokens: float = Field(default=0.0, alias="GEMINI_COST_PER_1K_INPUT_TOKENS")
+    gemini_estimated_cost_per_1k_output_tokens: float = Field(default=0.0, alias="GEMINI_COST_PER_1K_OUTPUT_TOKENS")
+
     # --- Ollama ---
     ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
     ollama_model: str = Field(default="llama3.1", alias="OLLAMA_MODEL")
