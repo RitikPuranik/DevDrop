@@ -20,6 +20,24 @@ the Node app there is no CORS middleware here on purpose.
 
 Run with: python -m uvicorn main:app --reload
 """
+import asyncio
+import sys
+
+if sys.platform == "win32":
+    # sandbox/local.py shells out to `npm install`/`npm run build` via
+    # asyncio.create_subprocess_exec. On Windows, only ProactorEventLoop
+    # implements subprocess support — SelectorEventLoop raises
+    # `NotImplementedError` from _make_subprocess_transport the moment a
+    # build is attempted, even though every earlier stage (agents, Mongo
+    # queries) works fine on either loop. asyncio's own default policy on
+    # Windows is already Proactor, but something in this process's import
+    # chain (observed with uvicorn --reload's reloader subprocess) can end
+    # up on Selector instead, so this is set explicitly and unconditionally
+    # rather than relying on the platform default. Must run before
+    # anything else gets a chance to create the event loop, hence right at
+    # the top of this file, before any other import.
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 import logging
 import time
 from contextlib import asynccontextmanager

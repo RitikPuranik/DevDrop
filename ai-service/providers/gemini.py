@@ -44,7 +44,16 @@ class GeminiProvider(AIProvider):
         if context:
             full_prompt = f"{prompt}\n\nContext:\n{json.dumps(context, default=str)}"
 
-        config: dict[str, Any] = {"temperature": temperature}
+        config: dict[str, Any] = {
+            # See gemini_pool/gemini_client.py's identical comment: without
+            # an explicit cap, Gemini 3 models can silently return a
+            # truncated-but-valid response (fewer files/fields) once their
+            # shared thinking+output token budget runs out, rather than
+            # erroring. This mirrors that file's ceiling to keep the two
+            # request-building paths in lockstep.
+            "temperature": temperature,
+            "max_output_tokens": 65536,
+        }
         if response_schema:
             config["response_mime_type"] = "application/json"
             config["response_schema"] = response_schema

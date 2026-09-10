@@ -70,7 +70,22 @@ async def call_gemini_api(
     if context:
         full_prompt = f"{prompt}\n\nContext:\n{json.dumps(context, default=str)}"
 
-    config: dict[str, Any] = {"temperature": temperature, "http_options": {"timeout": timeout_ms}}
+    config: dict[str, Any] = {
+        "temperature": temperature,
+        # Gemini 3 models share ONE token budget between internal
+        # "thinking" and the actual visible output — with no explicit
+        # cap, a large multi-file code-generation response can run the
+        # model out of budget mid-way through, and it silently returns a
+        # smaller-but-still-schema-valid result (fewer files) instead of
+        # an error. There's no per-agent signal here for how big a given
+        # response should be, so this uses one generous ceiling
+        # (65536 — the practical max for current flash-tier models) for
+        # every call; agents that need far less naturally stop early via
+        # their own STOP finish_reason; this only raises the ceiling for
+        # ones that need more, most importantly CodeGenerationAgent.
+        "max_output_tokens": 65536,
+        "http_options": {"timeout": timeout_ms},
+    }
     if response_schema:
         config["response_mime_type"] = "application/json"
         config["response_schema"] = response_schema
