@@ -1,42 +1,124 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { AlertTriangle, Check, Loader2, RefreshCw, RotateCcw, Sparkles } from 'lucide-react';
+import { AlertTriangle, ExternalLink, Loader2, RefreshCw, RotateCcw, Sparkles, X, Maximize2 } from 'lucide-react';
+import { aiStudioAPI } from '../../api/ai';
+import { toast } from 'sonner';
 
-// Mirrors ai-service/orchestrator/state.py::PipelineStage exactly. Order
-// here is the pipeline's real execution order — this is not a guess.
-const STAGE_ORDER = [
-  { id: 'QUEUED', label: 'Queued' },
-  { id: 'ANALYZING_REQUIREMENTS', label: 'Understanding your requirements' },
-  { id: 'CREATING_DESIGN', label: 'Designing your website' },
-  { id: 'CREATING_ARCHITECTURE', label: 'Planning the project' },
-  { id: 'GENERATING_CODE', label: 'Writing the code' },
-  { id: 'VALIDATING_PROJECT', label: 'Validating the project' },
-  { id: 'BUILDING', label: 'Building your website' },
-  { id: 'DEBUGGING', label: 'Fixing issues' },
-  { id: 'PATCHING', label: 'Applying fixes' },
-];
-
-const STAGE_INDEX = Object.fromEntries(STAGE_ORDER.map((s, i) => [s.id, i]));
-
-function StageRow({ stage, state }) {
-  return (
-    <li className="flex items-center gap-3 py-2">
-      <span
-        className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
-          state === 'done' ? 'bg-[#8b7355]' : state === 'current' ? 'bg-white/10 border border-[#8b7355]' : 'bg-white/5 border border-white/10'
-        }`}
-      >
-        {state === 'done' && <Check size={12} className="text-black" />}
-        {state === 'current' && <Loader2 size={11} className="animate-spin text-[#8b7355]" />}
-      </span>
-      <span className={`text-sm ${state === 'pending' ? 'text-white/25' : state === 'current' ? 'text-white' : 'text-white/50'}`}>
-        {stage.label}
-      </span>
-    </li>
-  );
-}
+// Genie (services/genie) reports generation status as a flat
+// pending/processing/completed/failed value over its polled REST API —
+// it does not expose the old ai-service's granular pipeline stages that
+// way. Genie *does* emit richer `generation:progress` Socket.io events,
+// but DevDrop's backend does not proxy those yet (see docs/AI_STUDIO.md,
+// "Streaming/progress" TODO), so the UI shows an honest generic
+// in-progress state rather than a fabricated step checklist.
+const IN_PROGRESS_MESSAGES = {
+  pending: 'Queued — your generation will start shortly…',
+  processing: 'Genie is generating your website…',
+};
 
 export default function GenerationProgress({ job, pollError, onRetry, onBackToForm, retrying }) {
+  const [previewUrl, setPreviewUrl] = React.useState(job?.previewUrl || null);
+  const [previewStatus, setPreviewStatus] = React.useState(job?.deploymentStatus || null);
+  const [previewLoading, setPreviewLoading] = React.useState(false);
+  const [previewOpen, setPreviewOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    setPreviewUrl(job?.previewUrl || null);
+    setPreviewStatus(job?.deploymentStatus || null);
+  }, [job?.previewUrl, job?.deploymentStatus]);
+
+  const startPreview = async () => {
+    if (!job?.jobId) return;
+    if (previewUrl) {
+      setPreviewOpen(true);
+      return;
+    }
+
+    setPreviewLoading(true);
+    setPreviewStatus('deploying');
+    try {
+      const response = await aiStudioAPI.createPreview(job.jobId);
+      const data = response.data || {};
+
+      if (data.previewUrl) {
+        setPreviewUrl(data.previewUrl);
+        setPreviewStatus('deployed');
+        setPreviewOpen(true);
+        return;
+      }
+
+      // Preview deployment runs asynchronously on the ai-service/Fly.io.
+      for (let attempt = 0; attempt < 60; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const statusResponse = await aiStudioAPI.getPreviewStatus(job.jobId);
+        const status = statusResponse.data || {};
+        setPreviewStatus(status.deploymentStatus);
+        if (status.previewUrl) setPreviewUrl(status.previewUrl);
+
+        if (status.ready && status.previewUrl) {
+          setPreviewOpen(true);
+          return;
+        }
+        if (status.deploymentStatus === 'failed') {
+          throw new Error(status.error || 'Preview deployment failed.');
+        }
+      }
+
+      throw new Error('Preview is taking longer than expected. Check again in a moment.');
+    } catch (error) {
+      setPreviewStatus('failed');
+      toast.error(error.response?.data?.message || error.message || 'Could not create preview.');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const openPreview = () => {
+    if (previewUrl) setPreviewOpen(true);
+    else startPreview();
+  };
+
+  const previewModal = previewOpen && previewUrl ? (
+    <div
+      className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-sm p-3 md:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Website preview"
+    >
+      <div className="h-full w-full max-w-[1600px] mx-auto rounded-2xl overflow-hidden border border-white/10 bg-[#111] flex flex-col shadow-2xl">
+        <div className="h-12 shrink-0 px-4 flex items-center justify-between border-b border-white/10 bg-[#0b0b0b]">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-white/60">
+            <Sparkles size={14} /> Live website preview
+          </div>
+          <div className="flex items-center gap-2">
+            <a
+              href={previewUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs font-bold text-white/70 hover:text-white"
+            >
+              <ExternalLink size={13} /> Open in new tab
+            </a>
+            <button
+              type="button"
+              onClick={() => setPreviewOpen(false)}
+              className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white"
+              aria-label="Close preview"
+            >
+              <X size={17} />
+            </button>
+          </div>
+        </div>
+        <iframe
+          title="Generated website preview"
+          src={previewUrl}
+          className="w-full flex-1 bg-white"
+          sandbox="allow-scripts allow-forms allow-modals allow-popups allow-same-origin"
+        />
+      </div>
+    </div>
+  ) : null;
+
   if (pollError && !job) {
     return (
       <div className="rounded-[26px] border border-white/8 bg-[#0b0b0b] p-8 text-center">
@@ -64,7 +146,6 @@ export default function GenerationProgress({ job, pollError, onRetry, onBackToFo
       <div className="rounded-[26px] border border-[#a6603f]/25 bg-[#a6603f]/5 p-8 text-center">
         <AlertTriangle className="mx-auto mb-4 text-[#a6603f]" size={28} />
         <p className="text-[15px] font-semibold mb-1">Generation failed</p>
-        {job.currentStage && <p className="text-white/40 text-xs uppercase tracking-wider mb-3">Stage: {job.currentStage.replace(/_/g, ' ')}</p>}
         <p className="text-white/50 text-sm mb-6 max-w-sm mx-auto">
           {job.failureMessage || 'Something went wrong while generating your website. You can retry or go back and adjust your details.'}
         </p>
@@ -88,48 +169,45 @@ export default function GenerationProgress({ job, pollError, onRetry, onBackToFo
 
   if (job.status === 'completed') {
     return (
-      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-[26px] border border-[#8b7355]/25 bg-[#8b7355]/5 p-8 text-center">
-        <div className="w-12 h-12 mx-auto mb-4 rounded-2xl bg-[#8b7355]/15 border border-[#8b7355]/30 flex items-center justify-center">
-          <Sparkles size={20} className="text-[#8b7355]" />
-        </div>
-        <p className="text-[16px] font-semibold mb-1">Project ready</p>
-        <p className="text-white/40 text-sm mb-1">Generated successfully.</p>
-        <p className="text-white/25 text-xs font-mono mb-6">Project ID: {job.projectId}</p>
-        <div className="flex items-center justify-center gap-3">
-          <button type="button" onClick={onBackToForm} className="px-6 py-3 rounded-xl bg-white/5 border border-white/10 text-[13px] font-bold">
-            Start another
-          </button>
-          <button
-            type="button"
-            disabled
-            title="Preview is coming in a future update"
-            className="px-6 py-3 rounded-xl bg-white text-black text-[13px] font-bold opacity-50 cursor-not-allowed"
-          >
-            Preview (coming soon)
-          </button>
-        </div>
-      </motion.div>
+      <>
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-[26px] border border-[#8b7355]/25 bg-[#8b7355]/5 p-8 text-center">
+          <div className="w-12 h-12 mx-auto mb-4 rounded-2xl bg-[#8b7355]/15 border border-[#8b7355]/30 flex items-center justify-center">
+            <Sparkles size={20} className="text-[#8b7355]" />
+          </div>
+          <p className="text-[16px] font-semibold mb-1">Project ready</p>
+          <p className="text-white/40 text-sm mb-1">Generated successfully.</p>
+          {job.projectId && <p className="text-white/25 text-xs font-mono mb-6">Project ID: {job.projectId}</p>}
+          <div className="flex items-center justify-center gap-3">
+            <button type="button" onClick={onBackToForm} className="px-6 py-3 rounded-xl bg-white/5 border border-white/10 text-[13px] font-bold">
+              Start another
+            </button>
+            <button
+              type="button"
+              onClick={openPreview}
+              disabled={previewLoading}
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white text-black text-[13px] font-bold disabled:opacity-60"
+            >
+              {previewLoading ? <Loader2 size={14} className="animate-spin" /> : <Maximize2 size={14} />}
+              {previewLoading ? 'Building preview…' : previewUrl ? 'Open Preview' : 'Preview Website'}
+            </button>
+          </div>
+          {previewStatus === 'failed' && <p className="mt-4 text-xs text-[#a6603f]">Preview deployment failed. Try again.</p>}
+        </motion.div>
+        {previewModal}
+      </>
     );
   }
 
-  // In-progress (queued / running)
-  const currentIdx = STAGE_INDEX[job.currentStage] ?? 0;
-
+  // In-progress (pending / processing)
   return (
-    <div className="rounded-[26px] border border-white/8 bg-[#0b0b0b] p-6">
-      <div className="flex items-center gap-3 mb-6">
-        <Loader2 size={16} className="animate-spin text-[#8b7355]" />
-        <p className="text-[14px] font-semibold">Generating your website…</p>
-      </div>
-      <ol>
-        {STAGE_ORDER.filter((s) => s.id !== 'QUEUED').map((stage) => {
-          const idx = STAGE_INDEX[stage.id];
-          const state = idx < currentIdx ? 'done' : idx === currentIdx ? 'current' : 'pending';
-          return <StageRow key={stage.id} stage={stage} state={state} />;
-        })}
-      </ol>
+    <div className="rounded-[26px] border border-white/8 bg-[#0b0b0b] p-8 text-center">
+      <Loader2 size={20} className="mx-auto mb-4 animate-spin text-[#8b7355]" />
+      <p className="text-[14px] font-semibold mb-1">
+        {IN_PROGRESS_MESSAGES[job.status] || 'Generating your website…'}
+      </p>
+      <p className="text-white/30 text-xs">Deep-thinking agents are reviewing the project. This can take several minutes.</p>
       {job.repairAttempts > 0 && (
-        <p className="mt-4 inline-flex items-center gap-1.5 text-white/30 text-[11px]">
+        <p className="mt-4 inline-flex items-center gap-1.5 justify-center text-white/30 text-[11px]">
           <RefreshCw size={11} /> Repair attempt {job.repairAttempts}
         </p>
       )}
