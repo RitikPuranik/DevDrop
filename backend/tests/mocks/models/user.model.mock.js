@@ -83,6 +83,11 @@ function checkDuplicates(doc) {
     const googleClash = store.find((u) => u.googleId === doc.googleId && u !== doc);
     if (googleClash) throw new DuplicateKeyError({ googleId: 1 });
   }
+
+  if (doc.githubId) {
+    const githubClash = store.find((u) => u.githubId === doc.githubId && u !== doc);
+    if (githubClash) throw new DuplicateKeyError({ githubId: 1 });
+  }
 }
 
 class FakeUser {
@@ -97,6 +102,8 @@ class FakeUser {
     this.role = fields.role || 'user';
     this.isVerified = fields.isVerified || false;
     this.googleId = fields.googleId;
+    this.githubId = fields.githubId;
+    this.githubUsername = fields.githubUsername;
     this.avatar = fields.avatar;
     this.authProvider = fields.authProvider || 'local';
     this.createdAt = new Date();
@@ -129,6 +136,8 @@ class FakeUser {
       if (emailClash) throw new DuplicateKeyError({ email: 1 });
       const googleClash = this.googleId && others.find((u) => u.googleId === this.googleId);
       if (googleClash) throw new DuplicateKeyError({ googleId: 1 });
+      const githubClash = this.githubId && others.find((u) => u.githubId === this.githubId);
+      if (githubClash) throw new DuplicateKeyError({ githubId: 1 });
     }
 
     if (this._passwordModified && this._pendingPlainPassword) {
@@ -174,6 +183,8 @@ class FakeUser {
       role: this.role,
       isVerified: this.isVerified,
       googleId: this.googleId,
+      githubId: this.githubId,
+      githubUsername: this.githubUsername,
       avatar: this.avatar,
       authProvider: this.authProvider,
       createdAt: this.createdAt,

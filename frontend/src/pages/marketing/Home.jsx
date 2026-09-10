@@ -1,7 +1,14 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { motion, useScroll, useTransform, useSpring, useInView } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import secondVideo from '../../assets/videos/v2.mp4'; 
+import {
+  UploadCloud, Globe2, RotateCcw, ShieldCheck,
+  Sparkles, LayoutTemplate, Wand2, MessageSquareCode,
+  ArrowUpRight, ArrowRight, ArrowLeft, GitBranch, Rocket, Quote,
+  GitFork, ShoppingBag, Gavel, Wallet, Bot, FileCode2, Cloud, CheckCircle2,
+  Terminal, Code2, Check, ArrowRightLeft, Cpu, Server, Layers, Zap, Play, CheckCircle
+} from 'lucide-react';
+import secondVideo from '../../assets/videos/v2.mp4';
 
 const ARTIFACTS = [
   { id: 'kinetic', name: 'Kinetic', h: 'h-64', img: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?q=80&w=500' },
@@ -15,17 +22,12 @@ const ARTIFACTS = [
 ];
 
 const REVIEWS = [
-  { quote: "An absolute masterclass in visual composition. Our engagement figures exploded by over 400% after rolling out the new interface design system.", author: "Elena Rostova", role: "Design Director, Aether Lab" },
-  { quote: "The motion dynamics feel incredibly heavy yet effortless. It's rare to see optimization and complex cinematic fluid transitions play so beautifully together.", author: "Marcus Vance", role: "Technical Lead, Nexus Studio" },
-  { quote: "They didn't just build a portfolio layout; they generated a living, breathing luxury catalog that communicates raw artistic value on every single frame.", author: "Sora Takahashi", role: "Creative Producer, Neo-Tokyo" }
+  { quote: "As I was making my first deploy today, I told myself I was going to gatekeep this as my little secret.", author: "Elena Rostova", role: "Design Director, Aether Lab", tint: 'rgba(42, 32, 24, 0.4)' },
+  { quote: "I just wanted to take a moment to congratulate the team on the incredible AI Studio pipeline — it actually ships working code.", author: "Marcus Vance", role: "Technical Lead, Nexus Studio", tint: 'rgba(24, 39, 34, 0.4)' },
+  { quote: "I recently used DevDrop to publish and sell a template. The auction flow and payout process were seamless.", author: "Sora Takahashi", role: "Creative Producer, Neo-Tokyo", tint: 'rgba(36, 28, 44, 0.4)' },
+  { quote: "Deploying used to be the part I dreaded. Now I connect Vercel, click once, and it's live under my own account.", author: "Priya Nandan", role: "Founder, Loopwork", tint: 'rgba(36, 31, 24, 0.4)' },
 ];
-const SERVICES_DATA = [
-  { title: "Logo, Icon & Banner", desc: "With our graphics expertise and concept designing traits, we design innovative logos, icons and banners." },
-  { title: "UI / UX Design", desc: "We create sleek and aesthetically appealing UI / UX designs that visitors will remember." },
-  { title: "Business Website", desc: "Our focus lies not just on great style, but also on user experience, tech details, search engine optimisation and ease of use." },
-  { title: "Landing Page", desc: "We design captivating landing pages that help turn visitors into potential customers." },
-  { title: "PSD to HTML", desc: "We convert your ideas into reality with a pixel perfect approach." }
-];
+
 const Home = ({ preloadedVideoRef, introComplete, fromIntro }) => {
   const [isReady, setIsReady] = useState(false);
 
@@ -39,18 +41,38 @@ const Home = ({ preloadedVideoRef, introComplete, fromIntro }) => {
 
   return (
     <div className="bg-[#050505] text-[#e8e2d6] selection:bg-[#e8e2d6] selection:text-black antialiased overflow-x-hidden">
+      {/* ── First Video (Hero) — Untouched ── */}
       <VideoHeroSection
         preloadedVideoRef={preloadedVideoRef}
         introComplete={showContent}
         fromIntro={fromIntro}
       />
-      
+
       <div className="relative z-10">
+        {/* ── Second Video — Untouched ── */}
         <SmoothVideoSection />
-        <TemplatesMasonry introComplete={showContent} />
-        <TemplatesGridReveal introComplete={showContent} />
-        {/* Added this line below so it actually renders on the screen */}
-        <OurServicesSection />
+
+        {/* ── Seamless Blending & Dynamic Flowchart Sections ── */}
+        <div className="-mt-16 md:-mt-28 relative z-20 font-napkin bg-[#050505]">
+          <div className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-full h-[250px] bg-gradient-to-b from-transparent via-[#050505]/90 to-[#050505]" />
+          
+          <DeployHighlight />
+          
+          <div className="w-full h-px bg-gradient-to-r from-transparent via-white/10 to-transparent my-4" />
+          
+          <AIStudioHighlight />
+          
+          <div className="w-full h-px bg-gradient-to-r from-transparent via-white/10 to-transparent my-4" />
+          
+          <MarketplaceHighlight />
+
+          <div className="w-full h-px bg-gradient-to-r from-transparent via-white/10 to-transparent my-4" />
+
+          <TemplatesMasonry introComplete={showContent} />
+          <TemplatesGridReveal introComplete={showContent} />
+          <TestimonialsSection />
+          <FinalCTASection />
+        </div>
       </div>
     </div>
   );
@@ -140,7 +162,7 @@ const SmoothVideoSection = () => {
   }, []);
 
   return (
-    <section ref={targetRef} className="h-auto my-12 md:my-0 md:h-[160vh] relative">
+    <section ref={targetRef} className="h-auto my-12 md:my-0 md:h-[140vh] relative">
       <div className="relative md:sticky md:top-0 md:h-screen w-full flex items-center justify-center z-10 px-4">
         <motion.div 
           style={{ 
@@ -167,6 +189,451 @@ const SmoothVideoSection = () => {
   );
 };
 
+/* ─── Shared UI Elements ─── */
+const Squiggle = ({ className = '', color = '#e8e2d6' }) => (
+  <svg viewBox="0 0 200 16" preserveAspectRatio="none" className={className} aria-hidden="true">
+    <motion.path
+      d="M2 9 C 14 1, 26 1, 38 9 S 62 17, 74 9 S 98 1, 110 9 S 134 17, 146 9 S 170 1, 182 9 S 198 13, 198 9"
+      fill="none"
+      stroke={color}
+      strokeWidth="5"
+      strokeLinecap="round"
+      initial={{ pathLength: 0, opacity: 0 }}
+      whileInView={{ pathLength: 1, opacity: 1 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.8, ease: 'easeInOut', delay: 0.2 }}
+    />
+  </svg>
+);
+
+/* ─── ELEGANT FLOWCHART 1: SYSTEM ARCHITECTURE FLOW (DEPLOY) ─── */
+const DeploySystemFlowchart = () => {
+  const ref = useRef(null);
+  const inView = useInView(ref, { once: true, amount: 0.3 });
+
+  const nodes = [
+    { title: 'Local Repository', sub: 'React / Next.js Source', icon: FileCode2, color: 'border-blue-500/30 bg-blue-500/10 text-blue-400' },
+    { title: 'DevDrop Router', sub: 'Automated Build Analysis', icon: Cpu, color: 'border-amber-500/40 bg-amber-500/10 text-amber-300' },
+    { title: 'Personal Vercel Account', sub: 'Production SSL & Edge', icon: Cloud, color: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400' }
+  ];
+
+  return (
+    <div ref={ref} className="relative rounded-[2.5rem] border border-white/10 bg-[#090b10] p-6 sm:p-8 shadow-[0_30px_90px_rgba(0,0,0,0.85)] overflow-hidden">
+      <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[350px] h-[350px] bg-blue-600/10 rounded-full blur-3xl" />
+
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-8">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping" />
+          <span className="text-xs font-mono uppercase tracking-widest text-[#e8e2d6]/70">Infrastructure Deployment Flow</span>
+        </div>
+        <span className="text-[10px] font-mono text-blue-300 bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20">
+          Zero-Downtime Handoff
+        </span>
+      </div>
+
+      {/* Dynamic Flowchart Nodes */}
+      <div className="relative flex flex-col sm:flex-row items-center justify-between gap-6 sm:gap-2 my-4 z-10">
+        
+        {nodes.map((node, index) => (
+          <React.Fragment key={node.title}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 15 }}
+              animate={inView ? { opacity: 1, scale: 1, y: 0 } : {}}
+              transition={{ duration: 0.5, delay: index * 0.2 }}
+              className={`w-full sm:w-1/3 rounded-2xl border ${node.color} p-4 flex flex-col items-center text-center relative backdrop-blur-md shadow-xl`}
+            >
+              <div className="p-3 rounded-xl bg-black/40 border border-white/10 mb-3 text-white">
+                <node.icon size={22} />
+              </div>
+              <h4 className="text-sm font-bold text-white mb-1">{node.title}</h4>
+              <p className="text-[11px] text-[#e8e2d6]/60 font-mono">{node.sub}</p>
+
+              {/* Status pulse pill */}
+              <div className="mt-3 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-[9px] font-mono text-white/80">
+                <CheckCircle size={10} className="text-emerald-400" /> Connected
+              </div>
+            </motion.div>
+
+            {/* Connecting Flow Arrow & Line */}
+            {index < nodes.length - 1 && (
+              <div className="relative flex sm:flex-col items-center justify-center my-2 sm:my-0 w-full sm:w-12 h-8 sm:h-auto">
+                <div className="hidden sm:block h-0.5 w-full bg-gradient-to-r from-blue-500/50 via-amber-500/50 to-emerald-500/50 relative">
+                  <motion.div
+                    animate={{ x: [0, 48, 0] }}
+                    transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                    className="absolute -top-1 left-0 w-2 h-2 rounded-full bg-amber-300 shadow-[0_0_8px_#f59e0b]"
+                  />
+                </div>
+                <div className="sm:hidden w-0.5 h-full bg-gradient-to-b from-blue-500/50 to-emerald-500/50" />
+                <ArrowRight size={16} className="text-white/40 hidden sm:block" />
+              </div>
+            )}
+          </React.Fragment>
+        ))}
+
+      </div>
+
+      {/* Terminal Footer Indicator */}
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={inView ? { opacity: 1 } : {}}
+        transition={{ delay: 0.8 }}
+        className="mt-8 pt-4 border-t border-white/10 flex items-center justify-between text-xs font-mono text-[#e8e2d6]/60"
+      >
+        <span className="flex items-center gap-2">
+          <Terminal size={14} className="text-amber-400" /> target: vercel.com/api/deploy
+        </span>
+        <span className="text-emerald-400 font-bold">100% Owner Key Authenticated</span>
+      </motion.div>
+    </div>
+  );
+};
+
+/* ─── ELEGANT FLOWCHART 2: VIDEO & AI COMPILER PIPELINE (AI STUDIO) ─── */
+const AIStudioVideoFlowchart = () => {
+  const ref = useRef(null);
+  const inView = useInView(ref, { once: true, amount: 0.3 });
+
+  return (
+    <div ref={ref} className="relative rounded-[2.5rem] border border-purple-500/30 bg-[#0c0814] p-6 sm:p-8 shadow-[0_30px_90px_rgba(0,0,0,0.85)] overflow-hidden">
+      <div className="pointer-events-none absolute top-0 right-0 w-[400px] h-[400px] bg-purple-600/15 rounded-full blur-3xl" />
+
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-6">
+        <div className="flex items-center gap-2">
+          <Sparkles size={16} className="text-purple-400 animate-pulse" />
+          <span className="text-xs font-mono uppercase tracking-widest text-[#e8e2d6]/70">AI Prompt-to-Code Pipeline</span>
+        </div>
+        <span className="text-[10px] font-mono bg-purple-500/20 text-purple-300 px-3 py-1 rounded-full border border-purple-500/30">
+          Real-Time Video Preview
+        </span>
+      </div>
+
+      {/* Main Container Grid: Embedded Live Video Preview & Pipeline Flow */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-center">
+        
+        {/* Left Side: Video Output Container (5 cols) */}
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={inView ? { opacity: 1, scale: 1 } : {}}
+          transition={{ duration: 0.5 }}
+          className="md:col-span-5 relative rounded-2xl overflow-hidden border border-purple-500/30 bg-black aspect-video md:aspect-square flex items-center justify-center group"
+        >
+          <video 
+            src={secondVideo}
+            autoPlay
+            loop
+            muted
+            playsInline
+            className="w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-700"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-black/30" />
+          
+          <div className="absolute top-3 left-3 flex items-center gap-2 px-2.5 py-1 rounded-full bg-black/70 backdrop-blur-md border border-white/10 text-[10px] font-mono text-purple-300">
+            <Play size={10} className="fill-purple-300" /> Live AST Render
+          </div>
+
+          <div className="absolute bottom-3 inset-x-3 p-2.5 rounded-xl bg-purple-950/80 backdrop-blur-md border border-purple-500/30 text-xs font-mono text-purple-200">
+            <span className="text-purple-400 font-bold">&gt; Code generation complete</span>
+          </div>
+        </motion.div>
+
+        {/* Right Side: Flowchart Engine (7 cols) */}
+        <div className="md:col-span-7 space-y-3">
+          {[
+            { step: '01', title: 'Prompt Ingestion', sub: 'Parses UX specs & component layout', icon: MessageSquareCode, color: 'text-purple-400' },
+            { step: '02', title: 'Multi-Agent Assembly', sub: 'Tailwind + React code synthesis', icon: Bot, color: 'text-amber-300' },
+            { step: '03', title: 'Sandbox Validation', sub: 'Zero-error build compilation & output', icon: Code2, color: 'text-emerald-400' }
+          ].map((item, index) => (
+            <motion.div
+              key={item.step}
+              initial={{ opacity: 0, x: 20 }}
+              animate={inView ? { opacity: 1, x: 0 } : {}}
+              transition={{ duration: 0.4, delay: 0.2 + (index * 0.15) }}
+              className="p-3.5 rounded-xl bg-white/[0.03] border border-white/10 flex items-center justify-between hover:bg-white/[0.06] transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-mono font-bold text-white/40">{item.step}</span>
+                <div className={`p-2 rounded-lg bg-white/5 border border-white/10 ${item.color}`}>
+                  <item.icon size={16} />
+                </div>
+                <div>
+                  <h5 className="text-xs font-bold text-white">{item.title}</h5>
+                  <p className="text-[10px] text-[#e8e2d6]/50">{item.sub}</p>
+                </div>
+              </div>
+              <CheckCircle2 size={16} className="text-purple-400/80 shrink-0" />
+            </motion.div>
+          ))}
+        </div>
+
+      </div>
+    </div>
+  );
+};
+
+/* ─── ELEGANT FLOWCHART 3: MARKETPLACE AUCTION & HANDOFF FLOW ─── */
+const MarketplaceHandoffFlowchart = () => {
+  const ref = useRef(null);
+  const inView = useInView(ref, { once: true, amount: 0.3 });
+
+  return (
+    <div ref={ref} className="relative rounded-[2.5rem] border border-amber-500/30 bg-[#120c07] p-6 sm:p-8 shadow-[0_30px_90px_rgba(0,0,0,0.85)] overflow-hidden">
+      <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[350px] h-[350px] bg-amber-600/10 rounded-full blur-3xl" />
+
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-6">
+        <div className="flex items-center gap-2">
+          <Gavel size={16} className="text-amber-400" />
+          <span className="text-xs font-mono uppercase tracking-widest text-[#e8e2d6]/70">Auction Escrow & Repository Handoff</span>
+        </div>
+        <span className="text-[10px] font-mono bg-amber-500/20 text-amber-300 px-3 py-1 rounded-full border border-amber-500/30">
+          Automated GitHub Transfer
+        </span>
+      </div>
+
+      {/* Visual Flow Diagram */}
+      <div className="space-y-4 relative z-10">
+        
+        {/* Top Step: Bid Placed */}
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={inView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.5 }}
+          className="p-4 rounded-2xl bg-white/[0.03] border border-amber-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+        >
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/30">
+              <Wallet size={18} />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-white">1. Verified Bid & Escrow Lock</h4>
+              <p className="text-[11px] text-[#e8e2d6]/60">Buyer funds held safely in automated escrow protocol</p>
+            </div>
+          </div>
+          <span className="text-xs font-mono text-amber-300 font-bold bg-amber-500/10 px-3 py-1 rounded-lg border border-amber-500/20">
+            2.4 ETH Confirmed
+          </span>
+        </motion.div>
+
+        {/* Central Connecting Flow Bar */}
+        <div className="flex justify-center my-1">
+          <div className="w-0.5 h-6 bg-gradient-to-b from-amber-500/60 to-emerald-500/60 relative">
+            <motion.div
+              animate={{ y: [0, 20, 0] }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
+              className="absolute -left-1 top-0 w-2 h-2 rounded-full bg-amber-300"
+            />
+          </div>
+        </div>
+
+        {/* Bottom Step: Handoff Execution */}
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={inView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.5, delay: 0.3 }}
+          className="p-4 rounded-2xl bg-emerald-950/20 border border-emerald-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+        >
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+              <GitFork size={18} />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-white">2. Direct GitHub Transfer</h4>
+              <p className="text-[11px] text-[#e8e2d6]/60">Instant ownership migration & full codebase repository commit</p>
+            </div>
+          </div>
+          <span className="text-xs font-mono text-emerald-400 font-bold bg-emerald-500/10 px-3 py-1 rounded-lg border border-emerald-500/20 flex items-center gap-1.5">
+            <CheckCircle size={12} /> Handoff Complete
+          </span>
+        </motion.div>
+
+      </div>
+    </div>
+  );
+};
+
+/* ─── HIGHLIGHT CONTAINER ─── */
+const FeatureHighlight = ({ 
+  eyebrow, 
+  EyebrowIcon, 
+  titleLead, 
+  titleHighlight, 
+  titleTail, 
+  description, 
+  steps, 
+  ctaLabel, 
+  onCta, 
+  RightAnimation,
+  glowColor,
+  isHeroHighlight = false
+}) => (
+  <section className="relative px-4 sm:px-6 md:px-10 py-12 md:py-20 overflow-hidden">
+    <div className={`pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] ${glowColor} opacity-15 blur-[140px] rounded-full`} />
+
+    <div className="max-w-[1300px] mx-auto relative z-10">
+      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-10 md:mb-14">
+        <div className="max-w-2xl">
+          <motion.div 
+            initial={{ opacity: 0, y: 15 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 backdrop-blur-xl px-4 py-1.5 text-xs font-semibold tracking-wider text-[#e8e2d6] uppercase shadow-lg"
+          >
+            <EyebrowIcon size={14} className="text-amber-300" /> {eyebrow}
+          </motion.div>
+          
+          <motion.h2 
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.1 }}
+            className={`font-napkin-display mt-5 font-bold tracking-tight text-[#e8e2d6] leading-[1.08] ${
+              isHeroHighlight ? 'text-3xl sm:text-4xl md:text-5xl lg:text-6xl' : 'text-3xl sm:text-4xl md:text-5xl'
+            }`}
+          >
+            {titleLead}{' '}
+            <span className="relative inline-block text-white">
+              {titleHighlight}
+              <Squiggle className="absolute left-0 -bottom-2.5 w-full h-3.5" color="#f59e0b" />
+            </span>{' '}
+            {titleTail}
+          </motion.h2>
+
+          <motion.p 
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.2 }}
+            className="mt-4 text-sm sm:text-base text-[#e8e2d6]/65 leading-relaxed max-w-xl"
+          >
+            {description}
+          </motion.p>
+        </div>
+
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          whileInView={{ opacity: 1, scale: 1 }}
+          viewport={{ once: true }}
+          transition={{ delay: 0.25 }}
+        >
+          <motion.button
+            onClick={onCta}
+            whileHover={{ scale: 1.04 }}
+            whileTap={{ scale: 0.96 }}
+            className="shrink-0 inline-flex items-center gap-2 rounded-full bg-[#e8e2d6] text-[#050505] px-7 py-3.5 text-sm font-extrabold shadow-[0_12px_30px_rgba(0,0,0,0.5)] transition-all"
+          >
+            {ctaLabel} <ArrowUpRight size={16} />
+          </motion.button>
+        </motion.div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+        {/* Left Step Details (5 cols) */}
+        <div className="space-y-4 lg:col-span-5 order-2 lg:order-1">
+          {steps.map((step, i) => (
+            <motion.div
+              key={step.title}
+              initial={{ opacity: 0, x: -20 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true, amount: 0.6 }}
+              transition={{ duration: 0.45, delay: i * 0.1 }}
+              className="group p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-white/20 hover:bg-white/[0.05] transition-all duration-300 flex gap-4"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-200 to-amber-500 text-[#050505] text-sm font-black shadow-md group-hover:scale-105 transition-transform">
+                {i + 1}
+              </span>
+              <div>
+                <h3 className="text-base font-bold text-[#e8e2d6] group-hover:text-white transition-colors">{step.title}</h3>
+                <p className="mt-1 text-xs sm:text-sm text-[#e8e2d6]/60 leading-relaxed">{step.desc}</p>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Dynamic Diagram / Flowchart (7 cols) */}
+        <div className="lg:col-span-7 order-1 lg:order-2">
+          <RightAnimation />
+        </div>
+      </div>
+    </div>
+  </section>
+);
+
+/* ─── HIGHLIGHT 1: DEPLOY ─── */
+const DeployHighlight = () => {
+  const navigate = useNavigate();
+  return (
+    <FeatureHighlight
+      isHeroHighlight
+      glowColor="bg-blue-600"
+      eyebrow="Deployment Infrastructure"
+      EyebrowIcon={Rocket}
+      titleLead="Deploy directly to cloud infrastructure"
+      titleHighlight="you completely own."
+      titleTail=""
+      description="Connect your Vercel or Render accounts once. DevDrop inspects your code structure, configures runtime specs, and pushes direct to production automatically."
+      steps={[
+        { title: 'Connect Cloud Provider', desc: 'Link your personal Vercel workspace or integrate custom Render API keys securely.' },
+        { title: 'Intelligent Code Analysis', desc: 'React, Next.js, Express, or Vite codebases are mapped automatically to optimal hosting targets.' },
+        { title: 'Automated Live Environments', desc: 'Enjoy absolute ownership. Every build, rollback, and domain configuration stays under your control.' },
+      ]}
+      ctaLabel="Deploy Your Project"
+      onCta={() => { window.scrollTo(0, 0); navigate('/deploy-own'); }}
+      RightAnimation={DeploySystemFlowchart}
+    />
+  );
+};
+
+/* ─── HIGHLIGHT 2: AI STUDIO ─── */
+const AIStudioHighlight = () => {
+  const navigate = useNavigate();
+  return (
+    <FeatureHighlight
+      glowColor="bg-purple-600"
+      eyebrow="Autonomous AI Studio"
+      EyebrowIcon={Sparkles}
+      titleLead="Describe your vision."
+      titleHighlight="AI builds production code"
+      titleTail="in real-time."
+      description="Transform simple text prompts into production-grade React & Tailwind codebases. Our multi-agent AI framework designs UI, structures architecture, and tests code before delivery."
+      steps={[
+        { title: 'Prompt Your Application Concept', desc: 'Provide a rough text outline, design wireframe idea, or functional requirements specification.' },
+        { title: 'Multi-Agent Validation Engine', desc: 'Specialized AI agents divide tasks: interface layout design, component architecture, and code generation.' },
+        { title: 'Export Ready-to-Ship Code', desc: 'Receive clean, modular React + Vite repositories ready to export directly to GitHub or deploy.' },
+      ]}
+      ctaLabel="Launch AI Studio"
+      onCta={() => { window.scrollTo(0, 0); navigate('/ai-studio'); }}
+      RightAnimation={AIStudioVideoFlowchart}
+    />
+  );
+};
+
+/* ─── HIGHLIGHT 3: MARKETPLACE ─── */
+const MarketplaceHighlight = () => {
+  const navigate = useNavigate();
+  return (
+    <FeatureHighlight
+      glowColor="bg-amber-600"
+      eyebrow="Asset Marketplace"
+      EyebrowIcon={ShoppingBag}
+      titleLead="Buy, sell & auction"
+      titleHighlight="verified templates"
+      titleTail="with instant transfers."
+      description="Publish digital templates, software components, or complete applications. Earn directly through fixed-price sales or high-visibility live bidding auctions."
+      steps={[
+        { title: 'List Full Source Codebases', desc: 'Set fixed prices, royalty arrangements, or open up timed auctions for exclusive designs.' },
+        { title: 'Seamless Auction & Checkout Flow', desc: 'Automated instant payment processing with complete transaction transparency for creators and buyers.' },
+        { title: 'Direct GitHub Repository Handoff', desc: 'Upon purchase completion, project repositories instantly clone into the buyer’s GitHub account.' },
+      ]}
+      ctaLabel="Browse Marketplace"
+      onCta={() => { window.scrollTo(0, 0); navigate('/template'); }}
+      RightAnimation={MarketplaceHandoffFlowchart}
+    />
+  );
+};
+
 /* ─── TEMPLATES MASONRY ─── */
 const TemplatesMasonry = ({ introComplete }) => {
   const navigate = useNavigate();
@@ -176,46 +643,32 @@ const TemplatesMasonry = ({ introComplete }) => {
       initial={{ opacity: 0 }}
       animate={{ opacity: introComplete ? 1 : 0 }}
       transition={{ duration: 0.8 }}
-      className="relative z-20 bg-[#050505] pt-8 pb-12 md:pt-24 md:pb-24 px-6"
+      className="px-4 sm:px-6 md:px-10 py-16 md:py-24 relative"
     >
-      <div className="mt-0 md:-mt-80 max-w-[1400px] mx-auto">
-        
-        <div className="text-center space-y-4 mb-10 md:mb-16">
-          <h2 className="text-3xl md:text-5xl font-serif italic tracking-tight text-[#e8e2d6]">
-            Explore Templates
+      <div className="max-w-[1300px] mx-auto">
+        <div className="text-center space-y-3 mb-12 md:mb-16">
+          <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 backdrop-blur-lg px-4 py-1.5 text-xs font-semibold tracking-wider text-[#e8e2d6] uppercase">
+            <LayoutTemplate size={14} className="text-amber-300" /> Gallery
+          </span>
+          <h2 className="font-napkin-display text-3xl md:text-5xl font-bold tracking-tight text-[#e8e2d6]">
+            Explore Featured Templates
           </h2>
         </div>
 
-        <div className="columns-2 gap-3 space-y-3 sm:columns-2 sm:gap-4 sm:space-y-4 md:columns-3 lg:columns-4">
+        <div className="columns-2 gap-4 space-y-4 sm:columns-2 sm:gap-6 sm:space-y-6 md:columns-3 lg:columns-4">
           {ARTIFACTS.map((item, idx) => (
             <ArtifactCard key={item.id} item={item} index={idx} />
           ))}
         </div>
 
-        <div className="mt-10 flex justify-center">
-          <motion.button 
+        <div className="mt-12 flex justify-center">
+          <motion.button
             onClick={() => { window.scrollTo(0, 0); navigate('/template'); }}
-            whileHover={{ y: -2 }}
-            className="group relative flex flex-col items-center cursor-pointer"
+            whileHover={{ scale: 1.04 }}
+            whileTap={{ scale: 0.97 }}
+            className="inline-flex items-center gap-2 rounded-full bg-[#e8e2d6] text-[#050505] px-7 py-3.5 text-sm font-extrabold shadow-[0_10px_30px_rgba(0,0,0,0.5)] transition-all"
           >
-            <span className="text-lg md:text-2xl font-serif italic tracking-tight text-[#e8e2d6]/50 group-hover:text-[#e8e2d6] transition-all duration-700">
-                 See more options
-            </span>
-            
-            <div className="relative mt-3 w-32 md:w-40 h-[1px] bg-white/5 overflow-hidden">
-              <motion.div 
-                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
-                initial={{ x: "-100%" }}
-                whileHover={{ x: "100%" }}
-                transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
-              />
-              <motion.div 
-                className="absolute inset-0 bg-[#e8e2d6] origin-center"
-                initial={{ scaleX: 0 }}
-                whileHover={{ scaleX: 1 }}
-                transition={{ duration: 0.6, ease: [0.21, 1, 0.36, 1] }}
-              />
-            </div>
+            See More Options <ArrowUpRight size={16} />
           </motion.button>
         </div>
       </div>
@@ -231,12 +684,12 @@ const ArtifactCard = ({ item, index }) => {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       whileInView={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: index * 0.03, ease: [0.21, 1, 0.36, 1] }}
+      transition={{ duration: 0.5, delay: index * 0.04, ease: [0.21, 1, 0.36, 1] }}
       viewport={{ once: true, margin: "-20px" }}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       onClick={() => { window.scrollTo(0, 0); navigate(`/template`); }}
-      className={`relative w-full ${item.h} break-inside-avoid cursor-pointer group rounded-2xl overflow-hidden bg-[#0d0d0f] border border-white/5 transition-all duration-500 hover:border-white/20`}
+      className={`relative w-full ${item.h} break-inside-avoid cursor-pointer group rounded-2xl overflow-hidden bg-[#0d0d0f] border border-white/10 transition-all duration-300 hover:border-white/25 hover:shadow-lg`}
     >
       <motion.img
         src={item.img}
@@ -245,67 +698,28 @@ const ArtifactCard = ({ item, index }) => {
         transition={{ duration: 0.6 }}
         className="w-full h-full object-cover brightness-[0.85] group-hover:brightness-100 transition-all duration-500"
       />
-      <div className="absolute inset-x-0 bottom-0 p-5 bg-gradient-to-t from-black/80 via-black/20 to-transparent">
-        <div className="flex items-center justify-between w-full">
-          <span className="text-[10px] font-mono font-black tracking-[0.3em] uppercase text-[#e8e2d6]">
-            {item.name}
-          </span>
-          <span className={`text-[#e8e2d6] transition-transform duration-300 ${hov ? 'translate-x-1' : ''}`}>
-            →
-          </span>
-        </div>
+      <div className="absolute inset-x-0 bottom-0 p-4 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex items-center justify-between">
+        <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-[#e8e2d6]">
+          {item.name}
+        </span>
+        <span className={`text-[#e8e2d6] transition-transform duration-300 ${hov ? 'translate-x-1' : ''}`}>
+          →
+        </span>
       </div>
     </motion.div>
   );
 };
 
-/* ─── DYNAMIC GEOMETRIC REVEAL CONTAINER ─── */
+/* ─── STAT / FEATURE GRID ─── */
 const TemplatesGridReveal = ({ introComplete }) => {
   const containerRef = useRef(null);
-  
-  // 1. Setup a standard mobile state listener
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768);
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
+  const isInView = useInView(containerRef, { once: true, amount: 0.15 });
 
-  // 2. Compute in-view state conditionally based on viewport
-  const isInViewMobile = useInView(containerRef, { once: true, amount: 0.1 });
-  const isInViewDesktop = useInView(containerRef, { once: false, amount: 0.1 });
-  
-  // Decide which visibility state to follow
-  const isSectionInView = isMobile ? isInViewMobile : isInViewDesktop;
-
-  const getOutwardDelay = (customId) => {
-    switch(customId) {
-      case 'left-tall-column': return 0.4;
-      case 'right-tall-column':
-      case 'bottom-left-panel': return 0.15; 
-      case 'center-top':
-      case 'center-bottom': return 0.3; 
-      case 'bottom-right-panel':
-      case 'bottom-right-corner': return 0.5; 
-      case 'bottom-wide': return 0.6;
-      default: return 0.3;
-    }
-  };
-
-  const structuralAnimationVariants = {
-    hidden: { scale: 0.65, opacity: 0 },
-    visible: (customId) => ({ 
-      scale: 1, 
-      opacity: 1,
-      transition: { type: "spring", stiffness: 55, damping: 15, mass: 1.15, delay: getOutwardDelay(customId) }
-    })
-  };
-
-  const centerPieceVariants = {
-    hidden: { scale: 0, x: "-50%", y: "-50%" },
-    visible: { scale: 1, x: "-50%", y: "-50%", transition: { type: "spring", stiffness: 45, damping: 12, delay: 0.2 } }
-  };
+  const cards = [
+    { title: 'Best Quality Standard', desc: 'Every template is reviewed for build quality before it goes live.', span: 'lg:col-span-1' },
+    { title: 'Full Package Ownership', desc: 'Full documentation and authorization on every website — 100% yours once purchased.', span: 'lg:col-span-2' },
+    { title: 'Curated Ecosystem', desc: 'Verified access and a smoother handoff after every purchase.', span: 'lg:col-span-1' },
+  ];
 
   return (
     <motion.section 
@@ -313,225 +727,143 @@ const TemplatesGridReveal = ({ introComplete }) => {
       initial={{ opacity: 0 }}
       animate={{ opacity: introComplete ? 1 : 0 }}
       transition={{ duration: 0.8 }}
-      className="relative z-20 bg-[#050505] pb-16 md:pb-36 px-6 md:px-12 lg:px-16 select-none"
+      className="px-4 sm:px-6 md:px-10 py-16 md:py-24 border-y border-white/8 bg-[#0a0a0c]"
     >
-      <div className="max-w-[1400px] mx-auto relative">
-        <motion.div 
+      <div className="max-w-[1300px] mx-auto">
+        <motion.div
           initial="hidden"
-          animate={isSectionInView ? "visible" : "hidden"}
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 auto-rows-auto lg:auto-rows-[240px] gap-4 md:gap-6 relative"
+          animate={isInView ? "visible" : "hidden"}
+          variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.12 } } }}
+          className="grid grid-cols-1 lg:grid-cols-4 gap-4 md:gap-6 mb-6"
         >
-          {/* Tile 1 */}
-          <motion.div 
-            variants={structuralAnimationVariants} custom="left-tall-column" style={{ originX: 0, originY: 0 }}
-            className="lg:col-span-1 lg:row-span-2 min-h-[160px] sm:min-h-[240px] lg:min-h-0 bg-[#0d0d10] p-6 md:p-8 rounded-3xl flex flex-col justify-between cursor-pointer border border-white/5 hover:border-white/20 transition-all duration-300"
-          >
-            <h2 className="text-xl md:text-2xl font-serif italic text-[#e8e2d6]">Best Quality</h2>
-            <p className="text-base md:text-xl text-[#e8e2d6]/60 font-mono mt-4 lg:mt-0">Get best quality website</p>
-          </motion.div>
-
-          {/* Tile 2 */}
-          <motion.div 
-            variants={structuralAnimationVariants} custom="center-top" style={{ originX: 0.5, originY: 0.3 }}
-            className="sm:col-span-2 lg:col-span-2 min-h-[200px] sm:min-h-[240px] lg:min-h-0 bg-[#111115] p-6 md:p-8 rounded-3xl flex flex-col justify-between border border-white/5 relative"
-          >
-            <div className="flex flex-col h-full justify-between">
-              <h1 className="text-xl sm:text-2xl md:text-4xl lg:text-3xl xl:text-4xl font-serif text-[#e8e2d6] tracking-tight leading-tight mb-4">Devdrop give website with full documentation and authorization</h1>
-              <div className="flex flex-wrap gap-3 sm:gap-8 text-[10px] sm:text-xs font-mono text-[#e8e2d6]/40">
-                <span>✦ 100% your website once sold</span>
-                <span>✦ 400% Output Rate</span>
-              </div>
-            </div>
-          </motion.div>
-
-          {/* Tile 3 */}
-          <motion.div 
-            variants={structuralAnimationVariants} custom="right-tall-column" style={{ originX: 1, originY: 0 }}
-            className="lg:col-span-1 lg:row-span-2 min-h-[200px] sm:min-h-[240px] lg:min-h-0 rounded-3xl overflow-hidden cursor-pointer border border-white/5 bg-[#0d0d10] relative group"
-          >
-            <img src={ARTIFACTS[2].img} alt={ARTIFACTS[2].name} className="w-full h-full object-cover opacity-80 group-hover:scale-105 transition-all duration-700" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent p-6 flex flex-col justify-end">
-              <span className="text-[10px] font-mono uppercase tracking-widest text-[#e8e2d6]/50">{ARTIFACTS[2].name}</span>
-            </div>
-          </motion.div>
-
-          {/* Tile 4 */}
-          <motion.div 
-            variants={structuralAnimationVariants} custom="bottom-left-panel" style={{ originX: 0.2, originY: 1 }}
-            className="lg:col-span-1 min-h-[180px] sm:min-h-[240px] lg:min-h-0 rounded-3xl overflow-hidden cursor-pointer border border-white/5 bg-[#0d0d10] relative group"
-          >
-            <img src={ARTIFACTS[4].img} alt={ARTIFACTS[4].name} className="w-full h-full object-cover opacity-50 group-hover:scale-105 transition-all duration-700" />
-            <div className="absolute inset-0 p-6 flex flex-col justify-end bg-gradient-to-t from-black/90 via-black/20 to-transparent">
-              <span className="text-xs font-mono text-[#e8e2d6]/70">{ARTIFACTS[4].name} Space</span>
-            </div>
-          </motion.div>
-
-          {/* Tile 5 */}
-          <motion.div 
-            variants={structuralAnimationVariants} custom="center-bottom" style={{ originX: 0.5, originY: 0.8 }}
-            className="lg:col-span-1 min-h-[180px] sm:min-h-[240px] lg:min-h-0 bg-[#16161c] p-6 md:p-8 rounded-3xl flex flex-col justify-between border border-white/5"
-          >
-            <div>
-              <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-[#e8e2d6]/30 block mb-2">CRITIQUE PRESS</span>
-              <p className="text-xs italic font-serif text-[#e8e2d6]/80 line-clamp-4">&quot;{REVIEWS[1].quote}&quot;</p>
-            </div>
-            <span className="text-[9px] font-mono uppercase tracking-widest text-[#e8e2d6]/40 mt-4 lg:mt-0">{REVIEWS[1].author}</span>
-          </motion.div>
-
-          {/* Tile 6 */}
-          <motion.div 
-            variants={structuralAnimationVariants} custom="bottom-right-panel" style={{ originX: 0.8, originY: 1 }}
-            className="lg:col-span-1 min-h-[140px] sm:min-h-[240px] lg:min-h-0 bg-[#0d0d10] p-6 md:p-8 rounded-3xl flex flex-col justify-end border border-white/5 cursor-pointer group"
-          >
-            <h3 className="text-lg md:text-xl font-serif italic text-[#e8e2d6]/70 group-hover:text-[#e8e2d6] transition-colors leading-snug">Living Catalog Architecture</h3>
-          </motion.div>
-
-          {/* Tile 7 */}
-          <motion.div 
-            variants={structuralAnimationVariants} custom="bottom-right-corner" style={{ originX: 1, originY: 1 }}
-            className="lg:col-span-1 min-h-[160px] sm:min-h-[240px] lg:min-h-0 rounded-3xl overflow-hidden cursor-pointer border border-white/5 bg-[#0d0d10] group relative"
-          >
-            <img src={ARTIFACTS[7].img} alt={ARTIFACTS[7].name} className="w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-700" />
-            <div className="absolute inset-0 bg-black/50 p-6 flex flex-col justify-between">
-              <span className="text-[9px] font-mono tracking-[0.2em] text-[#e8e2d6]/40 uppercase">SYSTEM EDGE</span>
-              <span className="text-xs font-mono text-[#e8e2d6] self-end">✦ PREVIEW</span>
-            </div>
-          </motion.div>
-          
-          {/* Tile 8 */}
-          <motion.div
-            variants={structuralAnimationVariants} custom="bottom-wide" style={{ originX: 1, originY: 1 }}
-            className="sm:col-span-2 lg:col-span-2 lg:col-start-3 lg:row-start-3 min-h-[320px] sm:min-h-[240px] lg:min-h-0 bg-gradient-to-br from-[#17171c] via-[#111115] to-[#0a0a0d] rounded-3xl border border-white/8 p-5 sm:p-6 md:p-8 flex flex-col justify-between gap-8 overflow-hidden relative"
-          >
-            <div className="absolute -top-12 right-[-20%] h-40 w-40 rounded-full bg-[#e8e2d6]/8 blur-3xl pointer-events-none" />
-            <div className="absolute bottom-0 left-0 h-28 w-full bg-gradient-to-t from-black/25 to-transparent pointer-events-none" />
-
-            <div className="relative z-10 max-w-md">
-              <span className="text-[10px] uppercase tracking-[0.3em] text-[#e8e2d6]/45 font-mono">WHY CHOOSE US</span>
-              <h2 className="mt-3 text-[1.85rem] leading-[0.95] sm:text-2xl md:text-4xl font-serif text-[#e8e2d6]">
-                Trusted Marketplace
-                <span className="block italic text-white/70 mt-2">for premium websites</span>
-              </h2>
-              <p className="mt-4 max-w-xs text-xs sm:text-sm font-mono leading-5 text-[#e8e2d6]/55">
-                Curated builds, verified access, and a smoother handoff after every purchase.
-              </p>
-            </div>
-
-            <div className="relative z-10 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-10 w-full">
-              <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 sm:border-0 sm:bg-transparent sm:p-0">
-                <div className="flex items-end justify-between sm:block">
-                  <div>
-                    <h3 className="text-3xl md:text-4xl font-serif text-[#e8e2d6]">500+</h3>
-                    <p className="mt-1 text-[10px] uppercase tracking-[0.24em] text-[#e8e2d6]/45">Projects</p>
-                  </div>
-                  <span className="text-[11px] font-mono text-[#e8e2d6]/35 sm:hidden">Delivered</span>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 sm:border-0 sm:bg-transparent sm:p-0">
-                <div className="flex items-end justify-between sm:block">
-                  <div>
-                    <h3 className="text-3xl md:text-4xl font-serif text-[#e8e2d6]">98%</h3>
-                    <p className="mt-1 text-[10px] uppercase tracking-[0.24em] text-[#e8e2d6]/45">Satisfaction</p>
-                  </div>
-                  <span className="text-[11px] font-mono text-[#e8e2d6]/35 sm:hidden">Buyer love</span>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 sm:border-0 sm:bg-transparent sm:p-0">
-                <div className="flex items-end justify-between sm:block">
-                  <div>
-                    <h3 className="text-3xl md:text-4xl font-serif text-[#e8e2d6]">24/7</h3>
-                    <p className="mt-1 text-[10px] uppercase tracking-[0.24em] text-[#e8e2d6]/45">Support</p>
-                  </div>
-                  <span className="text-[11px] font-mono text-[#e8e2d6]/35 sm:hidden">Always on</span>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-            
-          {/* Central Piece Overlap Circle */}
-          <motion.div 
-            variants={centerPieceVariants}
-            className="absolute hidden lg:block top-1/2 left-1/2 w-[250px] h-[250px] bg-[#050505] rounded-full p-3 shadow-[0_30px_70px_rgba(0,0,0,0.9)] z-30"
-          >
-            <div className="w-full h-full rounded-full bg-gradient-to-br from-[#16161c] to-[#0d0d10] border border-white/10 flex items-center justify-center">
-              <div className="text-center px-6">
-                <h2 className="text-4xl font-serif italic text-[#e8e2d6] leading-none">Why</h2>
-                <h2 className="text-5xl font-serif text-[#e8e2d6] leading-none my-1">Choose</h2>
-                <h2 className="text-4xl font-serif italic text-[#e8e2d6] leading-none">Us</h2>
-              </div>
-            </div>
-          </motion.div>
+          {cards.map((c) => (
+            <motion.div
+              key={c.title}
+              variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.21, 1, 0.36, 1] } } }}
+              className={`${c.span} rounded-3xl bg-white/[0.03] border border-white/8 p-6 md:p-8 flex flex-col justify-between min-h-[200px]`}
+            >
+              <h3 className="text-xl md:text-2xl font-bold text-[#e8e2d6] mb-3">{c.title}</h3>
+              <p className="text-sm text-[#e8e2d6]/55 leading-relaxed">{c.desc}</p>
+            </motion.div>
+          ))}
         </motion.div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6">
+          {[
+            { n: '500+', label: 'Projects Delivered' },
+            { n: '98%', label: 'Satisfaction' },
+            { n: '24/7', label: 'Support' },
+          ].map((stat) => (
+            <div key={stat.label} className="rounded-2xl bg-white/[0.03] border border-white/8 px-6 py-8 text-center">
+              <h4 className="font-napkin-display text-3xl md:text-4xl font-bold text-[#e8e2d6]">{stat.n}</h4>
+              <p className="mt-1 text-xs uppercase tracking-[0.2em] text-[#e8e2d6]/45">{stat.label}</p>
+            </div>
+          ))}
+        </div>
       </div>
     </motion.section>
-    
   );
 };
 
-/* ─── OUR SERVICES SECTION ─── */
-const OurServicesSection = () => {
-  return (
-    <section className="relative z-20 bg-[#050505] py-24 px-6 md:px-12 lg:px-16 text-[#e8e2d6] border-t border-white/5">
-      <div className="max-w-[1400px] mx-auto">
-        <div className="mb-16 md:mb-24 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
-          <div>
-            <span className="text-[10px] uppercase font-mono tracking-[0.3em] text-[#e8e2d6]/40 mb-4 block">Capabilities</span>
-            <h2 className="text-4xl md:text-6xl font-serif leading-tight">
-              Elevating Digital <br /> <span className="italic text-white/70">Experiences</span>
-            </h2>
-          </div>
-          <p className="text-sm md:text-base font-mono text-[#e8e2d6]/50 max-w-sm">
-            We merge artistic intent with technical precision to build digital landscapes that redefine industry standards.
-          </p>
-        </div>
+/* ─── TESTIMONIALS ─── */
+const TestimonialsSection = () => {
+  const scrollerRef = useRef(null);
+  const scrollBy = (dir) => {
+    scrollerRef.current?.scrollBy({ left: dir * 340, behavior: 'smooth' });
+  };
 
-        <div className="flex flex-col border-t border-white/10">
-          {SERVICES_DATA.map((service, index) => (
-            <ServiceRow key={index} service={service} index={index} />
-          ))}
+  return (
+    <section className="py-16 md:py-24 border-b border-white/8 overflow-hidden">
+      <div className="max-w-[1300px] mx-auto px-4 sm:px-6 md:px-10">
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-6 mb-10 md:mb-14">
+          <h2 className="font-napkin-display text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-[#e8e2d6] relative inline-block">
+            Don&rsquo;t take our word<br className="hidden sm:block" /> for{' '}
+            <span className="relative inline-block">
+              it.
+              <Squiggle className="absolute left-0 -bottom-2 w-full h-3" />
+            </span>
+          </h2>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => scrollBy(-1)}
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-white/5 border border-white/10 text-[#e8e2d6] hover:bg-white/10 transition-colors"
+              aria-label="Previous"
+            >
+              <ArrowLeft size={18} />
+            </button>
+            <button
+              onClick={() => scrollBy(1)}
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-white/5 border border-white/10 text-[#e8e2d6] hover:bg-white/10 transition-colors"
+              aria-label="Next"
+            >
+              <ArrowRight size={18} />
+            </button>
+          </div>
         </div>
+      </div>
+
+      <div ref={scrollerRef} className="flex gap-4 md:gap-6 overflow-x-auto px-4 sm:px-6 md:px-10 pb-4 snap-x snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+        {REVIEWS.map((r, i) => (
+          <motion.div
+            key={r.author}
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5, delay: i * 0.08 }}
+            style={{ backgroundColor: r.tint }}
+            className="snap-start shrink-0 w-[280px] sm:w-[320px] rounded-3xl border border-white/8 p-6 md:p-7"
+          >
+            <Quote size={22} className="text-[#e8e2d6]/30 mb-4" />
+            <p className="text-sm md:text-base text-[#e8e2d6]/85 leading-relaxed mb-6">{r.quote}</p>
+            <div>
+              <p className="text-sm font-bold text-[#e8e2d6]">{r.author}</p>
+              <p className="text-xs text-[#e8e2d6]/45">{r.role}</p>
+            </div>
+          </motion.div>
+        ))}
       </div>
     </section>
   );
 };
 
-const ServiceRow = ({ service, index }) => {
-  const [isHovered, setIsHovered] = useState(false);
-
+/* ─── FINAL CTA ─── */
+const FinalCTASection = () => {
+  const navigate = useNavigate();
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ duration: 0.6, delay: index * 0.1 }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      className="group flex flex-col md:flex-row justify-between items-start md:items-center py-8 md:py-12 border-b border-white/10 cursor-pointer relative overflow-hidden"
-    >
-      <div className="absolute inset-0 bg-gradient-to-r from-white/[0.03] to-transparent scale-x-0 group-hover:scale-x-100 origin-left transition-transform duration-700 ease-out" />
-      
-      <div className="relative z-10 flex items-center gap-6 md:gap-12 w-full md:w-auto">
-        <span className="text-xs font-mono text-[#e8e2d6]/30 w-8">0{index + 1}</span>
-        <h3 className={`text-2xl md:text-4xl font-serif transition-colors duration-500 ${isHovered ? 'text-white' : 'text-[#e8e2d6]/80'}`}>
-          {service.title}
-        </h3>
-      </div>
-      
-      <div className="relative z-10 mt-4 md:mt-0 md:w-1/3 flex items-center justify-between w-full">
-        <p className={`text-sm font-mono transition-colors duration-500 pr-8 ${isHovered ? 'text-[#e8e2d6]' : 'text-[#e8e2d6]/40'}`}>
-          {service.desc}
+    <section className="py-20 md:py-28 px-4 sm:px-6 md:px-10 text-center">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.6 }}
+        className="max-w-2xl mx-auto"
+      >
+        <h2 className="font-napkin-display text-3xl md:text-5xl font-bold tracking-tight text-[#e8e2d6] mb-5">
+          Build it, buy it, or deploy it.<br className="hidden sm:block" /> Either way, ship today.
+        </h2>
+        <p className="text-sm md:text-base text-[#e8e2d6]/50 mb-8">
+          Get started instantly — no long setup required.
         </p>
-        <motion.div
-          animate={{ x: isHovered ? 0 : -10, opacity: isHovered ? 1 : 0 }}
-          transition={{ duration: 0.4 }}
-          className="text-white"
-        >
-          →
-        </motion.div>
-      </div>
-    </motion.div>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <motion.button
+            onClick={() => { window.scrollTo(0, 0); navigate('/deploy-own'); }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className="inline-flex items-center gap-2 rounded-full bg-[#e8e2d6] text-[#050505] px-6 py-3 text-sm font-bold shadow-[0_10px_30px_rgba(0,0,0,0.4)]"
+          >
+            Deploy a project <ArrowUpRight size={16} />
+          </motion.button>
+          <motion.button
+            onClick={() => { window.scrollTo(0, 0); navigate('/ai-studio'); }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className="inline-flex items-center gap-2 rounded-full bg-white/5 border border-white/15 text-[#e8e2d6] px-6 py-3 text-sm font-bold"
+          >
+            Try AI Studio <ArrowUpRight size={16} />
+          </motion.button>
+        </div>
+      </motion.div>
+    </section>
   );
 };
 

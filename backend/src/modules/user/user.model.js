@@ -45,12 +45,21 @@ const userSchema = new mongoose.Schema(
       unique: true,
       sparse: true,
     },
+    githubId: {
+      type: String,
+      unique: true,
+      sparse: true, // allows multiple null/missing values for non-GitHub users
+    },
+    githubUsername: {
+      type: String,
+      trim: true,
+    },
     avatar: {
       type: String,
     },
     authProvider: {
       type: String,
-      enum: ['local', 'google'],
+      enum: ['local', 'google', 'github'],
       default: 'local',
     },
     verificationToken: String,

@@ -1,6 +1,7 @@
 jest.mock('../../../src/modules/user/user.model', () => require('../../mocks/models/user.model.mock'));
 jest.mock('../../../src/services/email.service', () => require('../../mocks/services/email.service.mock'));
 jest.mock('../../../src/services/supabase.service', () => require('../../mocks/services/supabase.service.mock'));
+jest.mock('../../../src/services/github.service', () => require('../../mocks/services/github.service.mock'));
 jest.mock('google-auth-library');
 
 // The authLimiter would otherwise share state across the many requests these
@@ -13,10 +14,12 @@ jest.mock('../../../src/shared/middleware/rateLimit', () => ({
 
 const express = require('express');
 const request = require('supertest');
+const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
 const User = require('../../../src/modules/user/user.model');
 const emailService = require('../../../src/services/email.service');
 const supabaseService = require('../../../src/services/supabase.service');
+const githubService = require('../../../src/services/github.service');
 const authRoutes = require('../../../src/modules/auth/auth.routes');
 
 const buildApp = () => {
@@ -245,5 +248,106 @@ describe('POST /api/auth/reset-password', () => {
   it('rejects a request missing the new password at the validation layer', async () => {
     const res = await request(app).post('/api/auth/reset-password').send({ token: 'whatever' });
     expect(res.status).toBe(400);
+  });
+});
+
+describe('GET /api/auth/github', () => {
+  it('redirects to the GitHub login authorize URL', async () => {
+    const res = await request(app).get('/api/auth/github');
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe('https://github.com/login/oauth/authorize?mock=login');
+  });
+
+  it('returns 503 when GitHub sign-in is not configured', async () => {
+    githubService.isGithubLoginConfigured.mockReturnValueOnce(false);
+    const res = await request(app).get('/api/auth/github');
+    expect(res.status).toBe(503);
+  });
+});
+
+describe('GET /api/auth/github/callback', () => {
+  const makeLoginState = (overrides = {}) =>
+    jwt.sign({ purpose: 'github_login', nonce: 'test-nonce', ...overrides }, process.env.JWT_SECRET, { expiresIn: '10m' });
+
+  it('creates a new user on first-time GitHub sign-in and posts a success message', async () => {
+    githubService.getAuthenticatedUser.mockResolvedValueOnce({ id: 777, username: 'newocto', avatarUrl: 'https://a.example.com/x.png', name: 'New Octo' });
+    githubService.getPrimaryVerifiedEmail.mockResolvedValueOnce('newocto@example.com');
+
+    const res = await request(app).get('/api/auth/github/callback').query({ code: 'abc', state: makeLoginState() });
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('github-auth-success');
+    expect(res.text).toContain('newocto@example.com');
+
+    const created = User.__all().find((u) => u.email === 'newocto@example.com');
+    expect(created).toBeDefined();
+    expect(created.githubId).toBe('777');
+    expect(created.authProvider).toBe('github');
+    expect(created.isVerified).toBe(true);
+  });
+
+  it('logs an existing GitHub-linked user back in without creating a duplicate', async () => {
+    await User.__seed({ name: 'Returning', email: 'returning@example.com', githubId: '555111', githubUsername: 'octocat', authProvider: 'github', isVerified: true });
+
+    const res = await request(app).get('/api/auth/github/callback').query({ code: 'abc', state: makeLoginState() });
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('github-auth-success');
+    expect(User.__all().filter((u) => u.githubId === '555111').length).toBe(1);
+  });
+
+  it('safely links GitHub to an existing local account with a matching verified email', async () => {
+    await User.__seed({ name: 'Local Jane', email: 'octocat@example.com', password: 'password123', authProvider: 'local' });
+
+    const res = await request(app).get('/api/auth/github/callback').query({ code: 'abc', state: makeLoginState() });
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('github-auth-success');
+    const linked = User.__all().find((u) => u.email === 'octocat@example.com');
+    expect(linked.githubId).toBe('555111');
+    // Linking must not touch the existing password-based login path.
+    expect(await linked.comparePassword('password123')).toBe(true);
+  });
+
+  it('refuses to link when the verified email already belongs to a different GitHub account', async () => {
+    await User.__seed({ name: 'Someone Else', email: 'octocat@example.com', githubId: 'a-totally-different-id', authProvider: 'github', isVerified: true });
+
+    const res = await request(app).get('/api/auth/github/callback').query({ code: 'abc', state: makeLoginState() });
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('github-auth-error');
+    expect(res.text).toMatch(/different GitHub account/i);
+    // No new account should have been created for the incoming GitHub id.
+    expect(User.__all().find((u) => u.githubId === '555111')).toBeUndefined();
+  });
+
+  it('declines gracefully when GitHub reports no verified email', async () => {
+    githubService.getPrimaryVerifiedEmail.mockResolvedValueOnce(null);
+    const res = await request(app).get('/api/auth/github/callback').query({ code: 'abc', state: makeLoginState() });
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('github-auth-error');
+    expect(res.text).toMatch(/verified email/i);
+  });
+
+  it('rejects a missing code or state', async () => {
+    const res = await request(app).get('/api/auth/github/callback').query({ state: makeLoginState() });
+    expect(res.text).toContain('github-auth-error');
+  });
+
+  it('rejects a state signed for a different purpose (e.g. the repo-export flow)', async () => {
+    const wrongPurposeState = makeLoginState({ purpose: 'github_oauth' });
+    const res = await request(app).get('/api/auth/github/callback').query({ code: 'abc', state: wrongPurposeState });
+    expect(res.text).toContain('github-auth-error');
+    expect(res.text).toMatch(/invalid sign-in request/i);
+  });
+
+  it('rejects a tampered/invalid state token', async () => {
+    const res = await request(app).get('/api/auth/github/callback').query({ code: 'abc', state: 'not-a-real-jwt' });
+    expect(res.text).toContain('github-auth-error');
+  });
+
+  it('surfaces GitHub-reported OAuth errors (e.g. the user denied access)', async () => {
+    const res = await request(app).get('/api/auth/github/callback').query({ error: 'access_denied' });
+    expect(res.text).toContain('github-auth-error');
   });
 });

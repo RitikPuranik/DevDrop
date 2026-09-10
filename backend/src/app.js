@@ -40,8 +40,8 @@ app.use(helmet({
 // moment it loads. That silently nulls `window.opener` (so postMessage never
 // arrives and the opener spins forever) and also revokes the tab's permission
 // to call `window.close()` on itself (so the user has to close it by hand).
-// Overriding it back to `unsafe-none` for just these two routes fixes both.
-app.use(['/api/github/callback', '/api/deployments/providers/vercel/callback'], (req, res, next) => {
+// Overriding it back to `unsafe-none` for just these routes fixes both.
+app.use(['/api/github/callback', '/api/deployments/providers/vercel/callback', '/api/auth/github/callback'], (req, res, next) => {
   res.setHeader('Cross-Origin-Opener-Policy', 'unsafe-none');
   next();
 });
@@ -88,6 +88,7 @@ app.use('/api/analytics', require('./modules/analytics'));
 app.use('/api/contact',   require('./modules/contact'));
 app.use('/api/github',    require('./modules/github'));
 app.use('/api/deployments', require('./modules/deployment'));
+app.use('/api/ai',          require('./modules/ai'));
 
 
 app.get("/debug-sentry", function mainHandler(req, res) {

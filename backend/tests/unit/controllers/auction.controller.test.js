@@ -489,6 +489,91 @@ describe('auction.controller', () => {
       expect(res.json.mock.calls[0][0].data.bids[0].bidderId.avatar).toBe('https://signed/b.png');
     });
 
+    it('nulls out a bidder avatar that fails to sign, rather than leaking a raw storage path', async () => {
+      Auction.findOne.mockReturnValue(createQueryMock(baseAuction()));
+      const bidDoc = { toObject: () => ({ bidAmount: 500, bidderId: { name: 'Bidder', avatar: 'avatars/broken.png' } }) };
+      Bid.find.mockReturnValue(createQueryMock([bidDoc]));
+      const supabaseService = require('../../../src/services/supabase.service');
+      supabaseService.createSignedUrl.mockRejectedValue(new Error('sign failed'));
+
+      const req = mockReq({ params: { websiteId: 'w1' } });
+      const res = mockRes();
+
+      await auctionController.getAuction(req, res);
+
+      expect(res.json.mock.calls[0][0].data.bids[0].bidderId.avatar).toBeNull();
+    });
+
+    it('reports hours-remaining messaging for an in-progress first_bid_waiting auction (not yet expired)', async () => {
+      const auction = baseAuction({
+        status: 'first_bid_waiting',
+        firstBidPlacedAt: new Date(),
+        firstBidDeadline: new Date(Date.now() + 1000 * 60 * 60 * 10),
+        hasFirstBidWaitingPassed: () => false,
+      });
+      Auction.findOne.mockReturnValue(createQueryMock(auction));
+      Bid.find.mockReturnValue(createQueryMock([]));
+
+      const req = mockReq({ params: { websiteId: 'w1' } });
+      const res = mockRes();
+
+      await auctionController.getAuction(req, res);
+
+      const timeInfo = res.json.mock.calls[0][0].data.auction.timeInfo;
+      expect(timeInfo.hoursRemaining).toBeGreaterThan(0);
+      expect(timeInfo.message).toMatch(/hours left for others to bid higher/i);
+    });
+
+    it('computes paymentDeadline from updatedAt when an awaiting_payment auction has none set yet', async () => {
+      const auction = baseAuction({
+        status: 'awaiting_payment',
+        updatedAt: new Date('2026-01-01T00:00:00Z'),
+        paymentDeadline: null,
+        hasPaymentDeadlinePassed: () => false,
+      });
+      Auction.findOne.mockReturnValue(createQueryMock(auction));
+      Bid.find.mockReturnValue(createQueryMock([]));
+
+      const req = mockReq({ params: { websiteId: 'w1' } });
+      const res = mockRes();
+
+      await auctionController.getAuction(req, res);
+
+      expect(auction.paymentDeadline).toEqual(new Date('2026-01-04T00:00:00Z')); // +72h default
+    });
+
+    it('falls back to "now + paymentHours" when an awaiting_payment auction has neither paymentDeadline nor updatedAt', async () => {
+      const auction = baseAuction({ status: 'awaiting_payment', updatedAt: null, paymentDeadline: null, hasPaymentDeadlinePassed: () => false });
+      Auction.findOne.mockReturnValue(createQueryMock(auction));
+      Bid.find.mockReturnValue(createQueryMock([]));
+      const before = Date.now();
+
+      const req = mockReq({ params: { websiteId: 'w1' } });
+      const res = mockRes();
+
+      await auctionController.getAuction(req, res);
+
+      expect(auction.paymentDeadline.getTime() - before).toBeGreaterThan(71 * 60 * 60 * 1000);
+    });
+
+    it('resets a "payment_failed" auction back to active via the getAuction view itself (not just reopenAuction)', async () => {
+      const website = { _id: 'w1' };
+      const auction = baseAuction({ status: 'payment_failed', websiteId: website, currentBidderId: 'bidder-1', currentBidAmount: 500 });
+      Auction.findOne.mockReturnValue(createQueryMock(auction));
+      Bid.find.mockReturnValue(createQueryMock([]));
+      Bid.updateMany = jest.fn().mockResolvedValue({});
+
+      const req = mockReq({ params: { websiteId: 'w1' } });
+      const res = mockRes();
+
+      await auctionController.getAuction(req, res);
+
+      expect(auction.status).toBe('active');
+      expect(auction.previousAttempts).toHaveLength(1);
+      expect(auction.save).toHaveBeenCalled();
+      expect(Bid.updateMany).toHaveBeenCalledWith({ websiteId: 'w1' }, { $set: { status: 'expired' } });
+    });
+
     it('auto-transitions to awaiting_payment once the first-bid waiting window has passed', async () => {
       const auction = baseAuction({
         status: 'first_bid_waiting',

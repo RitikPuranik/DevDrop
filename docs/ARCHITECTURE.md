@@ -56,6 +56,7 @@ The Express app currently mounts these domain routers:
 | `/api/contact` | `contact` | Contact/support operations |
 | `/api/github` | `github` | GitHub connection and export |
 | `/api/deployments` | `deployment` | Repository analysis and deployment lifecycle |
+| `/api/ai` | `ai` | AI Studio — proxies authenticated generation requests to the separate AI service (see `docs/AI_STUDIO.md`) |
 
 There is also an unversioned `GET /health` endpoint for service health checks.
 

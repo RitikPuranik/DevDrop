@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { toast } from 'sonner';
 import AuthModal from '../AuthModal';
@@ -11,6 +11,7 @@ vi.mock('../../../api/auth', () => ({
     register: vi.fn(),
     forgotPassword: vi.fn(),
     googleAuth: vi.fn(),
+    githubAuthUrl: vi.fn(() => 'http://localhost:5000/api/auth/github'),
   },
 }));
 
@@ -150,5 +151,75 @@ describe('AuthModal — forgot password', () => {
 
     await waitFor(() => expect(authAPI.forgotPassword).toHaveBeenCalledWith('reset@example.com'));
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('If this email exists, a reset link has been sent'));
+  });
+});
+
+describe('AuthModal — GitHub OAuth', () => {
+  it('renders a "Continue with GitHub" button', () => {
+    renderModal();
+    expect(screen.getAllByRole('button', { name: /continue with github/i }).length).toBeGreaterThan(0);
+  });
+
+  it('opens a popup and shows a connecting state when clicked', () => {
+    const fakePopup = { closed: false, close: vi.fn() };
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(fakePopup);
+    renderModal();
+
+    fireEvent.click(screen.getAllByRole('button', { name: /continue with github/i })[0]);
+
+    expect(openSpy).toHaveBeenCalledWith('http://localhost:5000/api/auth/github', 'github-login-oauth', expect.any(String));
+    expect(screen.getAllByText(/connecting/i).length).toBeGreaterThan(0);
+    openSpy.mockRestore();
+  });
+
+  it('warns and does not hang in a loading state when the popup is blocked', () => {
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    renderModal();
+
+    fireEvent.click(screen.getAllByRole('button', { name: /continue with github/i })[0]);
+
+    expect(toast.error).toHaveBeenCalledWith('Please allow popups to sign in with GitHub');
+    expect(screen.queryAllByText(/connecting/i).length).toBe(0);
+    openSpy.mockRestore();
+  });
+
+  it('signs the user in when the popup posts a success message', async () => {
+    const fakePopup = { closed: false, close: vi.fn() };
+    vi.spyOn(window, 'open').mockReturnValue(fakePopup);
+    const onClose = vi.fn();
+    renderModal({ onClose });
+
+    fireEvent.click(screen.getAllByRole('button', { name: /continue with github/i })[0]);
+
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        origin: window.location.origin,
+        data: { type: 'github-auth-success', token: 'gh_tok_1', user: { role: 'user', name: 'Gita' } },
+      }));
+    });
+
+    await waitFor(() => expect(localStorage.getItem('token')).toBe('gh_tok_1'));
+    expect(toast.success).toHaveBeenCalledWith('Signed in with GitHub!');
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('shows an error toast when the popup posts an error message', async () => {
+    const fakePopup = { closed: false, close: vi.fn() };
+    vi.spyOn(window, 'open').mockReturnValue(fakePopup);
+    renderModal();
+
+    fireEvent.click(screen.getAllByRole('button', { name: /continue with github/i })[0]);
+
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        origin: window.location.origin,
+        data: { type: 'github-auth-error', message: 'This email is already linked to a different GitHub account.' },
+      }));
+    });
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith('This email is already linked to a different GitHub account.')
+    );
+    expect(localStorage.getItem('token')).toBeNull();
   });
 });

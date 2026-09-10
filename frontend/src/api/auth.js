@@ -28,6 +28,10 @@ export const authAPI = {
   googleAuth: (credential) =>
     API.post("/google", { credential }),
 
+  // GET /api/auth/github redirects straight to GitHub's authorize screen —
+  // no preceding API call needed, just open this URL in a popup.
+  githubAuthUrl: () => `${import.meta.env.VITE_API_URL}/api/auth/github`,
+
   verifyEmail: (token) =>
     API.post("/verify-email", { token }),
 

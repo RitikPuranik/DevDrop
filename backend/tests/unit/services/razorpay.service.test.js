@@ -64,6 +64,16 @@ describe('razorpay.service signature verification', () => {
       const signature = signBody(rawBody, 'someone_elses_secret');
       expect(razorpayService.verifyWebhookSignature(rawBody, signature)).toBe(false);
     });
+
+    it('throws (rather than silently returning false) when RAZORPAY_WEBHOOK_SECRET is not configured', () => {
+      delete process.env.RAZORPAY_WEBHOOK_SECRET;
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        expect(() => razorpayService.verifyWebhookSignature('{}', 'anything')).toThrow();
+      } finally {
+        consoleErrorSpy.mockRestore();
+      }
+    });
   });
 
   describe('createOrder amount conversion', () => {
@@ -102,6 +112,84 @@ describe('razorpay.service signature verification', () => {
       const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
       try {
         await expect(freshService.createOrder('receipt-3', 100)).rejects.toThrow(/Razorpay keys not configured/);
+      } finally {
+        consoleErrorSpy.mockRestore();
+      }
+    });
+
+    it('prefers Razorpay\'s own error.error.description over the generic error.message when the SDK call itself fails', async () => {
+      const createMock = jest.fn().mockRejectedValue({ error: { description: 'Amount exceeds maximum limit' }, message: 'Request failed with status 400' });
+      jest.doMock('razorpay', () => jest.fn().mockImplementation(() => ({ orders: { create: createMock } })));
+      process.env.RAZORPAY_KEY_ID = 'rzp_test_id';
+      process.env.RAZORPAY_KEY_SECRET = KEY_SECRET;
+      jest.resetModules();
+      const freshService = require('../../../src/services/razorpay.service');
+
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        await expect(freshService.createOrder('receipt-4', 100)).rejects.toThrow('Amount exceeds maximum limit');
+      } finally {
+        consoleErrorSpy.mockRestore();
+      }
+    });
+  });
+
+  describe('fetchOrder', () => {
+    it('returns the order on success', async () => {
+      const fetchMock = jest.fn().mockResolvedValue({ id: 'order_1', status: 'paid' });
+      jest.doMock('razorpay', () => jest.fn().mockImplementation(() => ({ orders: { fetch: fetchMock } })));
+      process.env.RAZORPAY_KEY_ID = 'rzp_test_id';
+      process.env.RAZORPAY_KEY_SECRET = KEY_SECRET;
+      jest.resetModules();
+      const freshService = require('../../../src/services/razorpay.service');
+
+      const order = await freshService.fetchOrder('order_1');
+
+      expect(order).toEqual({ id: 'order_1', status: 'paid' });
+    });
+
+    it('maps a provider failure to a clean error message', async () => {
+      const fetchMock = jest.fn().mockRejectedValue({ error: { description: 'The id provided does not exist' } });
+      jest.doMock('razorpay', () => jest.fn().mockImplementation(() => ({ orders: { fetch: fetchMock } })));
+      process.env.RAZORPAY_KEY_ID = 'rzp_test_id';
+      process.env.RAZORPAY_KEY_SECRET = KEY_SECRET;
+      jest.resetModules();
+      const freshService = require('../../../src/services/razorpay.service');
+
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        await expect(freshService.fetchOrder('order_bogus')).rejects.toThrow('The id provided does not exist');
+      } finally {
+        consoleErrorSpy.mockRestore();
+      }
+    });
+  });
+
+  describe('fetchPayment', () => {
+    it('returns the payment on success', async () => {
+      const fetchMock = jest.fn().mockResolvedValue({ id: 'pay_1', status: 'captured' });
+      jest.doMock('razorpay', () => jest.fn().mockImplementation(() => ({ payments: { fetch: fetchMock } })));
+      process.env.RAZORPAY_KEY_ID = 'rzp_test_id';
+      process.env.RAZORPAY_KEY_SECRET = KEY_SECRET;
+      jest.resetModules();
+      const freshService = require('../../../src/services/razorpay.service');
+
+      const payment = await freshService.fetchPayment('pay_1');
+
+      expect(payment).toEqual({ id: 'pay_1', status: 'captured' });
+    });
+
+    it('maps a provider failure to a clean error message', async () => {
+      const fetchMock = jest.fn().mockRejectedValue({ error: { description: 'Payment not found' } });
+      jest.doMock('razorpay', () => jest.fn().mockImplementation(() => ({ payments: { fetch: fetchMock } })));
+      process.env.RAZORPAY_KEY_ID = 'rzp_test_id';
+      process.env.RAZORPAY_KEY_SECRET = KEY_SECRET;
+      jest.resetModules();
+      const freshService = require('../../../src/services/razorpay.service');
+
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        await expect(freshService.fetchPayment('pay_bogus')).rejects.toThrow('Payment not found');
       } finally {
         consoleErrorSpy.mockRestore();
       }

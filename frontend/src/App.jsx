@@ -17,6 +17,7 @@ import Workspace from './pages/account/Workspace';
 import PurchaseAccess from './pages/marketplace/PurchaseAccess';
 import DeployProject from './pages/deployment/DeployProject';
 import DeployOwnProject from './pages/deployment/DeployOwnProject';
+import AiStudio from './pages/ai-studio/AiStudio';
 import DeploymentDetails from './pages/deployment/DeploymentDetails';
 import VercelOAuthCallback from './pages/deployment/VercelOAuthCallback';
 import AdminPanel from "./pages/admin/AdminPanelPage";
@@ -137,6 +138,7 @@ function AppContent() {
               <Route path="/purchases/:purchaseId" element={<PurchaseAccess />} />
               <Route path="/deploy/vercel-callback" element={<VercelOAuthCallback />} />
               <Route path="/deploy-own" element={<DeployOwnProject />} />
+              <Route path="/ai-studio" element={<AiStudio />} />
               <Route path="/deploy/:purchaseId" element={<DeployProject />} />
               <Route path="/deployments/:deploymentId" element={<DeploymentDetails />} />
               <Route path="/admin" element={<AdminPanel />} />

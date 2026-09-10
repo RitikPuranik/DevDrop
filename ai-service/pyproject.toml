@@ -1,0 +1,5 @@
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = ["slow: real subprocess/network integration tests (npm install + vite build) — run with the rest of the suite by default, deselect with -m 'not slow' for a fast loop"]
