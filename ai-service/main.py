@@ -32,20 +32,13 @@ from config import get_settings
 from logging_config import configure_logging
 from routes.build import router as build_router
 from routes.generation import router as generation_router
-<<<<<<< HEAD
-=======
 from routes.gemini_pool_admin import router as gemini_pool_admin_router
->>>>>>> ad5b584213608b50dfd0fcd8acf211a5eeefc4a3
 from routes.health import router as health_router
 from routes.jobs import router as jobs_router
 from routes.planning import router as planning_router
 from routes.projects import router as projects_router
-<<<<<<< HEAD
-from storage.factory import get_repository
-=======
 from storage.factory import get_gemini_pool_repository, get_repository
 from storage.gemini_pool_mongo import MongoGeminiPoolRepository
->>>>>>> ad5b584213608b50dfd0fcd8acf211a5eeefc4a3
 from storage.mongo import MongoRepository
 
 configure_logging()
@@ -62,8 +55,6 @@ async def lifespan(app: FastAPI):
         # request. The in-memory repository has no equivalent concept.
         await repository.ensure_indexes()
         logger.info("mongo_indexes_ensured")
-<<<<<<< HEAD
-=======
 
     gemini_pool_repository = get_gemini_pool_repository(settings)
     if isinstance(gemini_pool_repository, MongoGeminiPoolRepository):
@@ -78,7 +69,6 @@ async def lifespan(app: FastAPI):
         from gemini_pool.lifecycle import ensure_legacy_credential_migrated
 
         await ensure_legacy_credential_migrated(gemini_pool_repository, settings)
->>>>>>> ad5b584213608b50dfd0fcd8acf211a5eeefc4a3
     yield
 
 
@@ -151,7 +141,4 @@ app.include_router(generation_router)
 app.include_router(build_router)
 app.include_router(jobs_router)
 app.include_router(projects_router)
-<<<<<<< HEAD
-=======
 app.include_router(gemini_pool_admin_router)
->>>>>>> ad5b584213608b50dfd0fcd8acf211a5eeefc4a3
