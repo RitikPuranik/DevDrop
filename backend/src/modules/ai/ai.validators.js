@@ -1,11 +1,13 @@
 const { body } = require('express-validator');
 const { handleValidationErrors } = require('../../shared/utils/validators');
 
-// Mirrors ai-service/routes/planning.py::PortfolioPlanningRequest exactly.
-// The frontend collects a few extra fields (targetAudience, primaryGoal,
-// contact) for the review screen's own clarity, but ONLY the fields below
-// are forwarded to the AI service — see Section 9/39: don't let the
-// frontend invent values the AI service doesn't accept.
+// This is DevDrop's own structured portfolio-brief schema — Genie itself
+// only accepts a free-form `prompt` string (see
+// backend/src/services/genie/service.js), so this validator's job is to
+// keep the *wizard's* input well-formed before DevDrop's adapter turns it
+// into that prompt. The frontend collects a few extra fields
+// (targetAudience, primaryGoal, contact) for the review screen's own
+// clarity, but ONLY the fields below are forwarded to the adapter.
 const SUPPORTED_WEBSITE_TYPES = ['portfolio'];
 const SUPPORTED_THEMES = ['light', 'dark', 'auto'];
 const SUPPORTED_STYLES = ['minimal', 'modern', 'professional', 'creative'];

@@ -1,14 +1,13 @@
-const crypto = require('crypto');
-const aiClient = require('../../services/ai/ai.client');
+const genieService = require('../../services/genie/service');
+const genieClient = require('../../services/genie/client');
 const AiGenerationJob = require('./aiGenerationJob.model');
 const supabaseService = require('../../services/supabase.service');
 const { SUPABASE_FOLDERS } = require('../../shared/utils/constants');
 
-// Only these fields are ever forwarded to the AI service (Section 16/39) —
-// anything else the frontend collects (targetAudience, primaryGoal, contact)
-// stays a DevDrop-side concern until the AI service's schema grows to
-// accept it, so we never send values it doesn't know about.
-const buildAiServicePayload = ({ websiteType, userData, preferences }) => ({
+// Only these fields are ever forwarded to Genie's adapter — anything else
+// the frontend collects (targetAudience, primaryGoal, contact) stays a
+// DevDrop-side concern until Genie's prompt-builder needs it.
+const buildGenieRequestPayload = ({ websiteType, userData, preferences, assets }) => ({
   websiteType: websiteType || 'portfolio',
   userData: {
     name: userData?.name,
@@ -28,92 +27,97 @@ const buildAiServicePayload = ({ websiteType, userData, preferences }) => ({
     style: preferences?.style || null,
     animations: typeof preferences?.animations === 'boolean' ? preferences.animations : null,
   },
+  assets: Array.isArray(assets) ? assets : [],
 });
 
+// The frontend still expects the fields the old ai-service integration
+// used (jobId/projectId/currentStage) so the polling hook and progress UI
+// don't need a rewrite — genieGenerationId is the same value under both
+// names since Genie has no separate "project" id, just a generation id.
 const jobToResponse = (job) => ({
-  jobId: job.jobId,
-  projectId: job.projectId,
+  jobId: job.genieGenerationId,
+  projectId: job.genieGenerationId,
   status: job.status,
-  currentStage: job.currentStage,
   repairAttempts: job.repairAttempts || 0,
-  failureCode: job.failureCode,
   failureMessage: job.failureMessage,
+  previewUrl: job.previewUrl,
+  deploymentStatus: job.deploymentStatus,
   createdAt: job.createdAt,
   updatedAt: job.updatedAt,
 });
 
 /**
  * POST /api/ai/generation/portfolio
- * Creates a new AI Studio generation job for the authenticated user.
+ * Creates a new AI Studio generation job for the authenticated user via
+ * the Genie microservice.
  */
 const createPortfolioGeneration = async (req, res) => {
   try {
-    const payload = buildAiServicePayload(req.body);
-    const idempotencyKey = crypto.randomUUID();
+    const payload = buildGenieRequestPayload(req.body);
 
-    const aiResponse = await aiClient.createGenerationJob(payload, {
+    const { genieGenerationId, status, prompt } = await genieService.startPortfolioGeneration(payload, {
       ownerId: req.userId.toString(),
-      idempotencyKey,
     });
 
     const record = await AiGenerationJob.create({
       userId: req.userId,
       websiteType: payload.websiteType,
-      jobId: aiResponse.jobId,
-      projectId: aiResponse.projectId || null,
-      status: aiResponse.status,
-      currentStage: aiResponse.currentStage,
-      repairAttempts: aiResponse.repairAttempts || 0,
-      failureCode: aiResponse.failureCode || null,
-      failureMessage: aiResponse.failureMessage || null,
-      idempotencyKey,
+      genieGenerationId,
+      status,
+      generatedPrompt: prompt,
       requestPayload: payload,
     });
 
     return res.status(201).json({ success: true, ...jobToResponse(record) });
   } catch (error) {
-    return handleAiError(res, error, 'Failed to start website generation.');
+    return handleGenieError(res, error, 'Failed to start website generation.');
   }
 };
 
 /**
  * GET /api/ai/generation/jobs/:jobId
  * Polled by the frontend's GenerationProgress screen. Ownership is
- * enforced against the DevDrop-side record before ever calling the AI
- * service, so a user can never poll another user's job by guessing an id.
+ * enforced against the DevDrop-side record before ever calling Genie, so
+ * a user can never poll another user's job by guessing an id. `jobId`
+ * here is Genie's generation id (see jobToResponse above).
  */
 const getGenerationJobStatus = async (req, res) => {
   try {
-    const record = await AiGenerationJob.findOne({ jobId: req.params.jobId, userId: req.userId });
+    const record = await AiGenerationJob.findOne({ genieGenerationId: req.params.jobId, userId: req.userId });
     if (!record) {
       return res.status(404).json({ success: false, message: 'Generation job not found.' });
     }
 
-    const aiResponse = await aiClient.getGenerationJob(record.jobId);
+    // Only ask Genie for full file contents once the job is about to
+    // finish or has already finished — never on every poll tick.
+    const wasTerminal = genieService.isGenerationTerminal(record.status);
+    const genieStatus = await genieService.getGenerationStatus(record.genieGenerationId, {
+      ownerId: req.userId.toString(),
+      full: !wasTerminal, // fetch files right when it transitions to terminal
+    });
 
-    record.status = aiResponse.status;
-    record.currentStage = aiResponse.currentStage;
-    record.repairAttempts = aiResponse.repairAttempts || 0;
-    record.projectId = aiResponse.projectId || record.projectId;
-    record.failureCode = aiResponse.failureCode || null;
-    record.failureMessage = aiResponse.failureMessage || null;
+    record.status = genieStatus.status;
+    record.failureMessage = genieStatus.error || null;
+    record.previewUrl = genieStatus.previewUrl;
+    record.deploymentStatus = genieStatus.deploymentStatus;
+    if (genieStatus.files) record.lastKnownFiles = genieStatus.files;
     await record.save();
 
     return res.json({ success: true, ...jobToResponse(record) });
   } catch (error) {
-    return handleAiError(res, error, 'Failed to fetch generation status.');
+    return handleGenieError(res, error, 'Failed to fetch generation status.');
   }
 };
 
 /**
  * POST /api/ai/generation/jobs/:jobId/retry
- * Starts a fresh generation job from the original request payload rather
- * than mutating the failed job in place (Section 22) — a brand-new
- * idempotency key ensures this is never confused with the failed attempt.
+ * Starts a fresh generation from the original request payload rather
+ * than mutating the failed job in place — a brand-new Genie generation id
+ * ensures this is never confused with the failed attempt.
  */
 const retryGeneration = async (req, res) => {
   try {
-    const original = await AiGenerationJob.findOne({ jobId: req.params.jobId, userId: req.userId });
+    const original = await AiGenerationJob.findOne({ genieGenerationId: req.params.jobId, userId: req.userId });
     if (!original) {
       return res.status(404).json({ success: false, message: 'Generation job not found.' });
     }
@@ -121,35 +125,72 @@ const retryGeneration = async (req, res) => {
       return res.status(409).json({ success: false, message: 'Only a failed generation can be retried.' });
     }
 
-    const idempotencyKey = crypto.randomUUID();
-    const aiResponse = await aiClient.createGenerationJob(original.requestPayload, {
+    const { genieGenerationId, status, prompt } = await genieService.startPortfolioGeneration(original.requestPayload, {
       ownerId: req.userId.toString(),
-      idempotencyKey,
     });
 
     const record = await AiGenerationJob.create({
       userId: req.userId,
       websiteType: original.websiteType,
-      jobId: aiResponse.jobId,
-      projectId: aiResponse.projectId || null,
-      status: aiResponse.status,
-      currentStage: aiResponse.currentStage,
-      repairAttempts: aiResponse.repairAttempts || 0,
-      failureCode: aiResponse.failureCode || null,
-      failureMessage: aiResponse.failureMessage || null,
-      idempotencyKey,
+      genieGenerationId,
+      status,
+      generatedPrompt: prompt,
       requestPayload: original.requestPayload,
     });
 
     return res.status(201).json({ success: true, ...jobToResponse(record) });
   } catch (error) {
-    return handleAiError(res, error, 'Failed to retry generation.');
+    return handleGenieError(res, error, 'Failed to retry generation.');
+  }
+};
+
+/**
+ * POST /api/ai/generation/jobs/:jobId/modify
+ * Iterative editing (Section 5) — "change the navbar to dark blue and add
+ * a login button". Sends the message to Genie's /api/chat together with
+ * the project's last known files, so Genie edits the existing project
+ * instead of generating something unrelated. Requires the job to have
+ * completed at least once (there must be files to modify).
+ */
+const modifyGeneration = async (req, res) => {
+  try {
+    const message = (req.body?.message || '').trim();
+    if (!message) {
+      return res.status(400).json({ success: false, message: 'message is required.' });
+    }
+
+    const record = await AiGenerationJob.findOne({ genieGenerationId: req.params.jobId, userId: req.userId });
+    if (!record) {
+      return res.status(404).json({ success: false, message: 'Generation job not found.' });
+    }
+    if (record.status !== 'completed' || !record.lastKnownFiles) {
+      return res.status(409).json({ success: false, message: 'This project has not finished generating yet.' });
+    }
+
+    await genieService.sendModification(
+      {
+        genieGenerationId: record.genieGenerationId,
+        message,
+        currentFiles: record.lastKnownFiles,
+      },
+      { ownerId: req.userId.toString() }
+    );
+
+    // Genie processes chat edits asynchronously against the SAME
+    // generation id — the existing status polling endpoint above picks up
+    // the updated status/files once Genie finishes applying the edit.
+    record.status = 'processing';
+    await record.save();
+
+    return res.status(202).json({ success: true, ...jobToResponse(record) });
+  } catch (error) {
+    return handleGenieError(res, error, 'Failed to send modification request.');
   }
 };
 
 // Portfolio asset uploads (profile image, project images, resume). Reuses
-// the existing Supabase storage service (Section 10) rather than a new
-// storage platform; multer/mimetype/size validation is enforced by the
+// the existing Supabase storage service rather than a new storage
+// platform; multer/mimetype/size validation is enforced by the
 // `uploadAiAsset` middleware in ai.upload.js before this ever runs.
 const uploadAsset = async (req, res) => {
   try {
@@ -174,19 +215,18 @@ const uploadAsset = async (req, res) => {
   }
 };
 
-// Normalizes AiServiceError (and any unexpected error) into DevDrop's
-// standard { success, message } shape (Section 31) — the frontend never
-// has to understand raw FastAPI/axios error internals.
-const handleAiError = (res, error, fallbackMessage) => {
-  if (error instanceof aiClient.AiServiceError) {
+// Normalizes GenieServiceError (and any unexpected error) into DevDrop's
+// standard { success, message } shape — the frontend never has to
+// understand raw HTTP/Genie internals.
+const handleGenieError = (res, error, fallbackMessage) => {
+  if (error instanceof genieClient.GenieServiceError) {
     return res.status(error.status).json({
       success: false,
       message: error.message || fallbackMessage,
       code: error.code,
-      stage: error.stage,
     });
   }
-  console.error('AI Studio error:', error);
+  console.error('AI Studio (Genie) error:', error);
   return res.status(500).json({ success: false, message: fallbackMessage });
 };
 
@@ -194,5 +234,6 @@ module.exports = {
   createPortfolioGeneration,
   getGenerationJobStatus,
   retryGeneration,
+  modifyGeneration,
   uploadAsset,
 };

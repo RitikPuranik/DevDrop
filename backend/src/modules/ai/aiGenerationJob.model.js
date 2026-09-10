@@ -1,17 +1,20 @@
 const mongoose = require('mongoose');
 
 /**
- * DevDrop-side record of an AI Studio generation request.
+ * DevDrop-side record of an AI Studio generation request, now backed by
+ * the Genie microservice (services/genie) instead of the deleted
+ * `ai-service`.
  *
- * This is deliberately NOT the AI-service's own job/project store (which
- * lives in the FastAPI service's own storage layer — see
- * ai-service/storage/). It exists purely so DevDrop can:
- *   - enforce ownership (a user may only poll/retry their own jobs)
- *   - list "my AI generations" without calling the AI service
- *   - keep the marketplace `Website` model untouched (Section 25)
- *
- * Full synchronization into a first-class DevDrop project record is
- * explicitly deferred — see Section 24/Deferred Work in the phase report.
+ * This is deliberately NOT Genie's own generation record (which lives in
+ * Genie's own Supabase `generations` table). It exists purely so DevDrop
+ * can:
+ *   - enforce ownership (a user may only poll/retry/modify their own jobs)
+ *   - list "my AI generations" without calling Genie
+ *   - keep the marketplace `Website` model untouched
+ *   - hold the last known file set, so a follow-up chat-based modification
+ *     (Section 5 — "change the navbar to dark blue") can be sent to Genie
+ *     together with the project's current files, instead of DevDrop having
+ *     to re-fetch full=true on every edit.
  */
 const aiGenerationJobSchema = new mongoose.Schema(
   {
@@ -26,35 +29,41 @@ const aiGenerationJobSchema = new mongoose.Schema(
       enum: ['portfolio'],
       required: true,
     },
-    jobId: {
+    // Genie's generation id (services/genie `generations.id`). Renamed
+    // from the old ai-service's `jobId` to make the source explicit.
+    genieGenerationId: {
       type: String,
       required: true,
       index: true,
     },
-    projectId: {
-      type: String,
-      default: null,
-    },
+    // Mirrors Genie's `generations.status` exactly (pending | processing |
+    // completed | failed) — one status vocabulary, not two.
     status: {
       type: String,
-      enum: ['queued', 'running', 'completed', 'failed', 'cancelled'],
-      default: 'queued',
+      enum: ['pending', 'processing', 'completed', 'failed'],
+      default: 'pending',
     },
-    currentStage: {
-      type: String,
-      default: 'QUEUED',
-    },
-    failureCode: { type: String, default: null },
     failureMessage: { type: String, default: null },
     repairAttempts: { type: Number, default: 0 },
-    // Idempotency key used for the most recent attempt tied to this
-    // record, so a retry can be told apart from a duplicate submit.
-    idempotencyKey: {
+    previewUrl: { type: String, default: null },
+    deploymentStatus: { type: String, default: null },
+    // Cached from the last full=true fetch. Populated once the job
+    // completes (or on-demand before a modification request) — never
+    // required just to render a "generating…" progress screen.
+    lastKnownFiles: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    // The prompt DevDrop's adapter (services/genie/service.js) built from
+    // the structured portfolio brief. Kept so a "Retry" action can
+    // resubmit without asking the user to redo the wizard, and so support
+    // can see exactly what was sent to Genie.
+    generatedPrompt: {
       type: String,
       default: null,
     },
-    // The exact structured request sent to the AI service, kept so a
-    // "Retry" action can resubmit without asking the user to redo the form.
+    // The exact structured request the frontend submitted (websiteType,
+    // userData, preferences, assets), kept for the same reason.
     requestPayload: {
       type: mongoose.Schema.Types.Mixed,
       required: true,

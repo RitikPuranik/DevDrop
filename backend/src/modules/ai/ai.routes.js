@@ -19,6 +19,7 @@ router.post(
 
 router.get('/generation/jobs/:jobId', aiController.getGenerationJobStatus);
 router.post('/generation/jobs/:jobId/retry', aiGenerationLimiter, aiController.retryGeneration);
+router.post('/generation/jobs/:jobId/modify', aiGenerationLimiter, aiController.modifyGeneration);
 
 router.post('/assets', uploadAiAsset, handleUploadError, aiController.uploadAsset);
 
