@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { AlertTriangle, Loader2, RefreshCw, RotateCcw, Sparkles } from 'lucide-react';
 
@@ -15,6 +16,8 @@ const IN_PROGRESS_MESSAGES = {
 };
 
 export default function GenerationProgress({ job, pollError, onRetry, onBackToForm, retrying }) {
+  const navigate = useNavigate();
+
   if (pollError && !job) {
     return (
       <div className="rounded-[26px] border border-white/8 bg-[#0b0b0b] p-8 text-center">
@@ -78,11 +81,10 @@ export default function GenerationProgress({ job, pollError, onRetry, onBackToFo
           </button>
           <button
             type="button"
-            disabled
-            title="Preview is coming in a future update"
-            className="px-6 py-3 rounded-xl bg-white text-black text-[13px] font-bold opacity-50 cursor-not-allowed"
+            onClick={() => navigate(`/ai-studio/preview/${job.jobId}`)}
+            className="px-6 py-3 rounded-xl bg-white text-black text-[13px] font-bold"
           >
-            Preview (coming soon)
+            Preview
           </button>
         </div>
       </motion.div>

@@ -18,8 +18,11 @@ router.post(
 );
 
 router.get('/generation/jobs/:jobId', aiController.getGenerationJobStatus);
+router.get('/generation/jobs/:jobId/files', aiController.getGenerationJobFiles);
 router.post('/generation/jobs/:jobId/retry', aiGenerationLimiter, aiController.retryGeneration);
 router.post('/generation/jobs/:jobId/modify', aiGenerationLimiter, aiController.modifyGeneration);
+router.get('/generation/jobs/:jobId/modify/:chatJobId', aiController.getModificationStatus);
+router.post('/generation/jobs/:jobId/undo', aiController.undoLastChange);
 
 router.post('/assets', uploadAiAsset, handleUploadError, aiController.uploadAsset);
 

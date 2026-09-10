@@ -68,6 +68,36 @@ const aiGenerationJobSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       required: true,
     },
+    // Genie's chat job id (services/genie `chat_jobs.id`) for the
+    // in-flight "Edit with AI" request, if any. Genie's `/api/chat`
+    // processes edits asynchronously against a job id that is DISTINCT
+    // from the generation id, and — unlike the original generation —
+    // never flips `generations.status` back to processing/completed
+    // (see services/genie ChatQueue). So DevDrop tracks the chat job
+    // itself rather than re-polling the generation's own status while an
+    // edit is running. Cleared once the edit resolves (success or error).
+    activeChatJobId: { type: String, default: null },
+    // Snapshot of `lastKnownFiles` taken immediately before the most
+    // recent edit was applied, so a broken edit can be undone without
+    // losing the previously-working project (Section 20).
+    previousFiles: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    // Lightweight chat/edit history for the "Edit with AI" panel. Genie
+    // has its own ChatMemoryManager for agent context, so this is purely
+    // a display-friendly mirror DevDrop keeps for its own UI — not a
+    // second source of truth for the AI's conversation context.
+    editHistory: {
+      type: [
+        {
+          role: { type: String, enum: ['user', 'assistant'], required: true },
+          message: { type: String, required: true },
+          createdAt: { type: Date, default: Date.now },
+        },
+      ],
+      default: [],
+    },
   },
   { timestamps: true }
 );

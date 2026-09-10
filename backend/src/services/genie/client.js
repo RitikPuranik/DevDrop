@@ -168,6 +168,20 @@ const sendChatMessage = async ({ generationId, message, currentFiles, imageUrls 
 };
 
 /**
+ * Fetches a chat (edit) job's status/result. Mirrors GET /api/chat/:jobId.
+ * `/api/chat` itself only enqueues the edit and returns a job id
+ * immediately — the actual applied files (or error) only show up here,
+ * once Genie's ChatQueue finishes processing the job.
+ */
+const getChatJob = async (chatJobId, { ownerId } = {}) => {
+  return request({
+    method: 'get',
+    path: `/api/chat/${encodeURIComponent(chatJobId)}`,
+    ownerId,
+  });
+};
+
+/**
  * Health check. Mirrors Genie's own GET /api/status. No auth required.
  */
 const checkHealth = async () => {
@@ -178,6 +192,7 @@ module.exports = {
   createGeneration,
   getGeneration,
   sendChatMessage,
+  getChatJob,
   checkHealth,
   isGenieConfigured,
   GenieServiceError,

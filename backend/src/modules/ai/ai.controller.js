@@ -42,6 +42,16 @@ const jobToResponse = (job) => ({
   failureMessage: job.failureMessage,
   previewUrl: job.previewUrl,
   deploymentStatus: job.deploymentStatus,
+  // Lets the preview workspace know a project has generated files it can
+  // fetch from GET /generation/jobs/:jobId/files, without shipping the
+  // (potentially large) file contents on every status poll.
+  hasFiles: Boolean(job.lastKnownFiles),
+  // Non-null while an "Edit with AI" request is in flight — the frontend
+  // resumes polling GET /generation/jobs/:jobId/modify/:chatJobId against
+  // this id (e.g. after a page reload) instead of assuming the edit is
+  // done just because the generation's own status looks terminal.
+  activeChatJobId: job.activeChatJobId || null,
+  canUndo: Boolean(job.previousFiles),
   createdAt: job.createdAt,
   updatedAt: job.updatedAt,
 });
@@ -151,6 +161,13 @@ const retryGeneration = async (req, res) => {
  * the project's last known files, so Genie edits the existing project
  * instead of generating something unrelated. Requires the job to have
  * completed at least once (there must be files to modify).
+ *
+ * Genie's /api/chat only enqueues the edit and hands back a chat job id;
+ * it does NOT flip the generation's own status, so this endpoint tracks
+ * that chat job id (`activeChatJobId`) instead of assuming a later poll
+ * of the generation itself will reflect the edit. The frontend polls
+ * GET /generation/jobs/:jobId/modify/:chatJobId to find out when it's
+ * actually done (see getModificationStatus below).
  */
 const modifyGeneration = async (req, res) => {
   try {
@@ -166,8 +183,11 @@ const modifyGeneration = async (req, res) => {
     if (record.status !== 'completed' || !record.lastKnownFiles) {
       return res.status(409).json({ success: false, message: 'This project has not finished generating yet.' });
     }
+    if (record.activeChatJobId) {
+      return res.status(409).json({ success: false, message: 'An edit is already in progress for this project.' });
+    }
 
-    await genieService.sendModification(
+    const { chatJobId } = await genieService.sendModification(
       {
         genieGenerationId: record.genieGenerationId,
         message,
@@ -176,15 +196,130 @@ const modifyGeneration = async (req, res) => {
       { ownerId: req.userId.toString() }
     );
 
-    // Genie processes chat edits asynchronously against the SAME
-    // generation id — the existing status polling endpoint above picks up
-    // the updated status/files once Genie finishes applying the edit.
+    // Keep the previous working file set recoverable (Section 20 — undo)
+    // and mark the edit in flight against its own chat job id.
+    record.previousFiles = record.lastKnownFiles;
+    record.activeChatJobId = chatJobId;
     record.status = 'processing';
+    if (!Array.isArray(record.editHistory)) record.editHistory = [];
+    record.editHistory.push({ role: 'user', message });
     await record.save();
 
-    return res.status(202).json({ success: true, ...jobToResponse(record) });
+    return res.status(202).json({ success: true, chatJobId, ...jobToResponse(record) });
   } catch (error) {
     return handleGenieError(res, error, 'Failed to send modification request.');
+  }
+};
+
+/**
+ * GET /api/ai/generation/jobs/:jobId/modify/:chatJobId
+ * Polled by the "Edit with AI" panel while an edit is in flight. Reads
+ * Genie's chat job status directly (Section 26 bug fix — the generation's
+ * own status never reflects an in-progress edit). On completion, applies
+ * the returned files (if any — a purely conversational reply completes
+ * with none) to `lastKnownFiles` and clears `activeChatJobId`. On error,
+ * the previous working files are left untouched so the last good preview
+ * stays recoverable (Section 18/19).
+ */
+const getModificationStatus = async (req, res) => {
+  try {
+    const { jobId, chatJobId } = req.params;
+    const record = await AiGenerationJob.findOne({ genieGenerationId: jobId, userId: req.userId });
+    if (!record) {
+      return res.status(404).json({ success: false, message: 'Generation job not found.' });
+    }
+    if (record.activeChatJobId !== chatJobId) {
+      return res.status(404).json({ success: false, message: 'This edit is no longer active for this project.' });
+    }
+
+    const chatStatus = await genieService.getChatJobStatus(chatJobId, { ownerId: req.userId.toString() });
+
+    if (chatStatus.status === 'completed') {
+      if (chatStatus.files) record.lastKnownFiles = chatStatus.files;
+      record.status = 'completed';
+      record.activeChatJobId = null;
+      if (chatStatus.summary) {
+        if (!Array.isArray(record.editHistory)) record.editHistory = [];
+        record.editHistory.push({ role: 'assistant', message: chatStatus.summary });
+      }
+      await record.save();
+      return res.json({
+        success: true,
+        status: 'completed',
+        summary: chatStatus.summary,
+        filesChanged: Boolean(chatStatus.files),
+        ...jobToResponse(record),
+      });
+    }
+
+    if (chatStatus.status === 'error') {
+      record.status = 'completed'; // previous working project remains the source of truth
+      record.activeChatJobId = null;
+      await record.save();
+      return res.json({
+        success: true,
+        status: 'error',
+        message: chatStatus.error || 'Could not apply this change.',
+        ...jobToResponse(record),
+      });
+    }
+
+    // pending / processing
+    return res.json({ success: true, status: chatStatus.status, ...jobToResponse(record) });
+  } catch (error) {
+    return handleGenieError(res, error, 'Failed to check modification status.');
+  }
+};
+
+/**
+ * GET /api/ai/generation/jobs/:jobId/files
+ * Dedicated endpoint for the preview workspace to fetch the actual
+ * generated project files (Section 6) — ownership-checked the same way
+ * as every other job endpoint, never sent on lightweight status polls.
+ */
+const getGenerationJobFiles = async (req, res) => {
+  try {
+    const record = await AiGenerationJob.findOne({ genieGenerationId: req.params.jobId, userId: req.userId });
+    if (!record) {
+      return res.status(404).json({ success: false, message: 'Generation job not found.' });
+    }
+    if (!record.lastKnownFiles) {
+      return res.status(409).json({ success: false, message: 'This project has no generated files yet.' });
+    }
+    return res.json({ success: true, files: record.lastKnownFiles, editHistory: record.editHistory });
+  } catch (error) {
+    console.error('AI Studio (Genie) error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to fetch generated files.' });
+  }
+};
+
+/**
+ * POST /api/ai/generation/jobs/:jobId/undo
+ * Restores the file set from immediately before the most recent edit
+ * (Section 20 — version safety). Only one level of undo is kept; there is
+ * nothing to redo back to once used.
+ */
+const undoLastChange = async (req, res) => {
+  try {
+    const record = await AiGenerationJob.findOne({ genieGenerationId: req.params.jobId, userId: req.userId });
+    if (!record) {
+      return res.status(404).json({ success: false, message: 'Generation job not found.' });
+    }
+    if (record.activeChatJobId) {
+      return res.status(409).json({ success: false, message: 'Wait for the current edit to finish before undoing.' });
+    }
+    if (!record.previousFiles) {
+      return res.status(409).json({ success: false, message: 'Nothing to undo.' });
+    }
+
+    record.lastKnownFiles = record.previousFiles;
+    record.previousFiles = null;
+    await record.save();
+
+    return res.json({ success: true, files: record.lastKnownFiles, ...jobToResponse(record) });
+  } catch (error) {
+    console.error('AI Studio (Genie) error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to undo last change.' });
   }
 };
 
@@ -235,5 +370,8 @@ module.exports = {
   getGenerationJobStatus,
   retryGeneration,
   modifyGeneration,
+  getModificationStatus,
+  getGenerationJobFiles,
+  undoLastChange,
   uploadAsset,
 };

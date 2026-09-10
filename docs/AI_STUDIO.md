@@ -104,19 +104,46 @@ finish or has already finished — never on every poll tick.
 generation from the original stored request payload rather than mutating
 the failed job in place.
 
-### Modify a completed project (new — Section 5, iterative editing)
+### Modify a completed project (Section 5, iterative editing)
 `POST /api/ai/generation/jobs/:jobId/modify` with `{ "message": "change the
 navbar to dark blue and add a login button" }`. Requires the job to have
 completed at least once. DevDrop sends the message to Genie's `POST
 /api/chat` together with the project's last known files (cached on the
 `AiGenerationJob` record from the most recent `full=true` fetch), so Genie
-edits the existing project instead of generating something unrelated. The
-job's status flips back to `processing`; the existing polling endpoint picks
-up the result once Genie finishes applying the edit.
+edits the existing project instead of generating something unrelated.
 
-> **Frontend note:** this endpoint is implemented and tested on the backend,
-> but no "chat with your project" UI has been wired up in AI Studio yet —
-> see §8.
+> **Important:** Genie's `/api/chat` only *enqueues* the edit and returns a
+> chat job id (`data.jobId`) — it does **not** flip the generation's own
+> `status` field, ever (see `services/genie/src/services/ChatQueue.ts`,
+> which only updates `files`/`deployment_status` on the `generations` row).
+> An earlier version of this doc said the job's status "flips back to
+> processing" and the existing generation-status poll "picks up the
+> result" — that was incorrect; the generation's status stays whatever it
+> already was the entire time the edit is running, so polling it can never
+> tell you the edit finished. This endpoint now tracks the chat job id
+> itself (`AiGenerationJob.activeChatJobId`) instead. Response:
+> `{ success, chatJobId, jobId, status: "processing", activeChatJobId, ... }`.
+
+### Poll a modification (new)
+`GET /api/ai/generation/jobs/:jobId/modify/:chatJobId` — polls Genie's own
+`GET /api/chat/:chatJobId` until it resolves. On `completed`, applies the
+returned files (if any — a purely conversational reply completes with none)
+to `lastKnownFiles` and clears `activeChatJobId`. On `error`, the previous
+working files are left untouched (Section 18/19) — nothing is lost.
+`activeChatJobId` is also included in the regular job-status response, so a
+page reload mid-edit can resume polling the right chat job instead of
+losing track of it.
+
+### Fetch generated files (new — Section 6/26 fix)
+`GET /api/ai/generation/jobs/:jobId/files` — the lightweight job-status
+response never includes file contents (only a `hasFiles: boolean` flag);
+this dedicated, ownership-checked endpoint is what the preview workspace
+actually calls to get `lastKnownFiles` plus the display-only edit history.
+
+### Undo the last edit (new — Section 20)
+`POST /api/ai/generation/jobs/:jobId/undo` — restores `lastKnownFiles` from
+the snapshot taken immediately before the most recent edit
+(`previousFiles`). One level of undo only.
 
 ### Upload an asset
 `POST /api/ai/assets` (`multipart/form-data`, fields: `file`, `type` ∈
@@ -208,17 +235,28 @@ VITE_AI_STUDIO_ENABLED=true   # feature gate only — no secrets here
 
 ## 8. Known limitations / deferred
 
-- Live browser preview of the generated project (placeholder button only) —
-  unchanged from before the migration.
-- No "chat with your project" UI yet, even though the backend `/modify`
-  endpoint (§3) is implemented and unit-tested — wiring a follow-up-message
-  UI into `AiStudio.jsx`'s "Ready" screen is deferred.
+- **Live preview** now exists: `frontend/src/pages/ai-studio/PreviewWorkspace.jsx`
+  (mounted at `/ai-studio/preview/:jobId`) boots the generated project
+  entirely in-browser via `@webcontainer/api` — no deployment provider is
+  involved. See `frontend/src/hooks/ai-studio/useWebContainerPreview.js`.
+  Static (non-npm) projects run via a tiny injected Node static file
+  server instead of `npm install`; npm-based projects run their own
+  `dev`/`start` script. The workspace also has a read-only Monaco code
+  view, an "Edit with AI" panel wired to the `/modify` + `/modify/:chatJobId`
+  endpoints above, undo, refresh, open-in-new-tab, and a client-side ZIP
+  download (no server-side archive endpoint was added).
+- WebContainer requires the page to be cross-origin isolated
+  (`Cross-Origin-Opener-Policy: same-origin` +
+  `Cross-Origin-Embedder-Policy: require-corp`). These are applied by a
+  small Vite dev-server plugin (`frontend/vite.config.js`) **scoped to the
+  `/ai-studio/preview` route only**, so the existing OAuth-popup flow
+  elsewhere (which needs the looser `same-origin-allow-popups`, no-COEP
+  setup) is untouched. A production static host serving the built
+  frontend needs the equivalent per-path header rule configured at that
+  layer — Vite's dev-server headers don't apply to `vite build` output.
 - Real-time granular progress (Genie's `generation:progress` Socket.io
-  events) is not proxied to the frontend; only flat status polling is wired
-  up (§4). A future change could have DevDrop's backend join Genie's
-  Socket.io room server-side and forward simplified progress events over
-  its own WebSocket/SSE channel to the frontend without exposing Genie's
-  connection details to the browser.
+  events) is still not proxied to the frontend; only flat status polling is
+  wired up (§4).
 - Syncing an AI-generated project into a first-class DevDrop `Website`
   record, and any GitHub export / Vercel / Render deployment integration for
   Genie-generated projects specifically, is not implemented. DevDrop's

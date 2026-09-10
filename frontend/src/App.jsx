@@ -18,6 +18,7 @@ import PurchaseAccess from './pages/marketplace/PurchaseAccess';
 import DeployProject from './pages/deployment/DeployProject';
 import DeployOwnProject from './pages/deployment/DeployOwnProject';
 import AiStudio from './pages/ai-studio/AiStudio';
+import PreviewWorkspace from './pages/ai-studio/PreviewWorkspace';
 import DeploymentDetails from './pages/deployment/DeploymentDetails';
 import VercelOAuthCallback from './pages/deployment/VercelOAuthCallback';
 import AdminPanel from "./pages/admin/AdminPanelPage";
@@ -34,6 +35,7 @@ const HERO_VIDEO_SRC = '/dewdrop.s3.mp4';
 function AppContent() {
   const location = useLocation();
   const isBuilder = location.pathname === "/website";
+  const isPreviewWorkspace = location.pathname.startsWith("/ai-studio/preview");
   const isWorkspace = location.pathname.startsWith("/workspace") || location.pathname.startsWith("/dashboard");
   const isVerifyEmail = location.pathname === "/verify-email";
   const isResetPassword = location.pathname === "/reset-password";
@@ -110,8 +112,8 @@ function AppContent() {
 
       {appReady && (
         <>
-          {!isStandaloneAuthPage && <Loader suppressOnce={suppressNextLoader} />}
-          {!isBuilder && !isStandaloneAuthPage && <Navbar />}
+          {!isStandaloneAuthPage && !isPreviewWorkspace && <Loader suppressOnce={suppressNextLoader} />}
+          {!isBuilder && !isPreviewWorkspace && !isStandaloneAuthPage && <Navbar />}
           <main className="bg-black min-h-screen">
             <Routes>
               <Route
@@ -139,6 +141,7 @@ function AppContent() {
               <Route path="/deploy/vercel-callback" element={<VercelOAuthCallback />} />
               <Route path="/deploy-own" element={<DeployOwnProject />} />
               <Route path="/ai-studio" element={<AiStudio />} />
+              <Route path="/ai-studio/preview/:jobId" element={<PreviewWorkspace />} />
               <Route path="/deploy/:purchaseId" element={<DeployProject />} />
               <Route path="/deployments/:deploymentId" element={<DeploymentDetails />} />
               <Route path="/admin" element={<AdminPanel />} />
@@ -162,7 +165,7 @@ function AppContent() {
             />
           </main>
 
-          {!isBuilder && !isWorkspace && !isStandaloneAuthPage && <Footer />}
+          {!isBuilder && !isWorkspace && !isPreviewWorkspace && !isStandaloneAuthPage && <Footer />}
         </>
       )}
     </>

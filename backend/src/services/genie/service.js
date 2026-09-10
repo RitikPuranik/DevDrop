@@ -123,13 +123,38 @@ const getGenerationStatus = async (genieGenerationId, { ownerId, full = false } 
  * to dark blue"). `currentFiles` MUST be the project's current files
  * (fetched via getGenerationStatus(..., { full: true })) so Genie edits
  * the existing project instead of generating something unrelated.
+ *
+ * POST /api/chat only *enqueues* the edit and returns a chat job id —
+ * Genie's ChatQueue applies it asynchronously and never flips the
+ * generation's own `status` field. Callers must poll getChatJobStatus()
+ * with the returned `chatJobId`, not getGenerationStatus(), to find out
+ * when the edit actually finishes.
  */
 const sendModification = async ({ genieGenerationId, message, currentFiles, imageUrls }, { ownerId } = {}) => {
   const genieResponse = await genieClient.sendChatMessage(
     { generationId: genieGenerationId, message, currentFiles, imageUrls },
     { ownerId }
   );
-  return genieResponse;
+  const data = genieResponse.data || {};
+  return { chatJobId: data.jobId, status: data.status || 'pending' };
+};
+
+/**
+ * Polls a Genie chat (edit) job started by sendModification(). Mirrors
+ * GET /api/chat/:jobId. `files` is only present once status is
+ * 'completed' and the edit actually changed files (a purely
+ * conversational reply completes with no files, meaning "nothing to
+ * apply" rather than "clear the project").
+ */
+const getChatJobStatus = async (chatJobId, { ownerId } = {}) => {
+  const genieResponse = await genieClient.getChatJob(chatJobId, { ownerId });
+  const data = genieResponse.data || {};
+  return {
+    status: data.status,
+    files: data.files || null,
+    summary: data.agentThought?.thought || null,
+    error: data.error || null,
+  };
 };
 
 const isGenerationTerminal = (status) => status === 'completed' || status === 'failed';
@@ -140,5 +165,6 @@ module.exports = {
   startPortfolioGeneration,
   getGenerationStatus,
   sendModification,
+  getChatJobStatus,
   isGenerationTerminal,
 };
