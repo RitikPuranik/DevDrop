@@ -29,16 +29,18 @@ def flatten_schema(model: type[BaseModel]) -> dict[str, Any]:
     no references anywhere in the output, safe to hand to any provider
     regardless of its `$ref` support.
 
-    Also strips `additionalProperties` from every object node: Pydantic
-    v2 sets it to `false` on every object schema by default, but the
-    Gemini Developer API (a plain GEMINI_API_KEY, as opposed to Vertex
-    AI / Gemini Enterprise Agent Platform) rejects that keyword outright
-    in `response_schema` — "additionalProperties is only supported in
-    Gemini Enterprise Agent Platform mode, not in Gemini Developer API
-    mode." Dropping the key entirely (not setting it to `true`) is the
-    fix either way, since Developer API mode doesn't understand the
-    keyword regardless of its value.
-    """
+    Also strips `additionalProperties` from every object in the schema.
+    Pydantic's `.model_json_schema()` adds `additionalProperties: false`
+    to every object by default, but the Gemini Developer API (unlike
+    Vertex AI / Gemini Enterprise Agent Platform) rejects that keyword
+    outright — every request fails with "additionalProperties is only
+    supported in Gemini Enterprise Agent Platform mode, not in Gemini
+    Developer API mode." This is a known, longstanding gap between what
+    Pydantic emits and what the Developer API's schema validator accepts
+    (the same keyword trips up tool-call schemas for other libraries
+    talking to Gemini too), so every schema goes through this stripping
+    step before it's ever sent to a provider, the same way $ref inlining
+    already is."""
     schema = model.model_json_schema()
     defs = schema.pop("$defs", {})
 
@@ -62,7 +64,7 @@ def flatten_schema(model: type[BaseModel]) -> dict[str, Any]:
             return {
                 k: _resolve(v, seen)
                 for k, v in node.items()
-                if k != "additionalProperties"
+                if k not in ("additionalProperties", "propertyNames")
             }
         if isinstance(node, list):
             return [_resolve(item, seen) for item in node]

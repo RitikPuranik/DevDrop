@@ -15,11 +15,29 @@ pre-filter and each repository's atomic `reserve()` from silently
 drifting apart over time.
 """
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from storage.gemini_pool_models import GeminiProjectCredential
 
 _MINUTE = timedelta(minutes=1)
+
+
+def _as_aware_utc(dt: datetime) -> datetime:
+    """Normalizes a datetime to timezone-aware UTC.
+
+    MongoDB round-trips strip tzinfo off stored dates by default (pymongo
+    returns naive datetimes unless the client is constructed with
+    tz_aware=True), while freshly-created records use
+    storage/models.py:utcnow() (timezone-aware). Comparing/subtracting a
+    naive and an aware datetime raises TypeError, so every datetime this
+    module touches is normalized through here first rather than assuming
+    one representation. A naive value is always treated as already being
+    UTC (every writer in this codebase only ever writes UTC instants),
+    never the local timezone.
+    """
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 
 @dataclass(frozen=True)
@@ -38,8 +56,11 @@ class EffectiveCounts:
 
 
 def effective_counts(project: GeminiProjectCredential, now: datetime, daily_reset_hour_utc: int) -> EffectiveCounts:
-    minute_reset = now - project.minuteWindowStartedAt >= _MINUTE
-    daily_reset = now >= next_daily_boundary(project.dailyWindowStartedAt, daily_reset_hour_utc)
+    now = _as_aware_utc(now)
+    minute_window_started_at = _as_aware_utc(project.minuteWindowStartedAt)
+    daily_window_started_at = _as_aware_utc(project.dailyWindowStartedAt)
+    minute_reset = now - minute_window_started_at >= _MINUTE
+    daily_reset = now >= next_daily_boundary(daily_window_started_at, daily_reset_hour_utc)
     return EffectiveCounts(
         requests_this_minute=0 if minute_reset else project.requestsThisMinute,
         tokens_this_minute=0 if minute_reset else project.tokensThisMinute,
@@ -61,6 +82,7 @@ def next_daily_boundary(window_started_at: datetime, hour_utc: int) -> datetime:
     verified claim about Google's actual reset instant. See
     docs/GEMINI_PROJECT_POOL.md's "Daily quota handling" section.
     """
+    window_started_at = _as_aware_utc(window_started_at)
     boundary = window_started_at.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(hours=hour_utc)
     if boundary <= window_started_at:
         boundary += timedelta(days=1)

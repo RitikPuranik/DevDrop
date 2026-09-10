@@ -38,7 +38,7 @@ repository turns out to be a real contention hot spot in production
 single-round-trip version is the natural next optimization; the
 `GeminiPoolRepository` interface doesn't change either way.
 """
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from pymongo import AsyncMongoClient, ReturnDocument
 
@@ -57,16 +57,14 @@ def _strip_mongo_id(doc: dict) -> dict:
 
 class MongoGeminiPoolRepository(GeminiPoolRepository):
     def __init__(self, database_url: str, database_name: str):
-        # tz_aware=True: without it, PyMongo decodes BSON dates back into
-        # *naive* datetimes on read, while the rest of this codebase
-        # (utcnow(), compute_backoff_cooldown(), datetime.now(timezone.utc))
-        # is entirely aware. Any datetime field this repository writes
-        # natively (minuteWindowStartedAt/dailyWindowStartedAt on a window
-        # reset, cooldownUntil, leaseExpiresAt, dailyResetAt, ...) round-trips
-        # naive on the next read, and `now - naive_datetime` in
-        # storage/gemini_pool_windows.py raises TypeError. tzinfo pins the
-        # aware result to UTC to match utcnow() exactly.
-        self._client = AsyncMongoClient(database_url, tz_aware=True, tzinfo=timezone.utc)
+        # tz_aware=True: without it, pymongo returns naive datetimes for
+        # every stored date (even though they were written as UTC
+        # instants), while fresh in-process values use
+        # storage/models.py:utcnow() (timezone-aware) — mixing the two in
+        # a comparison/subtraction raises "can't subtract offset-naive
+        # and offset-aware datetimes" (see gemini_pool/scheduler.py's and
+        # storage/gemini_pool_windows.py's now-vs-stored-timestamp checks).
+        self._client = AsyncMongoClient(database_url, tz_aware=True)
         self._db = self._client[database_name]
         self._projects = self._db[_PROJECTS_COLLECTION]
 
@@ -86,16 +84,7 @@ class MongoGeminiPoolRepository(GeminiPoolRepository):
         await self._client.close()
 
     async def create_project(self, project: GeminiProjectCredential) -> GeminiProjectCredential:
-        # NOT mode="json": that serializes every datetime field (including
-        # updatedAt) to an ISO string, so it gets stored as a BSON string
-        # instead of a BSON date. reserve()'s compare-and-swap then queries
-        # {"updatedAt": read_updated_at} with a real Python datetime (parsed
-        # back out of that string by pydantic) — a datetime can never equal
-        # a string in Mongo, so the CAS filter matches zero documents and
-        # find_one_and_update always returns None. Every reserve() attempt
-        # "loses the race" against nothing, list_ranked_candidates showed an
-        # eligible project, and the pool still reports exhausted.
-        await self._projects.insert_one(project.model_dump())
+        await self._projects.insert_one(project.model_dump(mode="json"))
         return project
 
     async def get_project(self, project_id: str) -> GeminiProjectCredential:

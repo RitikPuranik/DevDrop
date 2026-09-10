@@ -98,14 +98,14 @@ const normalizeError = (error) => {
   });
 };
 
-const request = async ({ method, path, data, params, headers }) => {
+const request = async ({ method, path, data, params, headers, timeout }) => {
   try {
     const response = await axios({
       method,
       url: `${getBaseUrl()}${path}`,
       data,
       params,
-      timeout: DEFAULT_TIMEOUT_MS,
+      timeout: timeout || DEFAULT_TIMEOUT_MS,
       headers: buildHeaders(headers),
     });
     return response.data;
@@ -113,6 +113,17 @@ const request = async ({ method, path, data, params, headers }) => {
     throw normalizeError(error);
   }
 };
+
+// POST /v1/generation/jobs runs the ENTIRE generation pipeline (planning,
+// code generation, sandboxed npm install + build, and any debug/repair
+// loop) synchronously before responding — it is not a fire-and-forget
+// "queue a job" call. That can legitimately take up to
+// MAX_GENERATION_DURATION_SECONDS (ai-service/.env, default 600s), so this
+// call needs a much longer timeout than the 20s default used for quick
+// status lookups (getGenerationJob/getProject) — otherwise the axios
+// request aborts with ECONNABORTED long before the AI service is actually
+// done, even though the pipeline itself is working fine.
+const GENERATION_TIMEOUT_MS = 620_000; // 10 minutes + 20s buffer
 
 /**
  * Creates a generation job for a portfolio website.
@@ -132,6 +143,7 @@ const createGenerationJob = async (payload, { ownerId, idempotencyKey } = {}) =>
     method: 'post',
     path: '/v1/generation/jobs',
     data: payload,
+    timeout: GENERATION_TIMEOUT_MS,
     headers: {
       ...(ownerId ? { 'X-Owner-Id': String(ownerId) } : {}),
       ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
