@@ -146,7 +146,18 @@ async def update_project(
     """Generic PATCH — every field except `status` maps straight through.
     `status` is restricted by the caller (routes/gemini_pool_admin.py) to
     "active"/"disabled" before this is ever invoked; enforcing that here
-    too would just be a second copy of the same rule, so it isn't."""
+    too would just be a second copy of the same rule, so it isn't.
+
+    `status` and the other fields are independent axes and both get
+    applied when given together: any plain-field updates (model,
+    apiKey, priority, ...) are written first, then the status
+    transition (enable_project/disable_project) runs against that
+    already-updated record. Previously the status branch returned
+    immediately with `enable_project`/`disable_project`'s own result,
+    silently discarding whatever was in `updates` — a PATCH sending
+    both `model` and `status` in the same call would flip the status
+    but drop the model change with no error.
+    """
     updates = {}
     if payload.name is not None:
         updates["name"] = payload.name
@@ -164,6 +175,10 @@ async def update_project(
         updates["rpdLimit"] = payload.rpdLimit
     if payload.monthlyBudget is not None:
         updates["monthlyBudget"] = payload.monthlyBudget
+
+    if updates:
+        await repository.update_project(project_id, **updates)
+
     if payload.status is not None:
         if payload.status == "active":
             return await enable_project(repository, project_id)
@@ -173,7 +188,7 @@ async def update_project(
 
     if not updates:
         return await repository.get_project(project_id)
-    return await repository.update_project(project_id, **updates)
+    return await repository.get_project(project_id)
 
 
 async def test_project(

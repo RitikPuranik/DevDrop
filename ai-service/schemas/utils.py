@@ -27,7 +27,18 @@ from pydantic import BaseModel
 def flatten_schema(model: type[BaseModel]) -> dict[str, Any]:
     """Return a JSON Schema for `model` with all `$defs`/`$ref` inlined —
     no references anywhere in the output, safe to hand to any provider
-    regardless of its `$ref` support."""
+    regardless of its `$ref` support.
+
+    Also strips `additionalProperties` from every object node: Pydantic
+    v2 sets it to `false` on every object schema by default, but the
+    Gemini Developer API (a plain GEMINI_API_KEY, as opposed to Vertex
+    AI / Gemini Enterprise Agent Platform) rejects that keyword outright
+    in `response_schema` — "additionalProperties is only supported in
+    Gemini Enterprise Agent Platform mode, not in Gemini Developer API
+    mode." Dropping the key entirely (not setting it to `true`) is the
+    fix either way, since Developer API mode doesn't understand the
+    keyword regardless of its value.
+    """
     schema = model.model_json_schema()
     defs = schema.pop("$defs", {})
 
@@ -48,7 +59,11 @@ def flatten_schema(model: type[BaseModel]) -> dict[str, Any]:
                 # take precedence over the definition's own.
                 target.update({k: v for k, v in node.items() if k != "$ref"})
                 return _resolve(target, seen | {ref_name})
-            return {k: _resolve(v, seen) for k, v in node.items()}
+            return {
+                k: _resolve(v, seen)
+                for k, v in node.items()
+                if k != "additionalProperties"
+            }
         if isinstance(node, list):
             return [_resolve(item, seen) for item in node]
         return node

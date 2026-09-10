@@ -16,7 +16,7 @@ carefully written against verified current API docs, flagged honestly as
 unverified, and worth a real smoke test against an actual database before
 this goes anywhere near production.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 
 from pymongo import AsyncMongoClient, ReturnDocument
 
@@ -49,7 +49,11 @@ def _strip_mongo_id(doc: dict) -> dict:
 
 class MongoRepository(Repository):
     def __init__(self, database_url: str, database_name: str):
-        self._client = AsyncMongoClient(database_url)
+        # tz_aware=True: same reasoning as storage/gemini_pool_mongo.py —
+        # without it, dates read back from Mongo are naive while the rest
+        # of the codebase's datetimes are aware, which is a latent
+        # TypeError waiting for any code path that subtracts the two.
+        self._client = AsyncMongoClient(database_url, tz_aware=True, tzinfo=timezone.utc)
         self._db = self._client[database_name]
         self._jobs = self._db[_JOBS_COLLECTION]
         self._projects = self._db[_PROJECTS_COLLECTION]
