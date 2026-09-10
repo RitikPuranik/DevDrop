@@ -97,6 +97,26 @@ class GeminiScheduler:
         projects) — the latter purely so GeminiPoolExhaustedError can
         report whether the pool was empty or just fully busy."""
         all_projects = await self._repository.list_projects()
+        for p in all_projects:  # TEMP DEBUG — remove after diagnosing
+            logger.warning(
+                "gemini.debug.candidate",
+                extra={
+                    "id": p.id,
+                    "status": repr(p.status),
+                    "model": p.model,
+                    "requested_model": requested_model,
+                    "excluded": p.id in exclude_ids,
+                    "terminal": p.status in TERMINAL_UNTIL_MANUAL_ACTION,
+                    "model_match": requested_model is None or p.model == requested_model,
+                    "cooldownUntil": repr(p.cooldownUntil),
+                    "leaseOwner": repr(p.leaseOwner),
+                    "leaseExpiresAt": repr(p.leaseExpiresAt),
+                    "minuteWindowStartedAt": repr(p.minuteWindowStartedAt),
+                    "dailyWindowStartedAt": repr(p.dailyWindowStartedAt),
+                    "now": repr(now),
+                    "passes_limits": self._passes_optimistic_limits(p, now, estimated_total_tokens),
+                },
+            )
         eligible = [
             p
             for p in all_projects
