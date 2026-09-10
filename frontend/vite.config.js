@@ -2,27 +2,15 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
-// WebContainer (Section 3 of the AI Studio preview spec) requires the
-// page that boots it to be cross-origin isolated, which means both:
-//   Cross-Origin-Opener-Policy: same-origin
-//   Cross-Origin-Embedder-Policy: require-corp
-// on the document response. Setting these globally would break the
-// existing OAuth popup flow (Vercel connect, etc.), which relies on
-// `window.opener` under the current looser
-// `same-origin-allow-popups` / no-COEP setup. So instead of changing the
-// global `server.headers`, this plugin applies the strict pair ONLY to
-// requests for the AI Studio preview workspace route — every other route
-// (including the OAuth callback) keeps the existing headers untouched.
-const WEBCONTAINER_ROUTE_PREFIX = '/ai-studio/preview';
+// WebContainer must boot from a document with COOP/COEP. Keep the
+// isolation scoped to the tiny runtime document so the normal DevDrop app
+// (including OAuth popup flows) keeps its existing browser behavior.
+const WEBCONTAINER_RUNTIME_PATH = '/webcontainer-runtime.html';
 
 function webcontainerIsolationHeaders() {
   const applyIfMatch = (req, res, next) => {
     const url = req.url || '';
-    if (
-      url === WEBCONTAINER_ROUTE_PREFIX ||
-      url.startsWith(`${WEBCONTAINER_ROUTE_PREFIX}/`) ||
-      url.startsWith(`${WEBCONTAINER_ROUTE_PREFIX}?`)
-    ) {
+    if (url.split('?')[0] === WEBCONTAINER_RUNTIME_PATH) {
       res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
       res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
     }
@@ -52,6 +40,10 @@ export default defineConfig({
       },
     },
     rollupOptions: {
+      input: {
+        main: 'index.html',
+        webcontainerRuntime: 'webcontainer-runtime.html',
+      },
       output: {
         manualChunks(id) {
           if (id.includes('node_modules')) {
