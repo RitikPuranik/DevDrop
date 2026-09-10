@@ -16,7 +16,7 @@
       ]
     },
     {
-      "source": "/webcontainer-runtime.html",
+      "source": "/ai-studio/preview/(.*)",
       "headers": [
         {
           "key": "Cross-Origin-Opener-Policy",
@@ -27,22 +27,18 @@
           "value": "require-corp"
         },
         {
-          "key": "X-Frame-Options",
-          "value": "SAMEORIGIN"
-        },
-        {
           "key": "X-Content-Type-Options",
           "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "SAMEORIGIN"
         }
       ]
     },
     {
       "source": "/(.*)",
       "headers": [
-        {
-          "key": "Cross-Origin-Opener-Policy",
-          "value": "same-origin-allow-popups"
-        },
         {
           "key": "X-Content-Type-Options",
           "value": "nosniff"

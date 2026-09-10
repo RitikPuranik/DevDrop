@@ -3,14 +3,15 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
 // WebContainer must boot from a document with COOP/COEP. Keep the
-// isolation scoped to the tiny runtime document so the normal DevDrop app
-// (including OAuth popup flows) keeps its existing browser behavior.
-const WEBCONTAINER_RUNTIME_PATH = '/webcontainer-runtime.html';
+// Keep WebContainer isolation scoped to the top-level AI Studio preview route
+// so normal DevDrop/OAuth pages keep their existing browser behavior.
+const PREVIEW_PATH_PREFIX = '/ai-studio/preview/';
 
 function webcontainerIsolationHeaders() {
   const applyIfMatch = (req, res, next) => {
     const url = req.url || '';
-    if (url.split('?')[0] === WEBCONTAINER_RUNTIME_PATH) {
+    const pathname = url.split('?')[0];
+    if (pathname.startsWith(PREVIEW_PATH_PREFIX)) {
       res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
       res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
     }
@@ -42,7 +43,6 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: 'index.html',
-        webcontainerRuntime: 'webcontainer-runtime.html',
       },
       output: {
         manualChunks(id) {
@@ -61,14 +61,13 @@ export default defineConfig({
   },
   server: {
     headers: {
-      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+      // Only the AI Studio preview document needs cross-origin isolation for WebContainer.
+      // The middleware above applies these headers to /ai-studio/preview/* requests.
     },
     port: 5173,
     strictPort: false,
   },
   preview: {
-    headers: {
-      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
-    },
+    headers: {},
   },
 });

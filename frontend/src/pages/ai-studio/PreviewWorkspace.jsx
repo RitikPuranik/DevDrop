@@ -241,6 +241,7 @@ export default function PreviewWorkspace() {
               error={preview.error}
               reloadNonce={preview.reloadNonce}
               onRetry={preview.retry}
+              output={preview.output}
             />
           ) : (
             files && <CodePane files={files} activePath={activePath} onSelectPath={setActivePath} />

@@ -9,13 +9,14 @@ const LOADING_LABELS = {
   [PREVIEW_STATES.STARTING]: 'Starting development server…',
 };
 
-export default function PreviewPane({ state, previewUrl, error, reloadNonce, onRetry }) {
+export default function PreviewPane({ state, previewUrl, error, reloadNonce, onRetry, output }) {
   if (state === PREVIEW_STATES.ERROR) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 text-center px-8">
         <AlertTriangle size={22} className="text-[#a6603f]" />
         <p className="text-[14px] font-semibold text-white/80">Preview failed</p>
-        <p className="text-white/40 text-[12.5px] max-w-sm">{error || 'Something went wrong while starting the preview.'}</p>
+        <p className="text-white/40 text-[12.5px] max-w-sm whitespace-pre-wrap">{error || 'Something went wrong while starting the preview.'}</p>
+        {output && <pre className="mt-2 w-full max-w-xl max-h-52 overflow-auto rounded-lg border border-white/10 bg-black/40 p-3 text-left text-[10px] leading-4 text-white/45 whitespace-pre-wrap">{output}</pre>}
         <button
           type="button"
           onClick={onRetry}
@@ -42,6 +43,9 @@ export default function PreviewPane({ state, previewUrl, error, reloadNonce, onR
       <div className="flex h-full flex-col items-center justify-center gap-3">
         <Loader2 size={22} className="animate-spin text-[#8b7355]" />
         <p className="text-white/40 text-[12.5px]">{LOADING_LABELS[state] || 'Preparing preview…'}</p>
+        {state === PREVIEW_STATES.INSTALLING && output && (
+          <pre className="mt-2 w-[min(720px,85%)] max-h-40 overflow-auto rounded-lg border border-white/10 bg-black/40 p-3 text-left text-[10px] leading-4 text-white/35 whitespace-pre-wrap">{output}</pre>
+        )}
       </div>
     );
   }
