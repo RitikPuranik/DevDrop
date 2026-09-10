@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
     gemini_model: str | None = Field(default=None, alias="GEMINI_MODEL")
 
+<<<<<<< HEAD
+=======
     # --- Gemini Project Pool ---
     # Opt-in on purpose: default False means every existing deployment
     # (and test_provider_factory_gemini, which constructs a plain
@@ -83,6 +85,7 @@ class Settings(BaseSettings):
     gemini_estimated_cost_per_1k_input_tokens: float = Field(default=0.0, alias="GEMINI_COST_PER_1K_INPUT_TOKENS")
     gemini_estimated_cost_per_1k_output_tokens: float = Field(default=0.0, alias="GEMINI_COST_PER_1K_OUTPUT_TOKENS")
 
+>>>>>>> ad5b584213608b50dfd0fcd8acf211a5eeefc4a3
     # --- Ollama ---
     ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
     ollama_model: str = Field(default="llama3.1", alias="OLLAMA_MODEL")

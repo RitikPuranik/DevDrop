@@ -350,7 +350,11 @@ answers.
   from Phase 3) — it can miss dynamic imports or computed paths, which is
   exactly why it only ever produces warnings.
 
+<<<<<<< HEAD
+## Status: Phase 5 — Project Storage + Generation Persistence
+=======
 ## Phase 5 — Project Storage + Generation Persistence (done)
+>>>>>>> ad5b584213608b50dfd0fcd8acf211a5eeefc4a3
 
 Generated projects and their generation jobs are now retrievable after
 the fact — the first phase where "what did this service generate
@@ -456,6 +460,8 @@ a machine with what this sandbox doesn't have — the former just a local
   storage without changing the `Repository` interface or the API
   contract, but that move hasn't happened.
 
+<<<<<<< HEAD
+=======
 ## Status: Phase 6 — Gemini Project Pool
 
 `AI_PROVIDER=gemini` no longer has to mean exactly one Gemini credential.
@@ -534,6 +540,7 @@ shape every phase in this README uses:
 - A pool entry serves exactly one model; multiple models from one
   underlying credential means multiple pool entries pointing at it.
 
+>>>>>>> ad5b584213608b50dfd0fcd8acf211a5eeefc4a3
 ## Setup
 
 ```bash

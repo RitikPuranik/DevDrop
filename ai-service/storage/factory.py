@@ -11,9 +11,12 @@ import logging
 
 from config import Settings, get_settings
 from storage.base import Repository
+<<<<<<< HEAD
+=======
 from storage.gemini_pool_base import GeminiPoolRepository
 from storage.gemini_pool_memory import InMemoryGeminiPoolRepository
 from storage.gemini_pool_mongo import MongoGeminiPoolRepository
+>>>>>>> ad5b584213608b50dfd0fcd8acf211a5eeefc4a3
 from storage.memory import InMemoryRepository
 from storage.mongo import MongoRepository
 
@@ -22,9 +25,12 @@ logger = logging.getLogger(__name__)
 _singleton: Repository | None = None
 _warned_in_memory = False
 
+<<<<<<< HEAD
+=======
 _gemini_pool_singleton: GeminiPoolRepository | None = None
 _warned_gemini_pool_in_memory = False
 
+>>>>>>> ad5b584213608b50dfd0fcd8acf211a5eeefc4a3
 
 def get_repository(settings: Settings | None = None) -> Repository:
     """Returns a process-wide singleton — a repository (especially
@@ -50,6 +56,8 @@ def get_repository(settings: Settings | None = None) -> Repository:
             _warned_in_memory = True
         _singleton = InMemoryRepository()
     return _singleton
+<<<<<<< HEAD
+=======
 
 
 def get_gemini_pool_repository(settings: Settings | None = None) -> GeminiPoolRepository:
@@ -80,3 +88,4 @@ def get_gemini_pool_repository(settings: Settings | None = None) -> GeminiPoolRe
             _warned_gemini_pool_in_memory = True
         _gemini_pool_singleton = InMemoryGeminiPoolRepository()
     return _gemini_pool_singleton
+>>>>>>> ad5b584213608b50dfd0fcd8acf211a5eeefc4a3

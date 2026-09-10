@@ -14,6 +14,7 @@ const Navbar = () => {
   const [websitesExpanded, setWebsitesExpanded] = useState(false);
   const [hoveredSubIndex, setHoveredSubIndex] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
 
   const navigate = useNavigate();
 
@@ -22,6 +23,15 @@ const Navbar = () => {
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Sheryians-style scroll navbar: stays put, but its height shrinks and it
+  // gains a dark, glassy background once the page has scrolled a bit.
+  useEffect(() => {
+    const handleScroll = () => setIsScrolled(window.scrollY > 40);
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   const syncFromStorage = () => {
@@ -154,10 +164,20 @@ const Navbar = () => {
       />
 
       {/* NAVBAR TOP STRIP */}
-      <nav className="fixed top-0 w-full px-5 sm:px-8 lg:px-12 py-5 sm:py-6 lg:py-8 flex justify-between items-center z-[110] mix-blend-difference pointer-events-none">
+      <nav
+        className={`fixed top-0 w-full flex justify-between items-center z-[110] pointer-events-none transition-all duration-500 ease-out
+          ${isOpen
+            ? 'px-5 sm:px-8 lg:px-12 py-5 sm:py-6 lg:py-8 mix-blend-difference bg-transparent'
+            : isScrolled
+            ? 'px-5 sm:px-8 lg:px-10 py-2.5 sm:py-3 bg-black/70 backdrop-blur-xl border-b border-white/10'
+            : 'px-5 sm:px-8 lg:px-12 py-5 sm:py-6 lg:py-8 mix-blend-difference bg-transparent'}
+        `}
+      >
         <LinkTransition
           to="/"
-          className="text-blue-50 font-serif italic text-2xl sm:text-3xl tracking-tighter pointer-events-auto"
+          className={`text-blue-50 font-serif italic tracking-tighter pointer-events-auto transition-all duration-500
+            ${!isOpen && isScrolled ? 'text-xl sm:text-2xl' : 'text-2xl sm:text-3xl'}
+          `}
         >
           devdrop
         </LinkTransition>
@@ -170,7 +190,9 @@ const Navbar = () => {
               setIsOpen(true);
             }
           }}
-          className="w-10 h-10 sm:w-12 sm:h-12 flex flex-col justify-center items-center gap-1.5 cursor-pointer relative group pointer-events-auto"
+          className={`flex flex-col justify-center items-center gap-1.5 cursor-pointer relative group pointer-events-auto transition-all duration-500
+            ${!isOpen && isScrolled ? 'w-8 h-8 sm:w-9 sm:h-9' : 'w-10 h-10 sm:w-12 sm:h-12'}
+          `}
         >
           <AnimatePresence>
             {isOpen && (
@@ -183,12 +205,20 @@ const Navbar = () => {
             )}
           </AnimatePresence>
           <motion.div
-            animate={isOpen ? { rotate: 45, y: 4, backgroundColor: "#000" } : { rotate: 0, y: 0, backgroundColor: "#e8e2d6" }}
+            animate={
+              isOpen
+                ? { rotate: 45, y: 4, backgroundColor: "#000" }
+                : { rotate: 0, y: 0, backgroundColor: "#e8e2d6" }
+            }
             transition={{ duration: 0.9, ease: fastEase }}
             className="w-7 sm:w-8 h-[2px]"
           />
           <motion.div
-            animate={isOpen ? { rotate: -45, y: -4, backgroundColor: "#000" } : { rotate: 0, y: 0, backgroundColor: "#e8e2d6" }}
+            animate={
+              isOpen
+                ? { rotate: -45, y: -4, backgroundColor: "#000" }
+                : { rotate: 0, y: 0, backgroundColor: "#e8e2d6" }
+            }
             transition={{ duration: 0.9, ease: fastEase }}
             className="w-7 sm:w-8 h-[2px]"
           />
