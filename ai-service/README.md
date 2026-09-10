@@ -350,7 +350,11 @@ answers.
   from Phase 3) — it can miss dynamic imports or computed paths, which is
   exactly why it only ever produces warnings.
 
+<<<<<<< HEAD
 ## Status: Phase 5 — Project Storage + Generation Persistence
+=======
+## Phase 5 — Project Storage + Generation Persistence (done)
+>>>>>>> ad5b584213608b50dfd0fcd8acf211a5eeefc4a3
 
 Generated projects and their generation jobs are now retrievable after
 the fact — the first phase where "what did this service generate
@@ -456,6 +460,87 @@ a machine with what this sandbox doesn't have — the former just a local
   storage without changing the `Repository` interface or the API
   contract, but that move hasn't happened.
 
+<<<<<<< HEAD
+=======
+## Status: Phase 6 — Gemini Project Pool
+
+`AI_PROVIDER=gemini` no longer has to mean exactly one Gemini credential.
+Set `GEMINI_POOL_ENABLED=true` and every Gemini call routes through a
+load-aware scheduler across an arbitrary number of projects/credentials —
+1, 3, 10, 60, however many are registered — instead of the single
+`GEMINI_API_KEY`. Full design writeup, the admin API
+(`GET/POST/PATCH/DELETE /v1/admin/gemini-projects`, `.../test`,
+`.../health/summary`), and every known limitation are in
+[`docs/GEMINI_PROJECT_POOL.md`](docs/GEMINI_PROJECT_POOL.md) — this section
+is the short version.
+
+- **Opt-in, not a rewrite.** `GEMINI_POOL_ENABLED` defaults to `false`.
+  `providers/factory.py` only branches to `GeminiPooledProvider` when it's
+  explicitly turned on; every existing deployment, and the pre-existing
+  `test_provider_factory_gemini` test asserting `get_provider()` returns a
+  plain `GeminiProvider`, keep their exact current behavior with the flag
+  unset. Nothing above the factory (agents, the orchestrator) changed at
+  all — both providers implement the same `AIProvider` interface, which is
+  the whole point of Section 32's "agents never know which project is
+  being used."
+- **The scheduling primitive is one atomic operation, not a read-then-write.**
+  `GeminiPoolRepository.reserve()` re-checks eligibility and claims a
+  project in a single atomic step per repository (an `asyncio.Lock` for
+  the in-memory repository every test in this phase runs against; an
+  optimistic-concurrency compare-and-swap on each record's own `updatedAt`
+  for the MongoDB one) — this is what makes concurrent workers safe
+  without introducing new infrastructure (no Redis added; Section 14 of
+  the spec this was built against is explicit not to add infrastructure
+  that isn't already needed).
+- **One error classifier, one mapping table.** `gemini_pool/errors.py`
+  turns a real `google.genai.errors.APIError` (verified against the
+  installed `google-genai==2.21.0` source, not guessed) into one of ten
+  classes, each with a fixed failover/penalize decision
+  (`gemini_pool/errors.py:ERROR_CLASS_META`) — an application-level error
+  (a blocked/malformed prompt) is the one class that neither fails over
+  nor penalizes the project, so a single bad prompt can't burn through the
+  whole pool.
+- **Legacy credential migration, not a breaking flag flip.** Turning the
+  pool on with `GEMINI_API_KEY`/`GEMINI_MODEL` already set migrates that
+  key into a single pool entry automatically the first time the service
+  starts (`gemini_pool/lifecycle.py:ensure_legacy_credential_migrated`) —
+  enabling the pool never means losing a credential that already worked.
+
+### What "tested" means here
+
+**All 321 tests pass** (212 pre-existing + 109 new for this phase), all
+against the in-memory repository and an injected fake `GeminiCaller` — no
+test in this phase touches the network or needs a real Mongo/Gemini
+credential. Covered: arbitrary pool sizes (0/1/3/10/60+ projects),
+add/remove/enable/disable, every eligibility condition (cooldown, daily
+exhaustion, budget exhaustion, model mismatch, disabled/removed/invalid),
+concurrent reservation, lease expiry, RPM/TPM/RPD tracking and recovery,
+error classification against real SDK exception types, failover
+(including the application-error non-failover case and the
+max-failover-count bound), and the full admin API over real HTTP
+(including that a masked credential — and only a masked credential — ever
+appears in a response body).
+
+### Known limitations
+
+Carried over verbatim from `docs/GEMINI_PROJECT_POOL.md`, same honest
+shape every phase in this README uses:
+
+- `storage/gemini_pool_mongo.py` has never touched a real MongoDB in this
+  sandbox — same disclaimer `storage/mongo.py` already carries.
+- `GEMINI_DAILY_RESET_HOUR_UTC`'s default (UTC midnight) is a placeholder,
+  not a verified claim about Gemini's actual daily-quota reset instant.
+- RPM vs. TPM vs. RPD classification is message-pattern-based, since
+  Gemini's 429s don't separate these at the HTTP-status level — worth
+  confirming the exact quota-metric strings against a real rate-limited
+  response before relying on the split operationally.
+- No automatic cross-provider fallback (Gemini pool exhausted → Ollama) —
+  this codebase's provider abstraction has no fallback-chain concept for
+  any provider today; an operator switches `AI_PROVIDER` manually.
+- A pool entry serves exactly one model; multiple models from one
+  underlying credential means multiple pool entries pointing at it.
+
+>>>>>>> ad5b584213608b50dfd0fcd8acf211a5eeefc4a3
 ## Setup
 
 ```bash
