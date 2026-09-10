@@ -1,5 +1,4 @@
 import { AgentBuilder } from '@iqai/adk';
-import { createHighThinkingPlanner } from '../base/thinking';
 import { testGenerationSchema } from '../../schemas/test-schema';
 import { withGitHubIntegration, enhancePromptWithGitHub } from '../../utils/agentGitHubIntegration';
 import type { GitHubToolsContext } from '../../utils/githubTools';
@@ -57,7 +56,6 @@ export const TestCrafterAgent = async (options?: TestCrafterOptions) => {
   
   let builder = AgentBuilder.create('TestCrafterAgent')
     .withModel('gemini-2.5-flash')
-    .withPlanner(createHighThinkingPlanner())
     .withInstruction(systemPrompt)
     .withOutputSchema(testGenerationSchema);
   

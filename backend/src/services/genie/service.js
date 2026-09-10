@@ -84,10 +84,7 @@ const startPortfolioGeneration = async (requestPayload, { ownerId } = {}) => {
     {
       prompt,
       targetLanguage: 'typescript',
-      complexity: 'complex',
-      // Portfolio generation is intentionally quality-first: let Genie run the
-      // deeper coding/review/quality agents instead of its speed-oriented defaults.
-      agents: ['ComplexCoder', 'TestCrafter', 'SecuritySentinel', 'PerformanceProfiler', 'DocWeaver'],
+      complexity: 'moderate',
       ...(imageUrls.length ? { imageUrls } : {}),
     },
     { ownerId }

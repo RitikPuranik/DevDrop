@@ -4,7 +4,6 @@ node_modules/*
 node_modules/@iqai/*
 !node_modules/@iqai/adk
 node_modules
-scripts
 
 # Environment
 .env

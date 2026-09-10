@@ -168,28 +168,6 @@ const sendChatMessage = async ({ generationId, message, currentFiles, imageUrls 
 };
 
 /**
- * Starts a preview deployment for a completed generation.
- * The ai-service owns the Fly.io deployment details; DevDrop only proxies
- * the action after authenticating and checking ownership on its side.
- */
-const createPreview = async (generationId, { ownerId, forceRegenerate = false } = {}) => {
-  return request({
-    method: 'post',
-    path: '/api/preview',
-    data: { generationId, forceRegenerate },
-    ownerId,
-  });
-};
-
-const getPreviewStatus = async (generationId, { ownerId } = {}) => {
-  return request({
-    method: 'get',
-    path: `/api/preview/status/${encodeURIComponent(generationId)}`,
-    ownerId,
-  });
-};
-
-/**
  * Health check. Mirrors Genie's own GET /api/status. No auth required.
  */
 const checkHealth = async () => {
@@ -200,8 +178,6 @@ module.exports = {
   createGeneration,
   getGeneration,
   sendChatMessage,
-  createPreview,
-  getPreviewStatus,
   checkHealth,
   isGenieConfigured,
   GenieServiceError,

@@ -152,74 +152,6 @@ const retryGeneration = async (req, res) => {
  * instead of generating something unrelated. Requires the job to have
  * completed at least once (there must be files to modify).
  */
-/**
- * POST /api/ai/generation/jobs/:jobId/preview
- * Starts the ai-service's preview deployment for a completed generation.
- */
-const createGenerationPreview = async (req, res) => {
-  try {
-    const record = await AiGenerationJob.findOne({ genieGenerationId: req.params.jobId, userId: req.userId });
-    if (!record) {
-      return res.status(404).json({ success: false, message: 'Generation job not found.' });
-    }
-    if (record.status !== 'completed') {
-      return res.status(409).json({ success: false, message: 'Preview is available after generation completes.' });
-    }
-
-    const result = await genieClient.createPreview(record.genieGenerationId, {
-      ownerId: req.userId.toString(),
-    });
-    const data = result.data || {};
-
-    if (data.previewUrl) {
-      record.previewUrl = data.previewUrl;
-      record.deploymentStatus = 'deployed';
-      await record.save();
-    }
-
-    return res.status(result?.data?.status === 'deploying' ? 202 : 200).json({
-      success: true,
-      previewUrl: data.previewUrl || record.previewUrl || null,
-      deploymentStatus: data.status || record.deploymentStatus || 'pending',
-      generationId: record.genieGenerationId,
-    });
-  } catch (error) {
-    return handleGenieError(res, error, 'Failed to start website preview.');
-  }
-};
-
-/**
- * GET /api/ai/generation/jobs/:jobId/preview
- * Returns the current preview deployment status.
- */
-const getGenerationPreviewStatus = async (req, res) => {
-  try {
-    const record = await AiGenerationJob.findOne({ genieGenerationId: req.params.jobId, userId: req.userId });
-    if (!record) {
-      return res.status(404).json({ success: false, message: 'Generation job not found.' });
-    }
-
-    const result = await genieClient.getPreviewStatus(record.genieGenerationId, {
-      ownerId: req.userId.toString(),
-    });
-    const data = result.data || {};
-
-    record.previewUrl = data.previewUrl || record.previewUrl || null;
-    record.deploymentStatus = data.status || record.deploymentStatus || null;
-    await record.save();
-
-    return res.json({
-      success: true,
-      previewUrl: record.previewUrl,
-      deploymentStatus: data.status || record.deploymentStatus || 'pending',
-      ready: Boolean(data.ready || record.previewUrl),
-      error: data.error || null,
-    });
-  } catch (error) {
-    return handleGenieError(res, error, 'Failed to fetch website preview status.');
-  }
-};
-
 const modifyGeneration = async (req, res) => {
   try {
     const message = (req.body?.message || '').trim();
@@ -302,8 +234,6 @@ module.exports = {
   createPortfolioGeneration,
   getGenerationJobStatus,
   retryGeneration,
-  createGenerationPreview,
-  getGenerationPreviewStatus,
   modifyGeneration,
   uploadAsset,
 };

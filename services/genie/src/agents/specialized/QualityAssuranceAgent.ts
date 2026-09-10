@@ -7,11 +7,10 @@
  * 3. Runtime Validation - Sandboxed execution checks
  * 4. Specialized Fixers - Targeted repairs (NO LLM unless absolutely necessary)
  *
- * Quality-first validation: allow multiple repair passes when needed
+ * Performance: < 5 seconds for full validation + auto-fix
  */
 
 import { AgentBuilder } from '@iqai/adk'
-import { createHighThinkingPlanner } from '../base/thinking';
 import { FastValidatorService } from '../../services/FastValidatorService'
 import { ComprehensiveValidator } from '../../services/validation/ComprehensiveValidator'
 import { SpecializedFixerRouter } from '../../services/validation/SpecializedFixers'
@@ -202,7 +201,7 @@ Your responsibilities:
 3. Report validation results with detailed diagnostics
 4. Provide confidence scores for code quality
 
-You are quality-first, not speed-first. Take the time required to validate the complete generated project thoroughly.
+You operate in < 2 seconds to maintain fast feedback loops.
 
 Performance characteristics:
 - Syntax validation: 100-200ms
@@ -227,8 +226,7 @@ Output format:
 }`
 
 export const QualityAssuranceAgentADK = AgentBuilder.create('QualityAssuranceAgent')
-  .withModel('gemini-2.5-flash')
-    .withPlanner(createHighThinkingPlanner()) // Fast model for validation
+  .withModel('gemini-2.5-flash') // Fast model for validation
   .withInstruction(systemPrompt)
   .build()
 

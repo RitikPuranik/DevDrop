@@ -7,8 +7,6 @@ export const aiStudioAPI = {
   generatePortfolio: (payload) => api.post("/ai/generation/portfolio", payload),
   getJobStatus: (jobId) => api.get(`/ai/generation/jobs/${jobId}`),
   retryJob: (jobId) => api.post(`/ai/generation/jobs/${jobId}/retry`),
-  createPreview: (jobId, options = {}) => api.post(`/ai/generation/jobs/${jobId}/preview`, options),
-  getPreviewStatus: (jobId) => api.get(`/ai/generation/jobs/${jobId}/preview`),
   modifyJob: (jobId, message) => api.post(`/ai/generation/jobs/${jobId}/modify`, { message }),
   uploadAsset: (file, type, onUploadProgress) => {
     const formData = new FormData();

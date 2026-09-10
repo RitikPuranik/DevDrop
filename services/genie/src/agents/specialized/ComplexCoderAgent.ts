@@ -5,7 +5,6 @@
  */
 
 import { AgentBuilder } from '@iqai/adk';
-import { createHighThinkingPlanner } from '../base/thinking';
 import { generationSchema } from '../../schemas/generation-schema';
 import { getLanguagePrompt } from '../../prompts/webcontainer-templates';
 import { generateValidationPrompt, getAIChecklistPrompt } from '../../services/validation/PreValidationRules';
@@ -263,7 +262,6 @@ export const ComplexCoderAgent = async (options?: ComplexCoderOptions) => {
   
   let builder = AgentBuilder.create('ComplexCoderAgent')
     .withModel('gemini-2.5-flash')
-    .withPlanner(createHighThinkingPlanner())
     .withInstruction(finalPrompt)
     .withOutputSchema(generationSchema);
   

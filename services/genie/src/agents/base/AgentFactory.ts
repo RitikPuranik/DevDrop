@@ -1,5 +1,4 @@
 import { AgentBuilder, Agent } from '@iqai/adk'
-import { createHighThinkingPlanner } from './thinking'
 import {
   parseCode,
   scaffoldCode,
@@ -104,7 +103,6 @@ export class AgentFactory {
   async createAgent(config: AgentConfig): Promise<Agent> {
     const builder = AgentBuilder.create(config.name)
       .withModel(config.model || 'gemini-2.5-flash')
-      .withPlanner(createHighThinkingPlanner())
       .withInstruction(config.systemPrompt)
 
     // Register tools if specified

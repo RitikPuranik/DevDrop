@@ -1,50 +1,14 @@
-import { Router, Response } from 'express';
+import { Router } from 'express';
 import { PreviewService } from '../../services/preview/PreviewService';
 import { PreviewServiceWithRetry } from '../../services/preview/PreviewServiceWithRetry';
 import { supabase } from '../../storage/SupabaseClient';
-import { optionalAuth, AuthenticatedRequest } from '../middleware/supabaseAuth';
 
 const router = Router();
 
-// Preview is an internal DevDrop action. Accept either a verified Supabase
-// user or the DevDrop service-key + X-User-Id identity.
-router.use(optionalAuth);
-
-
-const requireGenerationOwnership = async (generationId: string, req: AuthenticatedRequest, res: Response) => {
-  const { data, error } = await supabase
-    .from('generations')
-    .select('user_id')
-    .eq('id', generationId)
-    .maybeSingle();
-
-  if (error) throw new Error(error.message);
-  if (!data) {
-    res.status(404).json({ success: false, error: 'Generation not found' });
-    return false;
-  }
-
-  if (req.userId && data.user_id && String(data.user_id) !== String(req.userId)) {
-    res.status(403).json({ success: false, error: 'You do not have permission to preview this generation' });
-    return false;
-  }
-
-  // Service-to-service calls always include X-User-Id. Direct unauthenticated
-  // preview requests must not be allowed to access another user's generation.
-  if (!req.userId) {
-    res.status(401).json({ success: false, error: 'Authentication required' });
-    return false;
-  }
-
-  return true;
-};
-
 // Check deployment status endpoint
-router.get('/preview/status/:generationId', async (req: AuthenticatedRequest, res) => {
+router.get('/preview/status/:generationId', async (req, res) => {
   try {
     const { generationId } = req.params;
-
-    if (!(await requireGenerationOwnership(generationId, req, res))) return;
     
     // Get deployment status from database
     const { data: generationData, error } = await supabase
@@ -124,14 +88,9 @@ router.get('/preview/status/:generationId', async (req: AuthenticatedRequest, re
   }
 });
 
-router.post('/preview', async (req: AuthenticatedRequest, res) => {
+router.post('/preview', async (req, res) => {
   try {
     const { generationId, files: providedFiles, useRetry = true, maxRetries = 3 } = req.body;
-
-    if (!generationId) {
-      return res.status(400).json({ success: false, error: 'generationId is required' });
-    }
-    if (!(await requireGenerationOwnership(generationId, req, res))) return;
 
     let files: Array<{ path: string; content: string }>;
     let existingPreviewUrl: string | null = null;

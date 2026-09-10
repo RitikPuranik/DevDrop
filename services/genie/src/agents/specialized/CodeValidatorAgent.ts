@@ -4,7 +4,6 @@
  */
 
 import { AgentBuilder } from '@iqai/adk';
-import { createHighThinkingPlanner } from '../base/thinking';
 import { z } from 'zod';
 
 const systemPrompt = `You are a Code Validator Agent. Your job is to analyze generated code and detect any issues including:
@@ -65,7 +64,6 @@ const validationSchema: z.ZodTypeAny = z.object({
 export const CodeValidatorAgent = async () => {
   return AgentBuilder.create('CodeValidatorAgent')
     .withModel('gemini-2.5-flash')
-    .withPlanner(createHighThinkingPlanner())
     .withInstruction(systemPrompt)
     .withOutputSchema(validationSchema as unknown as z.ZodTypeAny)
     .build();

@@ -1,5 +1,4 @@
 import { AgentBuilder } from '@iqai/adk';
-import { createHighThinkingPlanner } from './thinking';
 
 const systemPrompt = `You are the Lead Engineer orchestrating a team of specialized AI agents for code generation.
 
@@ -82,7 +81,6 @@ Your orchestration:
 Remember: You coordinate, you don't code. Trust your specialized agents.`;
 
 export const LeadEngineerAgent = AgentBuilder.create('LeadEngineerAgent')
-	.withModel('gemini-2.5-flash')  // Deep-thinking model for orchestration decisions
-	.withPlanner(createHighThinkingPlanner())
+	.withModel('gemini-2.5-flash')  // Use better model for orchestration decisions
 	.withInstruction(systemPrompt)
 	.build();

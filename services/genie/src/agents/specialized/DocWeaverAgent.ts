@@ -1,5 +1,4 @@
 import { AgentBuilder } from '@iqai/adk';
-import { createHighThinkingPlanner } from '../base/thinking';
 import { commentInserterTool } from '../../tools';
 import { withGitHubIntegration, enhancePromptWithGitHub } from '../../utils/agentGitHubIntegration';
 import type { GitHubToolsContext } from '../../utils/githubTools';
@@ -72,7 +71,6 @@ export const DocWeaverAgent = async (options?: DocWeaverOptions) => {
   
   let builder = AgentBuilder.create('DocWeaverAgent')
     .withModel('gemini-2.5-flash')
-    .withPlanner(createHighThinkingPlanner())
     .withInstruction(enhancedPrompt)
     .withTools(commentInserterTool);
   

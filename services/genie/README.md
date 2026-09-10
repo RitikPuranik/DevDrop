@@ -71,8 +71,3 @@ Deploy this directory as its own Render Web Service named `ai-service` (Docker o
 runtime), separate from the DevDrop backend service. Set all variables from
 `.env.example`. Point DevDrop's backend at it via `AI_SERVICE_URL` (see
 `backend/.env.example`).
-
-
-### Website preview
-
-The DevDrop AI Studio **Preview Website** button uses Genie's existing Fly.io preview deployment service. Set `FLY_API_TOKEN` in the ai-service environment for preview deployment. Generation itself does not require this variable.

@@ -1,5 +1,4 @@
 import { AgentBuilder } from '@iqai/adk';
-import { createHighThinkingPlanner } from '../base/thinking';
 import { withGitHubIntegration, enhancePromptWithGitHub } from '../../utils/agentGitHubIntegration';
 import type { GitHubToolsContext } from '../../utils/githubTools';
 
@@ -30,7 +29,6 @@ export const BugHunterAgent = async (options?: BugHunterOptions) => {
   
   let builder = AgentBuilder.create('BugHunterAgent')
     .withModel('gemini-2.5-flash')
-    .withPlanner(createHighThinkingPlanner())
     .withInstruction(enhancedPrompt);
   
   // Add GitHub tools if context is available

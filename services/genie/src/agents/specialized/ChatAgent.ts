@@ -10,7 +10,6 @@
  */
 
 import { AgentBuilder } from '@iqai/adk';
-import { createHighThinkingPlanner } from '../base/thinking';
 import { chatResponseSchema } from '../../schemas/chat-schema';
 import { smartCompress, getCompressionStats } from '../../utils/PromptCompression';
 
@@ -502,7 +501,6 @@ export const ChatAgent = async (
   let finalPrompt = systemPrompt;
   let builder = AgentBuilder.create('ChatAgent')
     .withModel('gemini-2.5-flash')
-    .withPlanner(createHighThinkingPlanner())
     .withOutputSchema(chatResponseSchema as any);
   
   // Add GitHub tools if context provided

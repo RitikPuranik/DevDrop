@@ -4,7 +4,6 @@
  */
 
 import { AgentBuilder } from '@iqai/adk';
-import { createHighThinkingPlanner } from '../base/thinking';
 import { generationSchema } from '../../schemas/generation-schema';
 
 const systemPrompt = `You are a Code Fixer Agent. Your job is to fix code issues based on validation results.
@@ -89,7 +88,6 @@ The fixed code should be production-ready with no errors.`;
 export const CodeFixerAgent = async () => {
   return AgentBuilder.create('CodeFixerAgent')
     .withModel('gemini-2.5-flash')
-    .withPlanner(createHighThinkingPlanner())
     .withInstruction(systemPrompt)
     .withOutputSchema(generationSchema)
     .build();

@@ -12,7 +12,6 @@
  */
 
 import { AgentBuilder } from '@iqai/adk';
-import { createHighThinkingPlanner } from '../base/thinking';
 import { generationSchema } from '../../schemas/generation-schema';
 import { getLanguagePrompt } from '../../prompts/webcontainer-templates';
 import { generateValidationPrompt, getAIChecklistPrompt } from '../../services/validation/PreValidationRules';
@@ -449,7 +448,6 @@ export const CodeModificationAgent = async (options?: CodeModificationOptions) =
   
   let builder = AgentBuilder.create('CodeModificationAgent')
     .withModel('gemini-2.5-flash')
-    .withPlanner(createHighThinkingPlanner())
     .withInstruction(finalPrompt)
     .withOutputSchema(generationSchema);
   

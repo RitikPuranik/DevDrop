@@ -150,27 +150,18 @@ export class GenerateWorkflow {
         request.currentFiles &&
         request.currentFiles.length > 0
 
-      // Step 1: Deep requirement interpretation for every NEW project.
-      // Quality-first mode intentionally spends extra model reasoning time here.
+      // Step 1: Interpret requirements ONLY if we need to generate NEW code (not for modification or analysis)
+      // ⚡ OPTIMIZATION: SpecInterpreter DISABLED for maximum speed (adds ~23s overhead)
       
       let requirements: any
 
-      // Quality-first mode: always run SpecInterpreter for NEW projects.
-      // The previous fast path skipped this agent to save ~23s, but DevDrop
-      // explicitly prefers deeper planning over minimum latency.
-      const shouldInterpretNewProject =
-        !isAnalysisOnly &&
-        !isDocOnlyWithExistingCode &&
-        !isDocForNewProject &&
-        !isTestOnlyRequest &&
-        !isCodeModification
-
-      if (shouldInterpretNewProject) {
-        console.log('\n[STEP 1] Quality-first mode - SpecInterpreter is analyzing the full product brief...')
+      // Only use SpecInterpreter if images are provided (for UI/UX analysis)
+      if (request.imageUrls && request.imageUrls.length > 0) {
+        console.log('\n[STEP 1] Images detected - using SpecInterpreter for UI/UX analysis...')
         await this.emitProgress(
           'SpecInterpreter',
           'started',
-          'Analyzing product requirements, UX, architecture, and implementation constraints...'
+          'Analyzing UI/UX from screenshots...'
         )
 
         requirements = await this.interpretPrompt(request.prompt, request.imageUrls)
@@ -190,12 +181,13 @@ export class GenerateWorkflow {
           thought: `Analyzed requirements: ${requirements.summary || 'Requirements parsed successfully'}`,
         })
       } else {
-        // Existing-code/documentation/test workflows do not need a fresh product spec.
+        // ⚡ Fast mode: Skip SpecInterpreter, use minimal requirements
+        console.log('\n[STEP 1] ⚡ Fast mode: Skipping SpecInterpreter for maximum speed')
         requirements = {
           summary: request.prompt,
           requirements: [],
           nonFunctionalRequirements: [],
-          complexity: 'complex',
+          complexity: 'simple',
           domain: 'Web Application',
           technicalConstraints: [],
         }
@@ -660,7 +652,7 @@ export class GenerateWorkflow {
       files,
       language: request.targetLanguage,
       autoFix: true,
-      maxAttempts: 4,
+      maxAttempts: 2,
     })
 
     // Log QA agent's work

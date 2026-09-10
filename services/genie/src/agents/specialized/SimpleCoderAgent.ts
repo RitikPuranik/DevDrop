@@ -5,7 +5,6 @@
  */
 
 import { AgentBuilder } from '@iqai/adk';
-import { createHighThinkingPlanner } from '../base/thinking';
 import { generationSchema } from '../../schemas/generation-schema';
 import { SIMPLE_CODER_PROMPT } from '../../prompts/simple-coder-prompt';
 import { withGitHubIntegration, enhancePromptWithGitHub } from '../../utils/agentGitHubIntegration';
@@ -42,7 +41,6 @@ export const SimpleCoderAgent = async (options?: SimpleCoderOptions) => {
   
   let builder = AgentBuilder.create('SimpleCoderAgent')
     .withModel('gemini-2.5-flash')
-    .withPlanner(createHighThinkingPlanner())
     .withInstruction(finalPrompt)
     .withOutputSchema(generationSchema);
   

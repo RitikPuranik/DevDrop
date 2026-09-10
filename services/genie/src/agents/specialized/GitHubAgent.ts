@@ -27,7 +27,6 @@
  */
 
 import { AgentBuilder } from '@iqai/adk';
-import { createHighThinkingPlanner } from '../base/thinking';
 import { z } from 'zod';
 import { GITHUB_AGENT_ENHANCED_SYSTEM_PROMPT } from '../../prompts/github-agent-enhanced-prompt';
 import { GITHUB_AGENT_IMPROVED_V2_PROMPT } from '../../prompts/github-agent-improved-v2';
@@ -193,7 +192,6 @@ export const GitHubAgent = async (
       
       return AgentBuilder.create('GitHubAgent')
         .withModel('gemini-2.5-flash')
-    .withPlanner(createHighThinkingPlanner())
         .withInstruction(systemPrompt)
         .withTools(...cachedTools.tools)
         .withOutputSchema(githubAgentResponseSchema)
@@ -228,7 +226,6 @@ export const GitHubAgent = async (
         
         return AgentBuilder.create('GitHubAgent')
           .withModel('gemini-2.5-flash')
-    .withPlanner(createHighThinkingPlanner())
           .withInstruction(systemPrompt)
           .withTools(...cachedTools.tools)
           .withOutputSchema(githubAgentResponseSchema)

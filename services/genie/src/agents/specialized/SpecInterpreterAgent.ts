@@ -1,5 +1,4 @@
 import { AgentBuilder } from '@iqai/adk';
-import { createHighThinkingPlanner } from '../base/thinking';
 
 const systemPrompt = `You are a Spec Interpreter Agent with VISION CAPABILITIES. Your role is to parse natural language specifications AND analyze UI/UX from screenshots to extract clear, actionable requirements. You will be given a user's request and optionally images showing the desired design.
 
@@ -59,7 +58,6 @@ Provide structured, prioritized requirements that developers can implement with 
 export const SpecInterpreterAgent = async () => {
   return AgentBuilder.create('SpecInterpreterAgent')
     .withModel('gemini-2.5-flash')
-    .withPlanner(createHighThinkingPlanner())
     .withInstruction(systemPrompt)
     .build();
 };
