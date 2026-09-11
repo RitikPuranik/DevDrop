@@ -11,8 +11,11 @@ import { BOLT_DIY_URL } from '../../config/aiStudio.config';
  * Previously a guided wizard (Website Type -> Details -> Assets -> Design ->
  * Review -> Generate -> Progress -> Ready) backed by DevDrop's own
  * generation-job model and a WebContainer-based PreviewWorkspace, both
- * calling Genie under the hood. The old implementation is preserved at
- * AiStudio.wizard.deprecated.jsx.bak for reference/rollback.
+ * calling Genie under the hood. That whole pipeline (wizard step
+ * components, PreviewWorkspace.jsx, useGenerationPolling.js,
+ * useWebContainerPreview.js, api/ai.js, backend/src/modules/ai,
+ * backend/src/services/genie, services/genie) has been deleted — it's no
+ * longer wired up anywhere, so it's gone rather than kept as dead code.
  *
  * Replaced with an embedded bolt.diy (https://github.com/stackblitz-labs/bolt.diy)
  * instance: bolt.diy owns prompting, code generation, the file tree, the

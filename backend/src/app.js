@@ -88,7 +88,9 @@ app.use('/api/analytics', require('./modules/analytics'));
 app.use('/api/contact',   require('./modules/contact'));
 app.use('/api/github',    require('./modules/github'));
 app.use('/api/deployments', require('./modules/deployment'));
-app.use('/api/ai',          require('./modules/ai'));
+// AI Studio's generation backend (Genie) was removed — AI Studio now
+// embeds bolt.diy directly (services/bolt-diy), which needs no DevDrop
+// backend route.
 
 
 app.get("/debug-sentry", function mainHandler(req, res) {
