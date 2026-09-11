@@ -1,13 +1,15 @@
 # AI Studio
 
 AI Studio (`/ai-studio`) is a Lovable/Bolt-style "describe it, watch it
-build, see it live" experience, built natively into DevDrop — no iframe,
-no separate service to run.
+build, see it live" experience, built natively into DevDrop.
 
 - User types a prompt in the chat panel.
 - The frontend calls DevDrop's own backend: `POST /api/ai-generate`
-  (`backend/src/modules/ai-generate/`), which sends the conversation to
-  Gemini and gets back a strict JSON contract:
+  (`backend/src/modules/ai-generate/`), which creates a job on the
+  dedicated `ai-service/` (so a slow 30–180s Gemini call never ties up
+  the main API) and returns a `jobId` immediately.
+- The frontend polls `GET /api/ai-generate/jobs/:id` until the job
+  completes, then gets back a strict JSON contract:
   `{ assistantMessage, title, files, dependencies }`.
 - The frontend renders `files` live with
   [Sandpack](https://sandpack.codesandbox.io/) (`@codesandbox/sandpack-react`)

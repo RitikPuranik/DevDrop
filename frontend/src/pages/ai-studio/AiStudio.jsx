@@ -34,8 +34,10 @@ export default function AiStudio() {
   const [appTitle, setAppTitle] = useState(null);
   const [input, setInput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [genStatusLabel, setGenStatusLabel] = useState('Generating…');
   const [error, setError] = useState(null);
   const scrollRef = useRef(null);
+  const pollTimeoutRef = useRef(null);
 
   const aiStudioEnabled = import.meta.env.VITE_AI_STUDIO_ENABLED !== 'false';
 
@@ -55,22 +57,64 @@ export default function AiStudio() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, isGenerating]);
 
+  useEffect(() => {
+    // Stop polling if the page unmounts mid-generation.
+    return () => {
+      if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
+    };
+  }, []);
+
   if (!aiStudioEnabled) return null;
+
+  const POLL_INTERVAL_MS = 2000;
+
+  const pollJob = (jobId) =>
+    new Promise((resolve, reject) => {
+      const tick = async () => {
+        try {
+          const { data } = await aiGenerateAPI.getJob(jobId);
+          const job = data?.data;
+
+          if (job?.status === 'completed') {
+            resolve(job.result);
+            return;
+          }
+          if (job?.status === 'failed') {
+            reject(new Error(job.error || 'AI generation failed.'));
+            return;
+          }
+
+          setGenStatusLabel(job?.status === 'processing' ? 'AI is building your app…' : 'AI job queued…');
+          pollTimeoutRef.current = setTimeout(tick, POLL_INTERVAL_MS);
+        } catch (err) {
+          reject(err);
+        }
+      };
+      tick();
+    });
 
   const runGeneration = async (nextMessages) => {
     setIsGenerating(true);
     setError(null);
+    setGenStatusLabel('Queuing AI job…');
     try {
       const { data } = await aiGenerateAPI.generate(nextMessages, fileData);
-      const result = data?.data;
+      const { jobId } = data?.data || {};
+      if (!jobId) throw new Error('No jobId returned from server.');
+
+      const result = await pollJob(jobId);
       setMessages((prev) => [...prev, { role: 'assistant', content: result.assistantMessage || 'Done.' }]);
       setFileData({ files: result.files, dependencies: result.dependencies });
       if (result.title) setAppTitle(result.title);
     } catch (err) {
-      const msg = err.response?.data?.message || 'Something went wrong generating your app. Please try again.';
+      const msg = err.response?.data?.message || err.message || 'Something went wrong generating your app. Please try again.';
       setError(msg);
       setMessages((prev) => [...prev, { role: 'assistant', content: `⚠️ ${msg}` }]);
     } finally {
+      if (pollTimeoutRef.current) {
+        clearTimeout(pollTimeoutRef.current);
+        pollTimeoutRef.current = null;
+      }
       setIsGenerating(false);
     }
   };
@@ -135,7 +179,7 @@ export default function AiStudio() {
             {isGenerating && (
               <div className="flex items-center gap-2 text-sm text-neutral-400">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Generating…
+                {genStatusLabel}
               </div>
             )}
           </div>

@@ -8,5 +8,5 @@ process.env.TOKEN_ENCRYPTION_KEY = 'a'.repeat(64); // 32-byte hex
 process.env.PLATFORM_FEE_AMOUNT = '500';
 process.env.TAX_PERCENTAGE = '18';
 process.env.EXCLUSIVE_COMMISSION_PERCENTAGE = '20';
-process.env.AI_SERVICE_URL = 'http://genie.test.internal';
-process.env.AI_SERVICE_TOKEN = 'test-genie-service-token';
+process.env.AI_SERVICE_URL = 'http://ai-service.test.internal';
+process.env.AI_SERVICE_TOKEN = 'test-ai-service-token';

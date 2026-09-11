@@ -143,6 +143,73 @@ function getFinishReason(response) {
   return response.data?.candidates?.[0]?.finishReason || null;
 }
 
+
+function extractJsonCandidate(text) {
+  const trimmed = String(text || '').trim();
+  if (!trimmed) return '';
+
+  // Models sometimes return a fenced JSON object despite the JSON MIME request.
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fenced?.[1]) return fenced[1].trim();
+
+  const first = trimmed.indexOf('{');
+  const last = trimmed.lastIndexOf('}');
+  if (first >= 0 && last > first) return trimmed.slice(first, last + 1).trim();
+
+  return trimmed;
+}
+
+async function recoverFromPartial({ model, apiKey, contents, partialOutput, timeout }) {
+  const recoveryPrompt = `The previous Gemini response was intended to be one JSON object describing a complete React app, but it could not be parsed.
+
+Reconstruct the COMPLETE response from the user's original request and the partial response below.
+
+Return ONLY valid JSON matching this exact shape:
+{
+  "assistantMessage": "brief explanation",
+  "title": "short title",
+  "files": {
+    "/App.js": { "code": "complete source" }
+  },
+  "dependencies": {}
+}
+
+Requirements:
+- Include every source file required by App.js and its imports.
+- Preserve the requested design, theme, content, interactions, and functionality.
+- Every relative import must resolve to a returned file.
+- Default imports require export default.
+- Named imports require matching named exports.
+- Do not use markdown fences.
+- Do not omit or truncate source code.
+- Do not include react, react-dom, or tailwindcss in dependencies.
+
+PARTIAL RESPONSE:
+${partialOutput}`;
+
+  const response = await requestModel({
+    model,
+    apiKey,
+    contents: [
+      ...contents,
+      { role: 'user', parts: [{ text: recoveryPrompt }] },
+    ],
+    timeout,
+    systemPrompt: SYSTEM_PROMPT,
+  });
+
+  const raw = extractText(response);
+  const finishReason = getFinishReason(response);
+  if (!raw) {
+    const err = new Error('Gemini recovery returned no text');
+    err.retryableOutput = true;
+    err.finishReason = finishReason;
+    throw err;
+  }
+
+  return parseGeneratedApp(raw, finishReason);
+}
+
 function parseGeneratedApp(text, finishReason) {
   if (!text) {
     const err = new Error('Gemini returned no text');
@@ -152,7 +219,7 @@ function parseGeneratedApp(text, finishReason) {
   }
 
   try {
-    const parsed = JSON.parse(text);
+    const parsed = JSON.parse(extractJsonCandidate(text));
     if (!parsed.files || typeof parsed.files !== 'object' || Array.isArray(parsed.files)) {
       const err = new Error('Gemini response missing files');
       err.userMessage = 'The AI response was missing generated files.';
@@ -169,7 +236,7 @@ function parseGeneratedApp(text, finishReason) {
     if (error.statusCode) throw error;
     const err = new Error('Gemini returned incomplete/non-JSON output: ' + text.slice(0, 500));
     err.finishReason = finishReason;
-    err.retryableOutput = finishReason === 'MAX_TOKENS' || finishReason === 'OTHER';
+    err.retryableOutput = true;
     err.userMessage =
       finishReason === 'MAX_TOKENS'
         ? 'Gemini generated too much code for one response. Please try again.'
@@ -412,27 +479,6 @@ async function generateApp({ messages, fileData }) {
         model,
         errors: validationErrors,
       });
-      return await repairGeneratedApp({
-        model,
-        apiKey,
-        files: result.files,
-        dependencies: result.dependencies,
-        errors: validationErrors,
-        timeout,
-      });
-
-      const result = parseGeneratedApp(extractText(response), finishReason);
-      const validationErrors = validateGeneratedFiles(result.files);
-
-      if (validationErrors.length === 0) {
-        return result;
-      }
-
-      console.warn('Generated app failed import/export preflight; auto-repairing once', {
-        model,
-        errors: validationErrors,
-      });
-
       return await repairGeneratedApp({
         model,
         apiKey,
