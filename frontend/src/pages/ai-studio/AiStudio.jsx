@@ -168,7 +168,7 @@ export default function AiStudio() {
         </div>
 
         {/* Preview / code panel */}
-        <div className="flex-1">
+        <div className="min-h-0 flex-1 h-full">
           <AppPreview fileData={fileData} appTitle={appTitle} onFixError={handleFixError} isGenerating={isGenerating} />
         </div>
       </div>

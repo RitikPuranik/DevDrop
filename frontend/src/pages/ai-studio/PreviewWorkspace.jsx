@@ -233,7 +233,7 @@ export default function PreviewWorkspace() {
           {files && <FileTree files={files} activePath={activePath} onSelect={setActivePath} />}
         </aside>
 
-        <main className="min-w-0 bg-black">
+        <main className="min-w-0 h-full bg-black">
           {tab === 'preview' ? (
             <PreviewPane
               state={preview.state}

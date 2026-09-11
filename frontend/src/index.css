@@ -179,3 +179,16 @@ h1, h2, h3 {
     animation: none;
   }
 }
+
+/* ── Sandpack height overrides ──
+   Force the Sandpack provider's internal wrapper to fill all available
+   height so the preview iframe stretches to the bottom of the panel. */
+.sp-wrapper {
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+.sp-wrapper > .sp-layout {
+  flex: 1 !important;
+  min-height: 0 !important;
+}

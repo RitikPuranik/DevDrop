@@ -234,25 +234,27 @@ export default function AppPreview({ fileData, isGenerating, onFixError }) {
   const filePathKey = Object.keys(files).sort().join('|');
 
   return (
-    <SandpackProvider
-      key={filePathKey}
-      template="react"
-      theme="dark"
-      files={files}
-      customSetup={{ dependencies }}
-      options={{
-        externalResources: ['https://cdn.tailwindcss.com'],
-        recompileMode: 'delayed',
-        recompileDelay: 500,
-      }}
-    >
-      <SandpackInner
-        fileData={fileData}
-        isGenerating={isGenerating}
-        onFixError={onFixError}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-      />
-    </SandpackProvider>
+    <div className="h-full" style={{ display: 'flex', flexDirection: 'column' }}>
+      <SandpackProvider
+        key={filePathKey}
+        template="react"
+        theme="dark"
+        files={files}
+        customSetup={{ dependencies }}
+        options={{
+          externalResources: ['https://cdn.tailwindcss.com'],
+          recompileMode: 'delayed',
+          recompileDelay: 500,
+        }}
+      >
+        <SandpackInner
+          fileData={fileData}
+          isGenerating={isGenerating}
+          onFixError={onFixError}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+        />
+      </SandpackProvider>
+    </div>
   );
 }
