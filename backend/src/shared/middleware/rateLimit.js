@@ -139,9 +139,8 @@ module.exports = {
   generalLimiter,
   authLimiter,
   downloadLimiter,
+  paymentLimiter,
   exportLimiter,
   deployLimiter,
-  downloadLimiter,
-  paymentLimiter,
   aiGenerationLimiter,
 };
