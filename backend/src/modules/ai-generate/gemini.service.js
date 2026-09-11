@@ -1,14 +1,25 @@
 const axios = require('axios');
 
-// Adapted from https://github.com/piyush-eon/ai-app-builder (app/api/gen-ai-code/route.ts)
-// — same JSON-contract idea (assistantMessage/title/files/dependencies), same
-// system prompt approach — but called via a plain REST request instead of the
-// @google/genai SDK (no new dependency needed; axios is already used
-// elsewhere in this backend), non-streaming for simplicity, and gated behind
-// DevDrop's own JWT auth instead of Clerk/credits/Arcjet.
+// DevDrop keeps the AI Studio provider behind the backend so the Gemini key
+// never reaches the browser. We use Gemini's structured JSON response mode
+// and a generous timeout because generating a complete React app can take
+// longer than a normal API request.
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+const RETIRED_GEMINI_MODELS = new Set([
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-001',
+  'gemini-2.0-flash-lite',
+  'gemini-2.0-flash-lite-001',
+]);
+
+const configuredModel = (process.env.GEMINI_MODEL || '').trim();
+const GEMINI_MODEL =
+  configuredModel && !RETIRED_GEMINI_MODELS.has(configuredModel)
+    ? configuredModel
+    : 'gemini-3.8-flash';
+
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+const GEMINI_TIMEOUT_MS = Number.parseInt(process.env.GEMINI_TIMEOUT_MS || '180000', 10);
 
 const SYSTEM_PROMPT = `You are an expert React developer. Your job is to generate complete, working React applications based on user prompts.
 
@@ -34,21 +45,11 @@ RULES:
 8. When modifying existing code, include ALL files (both changed and unchanged) in "files", not just the ones you changed.
 9. Keep code clean, readable, and production-quality.`;
 
-/**
- * Keep only the system message plus the most recent few turns, so long
- * chats don't blow past context limits or slow every request down.
- */
 function trimHistory(messages) {
   if (messages.length <= 10) return messages;
   return [messages[0], ...messages.slice(-8)];
 }
 
-/**
- * Turn DevDrop's { role: 'user' | 'assistant', content }[] chat history into
- * Gemini's { role: 'user' | 'model', parts: [...] }[] contents array, and
- * attach the current project files as context on the final user turn so
- * follow-up prompts ("make the header blue") can see what already exists.
- */
 function buildContents(messages, fileData) {
   const trimmed = trimHistory(messages);
 
@@ -69,16 +70,11 @@ function buildContents(messages, fileData) {
   });
 }
 
-/**
- * Call Gemini and return the parsed { assistantMessage, title, files,
- * dependencies } object. Throws with a `.userMessage` on any failure the
- * caller should show back to the user (missing key, bad JSON, etc.).
- */
 async function generateApp({ messages, fileData }) {
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
+  if (!apiKey || apiKey === 'your_gemini_api_key_here') {
     const err = new Error('GEMINI_API_KEY is not configured on the backend');
-    err.userMessage = 'AI Studio is not configured yet (missing Gemini API key on the server).';
+    err.userMessage = 'AI Studio is not configured yet. Add a valid GEMINI_API_KEY to backend/.env and restart the server.';
     err.statusCode = 500;
     throw err;
   }
@@ -86,9 +82,10 @@ async function generateApp({ messages, fileData }) {
   const contents = buildContents(messages, fileData);
 
   let response;
+  const startedAt = Date.now();
   try {
     response = await axios.post(
-      `${GEMINI_API_URL}?key=${apiKey}`,
+      `${GEMINI_API_URL}?key=${encodeURIComponent(apiKey)}`,
       {
         contents,
         systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
@@ -97,19 +94,49 @@ async function generateApp({ messages, fileData }) {
           responseMimeType: 'application/json',
         },
       },
-      { timeout: 60_000 }
+      {
+        timeout: Number.isFinite(GEMINI_TIMEOUT_MS) && GEMINI_TIMEOUT_MS > 0 ? GEMINI_TIMEOUT_MS : 180000,
+        headers: { 'Content-Type': 'application/json' },
+      }
     );
   } catch (error) {
     const apiMessage = error.response?.data?.error?.message;
+    const status = error.response?.status;
+
+    console.error('Gemini request failed', {
+      model: GEMINI_MODEL,
+      status,
+      code: error.code,
+      elapsedMs: Date.now() - startedAt,
+      message: apiMessage || error.message,
+    });
+
+    if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+      const err = new Error(`Gemini request timed out after ${GEMINI_TIMEOUT_MS}ms`);
+      err.userMessage = `Gemini took too long to respond. The server waited ${Math.round(GEMINI_TIMEOUT_MS / 1000)} seconds. Please try again.`;
+      err.statusCode = 504;
+      throw err;
+    }
+
     const err = new Error(apiMessage || error.message);
     err.userMessage = apiMessage
       ? `Gemini API error: ${apiMessage}`
-      : 'Failed to reach Gemini. Check the server logs and your GEMINI_API_KEY.';
-    err.statusCode = error.response?.status || 502;
+      : 'Failed to reach Gemini. Check the backend network connection and GEMINI_API_KEY.';
+    err.statusCode = status || 502;
     throw err;
   }
 
-  const text = response.data?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
+  const text = response.data?.candidates?.[0]?.content?.parts
+    ?.map((part) => part.text || '')
+    .join('') || '';
+
+  if (!text) {
+    const finishReason = response.data?.candidates?.[0]?.finishReason;
+    const err = new Error(`Gemini returned no text (finishReason=${finishReason || 'unknown'})`);
+    err.userMessage = 'Gemini did not return generated app code. Please try again with a more specific prompt.';
+    err.statusCode = 502;
+    throw err;
+  }
 
   let parsed;
   try {
@@ -121,7 +148,7 @@ async function generateApp({ messages, fileData }) {
     throw err;
   }
 
-  if (!parsed.files || typeof parsed.files !== 'object') {
+  if (!parsed.files || typeof parsed.files !== 'object' || Array.isArray(parsed.files)) {
     const err = new Error('Gemini response missing "files"');
     err.userMessage = 'The AI response was missing generated files. Please try again.';
     err.statusCode = 502;
