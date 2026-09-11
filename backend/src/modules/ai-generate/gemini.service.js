@@ -38,11 +38,10 @@ const GEMINI_RETRY_DELAY_MS = Number.parseInt(process.env.GEMINI_RETRY_DELAY_MS 
 const GEMINI_MAX_MODEL_ATTEMPTS = Math.max(
   1,
   Math.min(
-    Number.parseInt(process.env.GEMINI_MAX_MODEL_ATTEMPTS || '2', 10) || 2,
+    Number.parseInt(process.env.GEMINI_MAX_MODEL_ATTEMPTS || '4', 10) || 4,
     GEMINI_MODELS.length
   )
 );
-
 const GEMINI_MAX_OUTPUT_TOKENS = Math.max(
   1024,
   Math.min(
@@ -110,19 +109,13 @@ function trimHistory(messages) {
 
 function buildContents(messages, fileData) {
   const trimmed = trimHistory(messages);
-
   return trimmed.map((msg, idx) => {
     const role = msg.role === 'assistant' ? 'model' : 'user';
-
-    if (msg.role !== 'user') {
-      return { role, parts: [{ text: msg.content }] };
-    }
-
+    if (msg.role !== 'user') return { role, parts: [{ text: msg.content }] };
     let text = msg.content;
     if (idx === trimmed.length - 1 && fileData) {
       text += '\n\nCurrent project files for context:\n' + JSON.stringify(fileData, null, 2);
     }
-
     return { role, parts: [{ text }] };
   });
 }
@@ -158,10 +151,22 @@ function parseGeneratedApp(text, finishReason) {
     throw err;
   }
 
-  let parsed;
   try {
-    parsed = JSON.parse(text);
-  } catch {
+    const parsed = JSON.parse(text);
+    if (!parsed.files || typeof parsed.files !== 'object' || Array.isArray(parsed.files)) {
+      const err = new Error('Gemini response missing files');
+      err.userMessage = 'The AI response was missing generated files.';
+      err.statusCode = 502;
+      throw err;
+    }
+    return {
+      assistantMessage: parsed.assistantMessage || '',
+      title: parsed.title || 'Generated App',
+      files: parsed.files,
+      dependencies: parsed.dependencies || {},
+    };
+  } catch (error) {
+    if (error.statusCode) throw error;
     const err = new Error('Gemini returned incomplete/non-JSON output: ' + text.slice(0, 500));
     err.finishReason = finishReason;
     err.retryableOutput = finishReason === 'MAX_TOKENS' || finishReason === 'OTHER';
@@ -172,20 +177,6 @@ function parseGeneratedApp(text, finishReason) {
     err.statusCode = 502;
     throw err;
   }
-
-  if (!parsed.files || typeof parsed.files !== 'object' || Array.isArray(parsed.files)) {
-    const err = new Error('Gemini response missing "files"');
-    err.userMessage = 'The AI response was missing generated files. Please try again.';
-    err.statusCode = 502;
-    throw err;
-  }
-
-  return {
-    assistantMessage: parsed.assistantMessage || '',
-    title: parsed.title || 'Generated App',
-    files: parsed.files,
-    dependencies: parsed.dependencies || {},
-  };
 }
 
 function stripExtension(path) {
@@ -306,10 +297,7 @@ async function requestModel({ model, apiKey, contents, timeout, systemPrompt }) 
         thinkingConfig: { thinkingLevel: 'low' },
       },
     },
-    {
-      timeout,
-      headers: { 'Content-Type': 'application/json' },
-    }
+    { timeout, headers: { 'Content-Type': 'application/json' } }
   );
 }
 
@@ -364,19 +352,16 @@ async function generateApp({ messages, fileData }) {
   }
 
   const contents = buildContents(messages, fileData);
-  const timeout =
-    Number.isFinite(GEMINI_TIMEOUT_MS) && GEMINI_TIMEOUT_MS > 0
-      ? GEMINI_TIMEOUT_MS
-      : 90000;
+  const timeout = Number.isFinite(GEMINI_TIMEOUT_MS) && GEMINI_TIMEOUT_MS > 0 ? GEMINI_TIMEOUT_MS : 180000;
 
   let lastError = null;
   let lastTimedOutModel = null;
   let lastCapacityModel = null;
+  let lastInvalidJsonModel = null;
 
   for (let attempt = 0; attempt < GEMINI_MAX_MODEL_ATTEMPTS; attempt += 1) {
     const model = GEMINI_MODELS[attempt];
     const startedAt = Date.now();
-
     try {
       const response = await requestModel({
         model,
@@ -387,13 +372,53 @@ async function generateApp({ messages, fileData }) {
       });
 
       const finishReason = getFinishReason(response);
+      const rawText = extractText(response);
       console.log('Gemini generation succeeded', {
+        model, attempt: attempt + 1, status: response.status, finishReason,
+        elapsedMs: Date.now() - startedAt, outputLimit: GEMINI_MAX_OUTPUT_TOKENS,
+        outputChars: rawText.length,
+      });
+
+      let result;
+      try {
+        result = parseGeneratedApp(rawText, finishReason);
+      } catch (parseError) {
+        if (!parseError.retryableOutput) throw parseError;
+        lastInvalidJsonModel = model;
+        lastError = parseError;
+        console.warn('Gemini returned malformed JSON; attempting same-model recovery before fallback', {
+          model,
+          finishReason,
+          partialChars: rawText.length,
+        });
+        try {
+          result = await recoverFromPartial({ model, apiKey, contents, partialOutput: rawText, timeout });
+        } catch (recoveryError) {
+          console.error('Same-model JSON recovery failed', {
+            model,
+            finishReason: getFinishReason(recoveryError.response),
+            message: recoveryError.response?.data?.error?.message || recoveryError.message,
+          });
+          if (attempt >= GEMINI_MAX_MODEL_ATTEMPTS - 1) throw parseError;
+          if (GEMINI_RETRY_DELAY_MS > 0) await sleep(GEMINI_RETRY_DELAY_MS);
+          continue;
+        }
+      }
+
+      const validationErrors = validateGeneratedFiles(result.files);
+      if (!validationErrors.length) return result;
+
+      console.warn('Generated app failed import/export preflight; auto-repairing once', {
         model,
-        attempt: attempt + 1,
-        status: response.status,
-        finishReason,
-        elapsedMs: Date.now() - startedAt,
-        outputLimit: GEMINI_MAX_OUTPUT_TOKENS,
+        errors: validationErrors,
+      });
+      return await repairGeneratedApp({
+        model,
+        apiKey,
+        files: result.files,
+        dependencies: result.dependencies,
+        errors: validationErrors,
+        timeout,
       });
 
       const result = parseGeneratedApp(extractText(response), finishReason);
@@ -421,28 +446,22 @@ async function generateApp({ messages, fileData }) {
       const apiMessage = error.response?.data?.error?.message;
       const timedOut = isTimeoutError(error);
       const capacity = isRetryableCapacityError(error);
+      const retryableOutput = Boolean(error.retryableOutput);
       lastError = error;
 
       console.error('Gemini model attempt failed', {
-        model,
-        attempt: attempt + 1,
-        status,
-        code: error.code,
-        finishReason: error.finishReason,
-        elapsedMs: Date.now() - startedAt,
+        model, attempt: attempt + 1, status, code: error.code,
+        finishReason: error.finishReason, elapsedMs: Date.now() - startedAt,
         message: apiMessage || error.message,
       });
 
       if (timedOut) lastTimedOutModel = model;
       if (capacity) lastCapacityModel = model;
-
-      const retryableOutput = Boolean(error.retryableOutput);
+      if (retryableOutput) lastInvalidJsonModel = model;
 
       if ((timedOut || capacity || retryableOutput) && attempt < GEMINI_MAX_MODEL_ATTEMPTS - 1) {
-        const reason = timedOut ? 'timeout' : capacity ? 'capacity' : 'incomplete output';
-        console.warn(
-          `Gemini ${reason} on ${model}; trying fallback model ${GEMINI_MODELS[attempt + 1]}`
-        );
+        const reason = timedOut ? 'timeout' : capacity ? 'capacity' : 'invalid JSON output';
+        console.warn(`Gemini ${reason} on ${model}; trying fallback model ${GEMINI_MODELS[attempt + 1]}`);
         if (GEMINI_RETRY_DELAY_MS > 0) await sleep(GEMINI_RETRY_DELAY_MS);
         continue;
       }
@@ -463,7 +482,7 @@ async function generateApp({ messages, fileData }) {
         throw err;
       }
 
-      if (error.retryableOutput) {
+      if (retryableOutput) {
         const err = new Error(error.message || 'Gemini returned incomplete output');
         err.userMessage =
           'Gemini reached the end of its output before finishing the app JSON. Please try again.';
@@ -485,8 +504,8 @@ async function generateApp({ messages, fileData }) {
     ? `Gemini generation timed out on ${lastTimedOutModel}. Please try again.`
     : lastCapacityModel
       ? 'Gemini is temporarily at capacity. Please try again shortly.'
-      : 'Gemini is temporarily unavailable. Please try again shortly.';
-  fallback.statusCode = lastTimedOutModel ? 504 : 503;
+      : 'Gemini returned an unusable response. Please try again.';
+  fallback.statusCode = lastTimedOutModel ? 504 : lastCapacityModel ? 503 : 502;
   throw fallback;
 }
 
