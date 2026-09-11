@@ -7,33 +7,20 @@ import { aiGenerateAPI } from '../../api/aiGenerate';
 import AppPreview from '../../components/ai-studio/AppPreview';
 
 /**
- * AI Studio.
- *
- * A Lovable/Bolt-style "describe it, watch it build, see it live" chat +
- * preview page, rendered natively inside DevDrop (no iframe, no separate
- * service to run).
- *
- * History: this used to embed bolt.diy (WebContainer-based) in an iframe.
- * WebContainer refuses to boot when nested in a foreign-origin iframe (it
- * requires cross-origin isolation tied to the top-level document), which
- * made the preview silently fail. This version generates code with Gemini
- * via DevDrop's own backend (POST /api/ai-generate) and renders it with
- * Sandpack (@codesandbox/sandpack-react), which -- unlike WebContainer --
- * is built to run inside a nested iframe/page, so there is no
- * cross-origin restriction to fight. Approach adapted from
- * https://github.com/piyush-eon/ai-app-builder (generation JSON contract +
- * Sandpack usage), stripped of its Clerk auth / Supabase / credits / Cline
- * agent -- DevDrop's own login and backend stand in for all of that.
+ * AI Studio uses an asynchronous backend job backed by the standalone
+ * top-level ai-service. The main DevDrop API returns immediately after the
+ * job is queued, while the browser polls for the completed project.
  */
 export default function AiStudio() {
   const navigate = useNavigate();
   const posthog = usePostHog();
 
-  const [messages, setMessages] = useState([]); // {role:'user'|'assistant', content}
-  const [fileData, setFileData] = useState(null); // {files, dependencies} | null
+  const [messages, setMessages] = useState([]);
+  const [fileData, setFileData] = useState(null);
   const [appTitle, setAppTitle] = useState(null);
   const [input, setInput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generationStatus, setGenerationStatus] = useState('');
   const [error, setError] = useState(null);
   const scrollRef = useRef(null);
 
@@ -53,25 +40,65 @@ export default function AiStudio() {
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages, isGenerating]);
+  }, [messages, isGenerating, generationStatus]);
 
   if (!aiStudioEnabled) return null;
 
+  const waitForJob = async (jobId) => {
+    const startedAt = Date.now();
+    const maxWaitMs = 10 * 60 * 1000;
+
+    while (Date.now() - startedAt < maxWaitMs) {
+      const { data } = await aiGenerateAPI.getJob(jobId);
+      const job = data?.data;
+
+      if (!job) throw new Error('AI service returned an invalid job response.');
+
+      if (job.status === 'completed' && job.result) {
+        return job.result;
+      }
+
+      if (job.status === 'failed') {
+        const err = new Error(job.error || 'AI generation failed.');
+        err.userMessage = job.error || 'AI generation failed. Please try again.';
+        throw err;
+      }
+
+      setGenerationStatus(job.status === 'queued' ? 'Queued…' : 'AI is building your app…');
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+
+    const err = new Error('AI generation timed out while waiting for the worker.');
+    err.userMessage = 'AI generation took too long. The worker may still be processing it. Please try again.';
+    throw err;
+  };
+
   const runGeneration = async (nextMessages) => {
     setIsGenerating(true);
+    setGenerationStatus('Queuing AI job…');
     setError(null);
+
     try {
       const { data } = await aiGenerateAPI.generate(nextMessages, fileData);
-      const result = data?.data;
-      setMessages((prev) => [...prev, { role: 'assistant', content: result.assistantMessage || 'Done.' }]);
+      const jobId = data?.data?.jobId;
+      if (!jobId) throw new Error('AI service did not return a job id.');
+
+      setGenerationStatus('AI job queued…');
+      const result = await waitForJob(jobId);
+
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: result.assistantMessage || 'Done.' },
+      ]);
       setFileData({ files: result.files, dependencies: result.dependencies });
       if (result.title) setAppTitle(result.title);
     } catch (err) {
-      const msg = err.response?.data?.message || 'Something went wrong generating your app. Please try again.';
+      const msg = err.userMessage || err.response?.data?.message || err.message || 'Something went wrong generating your app. Please try again.';
       setError(msg);
       setMessages((prev) => [...prev, { role: 'assistant', content: `⚠️ ${msg}` }]);
     } finally {
       setIsGenerating(false);
+      setGenerationStatus('');
     }
   };
 
@@ -81,7 +108,7 @@ export default function AiStudio() {
     setInput('');
     const nextMessages = [...messages, { role: 'user', content: trimmed }];
     setMessages(nextMessages);
-    runGeneration(nextMessages);
+    void runGeneration(nextMessages);
   };
 
   const handleFixError = (previewError) => {
@@ -89,7 +116,7 @@ export default function AiStudio() {
     const prompt = `The preview threw this error, please fix it:\n\n${previewError}`;
     const nextMessages = [...messages, { role: 'user', content: prompt }];
     setMessages(nextMessages);
-    runGeneration(nextMessages);
+    void runGeneration(nextMessages);
   };
 
   return (
@@ -108,7 +135,6 @@ export default function AiStudio() {
       </div>
 
       <div className="flex min-h-0 flex-1">
-        {/* Chat panel */}
         <div className="flex w-[380px] shrink-0 flex-col border-r border-neutral-800">
           <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto p-4">
             {messages.length === 0 && (
@@ -119,9 +145,7 @@ export default function AiStudio() {
             )}
             {messages.map((m, i) => (
               <div key={i} className={`flex gap-2 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                {m.role === 'assistant' && (
-                  <Bot className="mt-1 h-4 w-4 shrink-0 text-violet-400" />
-                )}
+                {m.role === 'assistant' && <Bot className="mt-1 h-4 w-4 shrink-0 text-violet-400" />}
                 <div
                   className={`max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
                     m.role === 'user' ? 'bg-violet-600 text-white' : 'bg-neutral-900 text-neutral-200'
@@ -135,7 +159,7 @@ export default function AiStudio() {
             {isGenerating && (
               <div className="flex items-center gap-2 text-sm text-neutral-400">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Generating…
+                {generationStatus || 'Generating…'}
               </div>
             )}
           </div>
@@ -167,9 +191,13 @@ export default function AiStudio() {
           </div>
         </div>
 
-        {/* Preview / code panel */}
         <div className="flex-1">
-          <AppPreview fileData={fileData} appTitle={appTitle} onFixError={handleFixError} isGenerating={isGenerating} />
+          <AppPreview
+            fileData={fileData}
+            appTitle={appTitle}
+            onFixError={handleFixError}
+            isGenerating={isGenerating}
+          />
         </div>
       </div>
     </div>
