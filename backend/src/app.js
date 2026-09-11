@@ -1,13 +1,8 @@
-const express = require('express');
-const cors = require('cors');
-const helmet = require('helmet');
-const morgan = require('morgan');
-const compression = require('compression');
-const { errorHandler, notFound } = require('./shared/middleware/errorHandler');
-const { generalLimiter } = require('./shared/middleware/rateLimit');
 const Sentry = require('@sentry/node');
 const { nodeProfilingIntegration } = require('@sentry/profiling-node');
 
+// Sentry must be initialized before Express is imported so its Express
+// instrumentation can patch the module correctly.
 if (process.env.SENTRY_DSN) {
   Sentry.init({
     dsn: process.env.SENTRY_DSN,
@@ -18,6 +13,14 @@ if (process.env.SENTRY_DSN) {
     profilesSampleRate: 1.0,
   });
 }
+
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const compression = require('compression');
+const { errorHandler, notFound } = require('./shared/middleware/errorHandler');
+const { generalLimiter } = require('./shared/middleware/rateLimit');
 
 const app = express();
 
@@ -89,7 +92,6 @@ app.use('/api/contact',   require('./modules/contact'));
 app.use('/api/github',    require('./modules/github'));
 app.use('/api/deployments', require('./modules/deployment'));
 app.use('/api/ai-generate', require('./modules/ai-generate'));
-
 
 app.get("/debug-sentry", function mainHandler(req, res) {
   throw new Error("My first Sentry error!");
