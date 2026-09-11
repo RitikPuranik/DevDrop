@@ -10,8 +10,11 @@ const RETIRED_GEMINI_MODELS = new Set([
   'gemini-2.0-flash-lite-001',
 ]);
 
+// Current Gemini Flash models. A 503 means the selected model is temporarily
+// capacity constrained, so we automatically try the next available model.
 const DEFAULT_GEMINI_MODELS = [
   'gemini-3.8-flash',
+  'gemini-3.7-flash',
   'gemini-3.6-flash',
   'gemini-3.5-flash-lite',
 ];
@@ -152,7 +155,6 @@ function parseGeneratedApp(text) {
 
 async function requestModel({ model, apiKey, contents, timeout }) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-
   return axios.post(
     `${url}?key=${encodeURIComponent(apiKey)}`,
     {
@@ -199,14 +201,12 @@ async function generateApp({ messages, fileData }) {
 
     try {
       const response = await requestModel({ model, apiKey, contents, timeout });
-
       console.log('Gemini generation succeeded', {
         model,
         attempt: attempt + 1,
         status: response.status,
         elapsedMs: Date.now() - startedAt,
       });
-
       return parseGeneratedApp(extractText(response));
     } catch (error) {
       const status = error.response?.status;
