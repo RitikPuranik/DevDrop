@@ -18,9 +18,10 @@ import PurchaseAccess from './pages/marketplace/PurchaseAccess';
 import DeployProject from './pages/deployment/DeployProject';
 import DeployOwnProject from './pages/deployment/DeployOwnProject';
 import AiStudio from './pages/ai-studio/AiStudio';
-// PreviewWorkspace (WebContainer-based Genie preview) is no longer routed —
-// AI Studio now embeds bolt.diy, which owns generation + preview end to
-// end. See services/bolt-diy/DEVDROP_INTEGRATION.md.
+// PreviewWorkspace (WebContainer-based Genie preview) and bolt.diy
+// (iframe-embedded WebContainer preview, which couldn't run nested in an
+// iframe) are both gone. AI Studio now generates via Gemini and renders
+// with Sandpack, natively inside this app — see pages/ai-studio/AiStudio.jsx.
 import DeploymentDetails from './pages/deployment/DeploymentDetails';
 import VercelOAuthCallback from './pages/deployment/VercelOAuthCallback';
 import AdminPanel from "./pages/admin/AdminPanelPage";
@@ -37,8 +38,8 @@ const HERO_VIDEO_SRC = '/dewdrop.s3.mp4';
 function AppContent() {
   const location = useLocation();
   const isBuilder = location.pathname === "/website";
-  // AiStudio.jsx is now a full-bleed embed of bolt.diy (its own header, own
-  // "back to DevDrop" affordance) — same chrome-less treatment as /website.
+  // AiStudio.jsx is a full-bleed native chat+preview page (its own header,
+  // own "back to DevDrop" affordance) — same chrome-less treatment as /website.
   // Replaces the old isPreviewWorkspace flag now that /ai-studio/preview/:jobId
   // no longer exists.
   const isAiStudio = location.pathname.startsWith("/ai-studio");
