@@ -5,6 +5,8 @@ import { usePostHog } from '@posthog/react';
 
 import { aiGenerateAPI } from '../../api/aiGenerate';
 import AppPreview from '../../components/ai-studio/AppPreview';
+import PortfolioBuilder from '../../components/ai-studio/PortfolioBuilder';
+import { WEBSITE_TYPES } from '../../config/aiStudio.config';
 
 /**
  * AI Studio.
@@ -29,6 +31,7 @@ export default function AiStudio() {
   const navigate = useNavigate();
   const posthog = usePostHog();
 
+  const [studioMode, setStudioMode] = useState('types');
   const [messages, setMessages] = useState([]); // {role:'user'|'assistant', content}
   const [fileData, setFileData] = useState(null); // {files, dependencies} | null
   const [appTitle, setAppTitle] = useState(null);
@@ -119,6 +122,13 @@ export default function AiStudio() {
     }
   };
 
+  const handlePortfolioGenerate = async (prompt) => {
+    const nextMessages = [{ role: 'user', content: prompt }];
+    setStudioMode('chat');
+    setMessages(nextMessages);
+    await runGeneration(nextMessages);
+  };
+
   const handleSend = () => {
     const trimmed = input.trim();
     if (!trimmed || isGenerating) return;
@@ -136,86 +146,37 @@ export default function AiStudio() {
     runGeneration(nextMessages);
   };
 
+  if (studioMode === 'types') {
+    return (
+      <div className="fixed inset-0 z-40 overflow-y-auto bg-neutral-950 text-white">
+        <div className="mx-auto max-w-5xl px-5 py-8 md:px-8 md:py-12">
+          <button type="button" onClick={() => navigate('/workspace')} className="mb-10 inline-flex items-center gap-2 text-sm text-white/50 hover:text-white"><ArrowLeft size={16} /> Back to DevDrop</button>
+          <div className="mb-10"><p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-violet-400">AI Studio</p><h1 className="text-3xl font-bold tracking-tight md:text-4xl">What do you want to build?</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-white/40">Choose a website type first. You will then provide the information specific to that type, and DevDrop will turn it into a detailed build specification for the AI.</p></div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {WEBSITE_TYPES.map((type) => { const Icon = type.icon; return (
+              <button key={type.id} type="button" disabled={!type.enabled} onClick={() => type.enabled && setStudioMode(type.id)} className={`group rounded-3xl border p-6 text-left transition-all ${type.enabled ? 'border-white/10 bg-white/[0.03] hover:border-violet-500/50 hover:bg-violet-500/[0.05]' : 'cursor-not-allowed border-white/5 bg-white/[0.015] opacity-45'}`}>
+                <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5"><Icon size={19} className="text-violet-400" /></div><h2 className="text-lg font-semibold">{type.title}</h2><p className="mt-2 text-sm leading-6 text-white/35">{type.description}</p>{!type.enabled && <p className="mt-4 text-[10px] font-bold uppercase tracking-[0.16em] text-white/25">Coming soon</p>}
+              </button>
+            ); })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (studioMode === 'portfolio') {
+    return <div className="fixed inset-0 z-40 overflow-y-auto bg-neutral-950"><PortfolioBuilder onBack={() => setStudioMode('types')} onGenerate={handlePortfolioGenerate} /></div>;
+  }
+
   return (
     <div className="fixed inset-0 z-40 flex flex-col bg-neutral-950 text-white">
-      <div className="flex items-center justify-between border-b border-neutral-800 bg-neutral-950 px-4 py-2">
-        <button
-          type="button"
-          onClick={() => navigate('/workspace')}
-          className="inline-flex items-center gap-2 text-sm text-neutral-300 hover:text-white"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to DevDrop
-        </button>
-        <span className="text-sm font-medium text-neutral-300">{appTitle || 'AI Studio'}</span>
-        <span className="w-24" />
-      </div>
-
+      <div className="flex items-center justify-between border-b border-neutral-800 bg-neutral-950 px-4 py-2"><button type="button" onClick={() => setStudioMode('types')} className="inline-flex items-center gap-2 text-sm text-neutral-300 hover:text-white"><ArrowLeft className="h-4 w-4" /> Website types</button><span className="text-sm font-medium text-neutral-300">{appTitle || 'AI Studio'}</span><span className="w-24" /></div>
       <div className="flex min-h-0 flex-1">
-        {/* Chat panel */}
         <div className="flex w-[380px] shrink-0 flex-col border-r border-neutral-800">
-          <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto p-4">
-            {messages.length === 0 && (
-              <p className="mt-8 text-center text-sm text-neutral-500">
-                Describe the app or website you want, e.g. "a portfolio site with a dark theme, a hero
-                section, and a contact form."
-              </p>
-            )}
-            {messages.map((m, i) => (
-              <div key={i} className={`flex gap-2 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                {m.role === 'assistant' && (
-                  <Bot className="mt-1 h-4 w-4 shrink-0 text-violet-400" />
-                )}
-                <div
-                  className={`max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
-                    m.role === 'user' ? 'bg-violet-600 text-white' : 'bg-neutral-900 text-neutral-200'
-                  }`}
-                >
-                  {m.content}
-                </div>
-                {m.role === 'user' && <User className="mt-1 h-4 w-4 shrink-0 text-neutral-500" />}
-              </div>
-            ))}
-            {isGenerating && (
-              <div className="flex items-center gap-2 text-sm text-neutral-400">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                {genStatusLabel}
-              </div>
-            )}
-          </div>
-
-          <div className="border-t border-neutral-800 p-3">
-            <div className="flex items-end gap-2 rounded-lg border border-neutral-700 bg-neutral-900 p-2">
-              <textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend();
-                  }
-                }}
-                placeholder="Describe what to build or change…"
-                rows={2}
-                className="flex-1 resize-none bg-transparent text-sm text-white placeholder:text-neutral-500 focus:outline-none"
-              />
-              <button
-                type="button"
-                onClick={handleSend}
-                disabled={!input.trim() || isGenerating}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-violet-600 text-white disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
+          <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto p-4">{messages.map((m, i) => <div key={i} className={`flex gap-2 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>{m.role === 'assistant' && <Bot className="mt-1 h-4 w-4 shrink-0 text-violet-400" />}<div className={`max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm ${m.role === 'user' ? 'bg-violet-600 text-white' : 'bg-neutral-900 text-neutral-200'}`}>{m.content}</div>{m.role === 'user' && <User className="mt-1 h-4 w-4 shrink-0 text-neutral-500" />}</div>)}{isGenerating && <div className="flex items-center gap-2 text-sm text-neutral-400"><Loader2 className="h-4 w-4 animate-spin" />{genStatusLabel}</div>}</div>
+          <div className="border-t border-neutral-800 p-3"><div className="flex items-end gap-2 rounded-lg border border-neutral-700 bg-neutral-900 p-2"><textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }} placeholder="Describe a change to your generated website…" rows={2} className="flex-1 resize-none bg-transparent text-sm text-white placeholder:text-neutral-500 focus:outline-none" /><button type="button" onClick={handleSend} disabled={!input.trim() || isGenerating} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-violet-600 text-white disabled:cursor-not-allowed disabled:opacity-40">{isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}</button></div></div>
         </div>
-
-        {/* Preview / code panel */}
-        <div className="min-h-0 flex-1 h-full">
-          <AppPreview fileData={fileData} appTitle={appTitle} onFixError={handleFixError} isGenerating={isGenerating} />
-        </div>
+        <div className="h-full min-h-0 flex-1"><AppPreview fileData={fileData} appTitle={appTitle} onFixError={handleFixError} isGenerating={isGenerating} /></div>
       </div>
     </div>
-  );
-}
+  );}
