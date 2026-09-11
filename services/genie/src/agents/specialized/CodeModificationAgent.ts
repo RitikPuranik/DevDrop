@@ -447,7 +447,7 @@ export const CodeModificationAgent = async (options?: CodeModificationOptions) =
   console.log(`  - Compressed: ${stats.originalSize} → ${stats.compressedSize} bytes (saved ${stats.savedPercent}%)`);
   
   let builder = AgentBuilder.create('CodeModificationAgent')
-    .withModel('gemini-2.5-flash')
+    .withModel('gemini-3.6-flash')
     .withInstruction(finalPrompt)
     .withOutputSchema(generationSchema);
   

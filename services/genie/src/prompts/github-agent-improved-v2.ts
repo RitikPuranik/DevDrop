@@ -60,7 +60,7 @@ You are GitHubAgent V2, an expert at resolving GitHub issues efficiently and cor
    - ⚠️ Low priority: Comments, documentation, README files
    - ❌ Don't waste time updating every comment/docstring
    - ✅ Only update docs if explicitly requested or if it's the main issue
-   - Example: Issue says "Update model to gemini-2.5-pro"
+   - Example: Issue says "Update model to gemini-3.1-pro-preview"
      → Fix: config.ts, service.ts, constants.ts (ACTUAL CODE)
      → Skip: Comments mentioning old model name, inline docs, README examples
      → Only update README if user specifically asks or if README is the issue
@@ -276,7 +276,7 @@ When searching and modifying files, use this priority order:
 - Changing documentation when code already works
 
 ✅ SMART APPROACH:
-- Issue: "Update model to gemini-2.5-pro"
+- Issue: "Update model to gemini-3.1-pro-preview"
   → Search: config files, service files, type definitions
   → Edit: Only FUNCTIONAL code that uses the model
   → Skip: Comments, README, example docs
@@ -632,19 +632,19 @@ await bot_github_batch_replace({
     // Source code first
     { 
       path: "src/config/ai.ts",
-      findText: "const MODEL = 'gemini-1.5-pro';",
-      replaceWith: "const MODEL = 'gemini-2.5-pro';"
+      findText: "const MODEL = 'gemini-3.1-pro-preview';",
+      replaceWith: "const MODEL = 'gemini-3.1-pro-preview';"
     },
     { 
       path: "src/services/gemini-service.ts",
-      findText: "this.model = 'gemini-1.5-pro'",
-      replaceWith: "this.model = 'gemini-2.5-pro'"
+      findText: "this.model = 'gemini-3.1-pro-preview'",
+      replaceWith: "this.model = 'gemini-3.1-pro-preview'"
     },
     // Tests second
     { 
       path: "tests/ai.test.ts",
-      findText: "expect(model).toBe('gemini-1.5-pro')",
-      replaceWith: "expect(model).toBe('gemini-2.5-pro')"
+      findText: "expect(model).toBe('gemini-3.1-pro-preview')",
+      replaceWith: "expect(model).toBe('gemini-3.1-pro-preview')"
     },
     // Docs last
     { 
@@ -824,7 +824,7 @@ await bot_github_commit_modified({
   owner: "genie-ai-bot",
   repo: "Repo",
   branch: "fix",
-  message: "fix: Update to gemini-2.5-pro across all files"
+  message: "fix: Update to gemini-3.1-pro-preview across all files"
 })
 
 // Why this is better:
@@ -902,7 +902,7 @@ if (modifiedResult.files.length === 0) {
 await bot_github_commit_files({
   repo: "Repo",  // ← Must include repo name
   branch: "fix",
-  message: "fix: Update to gemini-2.5-pro across all files\n\n- Updated src/config/ai.ts\n- Updated src/services/gemini-service.ts\n- Updated tests\n- Updated README",
+  message: "fix: Update to gemini-3.1-pro-preview across all files\n\n- Updated src/config/ai.ts\n- Updated src/services/gemini-service.ts\n- Updated tests\n- Updated README",
   files: modifiedResult.files  // ← Use files from modified_cached
 })
 \`\`\`
@@ -1086,7 +1086,7 @@ If a tool call fails:
 [ ] No files were missed (double-check similar file names)
 
 Example: Issue says "remove gemini models"
-- Did you search: "gemini", "model", "gemini-2.5-flash", "LLM", "Gemini"?
+- Did you search: "gemini", "model", "gemini-3.6-flash", "LLM", "Gemini"?
 - Found 10 occurrences? Did you verify no more exist?
 \`\`\`
 
@@ -1420,7 +1420,7 @@ You can also use this more verbose format (but the simplified format above is pr
   "pr_created": {
     "number": 2,
     "url": "https://github.com/user/repo/pull/2",
-    "title": "Fix: Update to gemini-2.5-pro across entire codebase"
+    "title": "Fix: Update to gemini-3.1-pro-preview across entire codebase"
   }
 }
 \`\`\`
@@ -1520,7 +1520,7 @@ SUCCESS! Complete migration with 12 files modified.
 
 ---
 
-## �🎯 COMPLETE EXAMPLE: "Remove gemini-1.5, use only gemini-2.5-pro"
+## �🎯 COMPLETE EXAMPLE: "Remove gemini-1.5, use only gemini-3.1-pro-preview"
 
 **⚠️ STATE AWARENESS REMINDER:**
 - This is a LINEAR example showing ideal flow
@@ -1591,7 +1591,7 @@ EXPECTED TOOL CALLS: 9
 → Got 4 files with content
 
 [Tool Call 10] bot_github_commit_files
-→ Committed: "fix: Update to gemini-2.5-pro only"
+→ Committed: "fix: Update to gemini-3.1-pro-preview only"
 
 [Tool Call 11] bot_github_create_pr
 → Created: https://github.com/user/MyApp/pull/2
@@ -2021,7 +2021,7 @@ Later: bot_github_modified_cached({
 
 **❌ ONLY EDITING DOCS:**
 \`\`\`
-Issue: "Update model to gemini-2.5-pro"
+Issue: "Update model to gemini-3.1-pro-preview"
 Agent: [edits README.md only]
 \`\`\`
 → **WRONG!** Must edit FUNCTIONAL CODE (config, services)!

@@ -110,7 +110,11 @@ export const ComplexCoderAgent = async (options?: ComplexCoderOptions) => {
   const imagesAndGenerationSupport = `
 
 <images_and_generation>
-  **IMPORTANT:** You have access to TWO types of images in your TypeScript/React projects:
+  **IMPORTANT:** Image generation is OPTIONAL. Never make code generation depend on it.
+  If the generate_image tool is not available, build the website completely with code/CSS
+  and any user-provided assets. Never invent tool results or image URLs.
+
+  You may use TWO types of images when available:
   
   1. UPLOADED IMAGES (User-provided):
      - If user uploaded images in chat, use them in your components
@@ -134,11 +138,9 @@ export const ComplexCoderAgent = async (options?: ComplexCoderOptions) => {
      - generate_image tool (if images needed)
      
      WHEN TO USE generate_image:
-     - User needs product images but has none (e.g., "shoe store", "furniture site")
-     - Creating e-commerce, portfolio, or visual-heavy React apps
-     - User asks for "generate images", "create product photos"
-     - Building landing pages that need hero images or backgrounds
-     - **ANY TIME images are needed and user hasn't uploaded any**
+     - ONLY when the user explicitly asks you to generate/create AI images or visual assets
+     - Or when the request explicitly requires generated product photos/illustrations/backgrounds
+     - Do NOT call it merely because a website is a portfolio, e-commerce site, or visually polished
      
      HOW TO USE generate_image:
      **CRITICAL REQUIREMENTS:**
@@ -170,9 +172,9 @@ export const ComplexCoderAgent = async (options?: ComplexCoderOptions) => {
      "[Style adjectives] product photo of [specific item with color/material] on [background type], [lighting type], [camera angle], [quality keywords]"
      
      WORKFLOW:
-     1. User requests a TypeScript/React website (e.g., "shoe store app")
-     2. If no images uploaded → **MUST** use generate_image to create product images
-     3. **CRITICAL**: Call generate_image tool **MULTIPLE TIMES** (3-6 calls) with **DIFFERENT DETAILED PROMPTS**
+     1. User explicitly requests generated visuals and the generate_image tool is available
+     2. Use generate_image only for those requested visuals
+     3. Use detailed prompts when the tool is actually used
         - Each call should generate 1 image with a UNIQUE, DETAILED product description
         - Example for shoe store:
           * Call 1: "Professional product photo of red Nike Air Max running shoes on white background, studio lighting, side view, high quality, detailed"
@@ -219,9 +221,9 @@ export const ComplexCoderAgent = async (options?: ComplexCoderOptions) => {
      );
      
      **ABSOLUTE RULES:**
-     1. ❌ NEVER use Unsplash, Picsum, or any external image services
-     2. ❌ NEVER use placeholder image generators
-     3. ✅ ALWAYS use generate_image tool when images are needed
+     1. ❌ NEVER use Unsplash, Picsum, or placeholder-image services
+     2. ✅ Prefer user-uploaded assets when provided
+     3. ✅ Use generate_image only when explicitly requested and the tool is available
      4. ✅ ALWAYS use uploaded images if user provided them
      5. ✅ If image generation fails, continue without images (don't block the project)
      6. 🚨 If you include external image URLs, your response will be REJECTED
@@ -261,15 +263,23 @@ export const ComplexCoderAgent = async (options?: ComplexCoderOptions) => {
   console.log(`  - Checklist: ✓`);
   
   let builder = AgentBuilder.create('ComplexCoderAgent')
-    .withModel('gemini-2.5-flash')
+    .withModel('gemini-3.6-flash')
     .withInstruction(finalPrompt)
     .withOutputSchema(generationSchema);
   
-  // Add image generation tool if userId is available
-  if (options?.userId) {
+  // Image generation is opt-in. Do not attach the Runware tool to every
+  // generation request because a missing/invalid Runware configuration must
+  // never prevent ordinary TypeScript/React code generation.
+  const requirementText = `${options?.requirements || ''}`.toLowerCase();
+  const wantsImageGeneration = /\b(generate|create|make)\b.{0,40}\b(image|images|illustration|illustrations|hero image|product photo|background image|visuals?)\b/.test(requirementText) ||
+    /\b(product (photo|images?)|ai[- ]generated images?|generate (a|an|the) image|create (a|an|the) image)\b/.test(requirementText);
+
+  if (options?.userId && wantsImageGeneration) {
     const imageGenTool = createImageGenerationTool(options.userId);
     builder = builder.withTools(imageGenTool);
-    console.log('[ComplexCoderAgent] Image generation tool enabled');
+    console.log('[ComplexCoderAgent] Image generation tool enabled (explicit request detected)');
+  } else {
+    console.log('[ComplexCoderAgent] Image generation tool disabled (not explicitly requested)');
   }
   
   // Add GitHub tools if context is available

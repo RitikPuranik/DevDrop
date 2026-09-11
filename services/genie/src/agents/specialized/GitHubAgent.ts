@@ -191,7 +191,7 @@ export const GitHubAgent = async (
         '\n3. Validate completeness (all file types addressed)';
       
       return AgentBuilder.create('GitHubAgent')
-        .withModel('gemini-2.5-flash')
+        .withModel('gemini-3.6-flash')
         .withInstruction(systemPrompt)
         .withTools(...cachedTools.tools)
         .withOutputSchema(githubAgentResponseSchema)
@@ -225,7 +225,7 @@ export const GitHubAgent = async (
           '\n\n**📋 Remember: Think → Plan → Execute → Validate**';
         
         return AgentBuilder.create('GitHubAgent')
-          .withModel('gemini-2.5-flash')
+          .withModel('gemini-3.6-flash')
           .withInstruction(systemPrompt)
           .withTools(...cachedTools.tools)
           .withOutputSchema(githubAgentResponseSchema)

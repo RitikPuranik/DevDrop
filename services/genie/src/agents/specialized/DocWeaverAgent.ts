@@ -70,7 +70,7 @@ export const DocWeaverAgent = async (options?: DocWeaverOptions) => {
   const enhancedPrompt = enhancePromptWithGitHub(instancePrompt, githubContext);
   
   let builder = AgentBuilder.create('DocWeaverAgent')
-    .withModel('gemini-2.5-flash')
+    .withModel('gemini-3.6-flash')
     .withInstruction(enhancedPrompt)
     .withTools(commentInserterTool);
   

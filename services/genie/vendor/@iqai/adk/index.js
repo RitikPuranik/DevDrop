@@ -981,7 +981,17 @@ ${instructions.join("\n\n")}`;
    */
   setOutputSchema(baseModel) {
     if (!this.config) this.config = {};
-    this.config.responseSchema = baseModel;
+    let jsonSchema = baseModel;
+    if (baseModel && typeof baseModel === "object" && ("_zod" in baseModel || "def" in baseModel || "~standard" in baseModel)) {
+      try {
+        const raw = z.toJSONSchema(baseModel, { reused: "inline" });
+        const { $schema, $defs, ...rest } = raw || {};
+        jsonSchema = $defs ? { ...rest, $defs } : rest;
+      } catch (e) {
+        jsonSchema = baseModel;
+      }
+    }
+    this.config.responseSchema = jsonSchema;
     this.config.responseMimeType = "application/json";
   }
   /**

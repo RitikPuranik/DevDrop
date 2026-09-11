@@ -81,6 +81,6 @@ Your orchestration:
 Remember: You coordinate, you don't code. Trust your specialized agents.`;
 
 export const LeadEngineerAgent = AgentBuilder.create('LeadEngineerAgent')
-	.withModel('gemini-2.5-flash')  // Use better model for orchestration decisions
+	.withModel('gemini-3.6-flash')  // Use better model for orchestration decisions
 	.withInstruction(systemPrompt)
 	.build();

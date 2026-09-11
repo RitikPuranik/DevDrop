@@ -63,7 +63,7 @@ const validationSchema: z.ZodTypeAny = z.object({
 
 export const CodeValidatorAgent = async () => {
   return AgentBuilder.create('CodeValidatorAgent')
-    .withModel('gemini-2.5-flash')
+    .withModel('gemini-3.6-flash')
     .withInstruction(systemPrompt)
     .withOutputSchema(validationSchema as unknown as z.ZodTypeAny)
     .build();

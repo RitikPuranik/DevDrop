@@ -45,3 +45,10 @@ export const ASSET_TYPES = {
 };
 
 export const AI_STUDIO_STEPS = ['websiteType', 'details', 'assets', 'design', 'review', 'generating'];
+
+// --- bolt.diy embed (replaces the wizard + Genie-backed generation/preview
+// above) --------------------------------------------------------------
+// Everything above this line is kept only because the old wizard step
+// components still import from it; AiStudio.jsx no longer uses any of it.
+// See services/bolt-diy/DEVDROP_INTEGRATION.md for the full picture.
+export const BOLT_DIY_URL = import.meta.env.VITE_BOLT_DIY_URL || '';

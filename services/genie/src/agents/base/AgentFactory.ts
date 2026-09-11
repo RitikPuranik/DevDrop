@@ -47,20 +47,20 @@ export enum AgentRole {
 
 /**
  * Default models for different agent types
- * Coding agents use gemini-2.5-flash for fast, quality code generation
+ * Coding agents use gemini-3.6-flash for fast, quality code generation
  * All agents use Google Gemini 2.5 Flash
  */
 const DEFAULT_MODELS = {
-  // Coding agents - use gemini-2.5-flash for fast, quality code generation
-  [AgentRole.LEAD_ENGINEER]: 'gemini-2.5-flash',
-  [AgentRole.SPEC_INTERPRETER]: 'gemini-2.5-flash',
-  [AgentRole.CODE_GENERATOR]: 'gemini-2.5-flash',
-  [AgentRole.TEST_CRAFTER]: 'gemini-2.5-flash',
+  // Coding agents - use gemini-3.6-flash for fast, quality code generation
+  [AgentRole.LEAD_ENGINEER]: 'gemini-3.6-flash',
+  [AgentRole.SPEC_INTERPRETER]: 'gemini-3.6-flash',
+  [AgentRole.CODE_GENERATOR]: 'gemini-3.6-flash',
+  [AgentRole.TEST_CRAFTER]: 'gemini-3.6-flash',
   // All agents - use Google Gemini 2.5 Flash
-  [AgentRole.BUG_HUNTER]: 'gemini-2.5-flash',
-  [AgentRole.SECURITY_SENTINEL]: 'gemini-2.5-flash',
-  [AgentRole.PERFORMANCE_PROFILER]: 'gemini-2.5-flash',
-  [AgentRole.DOC_WEAVER]: 'gemini-2.5-flash',
+  [AgentRole.BUG_HUNTER]: 'gemini-3.6-flash',
+  [AgentRole.SECURITY_SENTINEL]: 'gemini-3.6-flash',
+  [AgentRole.PERFORMANCE_PROFILER]: 'gemini-3.6-flash',
+  [AgentRole.DOC_WEAVER]: 'gemini-3.6-flash',
 }
 
 /**
@@ -102,7 +102,7 @@ export class AgentFactory {
    */
   async createAgent(config: AgentConfig): Promise<Agent> {
     const builder = AgentBuilder.create(config.name)
-      .withModel(config.model || 'gemini-2.5-flash')
+      .withModel(config.model || 'gemini-3.6-flash')
       .withInstruction(config.systemPrompt)
 
     // Register tools if specified
@@ -341,7 +341,7 @@ export class AgentFactory {
     const config = this.getRoleConfig(role)
     return {
       name: config.name,
-      model: config.model || 'gemini-2.5-flash',
+      model: config.model || 'gemini-3.6-flash',
       description: config.systemPrompt,
       tools: config.tools || [],
     }

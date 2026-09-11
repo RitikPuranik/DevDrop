@@ -313,7 +313,7 @@ export function createCachedGitHubTools(_octokit: Octokit) {
         Use this when you need to replace the same pattern in multiple files,
         or make multiple changes to the same file.
         
-        Example: Replace "gemini-1.5-pro" with "gemini-2.5-pro" in 5 different files
+        Example: Replace "gemini-3.1-pro-preview" with "gemini-3.1-pro-preview" in 5 different files
         → Use this tool with 5 replacements instead of 5 separate tool calls!`,
       schema: z.object({
         owner: z.string().describe('Repository owner'),
@@ -941,11 +941,11 @@ export function createCachedGitHubTools(_octokit: Octokit) {
         {
           repo: "MyRepo",
           branch: "my-branch",
-          message: "Fix: Update model to gemini-2.5-pro",
+          message: "Fix: Update model to gemini-3.1-pro-preview",
           files: [
             {
               path: "config.ts",
-              content: "export const MODEL = 'gemini-2.5-pro';"
+              content: "export const MODEL = 'gemini-3.1-pro-preview';"
             },
             {
               path: "README.md", 

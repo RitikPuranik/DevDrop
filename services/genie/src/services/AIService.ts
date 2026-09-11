@@ -12,7 +12,7 @@ export interface AIServiceConfig {
 export class AIService {
   private modelName: string
 
-  constructor(modelName: string = 'gemini-2.5-flash', config?: AIServiceConfig) {
+  constructor(modelName: string = 'gemini-3.6-flash', config?: AIServiceConfig) {
     this.modelName = config?.modelName || modelName
     // Store config for future use
     if (config) {

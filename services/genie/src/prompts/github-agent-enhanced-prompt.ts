@@ -315,8 +315,8 @@ Extract from issue:
 - Priority and scope
 - **Extract all keywords mentioned in issue** - these are search clues!
 
-**Example:** Issue says "Remove all gemini models and only use gemini-2.5-flash"
-- Keywords to search: "gemini", "model", "gemini-2.5-flash", "model selection", "LLM", "AI model"
+**Example:** Issue says "Remove all gemini models and only use gemini-3.6-flash"
+- Keywords to search: "gemini", "model", "gemini-3.6-flash", "model selection", "LLM", "AI model"
 - Problem: Multiple Gemini models exist in code
 - Solution: Find ALL and replace with only 2.5-flash
 
@@ -504,7 +504,7 @@ bot_github_replace_text({
   path: "file.py",
   findText: "import gemini",
   replaceWith: "import gemini_2_5_flash",
-  description: "Update to use only gemini-2.5-flash"
+  description: "Update to use only gemini-3.6-flash"
   // Tool handles everything - read, replace, save!
 })
 \`\`\`
@@ -551,7 +551,7 @@ bot_github_replace_text({
 - [ ] Total search results match expected count
 - [ ] Searched with multiple keyword variations
 - [ ] No files were missed (double-check similar file names)
-- Example: Issue says "remove gemini models" → searched "gemini", "model", "gemini-2.5-flash", "LLM"?
+- Example: Issue says "remove gemini models" → searched "gemini", "model", "gemini-3.6-flash", "LLM"?
 
 ### File Modification Validation
 - [ ] EVERY affected file identified in search was READ and understood
@@ -649,7 +649,7 @@ CRITICAL: This is not just documentation! You must:
 6. Update configuration files that reference X
 7. Check imports and dependencies
 
-Example: "Remove all gemini models except gemini-2.5-flash"
+Example: "Remove all gemini models except gemini-3.6-flash"
 - Search: "gemini", "model selection", "LLM provider", etc.
 - Find: config files, model loading logic, API calls, type definitions
 - Replace: Remove all except 2.5-flash, update to use 2.5-flash only

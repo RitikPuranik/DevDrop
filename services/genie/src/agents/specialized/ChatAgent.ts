@@ -500,7 +500,7 @@ export const ChatAgent = async (
   
   let finalPrompt = systemPrompt;
   let builder = AgentBuilder.create('ChatAgent')
-    .withModel('gemini-2.5-flash')
+    .withModel('gemini-3.6-flash')
     .withOutputSchema(chatResponseSchema as any);
   
   // Add GitHub tools if context provided

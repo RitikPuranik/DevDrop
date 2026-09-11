@@ -55,7 +55,7 @@ export const TestCrafterAgent = async (options?: TestCrafterOptions) => {
   const systemPrompt = enhancePromptWithGitHub(baseSystemPrompt, options?.githubContext || null);
   
   let builder = AgentBuilder.create('TestCrafterAgent')
-    .withModel('gemini-2.5-flash')
+    .withModel('gemini-3.6-flash')
     .withInstruction(systemPrompt)
     .withOutputSchema(testGenerationSchema);
   

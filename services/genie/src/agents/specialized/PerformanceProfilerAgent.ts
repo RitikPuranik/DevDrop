@@ -27,7 +27,7 @@ export const PerformanceProfilerAgent = async (options?: PerformanceProfilerOpti
   const systemPrompt = enhancePromptWithGitHub(baseSystemPrompt, options?.githubContext || null);
   
   let builder = AgentBuilder.create('PerformanceProfilerAgent')
-    .withModel('gemini-2.5-flash')
+    .withModel('gemini-3.6-flash')
     .withInstruction(systemPrompt);
   
   // Add GitHub tools if context is available

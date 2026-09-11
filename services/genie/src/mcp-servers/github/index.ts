@@ -26,7 +26,7 @@ export class GitHubMcpServer {
     this.enableAI = config.enableAIFeatures || false
     
     if (this.enableAI) {
-      this.aiService = new AIService(config.aiModelName || 'gemini-2.5-flash')
+      this.aiService = new AIService(config.aiModelName || 'gemini-3.6-flash')
     }
   }
 

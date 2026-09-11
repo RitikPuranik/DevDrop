@@ -1,5 +1,20 @@
 # AI Studio (Phase 6 — now backed by Genie)
 
+> **Superseded.** The frontend route `/ai-studio` documented below (the
+> wizard, `PreviewWorkspace`, and the Genie-backed job API) is no longer
+> what users see. `AiStudio.jsx` now embeds
+> [bolt.diy](https://github.com/stackblitz-labs/bolt.diy), vendored at
+> `services/bolt-diy/`, which owns prompting, generation, and live
+> WebContainer preview itself. See `services/bolt-diy/DEVDROP_INTEGRATION.md`
+> for the new architecture and what was traded away (the guided wizard,
+> per-user job history, asset uploads).
+>
+> The backend routes and Genie bridge described below (`backend/src/modules
+> /ai`, `backend/src/services/genie`) still exist and still run, but the
+> frontend no longer calls them. The rest of this document is kept as a
+> historical record of that API and is **not** current user-facing
+> behavior.
+
 AI Studio is DevDrop's guided website-generation product. This doc covers the
 user-facing wizard, job tracking, and the DevDrop backend ↔ Genie
 microservice integration boundary. It does **not** cover live preview,

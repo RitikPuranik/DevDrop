@@ -226,7 +226,7 @@ Output format:
 }`
 
 export const QualityAssuranceAgentADK = AgentBuilder.create('QualityAssuranceAgent')
-  .withModel('gemini-2.5-flash') // Fast model for validation
+  .withModel('gemini-3.6-flash') // Fast model for validation
   .withInstruction(systemPrompt)
   .build()
 

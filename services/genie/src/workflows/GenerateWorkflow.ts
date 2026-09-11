@@ -623,7 +623,7 @@ export class GenerateWorkflow {
       })
 
       // Return fallback code as proper multi-file project
-      const fallbackFiles = this.generateFallbackFiles(request)
+      const fallbackFiles = this.generateFallbackFiles(request, error?.message)
       return {
         files: fallbackFiles,
         tests: '',
@@ -1389,7 +1389,7 @@ Return the result as JSON with the following structure:
           files: finalFiles,
           confidence: 0.8,
           metadata: {
-            generatedBy: 'AI Agent (gemini-2.5-flash)',
+            generatedBy: 'AI Agent (gemini-3.6-flash)',
             formatted: !this.usedSimpleCoder,
             formattedCount: this.usedSimpleCoder ? 0 : finalFiles.length,
             attempt: attempt,
@@ -1655,7 +1655,7 @@ Return the complete updated codebase as JSON:
           files: finalFiles,
           confidence: 0.85,
           metadata: {
-            generatedBy: 'CodeModificationAgent (gemini-2.5-flash)',
+            generatedBy: 'CodeModificationAgent (gemini-3.6-flash)',
             formatted: true,
             formattedCount: formattedFiles.length,
             attempt: attempt,
@@ -1842,7 +1842,7 @@ Return a structured response with all test files and a summary.`
         metadata: {
           testCount,
           fileCount: response.files.length,
-          generatedBy: 'TestCrafterAgent (gemini-2.5-flash)',
+          generatedBy: 'TestCrafterAgent (gemini-3.6-flash)',
         },
       }
     } catch (error) {
@@ -2292,7 +2292,10 @@ MIT
    * Generate fallback files as a proper multi-file project.
    * Returns real HTML/CSS/JS files instead of a placeholder comment.
    */
-  private generateFallbackFiles(request: any): Array<{ path: string; content: string }> {
+  private generateFallbackFiles(
+    request: any,
+    errorMessage?: string
+  ): Array<{ path: string; content: string }> {
     // Extract just the user's request, stripping any internal context that was prepended
     let prompt = request.prompt || 'your request'
     // Remove internal context block if present
@@ -2314,6 +2317,19 @@ MIT
       const map: Record<string, string> = { '<': '&lt;', '>': '&gt;', '"': '&quot;', '&': '&amp;' }
       return map[c] || c
     })
+    // Sanitize/truncate the real error so it's actually visible to whoever is
+    // looking at the preview, instead of only ever reaching the server console.
+    let safeErrorDetail = ''
+    if (errorMessage) {
+      let detail = String(errorMessage)
+      if (detail.length > 300) {
+        detail = detail.substring(0, 300) + '...'
+      }
+      safeErrorDetail = detail.replace(/[<>"&]/g, (c: string) => {
+        const map: Record<string, string> = { '<': '&lt;', '>': '&gt;', '"': '&quot;', '&': '&amp;' }
+        return map[c] || c
+      })
+    }
     const lang = (request.targetLanguage || 'html').toLowerCase()
 
     if (lang === 'html' || lang === 'css' || lang === 'javascript') {
@@ -2335,6 +2351,7 @@ MIT
     <p class="message">The AI agent was unable to generate code for your request:</p>
     <blockquote class="request">${safePrompt}</blockquote>
     <p class="hint">This can happen due to a temporary issue. Please try again or rephrase your request.</p>
+    ${safeErrorDetail ? `<pre class="error-detail">${safeErrorDetail}</pre>` : ''}
     <button id="retry-btn" class="btn-retry" onclick="window.parent.postMessage({type:'retry'},'*')">Try Again</button>
   </div>
 </body>
@@ -2409,6 +2426,20 @@ h1 {
 
 .btn-retry:hover {
   background: #4f46e5;
+}
+
+.error-detail {
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  font-size: 0.8rem;
+  color: #f87171;
+  margin-bottom: 1.5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }`,
         },
       ]
@@ -2518,6 +2549,7 @@ function App() {
       <p className="message">The AI agent was unable to generate code for your request:</p>
       <blockquote className="request">${safePrompt}</blockquote>
       <p className="hint">This can happen due to a temporary issue. Please try again or rephrase your request.</p>
+      ${safeErrorDetail ? `<pre className="error-detail">${safeErrorDetail}</pre>` : ''}
     </div>
   )
 }
@@ -2559,7 +2591,21 @@ h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.75rem; color: #f1f5f9
   font-style: italic;
 }
 
-.hint { color: #64748b; font-size: 0.9rem; }`,
+.hint { color: #64748b; font-size: 0.9rem; }
+
+.error-detail {
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  font-size: 0.8rem;
+  color: #f87171;
+  margin-top: 1rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}`,
       },
     ]
   }

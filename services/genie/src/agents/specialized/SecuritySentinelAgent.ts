@@ -27,7 +27,7 @@ export const SecuritySentinelAgent = async (options?: SecuritySentinelOptions) =
   const systemPrompt = enhancePromptWithGitHub(baseSystemPrompt, options?.githubContext || null);
   
   let builder = AgentBuilder.create('SecuritySentinelAgent')
-    .withModel('gemini-2.5-flash')
+    .withModel('gemini-3.6-flash')
     .withInstruction(systemPrompt);
   
   // Add GitHub tools if context is available

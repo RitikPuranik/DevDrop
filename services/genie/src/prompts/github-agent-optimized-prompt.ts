@@ -310,7 +310,7 @@ const modifiedResult = await bot_github_modified_cached({
 await bot_github_commit_files({
   repo: "repo",
   branch: "branch",
-  message: "Fix: Update to gemini-2.5-pro",
+  message: "Fix: Update to gemini-3.1-pro-preview",
   files: modifiedResult.files  // Already in correct format!
 });
 
@@ -328,7 +328,7 @@ await bot_github_commit_files({
 
 ## 📋 TASK-SPECIFIC STRATEGIES
 
-### For Model Replacement Tasks (gemini-2.5-pro etc)
+### For Model Replacement Tasks (gemini-3.1-pro-preview etc)
 \`\`\`
 OPTIMAL PLAN (Fork-first workflow):
 1. Fork repository → genie-ai-bot/Repo (1 call)
@@ -408,7 +408,7 @@ FILE PRIORITY:
 
 ❌ **Pattern #1: README-Only Syndrome**
 \`\`\`
-Issue: "Remove gemini-1.5 and only use gemini-2.5-pro"
+Issue: "Remove gemini-1.5 and only use gemini-3.1-pro-preview"
 
 WRONG APPROACH:
 1. Search for "gemini" → finds 10 results across 5 files
@@ -568,7 +568,7 @@ Before submitting, verify:
 
 ---
 
-## 💡 COMPLETE EXAMPLE: Replace "gemini-1.5-pro" with "gemini-2.5-pro"
+## 💡 COMPLETE EXAMPLE: Replace "gemini-3.1-pro-preview" with "gemini-3.1-pro-preview"
 
 ### ❌ OLD WAY (Loaded twice + Only fixed README!):
 \`\`\`
@@ -634,30 +634,30 @@ PROBLEMS:
        // PRIORITY 1: Fix actual code
        { 
          path: "src/config/ai.ts", 
-         findText: "const DEFAULT_MODEL = 'gemini-1.5-pro';",
-         replaceWith: "const DEFAULT_MODEL = 'gemini-2.5-pro';"
+         findText: "const DEFAULT_MODEL = 'gemini-3.1-pro-preview';",
+         replaceWith: "const DEFAULT_MODEL = 'gemini-3.1-pro-preview';"
        },
        { 
          path: "src/config/ai.ts", 
-         findText: "fallbackModels: ['gemini-2.5-flash']",
-         replaceWith: "fallbackModels: []  // No fallback, only gemini-2.5-pro"
+         findText: "fallbackModels: ['gemini-3.6-flash']",
+         replaceWith: "fallbackModels: []  // No fallback, only gemini-3.1-pro-preview"
        },
        { 
          path: "src/services/gemini.ts", 
-         findText: "model: 'gemini-1.5-pro'",
-         replaceWith: "model: 'gemini-2.5-pro'"
+         findText: "model: 'gemini-3.1-pro-preview'",
+         replaceWith: "model: 'gemini-3.1-pro-preview'"
        },
        { 
          path: "src/services/gemini.ts", 
-         findText: "if (error) { return 'gemini-2.5-flash' }",
+         findText: "if (error) { return 'gemini-3.6-flash' }",
          replaceWith: "if (error) { throw error }  // No fallback"
        },
        
        // PRIORITY 2: Update tests
        { 
          path: "tests/gemini.test.ts", 
-         findText: "expect(model).toBe('gemini-1.5-pro')",
-         replaceWith: "expect(model).toBe('gemini-2.5-pro')"
+         findText: "expect(model).toBe('gemini-3.1-pro-preview')",
+         replaceWith: "expect(model).toBe('gemini-3.1-pro-preview')"
        },
        
        // PRIORITY 3: Update docs
@@ -686,14 +686,14 @@ PROBLEMS:
 
 7. bot_github_commit_files({
      repo: "MyApp", branch: "fix/update-gemini-model",
-     message: "Fix: Replace all Gemini models with gemini-2.5-pro only\n\n- Updated config to use gemini-2.5-pro\n- Removed fallback models\n- Updated service implementation\n- Updated tests\n- Updated documentation",
+     message: "Fix: Replace all Gemini models with gemini-3.1-pro-preview only\n\n- Updated config to use gemini-3.1-pro-preview\n- Removed fallback models\n- Updated service implementation\n- Updated tests\n- Updated documentation",
      files: result.files
    })
 
 8. bot_github_create_pr({
      owner: "user", repo: "MyApp",
      branch: "fix/update-gemini-model",
-     title: "Fix: Use only gemini-2.5-pro, remove all other models",
+     title: "Fix: Use only gemini-3.1-pro-preview, remove all other models",
      body: "Fixes #1\n\nChanges:\n- ✅ Updated src/config/ai.ts\n- ✅ Updated src/services/gemini.ts\n- ✅ Removed fallback models\n- ✅ Updated tests\n- ✅ Updated README"
    })
 \`\`\`

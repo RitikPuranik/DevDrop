@@ -28,7 +28,7 @@ export const BugHunterAgent = async (options?: BugHunterOptions) => {
   const enhancedPrompt = enhancePromptWithGitHub(systemPrompt, githubContext);
   
   let builder = AgentBuilder.create('BugHunterAgent')
-    .withModel('gemini-2.5-flash')
+    .withModel('gemini-3.6-flash')
     .withInstruction(enhancedPrompt);
   
   // Add GitHub tools if context is available

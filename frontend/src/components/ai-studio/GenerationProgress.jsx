@@ -1,5 +1,4 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { AlertTriangle, Loader2, RefreshCw, RotateCcw, Sparkles } from 'lucide-react';
 
@@ -16,8 +15,6 @@ const IN_PROGRESS_MESSAGES = {
 };
 
 export default function GenerationProgress({ job, pollError, onRetry, onBackToForm, retrying }) {
-  const navigate = useNavigate();
-
   if (pollError && !job) {
     return (
       <div className="rounded-[26px] border border-white/8 bg-[#0b0b0b] p-8 text-center">
@@ -81,7 +78,18 @@ export default function GenerationProgress({ job, pollError, onRetry, onBackToFo
           </button>
           <button
             type="button"
-            onClick={() => navigate(`/ai-studio/preview/${job.jobId}`)}
+            onClick={() => {
+              // WebContainer requires window.crossOriginIsolated === true, which is only
+              // set on a fresh document load that received the COOP/COEP headers (see
+              // vite.config.js / vercel.json for the /ai-studio/preview/* header rule).
+              // A client-side react-router navigate() re-uses the *current* document
+              // (whichever route it was loaded from, which never has those headers), so
+              // crossOriginIsolated stays false and WebContainer.boot() fails with
+              // "Preview failed — requires a cross-origin-isolated page". A full
+              // navigation forces the browser to re-request the document and pick up
+              // the headers.
+              window.location.assign(`/ai-studio/preview/${job.jobId}`);
+            }}
             className="px-6 py-3 rounded-xl bg-white text-black text-[13px] font-bold"
           >
             Preview
