@@ -34,7 +34,7 @@ const GEMINI_MODELS = [
 ].filter((model, index, models) => models.indexOf(model) === index);
 
 const GEMINI_TIMEOUT_MS = Number.parseInt(process.env.GEMINI_TIMEOUT_MS || '180000', 10);
-const GEMINI_RETRY_DELAY_MS = Number.parseInt(process.env.GEMINI_RETRY_DELAY_MS || '500', 10);
+const GEMINI_RETRY_DELAY_MS = Number.parseInt(process.env.GEMINI_RETRY_DELAY_MS || '750', 10);
 const GEMINI_MAX_MODEL_ATTEMPTS = Math.max(
   1,
   Math.min(
@@ -53,7 +53,7 @@ const GEMINI_MAX_OUTPUT_TOKENS = Math.max(
 const SYSTEM_PROMPT = `You are an expert React developer. Generate complete, working React applications from user prompts.
 
 RULES:
-1. Return exactly one valid JSON object. No markdown fences or text outside JSON.
+1. Return exactly one valid JSON object. No markdown fences and no text outside JSON.
 2. Exact shape:
 {
   "assistantMessage": "<brief explanation>",
@@ -69,30 +69,26 @@ RULES:
 5. /App.js must exist and have a default export.
 6. Every relative import must resolve to a file included in files.
 7. Default imports require export default. Named imports require matching named exports.
-8. Never mix default and named imports incorrectly.
-9. Do not include react, react-dom, or tailwindcss in dependencies.
-10. Return ALL project files when modifying an existing project.
-11. Keep the implementation complete but reasonably compact so the JSON is unlikely to hit the output limit.`;
+8. Do not include react, react-dom, or tailwindcss in dependencies.
+9. When modifying an existing project, return ALL files.
+10. Keep generated files reasonably compact so the complete JSON fits in one response.`;
 
 const REPAIR_SYSTEM_PROMPT = `You are a React build fixer. Repair the supplied generated React project.
 
-Return ONLY one valid JSON object with this shape:
-{
-  "assistantMessage": "<brief explanation>",
-  "title": "<short title>",
-  "files": { "/App.js": { "code": "<complete source>" } },
-  "dependencies": { "package-name": "version" }
-}
+Return ONLY one valid JSON object using the exact project shape requested by the user.
+Preserve design, content, theme, interactions, and functionality.
+Fix import/export mismatches and directly related compile problems.
+Every relative import must resolve to a returned file.
+Default imports require export default.
+Named imports require matching named exports.
+Return ALL project files. No TypeScript. No markdown outside JSON.`;
 
-Rules:
-- Preserve the requested design, content, theme, interactions, and functionality.
-- Fix only import/export and directly related compile problems.
-- Every relative import must resolve to a returned file.
-- Default imports require export default.
-- Named imports require a matching named export.
-- Return ALL files.
-- No TypeScript.
-- No markdown outside JSON.`;
+const RETRY_SYSTEM_PROMPT = `You are recovering a React application response that was truncated or malformed.
+Reconstruct the COMPLETE project from the user's requested app and the partial JSON supplied below.
+Return ONLY one valid JSON object with assistantMessage, title, files, and dependencies.
+Return ALL required files with complete source code.
+Use React functional components, JavaScript only, Tailwind CSS, and a default export from /App.js.
+Resolve every relative import correctly and never mix default and named imports.`;
 
 function trimHistory(messages) {
   if (messages.length <= 10) return messages;
@@ -104,7 +100,6 @@ function buildContents(messages, fileData) {
   return trimmed.map((msg, idx) => {
     const role = msg.role === 'assistant' ? 'model' : 'user';
     if (msg.role !== 'user') return { role, parts: [{ text: msg.content }] };
-
     let text = msg.content;
     if (idx === trimmed.length - 1 && fileData) {
       text += '\n\nCurrent project files for context:\n' + JSON.stringify(fileData, null, 2);
@@ -148,11 +143,10 @@ function parseGeneratedApp(text, finishReason) {
     const parsed = JSON.parse(text);
     if (!parsed.files || typeof parsed.files !== 'object' || Array.isArray(parsed.files)) {
       const err = new Error('Gemini response missing files');
-      err.userMessage = 'The AI response was missing generated files. Please try again.';
+      err.userMessage = 'The AI response was missing generated files.';
       err.statusCode = 502;
       throw err;
     }
-
     return {
       assistantMessage: parsed.assistantMessage || '',
       title: parsed.title || 'Generated App',
@@ -161,13 +155,11 @@ function parseGeneratedApp(text, finishReason) {
     };
   } catch (error) {
     if (error.statusCode) throw error;
-
     const err = new Error('Gemini returned incomplete/non-JSON output: ' + text.slice(0, 500));
     err.finishReason = finishReason;
-    // A JSON parse failure is retryable even when Gemini reports STOP. Large
-    // responses can be unusable before a useful machine-readable payload exists.
     err.retryableOutput = true;
-    err.userMessage = 'Gemini returned an incomplete app response. DevDrop will retry automatically.';
+    err.partialOutput = text;
+    err.userMessage = 'Gemini returned an incomplete app response.';
     err.statusCode = 502;
     throw err;
   }
@@ -175,7 +167,6 @@ function parseGeneratedApp(text, finishReason) {
 
 function resolveFilePath(fromPath, importPath, files) {
   if (!importPath.startsWith('.')) return null;
-
   const fromParts = fromPath.split('/').filter(Boolean);
   fromParts.pop();
   for (const segment of importPath.split('/')) {
@@ -183,16 +174,10 @@ function resolveFilePath(fromPath, importPath, files) {
     if (segment === '..') fromParts.pop();
     else fromParts.push(segment);
   }
-
   const base = '/' + fromParts.join('/');
   const candidates = [
-    base,
-    `${base}.js`,
-    `${base}.jsx`,
-    `${base}.mjs`,
-    `${base}.cjs`,
-    `${base}/index.js`,
-    `${base}/index.jsx`,
+    base, `${base}.js`, `${base}.jsx`, `${base}.mjs`, `${base}.cjs`,
+    `${base}/index.js`, `${base}/index.jsx`,
   ];
   return candidates.find((candidate) => Object.prototype.hasOwnProperty.call(files, candidate)) || null;
 }
@@ -203,7 +188,7 @@ function hasDefaultExport(code) {
 
 function hasNamedExport(code, name) {
   const direct = new RegExp(`\\bexport\\s+(?:const|let|var|function|class)\\s+${name}\\b`);
-  const exportList = new RegExp(`\\bexport\\s*\{[^}]*\\b${name}\\b[^}]*\}`);
+  const exportList = new RegExp(`\\bexport\\s*\\{[^}]*\\b${name}\\b[^}]*\\}`);
   return direct.test(code) || exportList.test(code);
 }
 
@@ -225,19 +210,16 @@ function validateGeneratedFiles(files) {
       const specifier = match[1] || '';
       const importPath = match[2] || match[3] || '';
       if (!importPath.startsWith('.')) continue;
-
       const target = resolveFilePath(filePath, importPath, files);
       if (!target) {
         errors.push(`${filePath} imports missing relative file ${importPath}.`);
         continue;
       }
-
       const targetCode = typeof files[target]?.code === 'string' ? files[target].code : '';
       const defaultMatch = specifier.match(/^(?!\s*\{)([A-Za-z_$][\w$]*)/)?.[1];
       if (defaultMatch && !hasDefaultExport(targetCode)) {
         errors.push(`${filePath} imports default "${defaultMatch}" from ${target}, but ${target} has no default export.`);
       }
-
       const namedBlock = specifier.match(/\{([\s\S]*?)\}/)?.[1];
       if (namedBlock) {
         for (const rawName of namedBlock.split(',')) {
@@ -249,11 +231,10 @@ function validateGeneratedFiles(files) {
       }
     }
   }
-
   return [...new Set(errors)].slice(0, 12);
 }
 
-async function requestModel({ model, apiKey, contents, timeout, systemPrompt = SYSTEM_PROMPT }) {
+async function requestModel({ model, apiKey, contents, timeout, systemPrompt = SYSTEM_PROMPT, maxOutputTokens = GEMINI_MAX_OUTPUT_TOKENS }) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
   return axios.post(
     `${url}?key=${encodeURIComponent(apiKey)}`,
@@ -262,7 +243,7 @@ async function requestModel({ model, apiKey, contents, timeout, systemPrompt = S
       systemInstruction: { parts: [{ text: systemPrompt }] },
       generationConfig: {
         responseMimeType: 'application/json',
-        maxOutputTokens: GEMINI_MAX_OUTPUT_TOKENS,
+        maxOutputTokens,
         thinkingConfig: { thinkingLevel: 'low' },
       },
     },
@@ -271,27 +252,37 @@ async function requestModel({ model, apiKey, contents, timeout, systemPrompt = S
 }
 
 async function repairGeneratedApp({ model, apiKey, files, dependencies, errors, timeout }) {
-  const repairRequest = `The generated app failed deterministic preflight validation.\n\nPROBLEMS:\n${errors
-    .map((error) => `- ${error}`)
-    .join('\n')}\n\nCURRENT FILES:\n${JSON.stringify(files)}\n\nCURRENT DEPENDENCIES:\n${JSON.stringify(dependencies)}\n\nReturn the repaired complete project.`;
-
+  const repairRequest = `The generated app failed deterministic preflight validation.\n\nPROBLEMS:\n${errors.map((e) => `- ${e}`).join('\n')}\n\nCURRENT FILES:\n${JSON.stringify(files)}\n\nCURRENT DEPENDENCIES:\n${JSON.stringify(dependencies)}\n\nReturn the repaired complete project.`;
   const response = await requestModel({
     model,
     apiKey,
     contents: [{ role: 'user', parts: [{ text: repairRequest }] }],
     timeout,
     systemPrompt: REPAIR_SYSTEM_PROMPT,
+    maxOutputTokens: GEMINI_MAX_OUTPUT_TOKENS,
   });
-
   const result = parseGeneratedApp(extractText(response), getFinishReason(response));
   const remainingErrors = validateGeneratedFiles(result.files);
   if (remainingErrors.length) {
     const err = new Error(`Automatic preview validation failed: ${remainingErrors.join(' | ')}`);
-    err.userMessage = 'The generated app still has a preview import/export mismatch. Use Fix with AI once more.';
+    err.userMessage = 'The generated app still has a preview import/export mismatch. Use Fix with AI.';
     err.statusCode = 502;
     throw err;
   }
   return result;
+}
+
+async function recoverFromPartial({ model, apiKey, contents, partialOutput, timeout }) {
+  const requestText = `The previous Gemini response was truncated or malformed. Rebuild it completely instead of continuing the broken JSON.\n\nPARTIAL RESPONSE:\n${partialOutput}\n\nReturn a fresh complete project JSON. Make the implementation reasonably compact so it fits within the output limit.`;
+  const response = await requestModel({
+    model,
+    apiKey,
+    contents: [{ role: 'user', parts: [{ text: requestText }] }],
+    timeout,
+    systemPrompt: RETRY_SYSTEM_PROMPT,
+    maxOutputTokens: GEMINI_MAX_OUTPUT_TOKENS,
+  });
+  return parseGeneratedApp(extractText(response), getFinishReason(response));
 }
 
 async function generateApp({ messages, fileData }) {
@@ -317,16 +308,39 @@ async function generateApp({ messages, fileData }) {
     try {
       const response = await requestModel({ model, apiKey, contents, timeout });
       const finishReason = getFinishReason(response);
+      const rawText = extractText(response);
       console.log('Gemini generation succeeded', {
-        model,
-        attempt: attempt + 1,
-        status: response.status,
-        finishReason,
-        elapsedMs: Date.now() - startedAt,
-        outputLimit: GEMINI_MAX_OUTPUT_TOKENS,
+        model, attempt: attempt + 1, status: response.status, finishReason,
+        elapsedMs: Date.now() - startedAt, outputLimit: GEMINI_MAX_OUTPUT_TOKENS,
+        outputChars: rawText.length,
       });
 
-      const result = parseGeneratedApp(extractText(response), finishReason);
+      let result;
+      try {
+        result = parseGeneratedApp(rawText, finishReason);
+      } catch (parseError) {
+        if (!parseError.retryableOutput) throw parseError;
+        lastInvalidJsonModel = model;
+        lastError = parseError;
+        console.warn('Gemini returned malformed JSON; attempting same-model recovery before fallback', {
+          model,
+          finishReason,
+          partialChars: rawText.length,
+        });
+        try {
+          result = await recoverFromPartial({ model, apiKey, contents, partialOutput: rawText, timeout });
+        } catch (recoveryError) {
+          console.error('Same-model JSON recovery failed', {
+            model,
+            finishReason: getFinishReason(recoveryError.response),
+            message: recoveryError.response?.data?.error?.message || recoveryError.message,
+          });
+          if (attempt >= GEMINI_MAX_MODEL_ATTEMPTS - 1) throw parseError;
+          if (GEMINI_RETRY_DELAY_MS > 0) await sleep(GEMINI_RETRY_DELAY_MS);
+          continue;
+        }
+      }
+
       const validationErrors = validateGeneratedFiles(result.files);
       if (!validationErrors.length) return result;
 
@@ -351,12 +365,8 @@ async function generateApp({ messages, fileData }) {
       lastError = error;
 
       console.error('Gemini model attempt failed', {
-        model,
-        attempt: attempt + 1,
-        status,
-        code: error.code,
-        finishReason: error.finishReason,
-        elapsedMs: Date.now() - startedAt,
+        model, attempt: attempt + 1, status, code: error.code,
+        finishReason: error.finishReason, elapsedMs: Date.now() - startedAt,
         message: apiMessage || error.message,
       });
 
@@ -393,9 +403,7 @@ async function generateApp({ messages, fileData }) {
       }
 
       const err = new Error(apiMessage || error.message);
-      err.userMessage = apiMessage
-        ? `Gemini API error: ${apiMessage}`
-        : error.userMessage || 'Failed to generate the application.';
+      err.userMessage = apiMessage ? `Gemini API error: ${apiMessage}` : error.userMessage || 'Failed to generate the application.';
       err.statusCode = status || error.statusCode || 502;
       throw err;
     }
