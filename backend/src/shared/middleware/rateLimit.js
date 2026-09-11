@@ -58,7 +58,7 @@ const generalLimiter = rateLimit({
 });
 
 // Stricter limiter for authentication routes
-authLimiter = rateLimit({
+const authLimiter = rateLimit({
   windowMs: AUTH_RATE_LIMIT_WINDOW_MS,
   max: AUTH_RATE_LIMIT_MAX_REQUESTS,
   skipSuccessfulRequests: true,
@@ -139,8 +139,9 @@ module.exports = {
   generalLimiter,
   authLimiter,
   downloadLimiter,
-  paymentLimiter,
   exportLimiter,
   deployLimiter,
+  downloadLimiter,
+  paymentLimiter,
   aiGenerationLimiter,
 };
