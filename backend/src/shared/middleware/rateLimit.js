@@ -1,8 +1,20 @@
 const rateLimit = require('express-rate-limit');
 
+const MAX_TIMER_MS = 2147483647;
+
 const readEnvNumber = (key, fallback) => {
   const value = Number.parseInt(process.env[key], 10);
-  return Number.isFinite(value) ? value : fallback;
+  if (!Number.isFinite(value)) return fallback;
+
+  if (value > MAX_TIMER_MS) {
+    console.warn(
+      `⚠️  ${key}=${value}ms exceeds Node's timer limit. Capping it to ${MAX_TIMER_MS}ms (~24.8 days).`
+    );
+    return MAX_TIMER_MS;
+  }
+
+  if (value <= 0) return fallback;
+  return value;
 };
 
 const formatWindowLabel = (windowMs) => {
@@ -46,7 +58,7 @@ const generalLimiter = rateLimit({
 });
 
 // Stricter limiter for authentication routes
-const authLimiter = rateLimit({
+authLimiter = rateLimit({
   windowMs: AUTH_RATE_LIMIT_WINDOW_MS,
   max: AUTH_RATE_LIMIT_MAX_REQUESTS,
   skipSuccessfulRequests: true,
