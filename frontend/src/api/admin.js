@@ -34,4 +34,13 @@ export const adminAPI = {
   backupMongo: (direction, mode = "replace") => api.post("/admin/backup/mongo", { direction, mode }),
   backupSupabase: (direction, supabaseMode = "mirror") => api.post("/admin/backup/supabase", { direction, supabaseMode }),
   backupFull: (direction, mode = "replace", supabaseMode = "mirror") => api.post("/admin/backup/full", { direction, mode, supabaseMode }),
+
+  // Gemini API Key Pool (AI Studio)
+  getGeminiKeys: () => api.get("/admin/gemini-keys"),
+  addGeminiKey: (data) => api.post("/admin/gemini-keys", data),
+  updateGeminiKey: (id, data) => api.patch(`/admin/gemini-keys/${id}`, data),
+  deleteGeminiKey: (id) => api.delete(`/admin/gemini-keys/${id}`),
+  testGeminiKey: (id) => api.post(`/admin/gemini-keys/${id}/test`),
+  reorderGeminiKeys: (orderedIds) => api.post("/admin/gemini-keys/reorder", { orderedIds }),
+  getGeminiPoolStatus: () => api.get("/admin/gemini-pool/status"),
 };

@@ -1,28 +1,20 @@
 const crypto = require('crypto');
 
 /**
- * AES-256-GCM helpers for encrypting sensitive tokens before they're
- * persisted to the database — GitHub OAuth access tokens, and (as of
- * DevDrop Deploy) each user's Vercel OAuth access token and Render API key.
- * One key encrypts all connected-provider credentials; there's no
- * provider-specific derivation.
- *
- * Storage format: "<ivHex>:<authTagHex>:<ciphertextHex>"
- *
- * The key is read lazily (not at module load) so the server can still boot
- * in environments where this feature isn't configured yet — the error only
- * surfaces when something actually tries to encrypt/decrypt a token.
+ * Same AES-256-GCM helper and TOKEN_ENCRYPTION_KEY as
+ * backend/src/shared/utils/crypto.js. ai-service is a separate process, so
+ * it needs its own copy to decrypt Gemini keys read from the shared
+ * GeminiApiKey collection — the encryption key itself must be set to the
+ * SAME value in both backend/.env and ai-service/.env.
  */
 
 const ALGORITHM = 'aes-256-gcm';
-const IV_LENGTH = 12; // recommended IV length for GCM
+const IV_LENGTH = 12;
 
 const getKey = () => {
-  // TOKEN_ENCRYPTION_KEY is the preferred name now that this key protects
-  // as a fallback so existing deployments don't need to rotate anything.
   const hex = process.env.TOKEN_ENCRYPTION_KEY;
   if (!hex) {
-    throw new Error('TOKEN_ENCRYPTION_KEY is not configured.');
+    throw new Error('TOKEN_ENCRYPTION_KEY is not configured on ai-service (must match backend).');
   }
   const key = Buffer.from(hex, 'hex');
   if (key.length !== 32) {
@@ -35,28 +27,21 @@ const encrypt = (plainText) => {
   const key = getKey();
   const iv = crypto.randomBytes(IV_LENGTH);
   const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
-
   const encrypted = Buffer.concat([cipher.update(String(plainText), 'utf8'), cipher.final()]);
   const authTag = cipher.getAuthTag();
-
   return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted.toString('hex')}`;
 };
 
 const decrypt = (payload) => {
   const key = getKey();
   const parts = String(payload || '').split(':');
-  if (parts.length !== 3) {
-    throw new Error('Malformed encrypted payload.');
-  }
-
+  if (parts.length !== 3) throw new Error('Malformed encrypted payload.');
   const [ivHex, authTagHex, dataHex] = parts;
   const iv = Buffer.from(ivHex, 'hex');
   const authTag = Buffer.from(authTagHex, 'hex');
   const data = Buffer.from(dataHex, 'hex');
-
   const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
   decipher.setAuthTag(authTag);
-
   const decrypted = Buffer.concat([decipher.update(data), decipher.final()]);
   return decrypted.toString('utf8');
 };

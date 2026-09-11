@@ -6,6 +6,7 @@ const { uploadMultiple, handleMulterError } = require('../../shared/middleware/u
 const adminController = require('./admin.controller');
 const backupController = require('../backup/backup.controller');
 const couponController = require('../coupons/coupon.controller');
+const geminiPoolController = require('../gemini-pool/geminiPool.controller');
 
 router.use(auth, adminOnly);
 
@@ -29,5 +30,15 @@ router.get('/backup/history', backupController.getHistory);
 router.post('/backup/mongo', backupController.backupMongo);
 router.post('/backup/supabase', backupController.backupSupabase);
 router.post('/backup/full', backupController.backupFull);
+
+// Gemini API key pool (AI Studio) — config lives in Mongo here, live
+// selection/health tracking happens in ai-service.
+router.get('/gemini-keys', geminiPoolController.listKeys);
+router.post('/gemini-keys', geminiPoolController.addKey);
+router.post('/gemini-keys/reorder', geminiPoolController.reorderKeys);
+router.post('/gemini-keys/:id/test', geminiPoolController.testKey);
+router.patch('/gemini-keys/:id', geminiPoolController.updateKey);
+router.delete('/gemini-keys/:id', geminiPoolController.deleteKey);
+router.get('/gemini-pool/status', geminiPoolController.getPoolStatus);
 
 module.exports = router;

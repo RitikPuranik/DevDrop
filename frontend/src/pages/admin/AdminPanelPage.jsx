@@ -10,6 +10,7 @@ import WebsitesSection from './sections/WebsitesSection';
 import PayoutsSection from './sections/PayoutsSection';
 import BackupSection from './sections/BackupSection';
 import CouponsSection from './sections/CouponsSection';
+import GeminiPoolSection from './sections/GeminiPoolSection';
 
 export default function AdminPanel() {
   const navigate = useNavigate();
@@ -67,6 +68,7 @@ export default function AdminPanel() {
         {activeTab === 'coupons' && <CouponsSection />}
         {activeTab === 'payouts' && <PayoutsSection />}
         {activeTab === 'backup' && <BackupSection />}
+        {activeTab === 'gemini-pool' && <GeminiPoolSection />}
       </div>
     </div>
   );
