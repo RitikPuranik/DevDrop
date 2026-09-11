@@ -10,32 +10,41 @@ const RETIRED_GEMINI_MODELS = new Set([
   'gemini-2.0-flash-lite-001',
 ]);
 
-// Current Gemini Flash models. A 503 means the selected model is temporarily
-// capacity constrained, so we automatically try the next available model.
 const DEFAULT_GEMINI_MODELS = [
   'gemini-3.8-flash',
-  'gemini-3.7-flash',
   'gemini-3.6-flash',
   'gemini-3.5-flash-lite',
 ];
 
 const configuredModel = (process.env.GEMINI_MODEL || '').trim();
-const primaryModel =
-  configuredModel && !RETIRED_GEMINI_MODELS.has(configuredModel)
+const configuredFallback =
+  configuredModel &&
+  !RETIRED_GEMINI_MODELS.has(configuredModel) &&
+  !DEFAULT_GEMINI_MODELS.includes(configuredModel)
     ? configuredModel
-    : DEFAULT_GEMINI_MODELS[0];
+    : null;
 
+// Always try the current 3.8 Flash first. A local GEMINI_MODEL remains a
+// fallback when it points at a different non-retired model.
 const GEMINI_MODELS = [
-  primaryModel,
-  ...DEFAULT_GEMINI_MODELS.filter((model) => model !== primaryModel),
-];
+  DEFAULT_GEMINI_MODELS[0],
+  ...(configuredModel &&
+  !RETIRED_GEMINI_MODELS.has(configuredModel) &&
+  configuredModel !== DEFAULT_GEMINI_MODELS[0]
+    ? [configuredModel]
+    : []),
+  ...DEFAULT_GEMINI_MODELS.slice(1),
+  ...(configuredFallback ? [configuredFallback] : []),
+].filter((model, index, models) => models.indexOf(model) === index);
 
-const GEMINI_TIMEOUT_MS = Number.parseInt(process.env.GEMINI_TIMEOUT_MS || '60000', 10);
-const GEMINI_RETRY_DELAY_MS = Number.parseInt(process.env.GEMINI_RETRY_DELAY_MS || '1000', 10);
+// Keep each attempt bounded. A timeout is treated like a temporary capacity
+// problem and automatically moves to the next Flash model.
+const GEMINI_TIMEOUT_MS = Number.parseInt(process.env.GEMINI_TIMEOUT_MS || '90000', 10);
+const GEMINI_RETRY_DELAY_MS = Number.parseInt(process.env.GEMINI_RETRY_DELAY_MS || '500', 10);
 const GEMINI_MAX_MODEL_ATTEMPTS = Math.max(
   1,
   Math.min(
-    Number.parseInt(process.env.GEMINI_MAX_MODEL_ATTEMPTS || String(GEMINI_MODELS.length), 10) || GEMINI_MODELS.length,
+    Number.parseInt(process.env.GEMINI_MAX_MODEL_ATTEMPTS || '2', 10) || 2,
     GEMINI_MODELS.length
   )
 );
@@ -97,6 +106,11 @@ const isRetryableCapacityError = (error) => {
   return status === 503 || /high demand|temporarily unavailable|unavailable/i.test(message);
 };
 
+const isTimeoutError = (error) =>
+  error.code === 'ECONNABORTED' ||
+  error.code === 'ETIMEDOUT' ||
+  /timeout of \d+ms exceeded/i.test(error.message || '');
+
 function extractText(response) {
   return response.data?.candidates?.[0]?.content?.parts
     ?.map((part) => part.text || '')
@@ -138,6 +152,7 @@ function parseGeneratedApp(text) {
 
 async function requestModel({ model, apiKey, contents, timeout }) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+
   return axios.post(
     `${url}?key=${encodeURIComponent(apiKey)}`,
     {
@@ -146,6 +161,9 @@ async function requestModel({ model, apiKey, contents, timeout }) {
       generationConfig: {
         temperature: 0.7,
         responseMimeType: 'application/json',
+        // Code generation does not need maximum reasoning depth. Keeping this
+        // low materially reduces latency and makes fallback attempts practical.
+        thinkingConfig: { thinkingLevel: 'low' },
       },
     },
     {
@@ -165,8 +183,14 @@ async function generateApp({ messages, fileData }) {
   }
 
   const contents = buildContents(messages, fileData);
-  const timeout = Number.isFinite(GEMINI_TIMEOUT_MS) && GEMINI_TIMEOUT_MS > 0 ? GEMINI_TIMEOUT_MS : 60000;
+  const timeout =
+    Number.isFinite(GEMINI_TIMEOUT_MS) && GEMINI_TIMEOUT_MS > 0
+      ? GEMINI_TIMEOUT_MS
+      : 90000;
+
   let lastError = null;
+  let lastTimedOutModel = null;
+  let lastCapacityModel = null;
 
   for (let attempt = 0; attempt < GEMINI_MAX_MODEL_ATTEMPTS; attempt += 1) {
     const model = GEMINI_MODELS[attempt];
@@ -174,16 +198,20 @@ async function generateApp({ messages, fileData }) {
 
     try {
       const response = await requestModel({ model, apiKey, contents, timeout });
+
       console.log('Gemini generation succeeded', {
         model,
         attempt: attempt + 1,
         status: response.status,
         elapsedMs: Date.now() - startedAt,
       });
+
       return parseGeneratedApp(extractText(response));
     } catch (error) {
       const status = error.response?.status;
       const apiMessage = error.response?.data?.error?.message;
+      const timedOut = isTimeoutError(error);
+      const capacity = isRetryableCapacityError(error);
       lastError = error;
 
       console.error('Gemini model attempt failed', {
@@ -195,33 +223,52 @@ async function generateApp({ messages, fileData }) {
         message: apiMessage || error.message,
       });
 
-      if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+      if (timedOut) lastTimedOutModel = model;
+      if (capacity) lastCapacityModel = model;
+
+      if ((timedOut || capacity) && attempt < GEMINI_MAX_MODEL_ATTEMPTS - 1) {
+        const reason = timedOut ? 'timeout' : 'capacity';
+        console.warn(
+          `Gemini ${reason} on ${model}; trying fallback model ${GEMINI_MODELS[attempt + 1]}`
+        );
+        if (GEMINI_RETRY_DELAY_MS > 0) await sleep(GEMINI_RETRY_DELAY_MS);
+        continue;
+      }
+
+      if (timedOut) {
         const err = new Error(`Gemini request timed out after ${timeout}ms`);
-        err.userMessage = `Gemini took too long to respond. The server waited ${Math.round(timeout / 1000)} seconds. Please try again.`;
+        err.userMessage =
+          `Gemini is taking too long to respond. DevDrop tried ${GEMINI_MAX_MODEL_ATTEMPTS} Gemini Flash model${GEMINI_MAX_MODEL_ATTEMPTS === 1 ? '' : 's'} ` +
+          `and the last attempt (${lastTimedOutModel || model}) timed out after ${Math.round(timeout / 1000)} seconds. Please try again.`;
         err.statusCode = 504;
         throw err;
       }
 
-      if (!isRetryableCapacityError(error) || attempt >= GEMINI_MAX_MODEL_ATTEMPTS - 1) {
-        const message = apiMessage || error.message;
-        const err = new Error(message);
-        err.userMessage = status === 503
-          ? 'Gemini is temporarily at capacity. DevDrop tried multiple Gemini Flash models, but they are currently unavailable. Please try again shortly.'
-          : apiMessage
-            ? `Gemini API error: ${apiMessage}`
-            : 'Failed to reach Gemini. Check the backend network connection and GEMINI_API_KEY.';
-        err.statusCode = status || 502;
+      if (status === 503 || capacity) {
+        const err = new Error(apiMessage || 'Gemini temporarily unavailable');
+        err.userMessage =
+          `Gemini is temporarily at capacity. DevDrop tried ${GEMINI_MAX_MODEL_ATTEMPTS} Gemini Flash model${GEMINI_MAX_MODEL_ATTEMPTS === 1 ? '' : 's'} ` +
+          `and none were available right now. Please try again shortly.`;
+        err.statusCode = 503;
         throw err;
       }
 
-      console.warn(`Gemini capacity issue on ${model}; trying fallback model next`);
-      if (GEMINI_RETRY_DELAY_MS > 0) await sleep(GEMINI_RETRY_DELAY_MS);
+      const err = new Error(apiMessage || error.message);
+      err.userMessage = apiMessage
+        ? `Gemini API error: ${apiMessage}`
+        : 'Failed to reach Gemini. Check the backend network connection and GEMINI_API_KEY.';
+      err.statusCode = status || 502;
+      throw err;
     }
   }
 
   const fallback = new Error(lastError?.message || 'All Gemini models failed');
-  fallback.userMessage = 'Gemini is temporarily unavailable. Please try again shortly.';
-  fallback.statusCode = 503;
+  fallback.userMessage = lastTimedOutModel
+    ? `Gemini generation timed out on ${lastTimedOutModel}. Please try again.`
+    : lastCapacityModel
+      ? 'Gemini is temporarily at capacity. Please try again shortly.'
+      : 'Gemini is temporarily unavailable. Please try again shortly.';
+  fallback.statusCode = lastTimedOutModel ? 504 : 503;
   throw fallback;
 }
 
