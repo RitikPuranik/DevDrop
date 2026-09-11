@@ -114,7 +114,7 @@ describe('Genie service contract', () => {
 
       await expect(genieClient.createGeneration({}, { ownerId: 'u1' })).rejects.toMatchObject({
         status: 401,
-        code: 'GENIE_SERVICE_AUTH_ERROR',
+        code: 'AI_SERVICE_AUTH_ERROR',
       });
     });
   });

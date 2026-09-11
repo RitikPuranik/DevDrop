@@ -56,7 +56,11 @@ const startBackupCron = () => {
   const intervalHours = parseFloat(intervalHoursRaw);
 
   if (intervalHoursRaw && !isNaN(intervalHours) && intervalHours > 0) {
-    const intervalMs = intervalHours * 60 * 60 * 1000;
+    let intervalMs = intervalHours * 60 * 60 * 1000;
+    if (intervalMs > 2147483647) {
+      console.warn(`⚠️  BACKUP_INTERVAL_HOURS of ${intervalHours} (${intervalMs}ms) exceeds the 32-bit signed integer limit. Capping to 24.8 days (2147483647ms).`);
+      intervalMs = 2147483647;
+    }
     setInterval(runScheduledBackup, intervalMs);
     console.log(`✅ Backup cron started — runs every ${intervalHours} hour(s) (BACKUP_INTERVAL_HOURS)`);
     return;

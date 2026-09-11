@@ -1,14 +1,53 @@
 const axios = require('axios');
 
-// Adapted from https://github.com/piyush-eon/ai-app-builder (app/api/gen-ai-code/route.ts)
-// — same JSON-contract idea (assistantMessage/title/files/dependencies), same
-// system prompt approach — but called via a plain REST request instead of the
-// @google/genai SDK (no new dependency needed; axios is already used
-// elsewhere in this backend), non-streaming for simplicity, and gated behind
-// DevDrop's own JWT auth instead of Clerk/credits/Arcjet.
+// DevDrop keeps the AI Studio provider behind the backend so the Gemini key
+// never reaches the browser. Generation uses Gemini's JSON response mode.
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+const RETIRED_GEMINI_MODELS = new Set([
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-001',
+  'gemini-2.0-flash-lite',
+  'gemini-2.0-flash-lite-001',
+]);
+
+const DEFAULT_GEMINI_MODELS = [
+  'gemini-3.8-flash',
+  'gemini-3.6-flash',
+  'gemini-3.5-flash-lite',
+];
+
+const configuredModel = (process.env.GEMINI_MODEL || '').trim();
+const configuredFallback =
+  configuredModel &&
+  !RETIRED_GEMINI_MODELS.has(configuredModel) &&
+  !DEFAULT_GEMINI_MODELS.includes(configuredModel)
+    ? configuredModel
+    : null;
+
+// Always try the current 3.8 Flash first. A local GEMINI_MODEL remains a
+// fallback when it points at a different non-retired model.
+const GEMINI_MODELS = [
+  DEFAULT_GEMINI_MODELS[0],
+  ...(configuredModel &&
+  !RETIRED_GEMINI_MODELS.has(configuredModel) &&
+  configuredModel !== DEFAULT_GEMINI_MODELS[0]
+    ? [configuredModel]
+    : []),
+  ...DEFAULT_GEMINI_MODELS.slice(1),
+  ...(configuredFallback ? [configuredFallback] : []),
+].filter((model, index, models) => models.indexOf(model) === index);
+
+// Keep each attempt bounded. A timeout is treated like a temporary capacity
+// problem and automatically moves to the next Flash model.
+const GEMINI_TIMEOUT_MS = Number.parseInt(process.env.GEMINI_TIMEOUT_MS || '90000', 10);
+const GEMINI_RETRY_DELAY_MS = Number.parseInt(process.env.GEMINI_RETRY_DELAY_MS || '500', 10);
+const GEMINI_MAX_MODEL_ATTEMPTS = Math.max(
+  1,
+  Math.min(
+    Number.parseInt(process.env.GEMINI_MAX_MODEL_ATTEMPTS || '2', 10) || 2,
+    GEMINI_MODELS.length
+  )
+);
 
 const SYSTEM_PROMPT = `You are an expert React developer. Your job is to generate complete, working React applications based on user prompts.
 
@@ -34,21 +73,11 @@ RULES:
 8. When modifying existing code, include ALL files (both changed and unchanged) in "files", not just the ones you changed.
 9. Keep code clean, readable, and production-quality.`;
 
-/**
- * Keep only the system message plus the most recent few turns, so long
- * chats don't blow past context limits or slow every request down.
- */
 function trimHistory(messages) {
   if (messages.length <= 10) return messages;
   return [messages[0], ...messages.slice(-8)];
 }
 
-/**
- * Turn DevDrop's { role: 'user' | 'assistant', content }[] chat history into
- * Gemini's { role: 'user' | 'model', parts: [...] }[] contents array, and
- * attach the current project files as context on the final user turn so
- * follow-up prompts ("make the header blue") can see what already exists.
- */
 function buildContents(messages, fileData) {
   const trimmed = trimHistory(messages);
 
@@ -69,47 +98,32 @@ function buildContents(messages, fileData) {
   });
 }
 
-/**
- * Call Gemini and return the parsed { assistantMessage, title, files,
- * dependencies } object. Throws with a `.userMessage` on any failure the
- * caller should show back to the user (missing key, bad JSON, etc.).
- */
-async function generateApp({ messages, fileData }) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    const err = new Error('GEMINI_API_KEY is not configured on the backend');
-    err.userMessage = 'AI Studio is not configured yet (missing Gemini API key on the server).';
-    err.statusCode = 500;
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const isRetryableCapacityError = (error) => {
+  const status = error.response?.status;
+  const message = error.response?.data?.error?.message || error.message || '';
+  return status === 503 || /high demand|temporarily unavailable|unavailable/i.test(message);
+};
+
+const isTimeoutError = (error) =>
+  error.code === 'ECONNABORTED' ||
+  error.code === 'ETIMEDOUT' ||
+  /timeout of \d+ms exceeded/i.test(error.message || '');
+
+function extractText(response) {
+  return response.data?.candidates?.[0]?.content?.parts
+    ?.map((part) => part.text || '')
+    .join('') || '';
+}
+
+function parseGeneratedApp(text) {
+  if (!text) {
+    const err = new Error('Gemini returned no text');
+    err.userMessage = 'Gemini did not return generated app code. Please try again.';
+    err.statusCode = 502;
     throw err;
   }
-
-  const contents = buildContents(messages, fileData);
-
-  let response;
-  try {
-    response = await axios.post(
-      `${GEMINI_API_URL}?key=${apiKey}`,
-      {
-        contents,
-        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        generationConfig: {
-          temperature: 0.7,
-          responseMimeType: 'application/json',
-        },
-      },
-      { timeout: 60_000 }
-    );
-  } catch (error) {
-    const apiMessage = error.response?.data?.error?.message;
-    const err = new Error(apiMessage || error.message);
-    err.userMessage = apiMessage
-      ? `Gemini API error: ${apiMessage}`
-      : 'Failed to reach Gemini. Check the server logs and your GEMINI_API_KEY.';
-    err.statusCode = error.response?.status || 502;
-    throw err;
-  }
-
-  const text = response.data?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
 
   let parsed;
   try {
@@ -121,7 +135,7 @@ async function generateApp({ messages, fileData }) {
     throw err;
   }
 
-  if (!parsed.files || typeof parsed.files !== 'object') {
+  if (!parsed.files || typeof parsed.files !== 'object' || Array.isArray(parsed.files)) {
     const err = new Error('Gemini response missing "files"');
     err.userMessage = 'The AI response was missing generated files. Please try again.';
     err.statusCode = 502;
@@ -134,6 +148,129 @@ async function generateApp({ messages, fileData }) {
     files: parsed.files,
     dependencies: parsed.dependencies || {},
   };
+}
+
+async function requestModel({ model, apiKey, contents, timeout }) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+
+  return axios.post(
+    `${url}?key=${encodeURIComponent(apiKey)}`,
+    {
+      contents,
+      systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+      generationConfig: {
+        temperature: 0.7,
+        responseMimeType: 'application/json',
+        maxOutputTokens: 8192,
+        // Code generation does not need maximum reasoning depth. Keeping this
+        // low materially reduces latency and makes fallback attempts practical.
+        thinkingConfig: { thinkingLevel: 'low' },
+      },
+    },
+    {
+      timeout,
+      headers: { 'Content-Type': 'application/json' },
+    }
+  );
+}
+
+async function generateApp({ messages, fileData }) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === 'your_gemini_api_key_here') {
+    const err = new Error('GEMINI_API_KEY is not configured on the backend');
+    err.userMessage = 'AI Studio is not configured yet. Add a valid GEMINI_API_KEY to backend/.env and restart the server.';
+    err.statusCode = 500;
+    throw err;
+  }
+
+  const contents = buildContents(messages, fileData);
+  const timeout =
+    Number.isFinite(GEMINI_TIMEOUT_MS) && GEMINI_TIMEOUT_MS > 0
+      ? GEMINI_TIMEOUT_MS
+      : 90000;
+
+  let lastError = null;
+  let lastTimedOutModel = null;
+  let lastCapacityModel = null;
+
+  for (let attempt = 0; attempt < GEMINI_MAX_MODEL_ATTEMPTS; attempt += 1) {
+    const model = GEMINI_MODELS[attempt];
+    const startedAt = Date.now();
+
+    try {
+      const response = await requestModel({ model, apiKey, contents, timeout });
+
+      console.log('Gemini generation succeeded', {
+        model,
+        attempt: attempt + 1,
+        status: response.status,
+        elapsedMs: Date.now() - startedAt,
+      });
+
+      return parseGeneratedApp(extractText(response));
+    } catch (error) {
+      const status = error.response?.status;
+      const apiMessage = error.response?.data?.error?.message;
+      const timedOut = isTimeoutError(error);
+      const capacity = isRetryableCapacityError(error);
+      lastError = error;
+
+      console.error('Gemini model attempt failed', {
+        model,
+        attempt: attempt + 1,
+        status,
+        code: error.code,
+        elapsedMs: Date.now() - startedAt,
+        message: apiMessage || error.message,
+      });
+
+      if (timedOut) lastTimedOutModel = model;
+      if (capacity) lastCapacityModel = model;
+
+      if ((timedOut || capacity) && attempt < GEMINI_MAX_MODEL_ATTEMPTS - 1) {
+        const reason = timedOut ? 'timeout' : 'capacity';
+        console.warn(
+          `Gemini ${reason} on ${model}; trying fallback model ${GEMINI_MODELS[attempt + 1]}`
+        );
+        if (GEMINI_RETRY_DELAY_MS > 0) await sleep(GEMINI_RETRY_DELAY_MS);
+        continue;
+      }
+
+      if (timedOut) {
+        const err = new Error(`Gemini request timed out after ${timeout}ms`);
+        err.userMessage =
+          `Gemini is taking too long to respond. DevDrop tried ${GEMINI_MAX_MODEL_ATTEMPTS} Gemini Flash model${GEMINI_MAX_MODEL_ATTEMPTS === 1 ? '' : 's'} ` +
+          `and the last attempt (${lastTimedOutModel || model}) timed out after ${Math.round(timeout / 1000)} seconds. Please try again.`;
+        err.statusCode = 504;
+        throw err;
+      }
+
+      if (status === 503 || capacity) {
+        const err = new Error(apiMessage || 'Gemini temporarily unavailable');
+        err.userMessage =
+          `Gemini is temporarily at capacity. DevDrop tried ${GEMINI_MAX_MODEL_ATTEMPTS} Gemini Flash model${GEMINI_MAX_MODEL_ATTEMPTS === 1 ? '' : 's'} ` +
+          `and none were available right now. Please try again shortly.`;
+        err.statusCode = 503;
+        throw err;
+      }
+
+      const err = new Error(apiMessage || error.message);
+      err.userMessage = apiMessage
+        ? `Gemini API error: ${apiMessage}`
+        : 'Failed to reach Gemini. Check the backend network connection and GEMINI_API_KEY.';
+      err.statusCode = status || 502;
+      throw err;
+    }
+  }
+
+  const fallback = new Error(lastError?.message || 'All Gemini models failed');
+  fallback.userMessage = lastTimedOutModel
+    ? `Gemini generation timed out on ${lastTimedOutModel}. Please try again.`
+    : lastCapacityModel
+      ? 'Gemini is temporarily at capacity. Please try again shortly.'
+      : 'Gemini is temporarily unavailable. Please try again shortly.';
+  fallback.statusCode = lastTimedOutModel ? 504 : 503;
+  throw fallback;
 }
 
 module.exports = { generateApp };

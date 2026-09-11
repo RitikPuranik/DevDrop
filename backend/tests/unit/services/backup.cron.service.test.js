@@ -121,6 +121,21 @@ describe('backup.cron.service', () => {
       jest.clearAllTimers();
     });
 
+    it('caps BACKUP_INTERVAL_HOURS if it exceeds the 32-bit signed integer limit', () => {
+      jest.useFakeTimers();
+      const setIntervalSpy = jest.spyOn(global, 'setInterval');
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      process.env.BACKUP_INTERVAL_HOURS = '1000';
+
+      startBackupCron();
+
+      expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 2147483647);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('exceeds the 32-bit signed integer limit'));
+
+      jest.clearAllTimers();
+      warnSpy.mockRestore();
+    });
+
     it('falls back to BACKUP_CRON_SCHEDULE (exact cron syntax) when no interval hours is set', () => {
       const cron = require('node-cron');
       const scheduleSpy = jest.spyOn(cron, 'schedule').mockImplementation(() => ({ stop: jest.fn() }));
