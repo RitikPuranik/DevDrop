@@ -52,6 +52,18 @@ const GEMINI_MAX_MODEL_ATTEMPTS = Math.max(
   )
 );
 
+// Gemini 3.8 Flash supports up to 65,536 output tokens. The old 8,192-token
+// ceiling was too small for full multi-file React apps and caused the JSON to
+// be cut off halfway through a source file. Keep the value configurable while
+// clamping it to the model's documented maximum.
+const GEMINI_MAX_OUTPUT_TOKENS = Math.max(
+  1024,
+  Math.min(
+    Number.parseInt(process.env.GEMINI_MAX_OUTPUT_TOKENS || '65536', 10) || 65536,
+    65536
+  )
+);
+
 const SYSTEM_PROMPT = `You are an expert React developer. Your job is to generate complete, working React applications based on user prompts.
 
 RULES:
@@ -74,7 +86,8 @@ RULES:
 6. All imports must reference files you include in "files" or packages in "dependencies".
 7. Do not include react, react-dom, or tailwindcss in "dependencies" — they are always available.
 8. When modifying existing code, include ALL files (both changed and unchanged) in "files", not just the ones you changed.
-9. Keep code clean, readable, and production-quality.`;
+9. Keep code clean, readable, and production-quality.
+10. Keep generated source files focused and avoid unnecessary duplicated boilerplate so the complete response fits within the output limit.`;
 
 function trimHistory(messages) {
   if (messages.length <= 10) return messages;
@@ -120,7 +133,11 @@ function extractText(response) {
     .join('') || '';
 }
 
-function parseGeneratedApp(text) {
+function getFinishReason(response) {
+  return response.data?.candidates?.[0]?.finishReason || null;
+}
+
+function parseGeneratedApp(text, finishReason) {
   if (!text) {
     const err = new Error('Gemini returned no text');
     err.userMessage = 'Gemini did not return generated app code. Please try again.';
@@ -132,8 +149,13 @@ function parseGeneratedApp(text) {
   try {
     parsed = JSON.parse(text);
   } catch {
-    const err = new Error('Gemini returned non-JSON output: ' + text.slice(0, 500));
-    err.userMessage = 'The AI returned an invalid response. Please try again.';
+    const err = new Error('Gemini returned incomplete/non-JSON output: ' + text.slice(0, 500));
+    err.finishReason = finishReason;
+    err.retryableOutput = finishReason === 'MAX_TOKENS' || finishReason === 'OTHER';
+    err.userMessage =
+      finishReason === 'MAX_TOKENS'
+        ? 'Gemini generated too much code for one response. DevDrop will retry with the expanded output limit.'
+        : 'The AI returned an incomplete response. Please try again.';
     err.statusCode = 502;
     throw err;
   }
@@ -161,9 +183,9 @@ async function requestModel({ model, apiKey, contents, timeout }) {
       contents,
       systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
       generationConfig: {
-        temperature: 0.7,
+        // Gemini 3.8 migration guidance removes temperature/top_p/top_k.
         responseMimeType: 'application/json',
-        maxOutputTokens: 8192,
+        maxOutputTokens: GEMINI_MAX_OUTPUT_TOKENS,
         // Code generation does not need maximum reasoning depth. Keeping this
         // low materially reduces latency and makes fallback attempts practical.
         thinkingConfig: { thinkingLevel: 'low' },
@@ -201,13 +223,16 @@ async function generateApp({ messages, fileData }) {
 
     try {
       const response = await requestModel({ model, apiKey, contents, timeout });
+      const finishReason = getFinishReason(response);
       console.log('Gemini generation succeeded', {
         model,
         attempt: attempt + 1,
         status: response.status,
+        finishReason,
         elapsedMs: Date.now() - startedAt,
+        outputLimit: GEMINI_MAX_OUTPUT_TOKENS,
       });
-      return parseGeneratedApp(extractText(response));
+      return parseGeneratedApp(extractText(response), finishReason);
     } catch (error) {
       const status = error.response?.status;
       const apiMessage = error.response?.data?.error?.message;
@@ -220,6 +245,7 @@ async function generateApp({ messages, fileData }) {
         attempt: attempt + 1,
         status,
         code: error.code,
+        finishReason: error.finishReason,
         elapsedMs: Date.now() - startedAt,
         message: apiMessage || error.message,
       });
@@ -227,8 +253,10 @@ async function generateApp({ messages, fileData }) {
       if (timedOut) lastTimedOutModel = model;
       if (capacity) lastCapacityModel = model;
 
-      if ((timedOut || capacity) && attempt < GEMINI_MAX_MODEL_ATTEMPTS - 1) {
-        const reason = timedOut ? 'timeout' : 'capacity';
+      const retryableOutput = Boolean(error.retryableOutput);
+
+      if ((timedOut || capacity || retryableOutput) && attempt < GEMINI_MAX_MODEL_ATTEMPTS - 1) {
+        const reason = timedOut ? 'timeout' : capacity ? 'capacity' : 'incomplete output';
         console.warn(
           `Gemini ${reason} on ${model}; trying fallback model ${GEMINI_MODELS[attempt + 1]}`
         );
@@ -251,6 +279,15 @@ async function generateApp({ messages, fileData }) {
           `Gemini is temporarily at capacity. DevDrop tried ${GEMINI_MAX_MODEL_ATTEMPTS} Gemini Flash model${GEMINI_MAX_MODEL_ATTEMPTS === 1 ? '' : 's'} ` +
           `and none were available right now. Please try again shortly.`;
         err.statusCode = 503;
+        throw err;
+      }
+
+      if (error.retryableOutput) {
+        const err = new Error(error.message || 'Gemini returned incomplete output');
+        err.userMessage =
+          `Gemini reached the end of its output before finishing the app JSON. ` +
+          `The response limit is now ${GEMINI_MAX_OUTPUT_TOKENS.toLocaleString()} tokens; please try again.`;
+        err.statusCode = 502;
         throw err;
       }
 
