@@ -16,7 +16,7 @@ const integration=require('../src/agents/integration.agent');
 it('runs requirements -> design -> architecture -> code -> integration -> validation', async () => {
   const stages=[];
   const result=await generateWebsite({websiteType:'portfolio',userData:{name:'Test'},preferences:{theme:'dark'},messages:[{role:'user',content:'portfolio'}]}, {onStage:(name,status)=>{if(status==='started')stages.push(name);}});
-  expect(stages).toEqual(['requirements','design','architecture','code-generation','integration','build-validator']);
+  expect(stages).toEqual(['requirements','design','architecture','code:/App.js','integration','build-validator']);
   expect(requirements.run).toHaveBeenCalledTimes(1);
   expect(design.run).toHaveBeenCalledTimes(1);
   expect(architecture.run).toHaveBeenCalledTimes(1);
