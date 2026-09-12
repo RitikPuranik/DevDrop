@@ -196,11 +196,54 @@ export default function AuthModal({ isOpen, onClose }) {
   useEffect(() => {
     const backendOrigin = getBackendOrigin();
 
+    const completeFromStorage = () => {
+      const token = localStorage.getItem("token");
+      const storedUser = localStorage.getItem("user");
+      if (!token || !storedUser) return false;
+
+      try {
+        const user = JSON.parse(storedUser);
+        if (!user?.id && !user?._id) return false;
+        localStorage.removeItem("devdrop_github_auth_complete");
+        finishGithubSignIn(token, user);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    const handleStorage = (event) => {
+      if (event.key === "devdrop_github_auth_complete" && event.newValue) {
+        completeFromStorage();
+        return;
+      }
+
+      // The callback page is on the frontend origin, so its token/user writes
+      // also generate storage events in this tab. Treat them as a fallback
+      // completion signal in case the dedicated marker was missed.
+      if ((event.key === "token" || event.key === "user") && event.newValue) {
+        completeFromStorage();
+        return;
+      }
+
+      if (event.key === "devdrop_github_auth_error" && event.newValue) {
+        try {
+          const payload = JSON.parse(event.newValue);
+          toast.error(payload?.message || "GitHub sign-in failed");
+        } catch {
+          toast.error("GitHub sign-in failed");
+        }
+        setGithubLoading(false);
+        clearInterval(githubPopupWatcherRef.current);
+      }
+    };
+
     const handleMessage = (event) => {
-      if (backendOrigin && event.origin !== backendOrigin) return;
+      if (event.origin !== window.location.origin) return;
+      if (githubPopupRef.current && event.source !== githubPopupRef.current) return;
       const { type, token, user, message } = event.data || {};
 
-      if (type === "github-auth-success") {
+      if (type === "github-auth-success" && token && user) {
         finishGithubSignIn(token, user);
       } else if (type === "github-auth-error") {
         toast.error(message || "GitHub sign-in failed");
@@ -216,10 +259,19 @@ export default function AuthModal({ isOpen, onClose }) {
     };
 
     window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, [finishGithubSignIn]);
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      window.removeEventListener("message", handleMessage);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, [finishGithubSignIn, isOpen]);
 
   const handleGithubAuth = () => {
+    try {
+      localStorage.removeItem("devdrop_github_auth_complete");
+      localStorage.removeItem("devdrop_github_auth_error");
+    } catch {}
     setGithubLoading(true);
     const popup = window.open(authAPI.githubAuthUrl(), "github-login-oauth", "width=600,height=720");
     githubPopupRef.current = popup;

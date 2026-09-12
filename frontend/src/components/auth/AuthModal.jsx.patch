@@ -1,0 +1,21 @@
+--- a/frontend/src/components/auth/AuthModal.jsx
++++ b/frontend/src/components/auth/AuthModal.jsx
+@@
+   useEffect(() => {
+-    const backendOrigin = getBackendOrigin();
++    const frontendOrigin = window.location.origin;
+ 
+     const handleMessage = (event) => {
+-      if (backendOrigin && event.origin !== backendOrigin) return;
++      if (event.origin !== frontendOrigin) return;
++      if (githubPopupRef.current && event.source !== githubPopupRef.current) return;
+       const { type, token, user, message } = event.data || {};
+ 
+       if (type === "github-auth-success") {
++        if (!token || !user) {
++          toast.error("GitHub sign-in returned an incomplete session.");
++          setGithubLoading(false);
++          return;
++        }
+         finishGithubSignIn(token, user);
+***
