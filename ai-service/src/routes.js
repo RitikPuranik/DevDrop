@@ -16,8 +16,25 @@ router.get('/health', (req, res) => res.status(200).json({ success: true, status
 router.post('/jobs', requireServiceKey, (req, res) => {
   const body = req.body || {};
   if (!Array.isArray(body.messages) || body.messages.length === 0) return res.status(400).json({ success: false, message: 'No messages provided' });
-  const jobId = createJob({ messages: body.messages, fileData: body.fileData || null, websiteType: body.websiteType || body.type || 'portfolio', userData: body.userData || body.portfolioData || {}, preferences: body.preferences || {}, assets: body.assets || [], conversation: body.conversation || body.messages });
-  res.status(202).json({ success: true, data: { jobId, status: 'queued' } });
+  // An existing project's files travel along with every follow-up request
+  // (the frontend keeps them in `fileData` after the first generation). Their
+  // presence is what distinguishes "edit an existing site" from "generate a
+  // new one" -- a brand-new request never has them.
+  const existingFiles = body.fileData && typeof body.fileData.files === 'object' && body.fileData.files ? body.fileData.files : null;
+  const mode = existingFiles && Object.keys(existingFiles).length > 0 ? 'edit' : 'generate';
+  const jobId = createJob({
+    messages: body.messages,
+    fileData: body.fileData || null,
+    websiteType: body.websiteType || body.type || 'portfolio',
+    userData: body.userData || body.portfolioData || {},
+    preferences: body.preferences || {},
+    assets: body.assets || [],
+    conversation: body.conversation || body.messages,
+    mode,
+    existingFiles,
+    existingDependencies: (existingFiles && body.fileData?.dependencies) || {},
+  });
+  res.status(202).json({ success: true, data: { jobId, status: 'queued', mode } });
 });
 router.get('/jobs/:id', requireServiceKey, (req, res) => {
   const job = getJob(req.params.id); if (!job) return res.status(404).json({ success: false, message: 'Job not found' });

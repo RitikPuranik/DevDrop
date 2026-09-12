@@ -1,5 +1,6 @@
 const { randomUUID } = require('crypto');
 const { generateWebsite } = require('./orchestrator/websiteGeneration.orchestrator');
+const { editWebsite } = require('./orchestrator/websiteEditing.orchestrator');
 
 const JOB_TTL_MS = Number.parseInt(process.env.AI_JOB_TTL_MS || String(30 * 60 * 1000), 10);
 const CONCURRENCY = Math.max(1, Number.parseInt(process.env.AI_CONCURRENCY || '1', 10) || 1);
@@ -12,7 +13,8 @@ async function runJob(id) {
   const job = jobs.get(id); if (!job) return;
   job.status = 'processing'; job.currentStage = 'starting';
   try {
-    const result = await generateWebsite(job.payload, { onStage: (stage, status, details) => { job.currentStage = stage; job.stageStatus = status; if (details) job.generationMeta.agents = job.generationMeta.agents.filter((a) => a.name !== stage).concat(details); } });
+    const run = job.payload.mode === 'edit' ? editWebsite : generateWebsite;
+    const result = await run(job.payload, { onStage: (stage, status, details) => { job.currentStage = stage; job.stageStatus = status; if (details) job.generationMeta.agents = job.generationMeta.agents.filter((a) => a.name !== stage).concat(details); } });
     job.status = 'completed'; job.result = result; job.error = null; job.currentStage = 'completed';
   } catch (error) {
     job.status = 'failed'; job.error = error.userMessage || error.message || 'AI generation failed'; job.currentStage = 'failed';

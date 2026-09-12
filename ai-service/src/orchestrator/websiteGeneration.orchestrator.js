@@ -7,13 +7,13 @@ const debugAgent=require('../agents/debug.agent');
 const {validateRequirements,validateDesign,validateArchitecture}=require('../validators/contracts.validator');
 const {validateGeneratedFiles}=require('../validators/generatedFiles.validator');
 const buildValidator=require('../validators/build.validator');
+const { withTimeout, stage: runStage }=require('./stageRunner');
 const MAX_BUILD_FIX_RETRIES=Math.max(0,Number.parseInt(process.env.MAX_BUILD_FIX_RETRIES||'3',10)||3);
 const STAGE_TIMEOUT_MS=Number.parseInt(process.env.AGENT_STAGE_TIMEOUT_MS||'180000',10);
 const CODE_AGENT_TIMEOUT_MS=Number.parseInt(process.env.CODE_AGENT_TIMEOUT_MS||'300000',10);
-function withTimeout(promise,ms,name){let timer;const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>reject(Object.assign(new Error(`${name} timed out after ${ms}ms`),{failure:{category:'timeout'}})),ms);});return Promise.race([promise,timeout]).finally(()=>clearTimeout(timer));}
 function normalizeInput(input){const messages=Array.isArray(input.messages)?input.messages:[];const lastUser=[...messages].reverse().find(m=>m?.role==='user')?.content||'';return {websiteType:input.websiteType||input.type||'portfolio',userData:input.userData||input.portfolioData||{},preferences:input.preferences||{},assets:input.assets||[],conversation:input.conversation||messages,legacyPrompt:lastUser,fileData:input.fileData||null};}
 function mergeFiles(base,changes){const out={...base};for(const[p,obj]of Object.entries(changes||{}))if(obj?.code)out[p]={code:obj.code};return out;}
-async function stage(name,fn,meta,onStage){const started=Date.now();const item={name,status:'processing',durationMs:0};meta.push(item);onStage?.(name,'started',item);try{const value=await withTimeout(fn(),STAGE_TIMEOUT_MS,name);item.status='completed';item.durationMs=Date.now()-started;item.model=value?.model||null;item.attempt=value?.attempt||null;onStage?.(name,'completed',item);return value;}catch(error){item.status='failed';item.durationMs=Date.now()-started;item.failure={category:error.failure?.category||'agent_error',message:error.message};onStage?.(name,'failed',item);throw error;}}
+function stage(name,fn,meta,onStage){return runStage(name,fn,meta,onStage,STAGE_TIMEOUT_MS);}
 async function generateWebsite(input,{onStage}={}){
  const meta=[];console.log('[ORCHESTRATOR] Starting generation');const normalized=normalizeInput(input);
  const requirementsResult=await stage('requirements',()=>requirementsAgent.run(normalized),meta,onStage);const requirements=validateRequirements(requirementsResult.value);
