@@ -280,7 +280,7 @@ function markFailure(entry, error) {
     update.consecutiveFailures = 0;
   } else {
     entry.consecutiveFailures += 1;
-    const cooldownMs = cooldownForFailure(entry.consecutiveFailures, info.classification);
+    const cooldownMs = cooldownForFailure(entry.consecutiveFailures, info.classification, info.retryAfterMs);
     entry.cooldownUntil = cooldownMs > 0 ? new Date(Date.now() + cooldownMs) : null;
     entry.status = info.classification === 'rate_limit' ? 'rate_limited' : 'degraded';
     update.status = entry.status;

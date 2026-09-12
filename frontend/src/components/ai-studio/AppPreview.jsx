@@ -7,7 +7,7 @@ import {
   SandpackFileExplorer,
   useSandpack,
 } from '@codesandbox/sandpack-react';
-import { Eye, Code2, AlertTriangle, Bot, Download, Check, Circle, Loader2 } from 'lucide-react';
+import { Eye, Code2, AlertTriangle, Bot, Download, Check, Circle, Loader2, RefreshCw } from 'lucide-react';
 import JSZip from 'jszip';
 
 const PLACEHOLDER_FILES = {
@@ -100,7 +100,7 @@ function PipelineProgress({ pipeline = {}, currentStage, isGenerating }) {
   );
 }
 
-function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiveTab, pipeline, currentStage }) {
+function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiveTab, pipeline, currentStage, onHardReload }) {
   const { sandpack, listen } = useSandpack();
   const [previewError, setPreviewError] = useState(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -179,16 +179,31 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
             <Code2 className="h-3.5 w-3.5" /> Code
           </button>
         </div>
-        <button onClick={handleExportZip} disabled={isExporting || !fileData} className="flex items-center gap-1.5 rounded-md border border-neutral-700 px-2.5 py-1 text-xs text-neutral-300 hover:bg-neutral-800 disabled:opacity-40">
-          <Download className="h-3.5 w-3.5" /> Download
-        </button>
+        <div className="flex items-center gap-2">
+          {activeTab === 'preview' && (
+            <button
+              onClick={onHardReload}
+              title="Restart the preview session (fixes a stuck/blank preview)"
+              className="flex items-center gap-1.5 rounded-md border border-neutral-700 px-2.5 py-1 text-xs text-neutral-300 hover:bg-neutral-800"
+            >
+              <RefreshCw className="h-3.5 w-3.5" /> Reload preview
+            </button>
+          )}
+          <button onClick={handleExportZip} disabled={isExporting || !fileData} className="flex items-center gap-1.5 rounded-md border border-neutral-700 px-2.5 py-1 text-xs text-neutral-300 hover:bg-neutral-800 disabled:opacity-40">
+            <Download className="h-3.5 w-3.5" /> Download
+          </button>
+        </div>
       </div>
 
       <div className="relative flex-1 overflow-hidden">
         <SandpackLayout style={{ height: '100%', border: 'none', borderRadius: 0, background: 'transparent' }}>
-          {activeTab === 'preview' ? (
+          {/* Keep the preview iframe mounted at all times — unmounting/remounting
+              SandpackPreviewPane on tab switch kills its bundler/iframe handshake
+              and the remount comes back as a blank white screen. Hide with CSS instead. */}
+          <div style={{ display: activeTab === 'preview' ? 'block' : 'none', height: '100%', width: '100%' }}>
             <SandpackPreviewPane style={{ height: '100%', width: '100%' }} showOpenInCodeSandbox={false} />
-          ) : (
+          </div>
+          {activeTab === 'code' && (
             <>
               <SandpackFileExplorer style={{ height: '100%', width: 180 }} />
               <SandpackCodeEditor style={{ height: '100%', flex: 1 }} showTabs showLineNumbers readOnly />
@@ -207,10 +222,18 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
             <div className="min-w-0 flex-1">
               <p className="text-xs font-medium text-red-300">Preview error</p>
               <p className="break-all text-[11px] text-red-300/70">{previewError}</p>
+              {/^\s*authentication error/i.test(previewError) && (
+                <p className="mt-1 text-[11px] text-red-300/50">
+                  This comes from Sandpack's cloud bundler session, not your generated code.
+                  Try "Reload preview" above, or allow third-party cookies for codesandbox.io / csb.app in this browser.
+                </p>
+              )}
             </div>
-            <button onClick={() => onFixError(previewError)} className="flex shrink-0 items-center gap-1.5 rounded-md bg-red-600 px-2.5 py-1 text-xs text-white hover:bg-red-500">
-              <Bot className="h-3 w-3" /> Fix with AI
-            </button>
+            {!/^\s*authentication error/i.test(previewError) && (
+              <button onClick={() => onFixError(previewError)} className="flex shrink-0 items-center gap-1.5 rounded-md bg-red-600 px-2.5 py-1 text-xs text-white hover:bg-red-500">
+                <Bot className="h-3 w-3" /> Fix with AI
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -220,6 +243,7 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
 
 export default function AppPreview({ fileData, isGenerating, onFixError, pipeline = {}, currentStage }) {
   const [activeTab, setActiveTab] = useState('preview');
+  const [sessionNonce, setSessionNonce] = useState(0);
 
   useEffect(() => {
     if (fileData) setActiveTab('preview');
@@ -229,10 +253,16 @@ export default function AppPreview({ fileData, isGenerating, onFixError, pipelin
   const dependencies = { ...BASE_DEPENDENCIES, ...(fileData?.dependencies ?? {}) };
   const filePathKey = Object.keys(files).sort().join('|');
 
+  // A full remount (new SandpackProvider instance) opens a brand-new bundler
+  // session. That's the reliable recovery for Sandpack's cloud-bundler
+  // "Authentication error" / stuck-white-screen state — a CSS-hide/show
+  // toggle alone can't fix a broken bundler session, only a broken tab switch.
+  const handleHardReload = () => setSessionNonce((n) => n + 1);
+
   return (
     <div className="h-full" style={{ display: 'flex', flexDirection: 'column' }}>
       <SandpackProvider
-        key={filePathKey}
+        key={`${filePathKey}::${sessionNonce}`}
         template="react"
         theme="dark"
         files={files}
@@ -247,6 +277,7 @@ export default function AppPreview({ fileData, isGenerating, onFixError, pipelin
           setActiveTab={setActiveTab}
           pipeline={pipeline}
           currentStage={currentStage}
+          onHardReload={handleHardReload}
         />
       </SandpackProvider>
     </div>
