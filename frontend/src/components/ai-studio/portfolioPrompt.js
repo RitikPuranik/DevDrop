@@ -32,7 +32,11 @@ IMPORTANT GENERATION RULES:
 - Make all buttons and links meaningful. External links should open safely in a new tab when appropriate.
 - Use the requested visual direction consistently across every section.
 - Use tasteful motion only according to the requested animation level and respect prefers-reduced-motion.
-- The final result must be ready to preview immediately with no missing imports, broken assets, or TODO placeholders.
+- The final result must be ready to preview immediately with no missing imports, broken assets, undefined components, or TODO placeholders.
+- Prefer a self-contained `/App.js` for the portfolio. If you split the app into component files, every local component must be explicitly imported and every imported component must be exported from the exact target file.
+- Before returning the JSON, compile-check every JSX element whose name starts with an uppercase letter (for example `Hero`, `Header`, `Projects`). Each one must either be a locally declared component/variable in that file or a valid import. Never render an undefined component.
+- Do not reference a component name that exists only in your plan or in another file unless it is actually imported.
+- If you create `Hero`, `Header`, or any other named component in the same file, define it before returning the final source and verify that its identifier exactly matches every JSX usage.
 
 ## Website
 Type: Portfolio
