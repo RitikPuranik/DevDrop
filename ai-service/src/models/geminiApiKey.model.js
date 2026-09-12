@@ -3,10 +3,9 @@ const mongoose = require('mongoose');
 /**
  * Same schema/collection as backend/src/modules/gemini-pool/geminiApiKey.model.js.
  * ai-service is a separate process/deployment from the main backend, so it
- * can't `require()` the backend's code — this is a deliberate, minimal
- * duplication of the schema shape rather than a shared package, kept in
- * sync manually. The backend owns admin CRUD + encryption; ai-service only
- * reads config from here and writes back live health/usage fields.
+ * cannot require the backend's code. Both services intentionally use the same
+ * dedicated Gemini database; backend encrypts credentials and ai-service
+ * decrypts them and writes runtime health/usage fields.
  */
 
 const GEMINI_KEY_STATUSES = [

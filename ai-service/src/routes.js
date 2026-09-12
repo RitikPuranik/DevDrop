@@ -2,6 +2,7 @@ const express = require('express');
 const axios = require('axios');
 const { createJob, getJob } = require('./jobs.service');
 const geminiPool = require('./geminiPool.service');
+const GeminiApiKey = require('./models/geminiApiKey.model');
 
 const router = express.Router();
 
@@ -78,53 +79,104 @@ router.get('/jobs/:id', requireServiceKey, (req, res) => {
   });
 });
 
-// GET /gemini-pool/status — live pool snapshot for the admin UI (via backend).
+// Never send a raw Gemini key anywhere. The backend owns admin CRUD and
+// serialization; ai-service only returns runtime/status information.
+function maskKey(doc) {
+  const prefix = doc.keyPrefix || 'AIza';
+  const suffix = doc.keySuffix || '????';
+  return `${prefix}...${suffix}`;
+}
+
+function isCoolingDown(doc) {
+  return Boolean(doc.cooldownUntil && new Date(doc.cooldownUntil).getTime() > Date.now());
+}
+
+function serializeKey(doc) {
+  const obj = doc.toObject ? doc.toObject() : doc;
+  return {
+    id: String(obj._id),
+    label: obj.label,
+    maskedKey: maskKey(obj),
+    enabled: obj.enabled,
+    priority: obj.priority,
+    status: obj.status,
+    cooldownUntil: obj.cooldownUntil,
+    isCoolingDown: isCoolingDown(obj),
+    failureCount: obj.failureCount,
+    consecutiveFailures: obj.consecutiveFailures,
+    totalRequests: obj.totalRequests,
+    totalSuccesses: obj.totalSuccesses,
+    totalFailures: obj.totalFailures,
+    lastUsedAt: obj.lastUsedAt,
+    lastSuccessAt: obj.lastSuccessAt,
+    lastFailureAt: obj.lastFailureAt,
+    lastErrorCode: obj.lastErrorCode,
+    lastErrorMessage: obj.lastErrorMessage,
+    createdAt: obj.createdAt,
+    updatedAt: obj.updatedAt,
+  };
+}
+
+// A raw Gemini key never appears in a thrown error, a log line, or a
+// response body anywhere in these routes — only encrypt()'s ciphertext
+// output and the 4-char suffix used for masking are ever persisted, and
+// only serializeKey()'s masked/metadata shape is ever returned.
+
+// The backend owns admin CRUD and encryption. ai-service exposes only
+// encrypted-key consumption/health endpoints and never accepts plaintext
+// Gemini credentials from the backend.
+router.post('/gemini-pool/reload', requireServiceKey, async (req, res) => {
+  try {
+    geminiPool.invalidate();
+    await geminiPool.loadPool(true);
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('Gemini pool reload error:', error.message);
+    res.status(500).json({ success: false, message: 'Failed to reload Gemini pool.' });
+  }
+});
+
 router.get('/gemini-pool/status', requireServiceKey, async (req, res) => {
   try {
     await geminiPool.loadPool();
     res.status(200).json({ success: true, data: geminiPool.getSnapshot() });
   } catch (error) {
     console.error('Gemini pool status error:', error.message);
-    res.status(500).json({ success: false, message: 'Failed to read Gemini pool status.' });
+    res.status(500).json({ success: false, message: 'Failed to load Gemini pool status.' });
   }
 });
 
-// POST /gemini-pool/reload — drop ai-service's short-TTL pool cache so an
-// admin add/enable/disable/reorder/delete takes effect immediately instead
-// of waiting out GEMINI_POOL_REFRESH_MS.
-router.post('/gemini-pool/reload', requireServiceKey, async (req, res) => {
-  geminiPool.invalidate();
-  await geminiPool.loadPool(true);
-  res.status(200).json({ success: true, data: geminiPool.getSnapshot() });
-});
+router.post('/gemini-pool/keys/:id/test', requireServiceKey, async (req, res) => {
+  try {
+    const doc = await GeminiApiKey.findById(req.params.id).select('+encryptedKey');
+    if (!doc) return res.status(404).json({ success: false, message: 'Gemini key not found.' });
 
-// POST /gemini-pool/test-key — lightweight single-key test, used by the
-// admin "Test" button. Runs a minimal generateContent call directly (not
-// through jobs.service/gemini.service) so it never touches the job queue
-// or a full AI Studio generation, and never fails over to another key —
-// the point is to test THIS key.
-router.post('/gemini-pool/test-key', requireServiceKey, async (req, res) => {
-  const { encryptedKey } = req.body || {};
-  if (!encryptedKey) {
-    return res.status(400).json({ success: false, message: 'encryptedKey is required.' });
+    const result = await geminiPool.testSingleKey(doc.encryptedKey, async (rawKey) => {
+      const model = process.env.GEMINI_TEST_MODEL || process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+      return axios.post(
+        `${url}?key=${encodeURIComponent(rawKey)}`,
+        {
+          contents: [{ role: 'user', parts: [{ text: 'Reply with OK.' }] }],
+          generationConfig: { maxOutputTokens: 8 },
+        },
+        { timeout: GEMINI_TEST_TIMEOUT_MS, headers: { 'Content-Type': 'application/json' } }
+      );
+    });
+
+    const info = result?.classification || result;
+    const update = {
+      lastErrorCode: info?.classification === 'success' ? null : String(info?.status || info?.classification || 'unknown'),
+      lastErrorMessage: info?.message || null,
+      status: info?.classification === 'invalid' ? 'invalid' : info?.classification === 'rate_limit' ? 'rate_limited' : info?.classification === 'success' ? 'healthy' : 'degraded',
+    };
+    await GeminiApiKey.findByIdAndUpdate(doc._id, update);
+
+    res.status(200).json({ success: true, data: { classification: info?.classification || 'unknown', message: info?.message || null } });
+  } catch (error) {
+    console.error('Gemini key test error:', error.message);
+    res.status(200).json({ success: true, data: { classification: 'error', message: error.message } });
   }
-
-  const result = await geminiPool.testSingleKey(encryptedKey, (rawKey) => {
-    const model = (process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite').trim() || 'gemini-3.5-flash-lite';
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-    return axios.post(
-      `${url}?key=${encodeURIComponent(rawKey)}`,
-      {
-        contents: [{ role: 'user', parts: [{ text: 'Reply with the single word: ok' }] }],
-        generationConfig: { maxOutputTokens: 8 },
-      },
-      { timeout: GEMINI_TEST_TIMEOUT_MS, headers: { 'Content-Type': 'application/json' } }
-    );
-  });
-
-  // Always 200 — a failed *test* isn't a failed *request*; the classification
-  // in the body is what the admin UI needs.
-  res.status(200).json({ success: true, data: result });
 });
 
 module.exports = router;

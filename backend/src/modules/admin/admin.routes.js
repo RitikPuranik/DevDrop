@@ -31,8 +31,9 @@ router.post('/backup/mongo', backupController.backupMongo);
 router.post('/backup/supabase', backupController.backupSupabase);
 router.post('/backup/full', backupController.backupFull);
 
-// Gemini API key pool (AI Studio) — config lives in Mongo here, live
-// selection/health tracking happens in ai-service.
+// Gemini API key pool (AI Studio) — Gemini credentials live in a dedicated
+// MongoDB deployment. This router authenticates/authorizes admin requests;
+// the Gemini-pool controller encrypts credentials before persistence.
 router.get('/gemini-keys', geminiPoolController.listKeys);
 router.post('/gemini-keys', geminiPoolController.addKey);
 router.post('/gemini-keys/reorder', geminiPoolController.reorderKeys);

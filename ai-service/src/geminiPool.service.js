@@ -266,6 +266,18 @@ function markFailure(entry, error) {
     console.error('Gemini pool: key marked invalid', { keyId: entry.id, reason: entry.lastErrorMessage });
   } else if (info.classification === 'permanent') {
     // Not the key's fault (bad request/model) — don't punish or cool down.
+  } else if (info.classification === 'capacity') {
+    // A 503/high-demand response is model/provider capacity, not evidence
+    // that this credential is unhealthy. Do not put the key into cooldown or
+    // increment its key-level failure streak. This lets the outer model
+    // fallback reuse the same key with another model instead of immediately
+    // reporting an exhausted pool.
+    entry.cooldownUntil = null;
+    entry.status = 'healthy';
+    entry.consecutiveFailures = 0;
+    update.status = 'healthy';
+    update.cooldownUntil = null;
+    update.consecutiveFailures = 0;
   } else {
     entry.consecutiveFailures += 1;
     const cooldownMs = cooldownForFailure(entry.consecutiveFailures, info.classification);

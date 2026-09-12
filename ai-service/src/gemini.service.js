@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { parse } = require('@babel/parser');
 const geminiPool = require('./geminiPool.service');
 
 const RETIRED_GEMINI_MODELS = new Set([
@@ -95,7 +96,7 @@ Return ONLY one valid JSON object using exactly:
 
 Rules:
 - Preserve the requested design, content, theme, interactions, and functionality.
-- Fix ONLY the reported compile/runtime import/export problems and any directly related issues.
+- Fix syntax, compile, import/export, and directly related runtime-preflight problems reported below.
 - Every relative import must resolve to a returned file.
 - Default imports require export default.
 - Named imports require a matching named export.
@@ -141,7 +142,7 @@ function extractText(response) {
 }
 
 function getFinishReason(response) {
-  return response.data?.candidates?.[0]?.finishReason || null;
+  return response?.data?.candidates?.[0]?.finishReason || null;
 }
 
 
@@ -291,6 +292,32 @@ function hasNamedExport(code, name) {
 function validateGeneratedFiles(files) {
   const errors = [];
 
+  const parseGeneratedSource = (filePath, code) => {
+    // Sandpack runs Babel over these files in the browser. Validate the same
+    // JavaScript/JSX syntax on the AI service before returning a result so a
+    // malformed generated component cannot reach preview.
+    try {
+      parse(code, {
+        sourceType: 'module',
+        sourceFilename: filePath,
+        plugins: [
+          'jsx',
+          'dynamicImport',
+          'optionalChaining',
+          'nullishCoalescingOperator',
+          'topLevelAwait',
+        ],
+      });
+    } catch (error) {
+      const line = error.loc?.line;
+      const column = error.loc?.column;
+      const location = Number.isInteger(line)
+        ? ` (${line}:${Number.isInteger(column) ? column + 1 : 1})`
+        : '';
+      errors.push(`${filePath}: JavaScript/JSX syntax error${location}: ${error.message}`);
+    }
+  };
+
   if (!files['/App.js']) {
     errors.push('/App.js is missing.');
   } else if (!hasDefaultExport(files['/App.js']?.code || '')) {
@@ -303,6 +330,8 @@ function validateGeneratedFiles(files) {
       errors.push(`${filePath} has no code.`);
       continue;
     }
+
+    parseGeneratedSource(filePath, code);
 
     const importRegex =
       /import\s+([\s\S]*?)\s+from\s+['"]([^'"]+)['"]|import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
@@ -409,7 +438,7 @@ ${JSON.stringify(dependencies, null, 2)}`;
       `Automatic preview validation failed: ${remainingErrors.join(' | ')}`
     );
     err.userMessage =
-      'DevDrop generated the site, but its preview still has an import/export mismatch. Use Fix with AI to repair it.';
+      'DevDrop generated the site, but its code failed syntax or import/export preflight. The AI repair step could not fully fix it.';
     err.statusCode = 502;
     throw err;
   }
@@ -467,7 +496,8 @@ async function generateApp({ messages, fileData }) {
         } catch (recoveryError) {
           console.error('Same-model JSON recovery failed', {
             model,
-            finishReason: getFinishReason(recoveryError.response),
+            finishReason: recoveryError.finishReason || getFinishReason(recoveryError.response),
+            status: recoveryError.response?.status,
             message: recoveryError.response?.data?.error?.message || recoveryError.message,
           });
           if (attempt >= GEMINI_MAX_MODEL_ATTEMPTS - 1) throw parseError;
@@ -479,7 +509,7 @@ async function generateApp({ messages, fileData }) {
       const validationErrors = validateGeneratedFiles(result.files);
       if (!validationErrors.length) return result;
 
-      console.warn('Generated app failed import/export preflight; auto-repairing once', {
+      console.warn('Generated app failed syntax/import/export preflight; auto-repairing once', {
         model,
         errors: validationErrors,
       });

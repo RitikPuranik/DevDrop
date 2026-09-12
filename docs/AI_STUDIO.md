@@ -11,6 +11,10 @@ build, see it live" experience, built natively into DevDrop.
 - The frontend polls `GET /api/ai-generate/jobs/:id` until the job
   completes, then gets back a strict JSON contract:
   `{ assistantMessage, title, files, dependencies }`.
+- Gemini credentials are managed by the admin-only Gemini Pool. Keys are
+  encrypted by the backend with `AI_GEMINI_TOKEN_ENCRYPTION_KEY` and stored
+  in a dedicated MongoDB database (`GEMINI_MONGODB_URI`); ai-service uses
+  the matching key only for decryption and Gemini requests.
 - The frontend renders `files` live with
   [Sandpack](https://sandpack.codesandbox.io/) (`@codesandbox/sandpack-react`)
   in `components/ai-studio/AppPreview.jsx` — a Code tab and a Preview tab,

@@ -12,13 +12,13 @@ const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12;
 
 const getKey = () => {
-  const hex = process.env.TOKEN_ENCRYPTION_KEY;
+  const hex = process.env.AI_GEMINI_TOKEN_ENCRYPTION_KEY;
   if (!hex) {
-    throw new Error('TOKEN_ENCRYPTION_KEY is not configured on ai-service (must match backend).');
+    throw new Error('AI_GEMINI_TOKEN_ENCRYPTION_KEY is not configured on ai-service (must match backend).');
   }
   const key = Buffer.from(hex, 'hex');
   if (key.length !== 32) {
-    throw new Error('TOKEN_ENCRYPTION_KEY must be a 32-byte hex string (64 hex characters).');
+    throw new Error('AI_GEMINI_TOKEN_ENCRYPTION_KEY must be a 32-byte hex string (64 hex characters).');
   }
   return key;
 };

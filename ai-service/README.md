@@ -21,10 +21,10 @@ small async job API.
 - `POST /gemini-pool/reload` — requires `X-Service-Key`. Drops the pool's
   short-TTL config cache so an admin change (add/enable/disable/reorder/
   delete a key) takes effect immediately.
-- `POST /gemini-pool/test-key` — requires `X-Service-Key`. Body
-  `{ encryptedKey }`; runs one minimal `generateContent` call against that
-  key only (never fails over, never touches the job queue) and returns a
-  validity/classification result.
+- `POST /gemini-pool/keys/:id/test` — requires `X-Service-Key`. Uses the
+  encrypted credential already stored in the dedicated Gemini database and
+  runs one minimal `generateContent` call against that key only (never
+  accepts a plaintext key and never touches the job queue).
 
 Jobs live in an in-memory `Map` with a simple concurrency-limited
 in-process queue (`AI_CONCURRENCY`, default 2) — no Redis/BullMQ. The
@@ -73,7 +73,7 @@ rely on for hard concurrency limits).
 
 ```bash
 cd ai-service
-cp .env.example .env   # fill in GEMINI_API_KEY, SERVICE_API_KEY, and (optionally) MONGODB_URI + TOKEN_ENCRYPTION_KEY for the key pool
+cp .env.example .env   # fill in SERVICE_API_KEY, GEMINI_MONGODB_URI, and AI_GEMINI_TOKEN_ENCRYPTION_KEY
 npm install
 npm run dev
 ```
@@ -81,9 +81,11 @@ npm run dev
 `SERVICE_API_KEY` here must match `AI_SERVICE_TOKEN` in
 `backend/.env`. Defaults to port **3001**.
 
-`TOKEN_ENCRYPTION_KEY` here must match `TOKEN_ENCRYPTION_KEY` in
-`backend/.env` exactly — it's what lets this service decrypt Gemini keys
-the admin panel encrypted and stored in Mongo.
+`AI_GEMINI_TOKEN_ENCRYPTION_KEY` here must exactly match the same
+`AI_GEMINI_TOKEN_ENCRYPTION_KEY` in `backend/.env`. The backend encrypts
+Gemini API keys before storing ciphertext in the dedicated Gemini MongoDB;
+ai-service uses this secret only to decrypt them when making Gemini calls.
+The existing backend `TOKEN_ENCRYPTION_KEY` is unrelated and must not be reused.
 
 ## Tests
 

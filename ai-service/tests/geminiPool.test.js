@@ -95,6 +95,19 @@ describe('execute()', () => {
     expect(result).toBe('ok');
   });
 
+  test('503 capacity does not cooldown or poison the failed key', async () => {
+    const entry = Array.from(_internal.pool.values())[0];
+    const requestFn = jest.fn(() => Promise.reject(httpError(503, 'This model is currently experiencing high demand')));
+
+    await expect(geminiPool.execute(requestFn)).rejects.toThrow();
+    expect(entry.cooldownUntil).toBeNull();
+    expect(entry.status).toBe('healthy');
+    expect(entry.consecutiveFailures).toBe(0);
+
+    const selectable = geminiPool.selectKey([]);
+    expect(selectable).toBeTruthy();
+  });
+
   test('invalid key gets marked invalid and is never selected again', async () => {
     let call = 0;
     const requestFn = jest.fn(() => {
