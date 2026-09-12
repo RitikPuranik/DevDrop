@@ -131,6 +131,15 @@ function repairJsonString(text) {
     }
 
     if (char === '"') {
+      // Peek ahead: a quote immediately followed by a JSON structural
+      // character (once whitespace is skipped) is almost always the real
+      // end of the string (e.g. `"code": "...`, `<attr>": ` ). A quote
+      // followed by anything else -- like `>` closing a JSX attribute, or
+      // more code -- is an internal quote the model forgot to escape.
+      // This is a heuristic, not a proof: it can still misjudge rarer
+      // patterns like `["a", "b"]` or `{"k": "v"}` appearing verbatim
+      // inside generated code, but it correctly handles the much more
+      // common case of quoted JSX/HTML attributes and string literals.
       let cursor = index + 1;
       while (cursor < source.length && /\s/.test(source[cursor])) cursor += 1;
       const next = source[cursor];
@@ -165,6 +174,34 @@ function repairJsonString(text) {
   if (escaped) output += '\\\\';
 
   return output;
+}
+
+// Uses JSON.parse's own error feedback to locate and escape raw control
+// characters one at a time. This sidesteps the ambiguity that makes
+// string-boundary heuristics unreliable: "bad control character" is an
+// unambiguous, precisely located error straight from the parser, so no
+// guessing about where a string starts or ends is needed here.
+function escapeControlCharsByParseError(text) {
+  let source = String(text || '');
+  for (let i = 0; i < 200; i += 1) {
+    try {
+      JSON.parse(source);
+      return source;
+    } catch (e) {
+      const match = /Bad control character in string literal in JSON at position (\d+)/.exec(e.message);
+      if (!match) return source;
+      const pos = Number(match[1]);
+      const char = source[pos];
+      if (char === undefined) return source;
+      let replacement;
+      if (char === '\n') replacement = '\\n';
+      else if (char === '\r') replacement = '\\r';
+      else if (char === '\t') replacement = '\\t';
+      else replacement = '\\u' + char.charCodeAt(0).toString(16).padStart(4, '0');
+      source = source.slice(0, pos) + replacement + source.slice(pos + 1);
+    }
+  }
+  return source;
 }
 
 function repairTrailingCommas(text) {
@@ -260,9 +297,12 @@ function extractJson(text) {
   const attempts = [
     candidate,
     repairTrailingCommas(candidate),
+    escapeControlCharsByParseError(candidate),
+    repairTrailingCommas(escapeControlCharsByParseError(candidate)),
     repairJsonString(candidate),
     repairTrailingCommas(repairJsonString(candidate)),
-    repairBareKeys(repairTrailingCommas(repairJsonString(candidate))),
+    escapeControlCharsByParseError(repairJsonString(candidate)),
+    repairBareKeys(repairTrailingCommas(escapeControlCharsByParseError(repairJsonString(candidate)))),
   ];
 
   let lastError;

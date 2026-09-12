@@ -24,8 +24,9 @@ async function run({ files, dependencies = {} }) {
     }
     if (!fs.existsSync(path.join(dir, 'index.html'))) fs.writeFileSync(path.join(dir, 'index.html'), '<!doctype html><html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/><title>DevDrop</title></head><body><div id="root"></div><script type="module" src="/main.jsx"></script></body></html>');
     if (!fs.existsSync(path.join(dir, 'main.jsx'))) fs.writeFileSync(path.join(dir, 'main.jsx'), 'import React from "react"; import { createRoot } from "react-dom/client"; import App from "./App.js"; createRoot(document.getElementById("root")).render(<React.StrictMode><App /></React.StrictMode>);');
-    await execFileAsync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['install', '--no-audit', '--no-fund'], { cwd: dir, timeout: BUILD_TIMEOUT_MS, maxBuffer: 5 * 1024 * 1024 });
-    const result = await execFileAsync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'build'], { cwd: dir, timeout: BUILD_TIMEOUT_MS, maxBuffer: 5 * 1024 * 1024 });
+    const spawnOpts = { cwd: dir, timeout: BUILD_TIMEOUT_MS, maxBuffer: 5 * 1024 * 1024, shell: process.platform === 'win32' };
+    await execFileAsync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['install', '--no-audit', '--no-fund'], spawnOpts);
+    const result = await execFileAsync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'build'], spawnOpts);
     return { success: true, errors: [], warnings: result.stderr ? result.stderr.split('\n').filter(Boolean).slice(0, 20) : [], durationMs: Date.now() - started };
   } catch (error) {
     return { success: false, errors: [String(error.stderr || error.stdout || error.message).slice(-12000)], warnings: [], durationMs: Date.now() - started, exitCode: error.code || null };

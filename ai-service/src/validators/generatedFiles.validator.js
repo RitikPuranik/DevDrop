@@ -35,6 +35,7 @@ function validateGeneratedFiles(files) {
     if (!path.startsWith('/') || path.includes('..')) { errors.push(`${path}: invalid path.`); continue; }
     const code = typeof obj?.code === 'string' ? obj.code : '';
     if (!code.trim()) { errors.push(`${path}: empty source.`); continue; }
+    if (!/\.(js|jsx|mjs|cjs)$/i.test(path)) continue; // non-JS assets (css, html, json, etc.) are not parsed as JavaScript
     if (/\binterface\s+|\btype\s+[A-Za-z_$]|:\s*(string|number|boolean)\b/.test(code)) errors.push(`${path}: TypeScript syntax is not allowed.`);
     let ast;
     try { ast = parse(code, { sourceType: 'module', sourceFilename: path, plugins: ['jsx','dynamicImport','optionalChaining','nullishCoalescingOperator','topLevelAwait'] }); jsxBindings(ast, code); }
