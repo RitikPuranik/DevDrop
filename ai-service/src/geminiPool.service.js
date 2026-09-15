@@ -23,6 +23,7 @@ const { classify, cooldownForFailure } = require('./geminiFailureClassifier');
  */
 
 const POOL_REFRESH_MS = Number.parseInt(process.env.GEMINI_POOL_REFRESH_MS || '5000', 10);
+const DAILY_TOKEN_LIMIT = Number.parseInt(process.env.GEMINI_DAILY_TOKEN_LIMIT || '1500000', 10);
 function getPerKeyConcurrency() {
   const raw = Number.parseInt(process.env.GEMINI_PER_KEY_CONCURRENCY || '', 10);
   return Number.isFinite(raw) && raw > 0 ? raw : Infinity;
@@ -73,6 +74,12 @@ function bootstrapFromEnv() {
       totalSuccesses: 0,
       totalFailures: 0,
       inFlight: 0,
+      // Token usage tracking
+      totalTokensUsed: 0,
+      promptTokensUsed: 0,
+      candidateTokensUsed: 0,
+      dailyTokensUsed: 0,
+      lastTokenResetAt: null,
     });
   });
 }
@@ -121,6 +128,12 @@ async function loadFromDB() {
       totalSuccesses: existing?.totalSuccesses ?? doc.totalSuccesses ?? 0,
       totalFailures: existing?.totalFailures ?? doc.totalFailures ?? 0,
       inFlight: existing?.inFlight ?? 0,
+      // Token usage tracking
+      totalTokensUsed: existing?.totalTokensUsed ?? doc.totalTokensUsed ?? 0,
+      promptTokensUsed: existing?.promptTokensUsed ?? doc.promptTokensUsed ?? 0,
+      candidateTokensUsed: existing?.candidateTokensUsed ?? doc.candidateTokensUsed ?? 0,
+      dailyTokensUsed: existing?.dailyTokensUsed ?? doc.dailyTokensUsed ?? 0,
+      lastTokenResetAt: existing?.lastTokenResetAt ?? doc.lastTokenResetAt ?? null,
     });
   }
 
@@ -239,6 +252,46 @@ function markSuccess(entry) {
     lastErrorCode: null,
     lastErrorMessage: null,
     $inc: { totalSuccesses: 1 },
+  });
+}
+
+/**
+ * Resets dailyTokensUsed if the last reset was on a different calendar day.
+ */
+function maybeResetDailyTokens(entry) {
+  const now = new Date();
+  const lastReset = entry.lastTokenResetAt ? new Date(entry.lastTokenResetAt) : null;
+  if (!lastReset || lastReset.toDateString() !== now.toDateString()) {
+    entry.dailyTokensUsed = 0;
+    entry.lastTokenResetAt = now;
+  }
+}
+
+/**
+ * Records token usage from a Gemini response's usageMetadata.
+ * Called after each successful generation.
+ */
+function markTokenUsage(entry, usageMetadata) {
+  if (!usageMetadata) return;
+  const prompt = usageMetadata.promptTokenCount || 0;
+  const candidates = usageMetadata.candidatesTokenCount || 0;
+  const total = usageMetadata.totalTokenCount || (prompt + candidates);
+
+  maybeResetDailyTokens(entry);
+
+  entry.totalTokensUsed += total;
+  entry.promptTokensUsed += prompt;
+  entry.candidateTokensUsed += candidates;
+  entry.dailyTokensUsed += total;
+
+  persistAsync(entry.id, {
+    lastTokenResetAt: entry.lastTokenResetAt,
+    $inc: {
+      totalTokensUsed: total,
+      promptTokensUsed: prompt,
+      candidateTokensUsed: candidates,
+      dailyTokensUsed: total,
+    },
   });
 }
 
@@ -384,26 +437,41 @@ async function testSingleKey(encryptedKey, requestFn) {
 
 function getSnapshot() {
   const now = Date.now();
-  const keys = Array.from(pool.values()).map((e) => ({
-    id: e.id,
-    label: e.label,
-    persisted: e.persisted,
-    enabled: e.enabled,
-    priority: e.priority,
-    status: e.status,
-    consecutiveFailures: e.consecutiveFailures,
-    cooldownRemainingMs: e.cooldownUntil ? Math.max(0, new Date(e.cooldownUntil).getTime() - now) : 0,
-    inFlight: e.inFlight,
-    totalRequests: e.totalRequests,
-    totalSuccesses: e.totalSuccesses,
-    totalFailures: e.totalFailures,
-    lastUsedAt: e.lastUsedAt,
-    lastErrorCode: e.lastErrorCode,
-    lastErrorMessage: e.lastErrorMessage,
-  }));
+  const keys = Array.from(pool.values()).map((e) => {
+    // Auto-reset daily tokens for the snapshot if it's a new day
+    maybeResetDailyTokens(e);
+    return {
+      id: e.id,
+      label: e.label,
+      persisted: e.persisted,
+      enabled: e.enabled,
+      priority: e.priority,
+      status: e.status,
+      consecutiveFailures: e.consecutiveFailures,
+      cooldownRemainingMs: e.cooldownUntil ? Math.max(0, new Date(e.cooldownUntil).getTime() - now) : 0,
+      cooldownUntil: e.cooldownUntil,
+      inFlight: e.inFlight,
+      totalRequests: e.totalRequests,
+      totalSuccesses: e.totalSuccesses,
+      totalFailures: e.totalFailures,
+      lastUsedAt: e.lastUsedAt,
+      lastErrorCode: e.lastErrorCode,
+      lastErrorMessage: e.lastErrorMessage,
+      // Token usage
+      totalTokensUsed: e.totalTokensUsed || 0,
+      promptTokensUsed: e.promptTokensUsed || 0,
+      candidateTokensUsed: e.candidateTokensUsed || 0,
+      dailyTokensUsed: e.dailyTokensUsed || 0,
+      lastTokenResetAt: e.lastTokenResetAt,
+      dailyTokenLimit: DAILY_TOKEN_LIMIT,
+      isOutOfTokens: e.status === 'rate_limited' || (DAILY_TOKEN_LIMIT > 0 && (e.dailyTokensUsed || 0) >= DAILY_TOKEN_LIMIT),
+    };
+  });
 
   const activeRequests = keys.reduce((sum, k) => sum + k.inFlight, 0);
   const availableNow = keys.some((k) => k.enabled && k.status !== 'invalid' && k.status !== 'disabled' && k.cooldownRemainingMs === 0);
+  const totalDailyTokens = keys.reduce((sum, k) => sum + k.dailyTokensUsed, 0);
+  const outOfTokensKeys = keys.filter((k) => k.isOutOfTokens).length;
 
   return {
     totalKeys: keys.length,
@@ -412,7 +480,10 @@ function getSnapshot() {
     rateLimitedKeys: keys.filter((k) => k.status === 'rate_limited').length,
     invalidKeys: keys.filter((k) => k.status === 'invalid').length,
     disabledKeys: keys.filter((k) => !k.enabled).length,
+    outOfTokensKeys,
     activeRequests,
+    totalDailyTokens,
+    dailyTokenLimit: DAILY_TOKEN_LIMIT,
     globalConcurrency: Number.parseInt(process.env.AI_CONCURRENCY || '1', 10),
     perKeyConcurrency: Number.isFinite(getPerKeyConcurrency()) ? getPerKeyConcurrency() : null,
     hasAvailableKey: availableNow,
@@ -427,7 +498,8 @@ module.exports = {
   selectKey,
   testSingleKey,
   getSnapshot,
+  markTokenUsage,
   PoolExhaustedError,
   // exported for tests only
-  _internal: { pool, bootstrapFromEnv, markSuccess, markFailure, markAcquired },
+  _internal: { pool, bootstrapFromEnv, markSuccess, markFailure, markAcquired, markTokenUsage },
 };

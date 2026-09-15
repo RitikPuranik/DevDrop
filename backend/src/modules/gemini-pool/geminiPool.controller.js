@@ -29,6 +29,12 @@ function serializeKey(doc) {
     lastFailureAt: obj.lastFailureAt,
     lastErrorCode: obj.lastErrorCode,
     lastErrorMessage: obj.lastErrorMessage,
+    // Token usage tracking
+    totalTokensUsed: obj.totalTokensUsed || 0,
+    promptTokensUsed: obj.promptTokensUsed || 0,
+    candidateTokensUsed: obj.candidateTokensUsed || 0,
+    dailyTokensUsed: obj.dailyTokensUsed || 0,
+    lastTokenResetAt: obj.lastTokenResetAt || null,
     createdAt: obj.createdAt,
     updatedAt: obj.updatedAt,
   };

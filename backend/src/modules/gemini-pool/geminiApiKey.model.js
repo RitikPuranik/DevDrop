@@ -31,6 +31,13 @@ const schema = new mongoose.Schema(
     cooldownUntil: { type: Date, default: null },
     lastErrorCode: { type: String, default: null },
     lastErrorMessage: { type: String, default: null },
+
+    // Token usage tracking — written by ai-service, read by admin UI
+    totalTokensUsed: { type: Number, default: 0 },
+    promptTokensUsed: { type: Number, default: 0 },
+    candidateTokensUsed: { type: Number, default: 0 },
+    dailyTokensUsed: { type: Number, default: 0 },
+    lastTokenResetAt: { type: Date, default: null },
   },
   { timestamps: true, collection: 'geminiapikeys' }
 );

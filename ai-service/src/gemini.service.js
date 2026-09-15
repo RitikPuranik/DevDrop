@@ -388,7 +388,7 @@ function validateGeneratedFiles(files) {
  * models. Returns the same axios response shape callers already expect.
  */
 async function requestModel({ model, contents, timeout, systemPrompt }) {
-  const { result } = await geminiPool.execute((apiKey) => {
+  const { result, keyId } = await geminiPool.execute((apiKey) => {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
     return axios.post(
       `${url}?key=${encodeURIComponent(apiKey)}`,
@@ -404,6 +404,16 @@ async function requestModel({ model, contents, timeout, systemPrompt }) {
       { timeout, headers: { 'Content-Type': 'application/json' } }
     );
   });
+
+  // Extract token usage from the Gemini response and record it against the key
+  const usageMetadata = result?.data?.usageMetadata;
+  if (usageMetadata && keyId) {
+    const poolEntry = geminiPool._internal.pool.get(keyId);
+    if (poolEntry) {
+      geminiPool.markTokenUsage(poolEntry, usageMetadata);
+    }
+  }
+
   return result;
 }
 

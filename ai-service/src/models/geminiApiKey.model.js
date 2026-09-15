@@ -44,6 +44,13 @@ const geminiApiKeySchema = new mongoose.Schema(
 
     lastErrorCode: { type: String, default: null },
     lastErrorMessage: { type: String, default: null },
+
+    // Token usage tracking — written by ai-service after each successful Gemini call
+    totalTokensUsed: { type: Number, default: 0 },
+    promptTokensUsed: { type: Number, default: 0 },
+    candidateTokensUsed: { type: Number, default: 0 },
+    dailyTokensUsed: { type: Number, default: 0 },
+    lastTokenResetAt: { type: Date, default: null },
   },
   { timestamps: true, collection: 'geminiapikeys' }
 );
