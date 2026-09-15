@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import {
   Loader2, KeyRound, Plus, RefreshCcw, Power, Trash2,
   AlertTriangle, Zap, Clock, ShieldCheck, Ban, Activity,
+  Search, Filter,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -112,6 +113,8 @@ export default function GeminiPoolSection() {
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState(initialForm);
   const [showForm, setShowForm] = useState(false);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
 
   useCooldownTick(keys);
 
@@ -208,6 +211,26 @@ export default function GeminiPoolSection() {
       cooldownUntil: live?.cooldownUntil ?? k.cooldownUntil,
       inFlight: live?.inFlight ?? 0,
     };
+  });
+
+  // Apply search + status filter
+  const filteredKeys = enrichedKeys.filter((key) => {
+    // Search filter
+    if (search) {
+      const q = search.toLowerCase();
+      const matchLabel = key.label?.toLowerCase().includes(q);
+      const matchKey = key.maskedKey?.toLowerCase().includes(q);
+      if (!matchLabel && !matchKey) return false;
+    }
+    // Status filter
+    if (statusFilter !== 'all') {
+      if (statusFilter === 'out_of_tokens') {
+        if (!key.isOutOfTokens) return false;
+      } else {
+        if (statusFor(key) !== statusFilter) return false;
+      }
+    }
+    return true;
   });
 
   return (
@@ -311,6 +334,47 @@ export default function GeminiPoolSection() {
         </form>
       )}
 
+      {/* ── Search & Filter Bar ──────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+        {/* Search */}
+        <div className="relative flex-1">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/25 pointer-events-none" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by label or key..."
+            className="w-full pl-9 pr-3 py-2 rounded-xl bg-white/[0.03] border border-white/10 text-xs text-white placeholder:text-white/25 focus:outline-none focus:border-[#8b7355] transition-colors"
+          />
+        </div>
+
+        {/* Status filter */}
+        <div className="relative">
+          <Filter size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/25 pointer-events-none" />
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="appearance-none pl-8 pr-8 py-2 rounded-xl bg-white/[0.03] border border-white/10 text-xs text-white/70 focus:outline-none focus:border-[#8b7355] transition-colors cursor-pointer"
+          >
+            <option value="all">All Status</option>
+            <option value="healthy">Healthy</option>
+            <option value="busy">Busy</option>
+            <option value="rate_limited">Rate Limited</option>
+            <option value="degraded">Degraded</option>
+            <option value="invalid">Invalid</option>
+            <option value="disabled">Disabled</option>
+            <option value="out_of_tokens">Out of Tokens</option>
+          </select>
+          <ChevronIcon className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/25 pointer-events-none" />
+        </div>
+
+        {/* Result count */}
+        {(search || statusFilter !== 'all') && (
+          <span className="text-[10px] text-white/30 font-bold uppercase tracking-wider self-center shrink-0">
+            {filteredKeys.length} / {enrichedKeys.length}
+          </span>
+        )}
+      </div>
+
       {/* ── Excel-style Table ────────────────────────────────────── */}
       <div className="rounded-[20px] border border-white/10 bg-white/[0.03] backdrop-blur-2xl overflow-hidden">
         {keys.length === 0 ? (
@@ -342,7 +406,7 @@ export default function GeminiPoolSection() {
 
               {/* Body */}
               <tbody>
-                {enrichedKeys.map((key) => {
+                {filteredKeys.map((key) => {
                   const status = statusFor(key);
                   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.healthy;
                   const cooldownMs = key.cooldownUntil
@@ -506,5 +570,13 @@ function SummaryCell({ label, value, tone = 'text-white' }) {
       <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-white/25 mb-0.5">{label}</p>
       <p className={`text-sm font-black tabular-nums ${tone}`}>{value}</p>
     </div>
+  );
+}
+
+function ChevronIcon({ className }) {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={className}>
+      <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
