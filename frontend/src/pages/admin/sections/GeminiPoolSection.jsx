@@ -250,7 +250,7 @@ export default function GeminiPoolSection() {
         )}
 
         {/* Summary strip */}
-        <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           <SummaryCell label="Total" value={poolStatus?.totalKeys ?? '—'} />
           <SummaryCell label="Active" value={poolStatus?.enabledKeys ?? '—'} />
           <SummaryCell label="Healthy" value={poolStatus?.healthyKeys ?? '—'} tone="text-emerald-400" />
