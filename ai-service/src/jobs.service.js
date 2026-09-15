@@ -23,7 +23,7 @@ async function runJob(id) {
 function processQueue() { while (running < CONCURRENCY && queue.length) { const id = queue.shift(); if (!jobs.has(id)) continue; running += 1; runJob(id); } }
 function createJob(input) {
   const id = randomUUID();
-  jobs.set(id, { id, status: 'queued', currentStage: 'queued', stageStatus: 'queued', payload: input, result: null, error: null, generationMeta: { agents: [] }, createdAt: Date.now() });
+  jobs.set(id, { id, mode: input.mode || 'generate', status: 'queued', currentStage: 'queued', stageStatus: 'queued', payload: input, result: null, error: null, generationMeta: { agents: [] }, createdAt: Date.now() });
   queue.push(id); processQueue(); return id;
 }
 function getJob(id) { return jobs.get(id) || null; }

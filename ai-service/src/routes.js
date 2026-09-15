@@ -38,7 +38,7 @@ router.post('/jobs', requireServiceKey, (req, res) => {
 });
 router.get('/jobs/:id', requireServiceKey, (req, res) => {
   const job = getJob(req.params.id); if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
-  const progress = { currentStage: job.currentStage, stageStatus: job.stageStatus, generationMeta: job.generationMeta };
+  const progress = { currentStage: job.currentStage, stageStatus: job.stageStatus, generationMeta: job.generationMeta, mode: job.mode };
   if (job.status === 'completed') return res.status(200).json({ success: true, data: { jobId: job.id, status: job.status, ...progress, result: job.result } });
   if (job.status === 'failed') return res.status(200).json({ success: true, data: { jobId: job.id, status: job.status, ...progress, error: job.error } });
   return res.status(200).json({ success: true, data: { jobId: job.id, status: job.status, ...progress } });
