@@ -353,16 +353,17 @@ export default function GeminiPoolSection() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="appearance-none pl-8 pr-8 py-2 rounded-xl bg-white/[0.03] border border-white/10 text-xs text-white/70 focus:outline-none focus:border-[#8b7355] transition-colors cursor-pointer"
+            className="appearance-none pl-8 pr-8 py-2 rounded-xl bg-[#141414] border border-white/10 text-xs text-white/70 focus:outline-none focus:border-[#8b7355] transition-colors cursor-pointer"
+            style={{ colorScheme: 'dark' }}
           >
-            <option value="all">All Status</option>
-            <option value="healthy">Healthy</option>
-            <option value="busy">Busy</option>
-            <option value="rate_limited">Rate Limited</option>
-            <option value="degraded">Degraded</option>
-            <option value="invalid">Invalid</option>
-            <option value="disabled">Disabled</option>
-            <option value="out_of_tokens">Out of Tokens</option>
+            <option value="all" className="bg-[#141414] text-white">All Status</option>
+            <option value="healthy" className="bg-[#141414] text-white">Healthy</option>
+            <option value="busy" className="bg-[#141414] text-white">Busy</option>
+            <option value="rate_limited" className="bg-[#141414] text-white">Rate Limited</option>
+            <option value="degraded" className="bg-[#141414] text-white">Degraded</option>
+            <option value="invalid" className="bg-[#141414] text-white">Invalid</option>
+            <option value="disabled" className="bg-[#141414] text-white">Disabled</option>
+            <option value="out_of_tokens" className="bg-[#141414] text-white">Out of Tokens</option>
           </select>
           <ChevronIcon className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/25 pointer-events-none" />
         </div>
