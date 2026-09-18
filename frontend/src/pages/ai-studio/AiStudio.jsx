@@ -32,7 +32,37 @@ export default function AiStudio() {
   const POLL_INTERVAL_MS=2000;
   const stageLabel=(stage)=>{if(stage.startsWith('code:'))return `Generating ${stage.slice(5)}…`;if(stage==='build-validator')return 'Validating build…';if(stage==='relevant-files')return 'Finding affected files…';if(stage==='edit')return 'Applying edit…';if(stage.startsWith('edit-debug'))return 'Fixing an issue…';return `${stage.charAt(0).toUpperCase()+stage.slice(1)}…`;};
   const updateProgress=(job)=>{const agents=job?.generationMeta?.agents||[]; const next={}; for(const a of agents)next[a.name]=a.status; setPipeline(next); if(job?.mode)setGenMode(job.mode); setCurrentStage(job?.currentStage||null); if(job?.currentStage)setGenStatusLabel(stageLabel(job.currentStage));};
-  const pollJob=(jobId)=>new Promise((resolve,reject)=>{const tick=async()=>{try{const {data}=await aiGenerateAPI.getJob(jobId);const job=data?.data;updateProgress(job);if(job?.status==='completed'){resolve(job.result);return;}if(job?.status==='failed'){reject(new Error(job.error||'AI generation failed.'));return;}pollTimeoutRef.current=setTimeout(tick,POLL_INTERVAL_MS);}catch(err){reject(err);}};tick();});
+  const pollJob=(jobId)=>new Promise((resolve,reject)=>{
+    let consecutivePollErrors=0;
+    let pollCount=0;
+    const MAX_POLL_ERRORS=30;
+    const tick=async()=>{
+      pollCount+=1;
+      try{
+        const {data}=await aiGenerateAPI.getJob(jobId);
+        consecutivePollErrors=0;
+        const job=data?.data;
+        updateProgress(job);
+        if(job?.status==='completed'){resolve(job.result);return;}
+        if(job?.status==='failed'){reject(new Error(job.error||'AI generation failed.'));return;}
+        pollTimeoutRef.current=setTimeout(tick,POLL_INTERVAL_MS);
+      }catch(err){
+        consecutivePollErrors+=1;
+        const status=err?.response?.status;
+        const message=err?.response?.data?.message||err?.message||'Unknown status polling error';
+        console.warn('[AI Studio] Status check failed; generation may still be running', {jobId,pollCount,consecutivePollErrors,status,message});
+        // A transient timeout/network/5xx must not kill an otherwise healthy
+        // long-running generation. Keep polling and let the backend/ai-service
+        // report the final job state on the next successful request.
+        if(status===401||status===403||status===404||consecutivePollErrors>=MAX_POLL_ERRORS){
+          reject(err);
+          return;
+        }
+        pollTimeoutRef.current=setTimeout(tick,Math.min(POLL_INTERVAL_MS*consecutivePollErrors,10000));
+      }
+    };
+    tick();
+  });
   const runGeneration=async(nextMessages,spec={})=>{setIsGenerating(true);setError(null);setPipeline({});setCurrentStage('queued');
     // Optimistic guess so the sidebar shows the right stage list immediately,
     // before the first poll response confirms the actual mode the backend

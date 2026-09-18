@@ -56,6 +56,26 @@ function formatCooldown(ms) {
   return `${totalSec}s`;
 }
 
+function activeModelCooldownFor(key) {
+  const now = Date.now();
+  const cooldowns = key.modelCooldowns && typeof key.modelCooldowns === 'object'
+    ? key.modelCooldowns
+    : {};
+  const active = Object.entries(cooldowns)
+    .map(([model, until]) => ({
+      model,
+      remainingMs: Math.max(0, new Date(until).getTime() - now),
+    }))
+    .filter((item) => item.remainingMs > 0)
+    .sort((a, b) => a.remainingMs - b.remainingMs)[0];
+
+  return active || (
+    key.activeModelCooldown?.remainingMs > 0
+      ? key.activeModelCooldown
+      : null
+  );
+}
+
 function successRate(key) {
   if (!key.totalRequests || key.totalRequests === 0) return '—';
   return `${Math.round((key.totalSuccesses / key.totalRequests) * 100)}%`;
@@ -69,7 +89,9 @@ function useCooldownTick(keys) {
 
   useEffect(() => {
     const hasCooldown = keys.some(
-      (k) => k.cooldownUntil && new Date(k.cooldownUntil).getTime() > Date.now()
+      (k) =>
+        (k.cooldownUntil && new Date(k.cooldownUntil).getTime() > Date.now()) ||
+        (k.activeModelCooldown?.remainingMs ?? 0) > 0
     );
     if (hasCooldown && !intervalRef.current) {
       intervalRef.current = setInterval(() => setTick((t) => t + 1), 1000);
@@ -87,7 +109,9 @@ function useCooldownTick(keys) {
 /* ── Token bar ──────────────────────────────────────────────────────── */
 
 function TokenBar({ used, limit }) {
-  const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  const rawPct = limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
+  const pct = rawPct >= 1 ? Math.round(rawPct) : rawPct > 0 ? Number(rawPct.toFixed(1)) : 0;
+  const label = rawPct > 0 && rawPct < 0.1 ? '<0.1%' : `${pct}%`;
   return (
     <div className="flex items-center gap-2 min-w-[120px]">
       <div className="flex-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
@@ -98,7 +122,7 @@ function TokenBar({ used, limit }) {
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="text-[10px] text-white/40 tabular-nums w-8 text-right">{pct}%</span>
+      <span className="text-[10px] text-white/40 tabular-nums w-9 text-right">{label}</span>
     </div>
   );
 }
@@ -210,6 +234,8 @@ export default function GeminiPoolSection() {
       cooldownRemainingMs: live?.cooldownRemainingMs ?? 0,
       cooldownUntil: live?.cooldownUntil ?? k.cooldownUntil,
       inFlight: live?.inFlight ?? 0,
+      activeModelCooldown: live?.activeModelCooldown ?? null,
+      modelCooldowns: live?.modelCooldowns ?? {},
     };
   });
 
@@ -413,6 +439,7 @@ export default function GeminiPoolSection() {
                   const cooldownMs = key.cooldownUntil
                     ? Math.max(0, new Date(key.cooldownUntil).getTime() - Date.now())
                     : 0;
+                  const activeModelCooldown = activeModelCooldownFor(key);
 
                   return (
                     <tr
@@ -485,7 +512,14 @@ export default function GeminiPoolSection() {
 
                       {/* Cooldown */}
                       <Td>
-                        {cooldownMs > 0 ? (
+                        {activeModelCooldown?.remainingMs > 0 ? (
+                          <span
+                            className="flex items-center gap-1 text-amber-400 font-semibold tabular-nums"
+                            title={`${activeModelCooldown.model} model cooldown`}
+                          >
+                            <Clock size={10} /> {activeModelCooldown.model.replace('gemini-', '')}: {formatCooldown(activeModelCooldown.remainingMs)}
+                          </span>
+                        ) : cooldownMs > 0 ? (
                           <span className="flex items-center gap-1 text-amber-400 font-semibold tabular-nums">
                             <Clock size={10} /> {formatCooldown(cooldownMs)}
                           </span>

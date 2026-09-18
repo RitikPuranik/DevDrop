@@ -45,6 +45,9 @@ const geminiApiKeySchema = new mongoose.Schema(
     lastErrorCode: { type: String, default: null },
     lastErrorMessage: { type: String, default: null },
 
+    // Per-model cooldown timestamps. The credential remains usable with other models.
+    modelCooldowns: { type: Map, of: Date, default: {} },
+
     // Token usage tracking — written by ai-service after each successful Gemini call
     totalTokensUsed: { type: Number, default: 0 },
     promptTokensUsed: { type: Number, default: 0 },
