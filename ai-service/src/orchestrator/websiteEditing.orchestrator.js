@@ -2,15 +2,17 @@ const editAgent = require('../agents/edit.agent');
 const debugAgent = require('../agents/debug.agent');
 const { validateGeneratedFiles } = require('../validators/generatedFiles.validator');
 const { identifyRelevantFiles } = require('./relevantFiles');
-const { stage: runStage } = require('./stageRunner');
+const { withTimeout, stage: runStage } = require('./stageRunner');
 
-const STAGE_TIMEOUT_MS = Number.parseInt(process.env.AGENT_STAGE_TIMEOUT_MS || '180000', 10);
-const EDIT_AGENT_TIMEOUT_MS = Number.parseInt(process.env.EDIT_AGENT_TIMEOUT_MS || '180000', 10);
+// Single overall timeout for the entire incremental-edit pipeline
+// (relevant-files detection -> edit agent -> validation/debug repair loop).
+// Replaces the old per-agent/per-stage timeouts.
+const EDIT_TIMEOUT_MS = Number.parseInt(process.env.WEBSITE_EDIT_TIMEOUT_MS || '300000', 10);
 const MAX_EDIT_REPAIR_RETRIES = Math.max(0, Number.parseInt(process.env.MAX_EDIT_REPAIR_RETRIES || '1', 10) || 0);
 const MAX_RELEVANT_FILES = Math.max(1, Number.parseInt(process.env.EDIT_MAX_RELEVANT_FILES || '6', 10) || 6);
 
-function stage(name, fn, meta, onStage, timeoutMs = STAGE_TIMEOUT_MS) {
-  return runStage(name, fn, meta, onStage, timeoutMs);
+function stage(name, fn, meta, onStage) {
+  return runStage(name, fn, meta, onStage);
 }
 
 function lastUserInstruction(messages) {
@@ -40,7 +42,11 @@ function dependenciesFromPackageJson(files, fallback) {
   }
 }
 
-async function editWebsite(input, { onStage } = {}) {
+async function editWebsite(input, options = {}) {
+  return withTimeout(runEdit(input, options), EDIT_TIMEOUT_MS, 'website-edit');
+}
+
+async function runEdit(input, { onStage } = {}) {
   const meta = [];
   console.log('[EDIT-ORCHESTRATOR] Starting incremental edit');
   const normalized = normalizeInput(input);
@@ -62,8 +68,7 @@ async function editWebsite(input, { onStage } = {}) {
       return { value: { relevantPaths, confident } };
     },
     meta,
-    onStage,
-    5000
+    onStage
   );
   const relevantPaths = detection.value.relevantPaths;
 
@@ -82,8 +87,7 @@ async function editWebsite(input, { onStage } = {}) {
       dependencies: normalized.dependencies,
     }),
     meta,
-    onStage,
-    EDIT_AGENT_TIMEOUT_MS
+    onStage
   );
 
   const changedPaths = new Set();
@@ -142,8 +146,7 @@ async function editWebsite(input, { onStage } = {}) {
         dependencies: normalized.dependencies,
       }),
       meta,
-      onStage,
-      EDIT_AGENT_TIMEOUT_MS
+      onStage
     );
     for (const change of debug.value?.changes || []) {
       if (change?.path && typeof change.code === 'string') {

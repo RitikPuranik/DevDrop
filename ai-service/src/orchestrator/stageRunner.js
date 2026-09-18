@@ -16,7 +16,10 @@ async function stage(name, fn, meta, onStage, timeoutMs) {
   meta.push(item);
   onStage?.(name, 'started', item);
   try {
-    const value = await withTimeout(fn(), timeoutMs, name);
+    // Per-stage/per-agent timeouts were removed in favor of a single
+    // overall timeout wrapping the whole pipeline (see the orchestrators).
+    // Pass timeoutMs only for the rare stage that still needs its own cap.
+    const value = timeoutMs ? await withTimeout(fn(), timeoutMs, name) : await fn();
     item.status = 'completed';
     item.durationMs = Date.now() - started;
     item.model = value?.model || null;

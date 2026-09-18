@@ -1,7 +1,15 @@
 const geminiPool = require('../geminiPool.service');
 const axios = require('axios');
 
-const DEFAULT_TIMEOUT_MS = Number.parseInt(process.env.GEMINI_TIMEOUT_MS || '180000', 10);
+const CONFIGURED_TIMEOUT_MS = Number.parseInt(process.env.GEMINI_TIMEOUT_MS || '45000', 10);
+// Never let a single Gemini model attempt block the whole credential pool for
+// minutes. A model timeout should fall through to the next model on the same
+// key, then to the next key. Keep an operator override, but cap it at 60s.
+const MAX_GEMINI_TIMEOUT_MS = Number.parseInt(process.env.GEMINI_MAX_TIMEOUT_MS || '60000', 10);
+const DEFAULT_TIMEOUT_MS = Math.min(
+  Number.isFinite(MAX_GEMINI_TIMEOUT_MS) && MAX_GEMINI_TIMEOUT_MS > 0 ? MAX_GEMINI_TIMEOUT_MS : 60000,
+  Number.isFinite(CONFIGURED_TIMEOUT_MS) && CONFIGURED_TIMEOUT_MS > 0 ? CONFIGURED_TIMEOUT_MS : 45000
+);
 const MAX_AGENT_RETRIES = Math.max(1, Number.parseInt(process.env.AGENT_MAX_RETRIES || '2', 10) || 2);
 const RETRY_DELAY_MS = Math.max(0, Number.parseInt(process.env.GEMINI_RETRY_DELAY_MS || '500', 10) || 0);
 const RATE_LIMIT_COOLDOWN_MS = Math.max(0, Number.parseInt(process.env.GEMINI_RATE_LIMIT_COOLDOWN_MS || '5000', 10) || 0);
@@ -9,18 +17,13 @@ const RATE_LIMIT_COOLDOWN_MAX_MS = Math.max(
   RATE_LIMIT_COOLDOWN_MS,
   Number.parseInt(process.env.GEMINI_RATE_LIMIT_COOLDOWN_MAX_MS || '60000', 10) || 60000
 );
-const RATE_LIMIT_MAX_RETRIES = Math.max(
-  0,
-  Number.parseInt(process.env.GEMINI_RATE_LIMIT_MAX_RETRIES || '5', 10) || 0
-);
-
 const MODELS = [
-  process.env.GEMINI_MODEL || 'gemini-3.7-flash',
-  process.env.GEMINI_FALLBACK_MODEL || 'gemini-3.6-flash',
+  'gemini-3.7-flash',
   'gemini-3.6-flash',
-]
-  .filter((model) => model && !/gemini-3\.8-flash/i.test(model))
-  .filter((model, index, models) => models.indexOf(model) === index);
+  'gemini-3.5-flash',
+  'gemini-3.5-flash-lite',
+].filter((model, index, models) => models.indexOf(model) === index);
+
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -346,113 +349,155 @@ function retrySecondsFromMessage(message) {
 }
 
 async function callGemini({ system, input, timeout = DEFAULT_TIMEOUT_MS }) {
+  const requestTimeout = Math.min(
+    Number.isFinite(Number(timeout)) && Number(timeout) > 0 ? Number(timeout) : DEFAULT_TIMEOUT_MS,
+    Number.isFinite(MAX_GEMINI_TIMEOUT_MS) && MAX_GEMINI_TIMEOUT_MS > 0 ? MAX_GEMINI_TIMEOUT_MS : 60000
+  );
   let lastError;
 
   for (let attempt = 1; attempt <= MAX_AGENT_RETRIES; attempt += 1) {
-    for (const model of MODELS) {
-      let rateLimitRetries = 0;
+    const startedAt = Date.now();
 
-      while (true) {
-        const startedAt = Date.now();
-
-        try {
-          const { result } = await geminiPool.execute((apiKey) => axios.post(
-            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
-            {
-              contents: [{ role: 'user', parts: [{ text: JSON.stringify(input) }] }],
-              systemInstruction: { parts: [{ text: system }] },
-              generationConfig: {
-                responseMimeType: 'application/json',
-                maxOutputTokens: Number.parseInt(
-                  process.env.GEMINI_MAX_OUTPUT_TOKENS || '32768',
-                  10
-                ),
-                thinkingConfig: { thinkingLevel: 'low' },
-              },
+    try {
+      // IMPORTANT: credential-first traversal lives inside the pool.
+      // For each key/project, executeModels tries the entire model list before
+      // moving to the next credential:
+      //
+      //   key A -> 3.8 -> 3.7 -> 3.6 -> 3.5-lite
+      //   key B -> 3.8 -> 3.7 -> 3.6 -> 3.5-lite
+      //   ...
+      //
+      // Do not wrap this in a separate `for (const model of MODELS)` loop,
+      // because that changes the traversal back to model-first and causes the
+      // exact regression this pool was added to solve.
+      const { result, model } = await geminiPool.executeModels(MODELS, async (apiKey, model) => {
+        const response = await axios.post(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
+          {
+            contents: [{ role: 'user', parts: [{ text: JSON.stringify(input) }] }],
+            systemInstruction: { parts: [{ text: system }] },
+            generationConfig: {
+              responseMimeType: 'application/json',
+              maxOutputTokens: Number.parseInt(
+                process.env.GEMINI_MAX_OUTPUT_TOKENS || '32768',
+                10
+              ),
+              thinkingConfig: { thinkingLevel: 'low' },
             },
-            {
-              timeout,
-              headers: { 'Content-Type': 'application/json' },
-            }
-          ));
+          },
+          {
+            timeout: requestTimeout,
+            headers: { 'Content-Type': 'application/json' },
+          }
+        );
 
-          const raw = extractText(result);
+        // IMPORTANT: JSON parsing must happen INSIDE the pool callback.
+        // Otherwise a model can return HTTP 200 with malformed JSON, the pool
+        // marks that credential/model as successful, and the LLM layer gets
+        // the parse error after the pool has already stopped. Throwing here
+        // makes malformed output participate in the same key-first fallback:
+        //
+        //   key A -> 3.7 -> malformed JSON -> 3.6 -> ... -> key B
+        //
+        // without treating a bad model response as a successful request.
+        const raw = extractText(response);
+        try {
           const parsed = extractJson(raw);
-
           return {
-            value: parsed,
-            model,
-            durationMs: Date.now() - startedAt,
-            attempt,
+            response,
+            parsed,
           };
         } catch (error) {
-          lastError = error;
-          const detail = safeError(error);
-
-          console.warn('[LLM] agent request failed', {
+          // HTTP 200 does not mean the generated contract is usable. Keep
+          // malformed JSON inside the pool's fallback path so this exact
+          // credential can try the next model before we move to another key.
+          console.warn('[Gemini Pool] INVALID GENERATED JSON', {
+            keyId: String(apiKey).length > 8 ? `${String(apiKey).slice(0, 4)}...${String(apiKey).slice(-4)}` : 'redacted',
             model,
-            attempt,
-            rateLimitRetries,
-            durationMs: Date.now() - startedAt,
-            ...detail,
+            message: error.message,
+            position: String(error.message).match(/position (\d+)/i)?.[1] || null,
           });
+          error.code = error.code || 'GEMINI_INVALID_GENERATED_JSON';
+          error.retryableOutput = true;
+          throw error;
+        }
+      });
 
-          if (detail.category === 'generated_json') {
-            // A malformed model response is not a key failure. Move to the
-            // next model/agent attempt instead of poisoning the key pool.
-            break;
-          }
+      const parsed = result?.parsed;
 
-          const poolUnavailable =
-            detail.category === 'model_error' &&
-            /all gemini keys are temporarily unavailable/i.test(detail.message || '');
+      return {
+        value: parsed,
+        // The pool selected the model after walking the model list for the
+        // winning credential. Preserve that selected model for callers.
+        model,
+        durationMs: Date.now() - startedAt,
+        attempt,
+      };
+    } catch (error) {
+      lastError = error;
+      const detail = safeError(error);
 
-          if (detail.category !== 'rate_limit' && !poolUnavailable) {
-            break;
-          }
+      console.warn('[LLM] agent request failed', {
+        attempt,
+        durationMs: Date.now() - startedAt,
+        ...detail,
+      });
 
-          if (rateLimitRetries >= RATE_LIMIT_MAX_RETRIES) {
-            console.warn('[LLM] rate-limit retry budget exhausted', {
-              model,
-              attempt,
-              rateLimitRetries,
-              maxRateLimitRetries: RATE_LIMIT_MAX_RETRIES,
-            });
-            break;
-          }
+      if (detail.category === 'generated_json') {
+        break;
+      }
 
-          const providerRetryMs = retrySecondsFromMessage(detail.message);
-          const requestedWaitMs = Math.max(RATE_LIMIT_COOLDOWN_MS, providerRetryMs);
-          const waitMs = Math.min(
-            RATE_LIMIT_COOLDOWN_MAX_MS,
-            requestedWaitMs
-          );
+      const poolUnavailable =
+        error?.code === 'GEMINI_POOL_EXHAUSTED' ||
+        (detail.category === 'model_error' &&
+          /all gemini keys are temporarily unavailable|gemini pool exhausted/i.test(detail.message || ''));
 
-          rateLimitRetries += 1;
+      if (poolUnavailable) {
+        const retryAfterMs = Number.isFinite(error?.retryAfterMs) ? error.retryAfterMs : 0;
+        console.warn('[LLM] Gemini pool exhausted for this agent attempt', {
+          attempt,
+          retryAfterMs,
+          attemptedKeys: error?.attemptedKeyIds?.length || null,
+          classification: error?.classification || detail.category,
+        });
 
-          if (waitMs > 0) {
-            console.warn('[LLM] rate limit cooldown', {
-              waitMs,
-              configuredCooldownMs: RATE_LIMIT_COOLDOWN_MS,
-              maxCooldownMs: RATE_LIMIT_COOLDOWN_MAX_MS,
-              retryIndex: rateLimitRetries,
-            });
-            await sleep(waitMs);
-          }
+        // The pool has already tried every key across every model. Waiting for
+        // the shortest provider cooldown before the next agent attempt is
+        // useful, but NEVER run another model loop here.
+        if (attempt < MAX_AGENT_RETRIES && retryAfterMs > 0) {
+          const waitMs = Math.min(RATE_LIMIT_COOLDOWN_MAX_MS, retryAfterMs);
+          console.warn('[LLM] waiting before retrying the full key-first pool', {
+            waitMs,
+            retryAfterMs,
+            nextAttempt: attempt + 1,
+          });
+          await sleep(waitMs);
+        }
+        continue;
+      }
+
+      if (detail.category === 'rate_limit') {
+        const providerRetryMs = retrySecondsFromMessage(detail.message);
+        const waitMs = Math.min(
+          RATE_LIMIT_COOLDOWN_MAX_MS,
+          Math.max(RATE_LIMIT_COOLDOWN_MS, providerRetryMs)
+        );
+        if (attempt < MAX_AGENT_RETRIES && waitMs > 0) {
+          console.warn('[LLM] rate limit cooldown after pool request', {
+            waitMs,
+            retryIndex: attempt,
+          });
+          await sleep(waitMs);
         }
       }
-    }
 
-    if (attempt < MAX_AGENT_RETRIES && RETRY_DELAY_MS > 0) {
-      await sleep(RETRY_DELAY_MS);
+      if (attempt < MAX_AGENT_RETRIES && RETRY_DELAY_MS > 0) {
+        await sleep(RETRY_DELAY_MS);
+      }
     }
   }
 
-  let finalMessage = lastError?.message || 'All Gemini agent attempts failed';
-  if (lastError?.category === 'generated_json') {
-    finalMessage = `Gemini returned malformed JSON after all repair attempts: ${finalMessage}`;
-  }
-
+  const finalMessage = lastError?.message || 'All Gemini agent attempts failed';
   const error = new Error(finalMessage);
   error.failure = safeError(lastError || error);
   throw error;

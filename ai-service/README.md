@@ -54,9 +54,12 @@ Gemini call goes through `src/geminiPool.service.js`, which:
   the environment when no key exists yet in Mongo, or when `MONGODB_URI`
   isn't set at all — existing single-key installs need no changes.
 
-Model fallback (which Gemini model to try) is unchanged and orthogonal to
-key fallback — for a given model, the pool may try several keys before
-`gemini.service.js`'s outer loop moves on to the next model.
+Website generation now uses **credential-first fallback**: one credential
+tries every configured Gemini model in order before the pool moves to the next
+credential. For example: `Key A -> 3.8 -> 3.7 -> 3.6 -> 3.5-lite -> Key B -> ...`.
+This keeps model fallback on the same project/key before spending another
+project, while separate single-model calls (such as repair/recovery) can still
+use the normal `execute()` path.
 
 **Multi-instance note:** the job queue in `jobs.service.js` is
 process-local — `AI_CONCURRENCY` limits *one* ai-service process, and

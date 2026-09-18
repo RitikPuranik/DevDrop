@@ -191,6 +191,50 @@ describe('execute()', () => {
     delete process.env.GEMINI_PER_KEY_CONCURRENCY;
   });
 
+  test('executeModels is key-first: one key tries every model before the next key', async () => {
+    const calls = [];
+    const models = ['MODEL_A', 'MODEL_B', 'MODEL_C', 'MODEL_D'];
+    const entries = Array.from(_internal.pool.values());
+    const firstKey = entries[0].rawKey;
+    const secondKey = entries[1].rawKey;
+
+    const requestFn = jest.fn((rawKey, model) => {
+      calls.push([rawKey, model]);
+      if (rawKey === firstKey) return Promise.reject(httpError(429, 'quota exceeded'));
+      if (rawKey === secondKey && model === 'MODEL_C') return Promise.resolve('ok');
+      return Promise.reject(httpError(429, 'quota exceeded'));
+    });
+
+    const { result, keyId, model } = await geminiPool.executeModels(models, requestFn);
+
+    expect(result).toBe('ok');
+    expect(keyId).toBe(entries[1].id);
+    expect(model).toBe('MODEL_C');
+    expect(calls).toEqual([
+      [firstKey, 'MODEL_A'],
+      [firstKey, 'MODEL_B'],
+      [firstKey, 'MODEL_C'],
+      [firstKey, 'MODEL_D'],
+      [secondKey, 'MODEL_A'],
+      [secondKey, 'MODEL_B'],
+      [secondKey, 'MODEL_C'],
+    ]);
+  });
+
+  test('pool can try every configured key instead of hard-stopping at four', async () => {
+    process.env.GEMINI_POOL_MAX_KEY_ATTEMPTS = '57';
+    let calls = 0;
+    const requestFn = jest.fn((rawKey) => {
+      calls += 1;
+      if (rawKey !== 'KEY_C_9012') return Promise.reject(httpError(429, 'quota exceeded'));
+      return Promise.resolve('ok');
+    });
+    const { result } = await geminiPool.execute(requestFn);
+    expect(result).toBe('ok');
+    expect(calls).toBe(3);
+    delete process.env.GEMINI_POOL_MAX_KEY_ATTEMPTS;
+  });
+
   test('all keys exhausted throws PoolExhaustedError with a generic message', async () => {
     const requestFn = jest.fn(() => Promise.reject(httpError(429, 'quota exceeded')));
     await expect(geminiPool.execute(requestFn)).rejects.toThrow();

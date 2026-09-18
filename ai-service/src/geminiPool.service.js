@@ -23,6 +23,14 @@ const { classify, cooldownForFailure } = require('./geminiFailureClassifier');
  */
 
 const POOL_REFRESH_MS = Number.parseInt(process.env.GEMINI_POOL_REFRESH_MS || '5000', 10);
+// Number of different credentials a single Gemini call may try before the
+// pool gives control back to the LLM layer.  The old hard-coded value of 4
+// made a 57-project pool behave like a 4-key pool and caused the outer LLM
+// retry loop to start the same failover cycle again.
+function getMaxKeyAttempts() {
+  const raw = Number.parseInt(process.env.GEMINI_POOL_MAX_KEY_ATTEMPTS || '', 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : pool.size || 1;
+}
 const DAILY_TOKEN_LIMIT = Number.parseInt(process.env.GEMINI_DAILY_TOKEN_LIMIT || '1500000', 10);
 function getPerKeyConcurrency() {
   const raw = Number.parseInt(process.env.GEMINI_PER_KEY_CONCURRENCY || '', 10);
@@ -193,6 +201,30 @@ function isUsable(entry, excludeIds, now) {
  * priority the least-recently-used — so a healthy pool doesn't just
  * hammer whichever key happens to be priority 1 forever.
  */
+function keyLogName(entry) {
+  const suffix = entry?.id ? String(entry.id).slice(-6) : 'unknown';
+  return entry?.label ? `${entry.label} (${suffix})` : `key-${suffix}`;
+}
+
+function logModelTry(entry, model, meta = {}) {
+  console.log('[Gemini Pool] TRY', {
+    key: keyLogName(entry),
+    keyId: entry?.id || null,
+    model,
+    ...meta,
+  });
+}
+
+function logModelResult(entry, model, result, meta = {}) {
+  const method = result === 'SUCCESS' ? console.log : console.warn;
+  method(`[Gemini Pool] ${result}`, {
+    key: keyLogName(entry),
+    keyId: entry?.id || null,
+    model,
+    ...meta,
+  });
+}
+
 function selectKey(excludeIds = []) {
   const now = Date.now();
   const candidates = Array.from(pool.values()).filter((entry) => isUsable(entry, excludeIds, now));
@@ -295,7 +327,7 @@ function markTokenUsage(entry, usageMetadata) {
   });
 }
 
-function markFailure(entry, error) {
+function markFailure(entry, error, options = {}) {
   entry.inFlight = Math.max(0, entry.inFlight - 1);
   const info = classify(error);
   const apiMessage = error.response?.data?.error?.message || error.message || 'Unknown error';
@@ -334,11 +366,22 @@ function markFailure(entry, error) {
   } else {
     entry.consecutiveFailures += 1;
     const cooldownMs = cooldownForFailure(entry.consecutiveFailures, info.classification, info.retryAfterMs);
-    entry.cooldownUntil = cooldownMs > 0 ? new Date(Date.now() + cooldownMs) : null;
-    entry.status = info.classification === 'rate_limit' ? 'rate_limited' : 'degraded';
-    update.status = entry.status;
-    update.cooldownUntil = entry.cooldownUntil;
-    update.consecutiveFailures = entry.consecutiveFailures;
+    if (options.deferTemporaryCooldown && info.retryable) {
+      // We are intentionally trying the next model on the same credential.
+      // Keep this key eligible inside the current key->model sequence; the
+      // credential is only cooled once its full model list is exhausted.
+      entry.cooldownUntil = null;
+      entry.status = 'healthy';
+      update.status = 'healthy';
+      update.cooldownUntil = null;
+      update.consecutiveFailures = entry.consecutiveFailures;
+    } else {
+      entry.cooldownUntil = cooldownMs > 0 ? new Date(Date.now() + cooldownMs) : null;
+      entry.status = info.classification === 'rate_limit' ? 'rate_limited' : 'degraded';
+      update.status = entry.status;
+      update.cooldownUntil = entry.cooldownUntil;
+      update.consecutiveFailures = entry.consecutiveFailures;
+    }
   }
 
   persistAsync(entry.id, update);
@@ -351,6 +394,147 @@ class PoolExhaustedError extends Error {
     this.name = 'PoolExhaustedError';
     this.retryAfterMs = retryAfterMs;
   }
+}
+
+/**
+ * Runs a model sequence on the SAME credential before moving to the next
+ * credential. This is the important traversal order for website generation:
+ *
+ *   key A -> model 1 -> model 2 -> model 3 -> model 4
+ *          -> key B -> model 1 -> model 2 -> ...
+ *
+ * A retryable provider failure (429/503/timeout/transient) moves to the next
+ * model while keeping the current key. Only after every model has failed for
+ * that key do we move to another credential.
+ *
+ * `requestFn(rawKey, model)` must resolve with the provider result or reject
+ * with the provider error.
+ *
+ * @returns {Promise<{result: any, keyId: string, model: string}>}
+ */
+async function executeModels(models, requestFn) {
+  await loadPool();
+
+  const modelList = Array.isArray(models) ? models.filter(Boolean) : [];
+  if (modelList.length === 0) {
+    const err = new Error('No Gemini models are configured.');
+    err.code = 'GEMINI_NO_MODELS';
+    throw err;
+  }
+
+  if (pool.size === 0) {
+    const err = new Error('No Gemini API keys are configured.');
+    err.userMessage =
+      'AI Studio is not configured yet. Add at least one Gemini API key from the admin panel (or set GEMINI_API_KEY).';
+    err.statusCode = 500;
+    throw err;
+  }
+
+  const excludeIds = [];
+  const maxKeyAttempts = Math.max(1, Math.min(pool.size, getMaxKeyAttempts()));
+  let lastError = null;
+  let lastInfo = null;
+
+  for (let keyAttempt = 0; keyAttempt < maxKeyAttempts; keyAttempt += 1) {
+    const entry = selectKey(excludeIds);
+    if (!entry) {
+      const retryAfterMs = shortestCooldownRemaining(excludeIds);
+      throw new PoolExhaustedError(
+        retryAfterMs
+          ? `All Gemini keys are temporarily unavailable; shortest cooldown is ${Math.ceil(retryAfterMs / 1000)}s.`
+          : 'No enabled, healthy Gemini API keys are available.',
+        retryAfterMs
+      );
+    }
+
+    console.log('Gemini pool key sequence start', {
+      keyId: entry.id,
+      keyAttempt: keyAttempt + 1,
+      models: modelList,
+    });
+
+    for (let modelAttempt = 0; modelAttempt < modelList.length; modelAttempt += 1) {
+      const model = modelList[modelAttempt];
+      markAcquired(entry);
+      const startedAt = Date.now();
+
+      logModelTry(entry, model, {
+        keyAttempt: keyAttempt + 1,
+        modelAttempt: modelAttempt + 1,
+        totalKeys: maxKeyAttempts,
+        totalModels: modelList.length,
+      });
+
+      try {
+        const result = await requestFn(entry.rawKey, model);
+        markSuccess(entry);
+        logModelResult(entry, model, 'SUCCESS', {
+          keyAttempt: keyAttempt + 1,
+          modelAttempt: modelAttempt + 1,
+          latencyMs: Date.now() - startedAt,
+        });
+        return { result, keyId: entry.id, model };
+      } catch (error) {
+        const info = markFailure(entry, error, { deferTemporaryCooldown: modelAttempt < modelList.length - 1 });
+        lastError = error;
+        lastInfo = info;
+
+        logModelResult(entry, model, 'FAILED', {
+          keyAttempt: keyAttempt + 1,
+          modelAttempt: modelAttempt + 1,
+          reason: info.classification,
+          status: error?.response?.status || null,
+          latencyMs: Date.now() - startedAt,
+        });
+
+        if (info.classification === 'timeout') {
+          console.warn('[Gemini Pool] TIMEOUT -> falling back immediately', {
+            keyId: entry.id,
+            model,
+            timeoutMs: Date.now() - startedAt,
+            nextModel: modelList[modelAttempt + 1] || null,
+          });
+        }
+
+        if (!info.failoverKey) throw error;
+
+        // Same key, next model first. Do not immediately cool a credential
+        // while we are still walking the model list. A 429 may be model- or
+        // dimension-specific, and the caller explicitly wants model fallback
+        // before credential fallback.
+        if (modelAttempt < modelList.length - 1) {
+          console.log('[Gemini Pool] NEXT MODEL ON SAME KEY', {
+            keyId: entry.id,
+            failedModel: model,
+            reason: info.classification,
+            nextModel: modelList[modelAttempt + 1],
+          });
+          continue;
+        }
+
+        excludeIds.push(entry.id);
+        const nextEntry = selectKey(excludeIds);
+        console.log('[Gemini Pool] NEXT KEY', {
+          failedKeyId: entry.id,
+          reason: info.classification,
+          nextKeyId: nextEntry?.id || null,
+        });
+      }
+    }
+  }
+
+  if (lastInfo?.classification === 'invalid') throw lastError;
+  const exhausted = new PoolExhaustedError(
+    lastInfo?.retryAfterMs
+      ? `Gemini pool exhausted after trying ${excludeIds.length} credentials across ${modelList.length} models each; retry after ${Math.ceil(lastInfo.retryAfterMs / 1000)}s.`
+      : `Gemini pool exhausted after trying ${excludeIds.length} credentials across ${modelList.length} models each.`,
+    lastInfo?.retryAfterMs || null
+  );
+  exhausted.code = 'GEMINI_POOL_EXHAUSTED';
+  exhausted.classification = lastInfo?.classification || 'unknown';
+  exhausted.attemptedKeyIds = excludeIds.slice();
+  exhausted.lastError = lastError;
+  throw exhausted;
 }
 
 /**
@@ -372,7 +556,7 @@ async function execute(requestFn) {
   }
 
   const excludeIds = [];
-  const maxKeyAttempts = Math.max(1, Math.min(pool.size, 4));
+  const maxKeyAttempts = Math.max(1, Math.min(pool.size, getMaxKeyAttempts()));
   let lastError = null;
   let lastInfo = null;
 
@@ -414,7 +598,17 @@ async function execute(requestFn) {
   }
 
   if (lastInfo?.classification === 'invalid') throw lastError;
-  throw lastError || new PoolExhaustedError('All Gemini API keys failed.', null);
+  const exhausted = new PoolExhaustedError(
+    lastInfo?.retryAfterMs
+      ? `Gemini pool exhausted after trying ${excludeIds.length} credentials; retry after ${Math.ceil(lastInfo.retryAfterMs / 1000)}s.`
+      : `Gemini pool exhausted after trying ${excludeIds.length} credentials.`,
+    lastInfo?.retryAfterMs || null
+  );
+  exhausted.code = 'GEMINI_POOL_EXHAUSTED';
+  exhausted.classification = lastInfo?.classification || 'unknown';
+  exhausted.attemptedKeyIds = excludeIds.slice();
+  exhausted.lastError = lastError;
+  throw exhausted;
 }
 
 /** Lightweight single-key test call (used by the admin "Test" button). */
@@ -495,6 +689,7 @@ module.exports = {
   loadPool,
   invalidate,
   execute,
+  executeModels,
   selectKey,
   testSingleKey,
   getSnapshot,

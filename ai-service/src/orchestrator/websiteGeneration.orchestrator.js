@@ -9,12 +9,17 @@ const {validateGeneratedFiles}=require('../validators/generatedFiles.validator')
 const buildValidator=require('../validators/build.validator');
 const { withTimeout, stage: runStage }=require('./stageRunner');
 const MAX_BUILD_FIX_RETRIES=Math.max(0,Number.parseInt(process.env.MAX_BUILD_FIX_RETRIES||'3',10)||3);
-const STAGE_TIMEOUT_MS=Number.parseInt(process.env.AGENT_STAGE_TIMEOUT_MS||'180000',10);
-const CODE_AGENT_TIMEOUT_MS=Number.parseInt(process.env.CODE_AGENT_TIMEOUT_MS||'300000',10);
+// Single overall timeout for the entire whole-website generation pipeline
+// (requirements -> design -> architecture -> code-gen -> integration ->
+// validation/debug loop). Replaces the old per-agent/per-stage timeouts.
+const GENERATION_TIMEOUT_MS=Number.parseInt(process.env.WEBSITE_GENERATION_TIMEOUT_MS||'900000',10);
 function normalizeInput(input){const messages=Array.isArray(input.messages)?input.messages:[];const lastUser=[...messages].reverse().find(m=>m?.role==='user')?.content||'';return {websiteType:input.websiteType||input.type||'portfolio',userData:input.userData||input.portfolioData||{},preferences:input.preferences||{},assets:input.assets||[],conversation:input.conversation||messages,legacyPrompt:lastUser,fileData:input.fileData||null};}
 function mergeFiles(base,changes){const out={...base};for(const[p,obj]of Object.entries(changes||{}))if(obj?.code)out[p]={code:obj.code};return out;}
-function stage(name,fn,meta,onStage){return runStage(name,fn,meta,onStage,STAGE_TIMEOUT_MS);}
-async function generateWebsite(input,{onStage}={}){
+function stage(name,fn,meta,onStage){return runStage(name,fn,meta,onStage);}
+async function generateWebsite(input,options={}){
+ return withTimeout(runGeneration(input,options),GENERATION_TIMEOUT_MS,'website-generation');
+}
+async function runGeneration(input,{onStage}={}){
  const meta=[];console.log('[ORCHESTRATOR] Starting generation');const normalized=normalizeInput(input);
  const requirementsResult=await stage('requirements',()=>requirementsAgent.run(normalized),meta,onStage);const requirements=validateRequirements(requirementsResult.value);
  const designResult=await stage('design',()=>designAgent.run({requirements,preferences:normalized.preferences,websiteType:normalized.websiteType}),meta,onStage);const design=validateDesign(designResult.value);
@@ -23,11 +28,7 @@ async function generateWebsite(input,{onStage}={}){
  let files={};
  for(const fileContract of ordered){
    const relatedContracts=architecture.files.filter(f=>f.path!==fileContract.path&&(fileContract.imports||[]).includes(f.path));
-   const result=await stage(`code:${fileContract.path}`,()=>withTimeout(
-     codeGenerationAgent.run({fileContract,relatedContracts,requirements,design,userData:requirements.userData}),
-     CODE_AGENT_TIMEOUT_MS,
-     `code:${fileContract.path}`
-   ),meta,onStage);
+   const result=await stage(`code:${fileContract.path}`,()=>codeGenerationAgent.run({fileContract,relatedContracts,requirements,design,userData:requirements.userData}),meta,onStage);
    if(result.value?.path!==fileContract.path||typeof result.value.code!=='string')throw new Error(`Code agent returned an invalid path/contract for ${fileContract.path}`);
    files[fileContract.path]={code:result.value.code};
  }const integrationResult=await stage('integration',()=>integrationAgent.run({requirements,design,architecture,files}),meta,onStage);files=mergeFiles(files,integrationResult.value?.files);let dependencies=architecture.dependencies||{};

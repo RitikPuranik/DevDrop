@@ -36,14 +36,6 @@ const GEMINI_MODELS = [
 ].filter((model, index, models) => models.indexOf(model) === index);
 
 const GEMINI_TIMEOUT_MS = Number.parseInt(process.env.GEMINI_TIMEOUT_MS || '90000', 10);
-const GEMINI_RETRY_DELAY_MS = Number.parseInt(process.env.GEMINI_RETRY_DELAY_MS || '500', 10);
-const GEMINI_MAX_MODEL_ATTEMPTS = Math.max(
-  1,
-  Math.min(
-    Number.parseInt(process.env.GEMINI_MAX_MODEL_ATTEMPTS || '4', 10) || 4,
-    GEMINI_MODELS.length
-  )
-);
 const GEMINI_MAX_OUTPUT_TOKENS = Math.max(
   1024,
   Math.min(
@@ -405,16 +397,48 @@ async function requestModel({ model, contents, timeout, systemPrompt }) {
     );
   });
 
-  // Extract token usage from the Gemini response and record it against the key
   const usageMetadata = result?.data?.usageMetadata;
   if (usageMetadata && keyId) {
     const poolEntry = geminiPool._internal.pool.get(keyId);
-    if (poolEntry) {
-      geminiPool.markTokenUsage(poolEntry, usageMetadata);
-    }
+    if (poolEntry) geminiPool.markTokenUsage(poolEntry, usageMetadata);
   }
 
   return result;
+}
+
+/**
+ * Website generation traversal order is deliberately credential-first:
+ *
+ *   key A -> every configured model -> key B -> every configured model -> ...
+ *
+ * This prevents model fallback from silently selecting a different credential
+ * before the current project has had a chance to try its other models.
+ */
+async function requestModels({ models, contents, timeout, systemPrompt }) {
+  const { result, keyId, model } = await geminiPool.executeModels(models, (apiKey, selectedModel) => {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent`;
+    return axios.post(
+      `${url}?key=${encodeURIComponent(apiKey)}`,
+      {
+        contents,
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        generationConfig: {
+          responseMimeType: 'application/json',
+          maxOutputTokens: GEMINI_MAX_OUTPUT_TOKENS,
+          thinkingConfig: { thinkingLevel: 'low' },
+        },
+      },
+      { timeout, headers: { 'Content-Type': 'application/json' } }
+    );
+  });
+
+  const usageMetadata = result?.data?.usageMetadata;
+  if (usageMetadata && keyId) {
+    const poolEntry = geminiPool._internal.pool.get(keyId);
+    if (poolEntry) geminiPool.markTokenUsage(poolEntry, usageMetadata);
+  }
+
+  return { result, keyId, model };
 }
 
 async function repairGeneratedApp({ model, files, dependencies, errors, timeout }) {
@@ -457,11 +481,6 @@ ${JSON.stringify(dependencies, null, 2)}`;
 }
 
 async function generateApp({ messages, fileData }) {
-  // No upfront single-key check anymore — the Gemini API key pool may be
-  // backed by zero, one, or many keys (admin UI or GEMINI_API_KEY/
-  // GEMINI_API_KEYS env fallback). requestModel()/geminiPool.execute()
-  // throws a clear, user-facing error the first time it's actually needed
-  // if the pool turns out to be empty.
   const contents = buildContents(messages, fileData);
   const timeout = Number.isFinite(GEMINI_TIMEOUT_MS) && GEMINI_TIMEOUT_MS > 0 ? GEMINI_TIMEOUT_MS : 180000;
 
@@ -470,150 +489,127 @@ async function generateApp({ messages, fileData }) {
   let lastCapacityModel = null;
   let lastInvalidJsonModel = null;
 
-  for (let attempt = 0; attempt < GEMINI_MAX_MODEL_ATTEMPTS; attempt += 1) {
-    const model = GEMINI_MODELS[attempt];
-    const startedAt = Date.now();
+  try {
+    const { result: response, keyId, model } = await requestModels({
+      models: GEMINI_MODELS,
+      contents,
+      timeout,
+      systemPrompt: SYSTEM_PROMPT,
+    });
+
+    const finishReason = getFinishReason(response);
+    const rawText = extractText(response);
+    console.log('Gemini generation succeeded', {
+      model,
+      keyId,
+      status: response.status,
+      finishReason,
+      elapsedMs: 0,
+      outputLimit: GEMINI_MAX_OUTPUT_TOKENS,
+      outputChars: rawText.length,
+    });
+
+    let result;
     try {
-      const response = await requestModel({
+      result = parseGeneratedApp(rawText, finishReason);
+    } catch (parseError) {
+      if (!parseError.retryableOutput) throw parseError;
+      lastInvalidJsonModel = model;
+      lastError = parseError;
+      console.warn('Gemini returned malformed JSON; attempting same-model recovery', {
         model,
-        contents,
-        timeout,
-        systemPrompt: SYSTEM_PROMPT,
+        keyId,
+        finishReason,
+        partialChars: rawText.length,
       });
-
-      const finishReason = getFinishReason(response);
-      const rawText = extractText(response);
-      console.log('Gemini generation succeeded', {
-        model, attempt: attempt + 1, status: response.status, finishReason,
-        elapsedMs: Date.now() - startedAt, outputLimit: GEMINI_MAX_OUTPUT_TOKENS,
-        outputChars: rawText.length,
-      });
-
-      let result;
       try {
-        result = parseGeneratedApp(rawText, finishReason);
-      } catch (parseError) {
-        if (!parseError.retryableOutput) throw parseError;
-        lastInvalidJsonModel = model;
-        lastError = parseError;
-        console.warn('Gemini returned malformed JSON; attempting same-model recovery before fallback', {
+        result = await recoverFromPartial({ model, contents, partialOutput: rawText, timeout });
+      } catch (recoveryError) {
+        console.error('Same-model JSON recovery failed', {
           model,
-          finishReason,
-          partialChars: rawText.length,
+          finishReason: recoveryError.finishReason || getFinishReason(recoveryError.response),
+          status: recoveryError.response?.status,
+          message: recoveryError.response?.data?.error?.message || recoveryError.message,
         });
-        try {
-          result = await recoverFromPartial({ model, contents, partialOutput: rawText, timeout });
-        } catch (recoveryError) {
-          console.error('Same-model JSON recovery failed', {
-            model,
-            finishReason: recoveryError.finishReason || getFinishReason(recoveryError.response),
-            status: recoveryError.response?.status,
-            message: recoveryError.response?.data?.error?.message || recoveryError.message,
-          });
-          if (attempt >= GEMINI_MAX_MODEL_ATTEMPTS - 1) throw parseError;
-          if (GEMINI_RETRY_DELAY_MS > 0) await sleep(GEMINI_RETRY_DELAY_MS);
-          continue;
-        }
+        throw parseError;
       }
+    }
 
-      const validationErrors = validateGeneratedFiles(result.files);
-      if (!validationErrors.length) return result;
+    const validationErrors = validateGeneratedFiles(result.files);
+    if (!validationErrors.length) return result;
 
-      console.warn('Generated app failed syntax/import/export preflight; auto-repairing once', {
-        model,
-        errors: validationErrors,
-      });
-      return await repairGeneratedApp({
-        model,
-        files: result.files,
-        dependencies: result.dependencies,
-        errors: validationErrors,
-        timeout,
-      });
-    } catch (error) {
-      // Every credential in the pool is currently disabled/invalid/cooling
-      // down. Per the failover UX requirement, the end user never sees
-      // "Key 1/2/3 failed" — just one clean, generic message; the
-      // per-key detail already went to the structured logs above (inside
-      // geminiPool.service.js's execute()).
-      if (error.name === 'PoolExhaustedError') {
-        lastError = error;
-        if (attempt < GEMINI_MAX_MODEL_ATTEMPTS - 1) {
-          console.warn(`Gemini pool exhausted on ${model}; trying fallback model ${GEMINI_MODELS[attempt + 1]}`);
-          if (GEMINI_RETRY_DELAY_MS > 0) await sleep(GEMINI_RETRY_DELAY_MS);
-          continue;
-        }
-        const err = new Error(error.message);
-        err.userMessage = 'AI generation is temporarily busy. DevDrop automatically switched to another Gemini capacity but all options are exhausted right now — please try again shortly.';
-        err.statusCode = 503;
-        throw err;
-      }
-
-      const status = error.response?.status;
-      const apiMessage = error.response?.data?.error?.message;
-      const timedOut = isTimeoutError(error);
-      const capacity = isRetryableCapacityError(error);
-      const retryableOutput = Boolean(error.retryableOutput);
+    console.warn('Generated app failed syntax/import/export preflight; auto-repairing once', {
+      model,
+      keyId,
+      errors: validationErrors,
+    });
+    return await repairGeneratedApp({
+      model,
+      files: result.files,
+      dependencies: result.dependencies,
+      errors: validationErrors,
+      timeout,
+    });
+  } catch (error) {
+    if (error.name === 'PoolExhaustedError') {
       lastError = error;
-
-      console.error('Gemini model attempt failed', {
-        model, attempt: attempt + 1, status, code: error.code,
-        finishReason: error.finishReason, elapsedMs: Date.now() - startedAt,
-        message: apiMessage || error.message,
+      throw Object.assign(new Error(error.message), {
+        userMessage: 'AI generation is temporarily busy. DevDrop tried every configured Gemini model on each available project, but all options are exhausted right now. Please try again shortly.',
+        statusCode: 503,
+        code: 'GEMINI_POOL_EXHAUSTED',
       });
+    }
 
-      if (timedOut) lastTimedOutModel = model;
-      if (capacity) lastCapacityModel = model;
-      if (retryableOutput) lastInvalidJsonModel = model;
+    const status = error.response?.status;
+    const apiMessage = error.response?.data?.error?.message;
+    const timedOut = isTimeoutError(error);
+    const capacity = isRetryableCapacityError(error);
+    const retryableOutput = Boolean(error.retryableOutput);
+    lastError = error;
 
-      if ((timedOut || capacity || retryableOutput) && attempt < GEMINI_MAX_MODEL_ATTEMPTS - 1) {
-        const reason = timedOut ? 'timeout' : capacity ? 'capacity' : 'invalid JSON output';
-        console.warn(`Gemini ${reason} on ${model}; trying fallback model ${GEMINI_MODELS[attempt + 1]}`);
-        if (GEMINI_RETRY_DELAY_MS > 0) await sleep(GEMINI_RETRY_DELAY_MS);
-        continue;
-      }
+    console.error('Gemini generation failed', {
+      status,
+      code: error.code,
+      model: lastInvalidJsonModel || lastCapacityModel || lastTimedOutModel,
+      finishReason: error.finishReason,
+      message: apiMessage || error.message,
+    });
 
-      if (timedOut) {
-        const err = new Error(`Gemini request timed out after ${timeout}ms`);
-        err.userMessage =
-          `Gemini is taking too long to respond. DevDrop tried ${GEMINI_MAX_MODEL_ATTEMPTS} Gemini Flash models and the last attempt (${lastTimedOutModel || model}) timed out after ${Math.round(timeout / 1000)} seconds. Please try again.`;
-        err.statusCode = 504;
-        throw err;
-      }
+    if (timedOut) lastTimedOutModel = lastTimedOutModel || 'configured models';
+    if (capacity) lastCapacityModel = lastCapacityModel || 'configured models';
+    if (retryableOutput) lastInvalidJsonModel = lastInvalidJsonModel || 'configured models';
 
-      if (status === 503 || capacity) {
-        const err = new Error(apiMessage || 'Gemini temporarily unavailable');
-        err.userMessage =
-          `Gemini is temporarily at capacity. DevDrop tried ${GEMINI_MAX_MODEL_ATTEMPTS} Gemini Flash models and none were available right now. Please try again shortly.`;
-        err.statusCode = 503;
-        throw err;
-      }
-
-      if (retryableOutput) {
-        const err = new Error(error.message || 'Gemini returned incomplete output');
-        err.userMessage =
-          'Gemini reached the end of its output before finishing the app JSON. Please try again.';
-        err.statusCode = 502;
-        throw err;
-      }
-
-      const err = new Error(apiMessage || error.message);
-      err.userMessage = apiMessage
-        ? `Gemini API error: ${apiMessage}`
-        : error.userMessage || 'Failed to generate the application.';
-      err.statusCode = status || error.statusCode || 502;
+    if (timedOut) {
+      const err = new Error(`Gemini request timed out after ${timeout}ms`);
+      err.userMessage =
+        'Gemini is taking too long to respond. DevDrop tried all configured models on each available project and could not complete the request. Please try again.';
+      err.statusCode = 504;
       throw err;
     }
-  }
 
-  const fallback = new Error(lastError?.message || 'All Gemini models failed');
-  fallback.userMessage = lastTimedOutModel
-    ? `Gemini generation timed out on ${lastTimedOutModel}. Please try again.`
-    : lastCapacityModel
-      ? 'Gemini is temporarily at capacity. Please try again shortly.'
-      : 'Gemini returned an unusable response. Please try again.';
-  fallback.statusCode = lastTimedOutModel ? 504 : lastCapacityModel ? 503 : 502;
-  throw fallback;
+    if (status === 503 || capacity) {
+      const err = new Error(apiMessage || 'Gemini temporarily unavailable');
+      err.userMessage =
+        'Gemini is temporarily at capacity. DevDrop tried all configured models on each available project and none completed the request right now. Please try again shortly.';
+      err.statusCode = 503;
+      throw err;
+    }
+
+    if (retryableOutput) {
+      const err = new Error(error.message || 'Gemini returned incomplete output');
+      err.userMessage =
+        'Gemini reached the end of its output before finishing the app JSON. Please try again.';
+      err.statusCode = 502;
+      throw err;
+    }
+
+    const err = new Error(apiMessage || error.message || lastError?.message || 'Failed to generate the application.');
+    err.userMessage = apiMessage
+      ? `Gemini API error: ${apiMessage}`
+      : error.userMessage || 'Failed to generate the application.';
+    err.statusCode = status || error.statusCode || 502;
+    throw err;
+  }
 }
 
 module.exports = { generateApp };
