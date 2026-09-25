@@ -195,6 +195,7 @@ const SmoothVideoSection = () => {
             playsInline 
             preload="auto"
             fetchPriority="high"
+            poster="/hero-poster.svg"
             className="w-full h-full object-cover opacity-90 transition-opacity duration-700 group-hover:opacity-100" 
           />
           <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
