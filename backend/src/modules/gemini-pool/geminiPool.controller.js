@@ -59,8 +59,53 @@ async function notifyPoolReload() {
 exports.listKeys = async (req, res) => {
   try {
     const Model = await getModel();
-    const keys = await Model.find().sort({ priority: 1, createdAt: 1 });
-    res.status(200).json({ success: true, data: { keys: keys.map(serializeKey) } });
+    const rawPage = Number.parseInt(req.query.page || '1', 10);
+    const rawLimit = Number.parseInt(req.query.limit || '20', 10);
+    const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
+    const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 20, 1), 100);
+    const search = String(req.query.search || '').trim();
+    const status = String(req.query.status || 'all').trim();
+
+    const query = {};
+    if (search) {
+      const escaped = search.split('').map((char) => /[.*+?^${}()|[\]\\]/.test(char) ? '\\' + char : char).join('');
+
+      query.$or = [
+        { label: { $regex: escaped, $options: 'i' } },
+        { keySuffix: { $regex: escaped, $options: 'i' } },
+      ];
+    }
+
+    if (status === 'disabled') {
+      query.enabled = false;
+    } else if (['healthy', 'busy', 'rate_limited', 'degraded', 'invalid'].includes(status)) {
+      query.enabled = true;
+      query.status = status;
+    } else if (status === 'out_of_tokens') {
+      query.enabled = true;
+      query.dailyTokensUsed = {
+        $gte: Number.parseInt(process.env.GEMINI_DAILY_TOKEN_LIMIT || '1500000', 10),
+      };
+    }
+
+    const [keys, total] = await Promise.all([
+      Model.find(query).sort({ priority: 1, createdAt: 1 }).skip((page - 1) * limit).limit(limit),
+      Model.countDocuments(query),
+    ]);
+
+    const totalPages = Math.ceil(total / limit);
+    res.status(200).json({
+      success: true,
+      data: { keys: keys.map(serializeKey) },
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1,
+      },
+    });
   } catch (error) {
     respondWithClientError(res, error, 'Failed to load Gemini API keys.');
   }
@@ -213,7 +258,49 @@ exports.getPoolStatus = async (req, res) => {
         },
       });
     }
-    res.status(200).json({ success: true, data: live });
+    const rawPage = Number.parseInt(req.query.page || '1', 10);
+    const rawLimit = Number.parseInt(req.query.limit || '20', 10);
+    const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
+    const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 20, 1), 100);
+    const search = String(req.query.search || '').trim().toLowerCase();
+    const status = String(req.query.status || 'all').trim();
+    const allLiveKeys = Array.isArray(live.keys) ? live.keys : [];
+
+    const filteredLiveKeys = allLiveKeys.filter((key) => {
+      if (search) {
+        const label = String(key.label || '').toLowerCase();
+        const maskedKey = String(key.maskedKey || key.keySuffix || '').toLowerCase();
+        if (!label.includes(search) && !maskedKey.includes(search)) return false;
+      }
+      if (status === 'disabled') return !key.enabled;
+      if (status === 'out_of_tokens') return Boolean(key.isOutOfTokens);
+      if (['healthy', 'busy', 'rate_limited', 'degraded', 'invalid'].includes(status)) {
+        const effectiveStatus = !key.enabled ? 'disabled' : (key.status || 'healthy');
+        return effectiveStatus === status;
+      }
+      return true;
+    });
+
+    const start = (page - 1) * limit;
+    const totalLiveKeys = filteredLiveKeys.length;
+    const liveKeys = filteredLiveKeys.slice(start, start + limit);
+    const totalPages = Math.ceil(totalLiveKeys / limit);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        ...live,
+        keys: liveKeys,
+        keysPagination: {
+          page,
+          limit,
+          total: totalLiveKeys,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPreviousPage: page > 1,
+        },
+      },
+    });
   } catch (error) {
     console.error('Gemini pool status error:', error.message);
     res.status(500).json({ success: false, message: 'Failed to load Gemini pool status.' });
