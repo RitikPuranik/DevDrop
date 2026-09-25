@@ -77,18 +77,17 @@ function AppContent() {
 
     setAppReady(true);
 
-    // Preload the shared hero video once so every viewport uses the same asset.
-    const vid = document.createElement('video');
+    // Reuse the hero video declared in index.html so the browser can discover
+    // the LCP resource before React executes. This is the same element later
+    // moved into the hero wrapper, so there is no duplicate video request.
+    const vid = document.getElementById('hero-lcp-video');
+    if (!vid) return;
+
     vid.muted = true;
     vid.playsInline = true;
     vid.preload = 'auto';
     vid.fetchPriority = 'high';
     vid.loop = false;
-    vid.src = HERO_VIDEO_SRC;
-    vid.load();
-    // The hero sits behind the intro overlay, so start decoding/playback now.
-    // This makes the first frame ready when the intro exits instead of starting
-    // the video work only after the intro has completed.
     vid.play().catch(() => {});
 
     preloadedVideoRef.current = vid;
