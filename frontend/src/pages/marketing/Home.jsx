@@ -81,7 +81,9 @@ const Home = ({ preloadedVideoRef, introComplete, fromIntro }) => {
 /* ─── VIDEO HERO ─── */
 const VideoHeroSection = ({ preloadedVideoRef, introComplete, fromIntro }) => {
   const wrapperRef = useRef(null);
-  const [visible, setVisible] = useState(false);
+  // The hero is mounted behind the intro overlay, so keep it paintable from
+  // the first render. The intro still visually covers it until it exits.
+  const [visible, setVisible] = useState(true);
   const { scrollY } = useScroll();
 
   const videoScale = useTransform(scrollY, [0, 1000], [1.03, 1]);
