@@ -46,7 +46,7 @@ const CinematicLoader = ({ onComplete }) => {
           transform: translate3d(0, 30px, 0);
         }
 
-        .cinematic-loader.phase-two .loader-progress {
+        .cinematic-loader .loader-progress.phase-two {
           animation: loader-progress-in 1.5s cubic-bezier(.16,1,.3,1) both;
         }
 
@@ -56,7 +56,7 @@ const CinematicLoader = ({ onComplete }) => {
           will-change: transform;
         }
 
-        .cinematic-loader.phase-three .loader-content {
+        .cinematic-loader .loader-content.phase-three {
           animation: loader-content-out 1.8s cubic-bezier(.76,0,.24,1) both;
         }
 
