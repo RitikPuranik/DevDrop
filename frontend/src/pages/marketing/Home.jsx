@@ -146,9 +146,27 @@ const VideoHeroSection = ({ preloadedVideoRef, introComplete, fromIntro }) => {
 
 /* ─── SMOOTH VIDEO SECTION ─── */
 const SmoothVideoSection = () => {
-  const targetRef = useRef(null);
-  const { scrollYProgress } = useScroll({ target: targetRef, offset: ["start end", "end start"] });
-  const smoothP = useSpring(scrollYProgress, { stiffness: 40, damping: 24 });
+  // Use the global scroll position instead of Motion's target-based useScroll.
+  // Target-based useScroll measures the section's DOM rect and can force layout
+  // during startup. The section is positioned directly after the hero, so its
+  // scroll range can be derived from viewport height without DOM measurement.
+  const { scrollY } = useScroll();
+  const [viewportHeight, setViewportHeight] = useState(
+    () => (typeof window !== 'undefined' ? window.innerHeight : 800)
+  );
+
+  useEffect(() => {
+    const updateViewportHeight = () => setViewportHeight(window.innerHeight);
+    window.addEventListener('resize', updateViewportHeight);
+    return () => window.removeEventListener('resize', updateViewportHeight);
+  }, []);
+
+  const sectionStart = useTransform(scrollY, (value) => {
+    const start = viewportHeight * 0.72;
+    const end = start + viewportHeight * 1.4;
+    return Math.min(1, Math.max(0, (value - start) / (end - start)));
+  });
+  const smoothP = useSpring(sectionStart, { stiffness: 40, damping: 24 });
 
   // Keep the layout box at its final dimensions so the card never changes
   // document geometry while scroll progress settles. Animate only transforms.
