@@ -7,6 +7,24 @@ import tailwindcss from '@tailwindcss/vite';
 // so normal DevDrop/OAuth pages keep their existing browser behavior.
 const PREVIEW_PATH_PREFIX = '/ai-studio/preview/';
 
+function deferGeneratedCss() {
+  return {
+    name: 'devdrop-defer-generated-css',
+    transformIndexHtml: {
+      order: 'post',
+      handler(html) {
+        return html.replace(
+          /<link\b([^>]*\brel=["']stylesheet["'][^>]*\bhref=["']([^"']+\.css)["'][^>]*)>/gi,
+          (_match, attrs, href) => [
+            `<link rel="preload" as="style" href="${href}" onload="this.onload=null;this.rel='stylesheet'">`,
+            `<noscript><link rel="stylesheet" href="${href}"></noscript>`,
+          ].join('')
+        );
+      },
+    },
+  };
+}
+
 function webcontainerIsolationHeaders() {
   const applyIfMatch = (req, res, next) => {
     const url = req.url || '';
@@ -30,7 +48,7 @@ function webcontainerIsolationHeaders() {
 }
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), webcontainerIsolationHeaders()],
+  plugins: [react(), tailwindcss(), webcontainerIsolationHeaders(), deferGeneratedCss()],
   build: {
     target: 'esnext',
     minify: 'oxc',
