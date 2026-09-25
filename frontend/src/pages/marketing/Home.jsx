@@ -154,10 +154,13 @@ const SmoothVideoSection = () => {
 
   const cardY = useTransform(smoothP, [0, 0.4], [60, 0]); 
 
-  const [isMobile, setIsMobile] = useState(false);
+  // Read the viewport during the initial client render so mobile does not
+  // briefly render the desktop card dimensions and then jump to mobile.
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < 768
+  );
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
-    checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
