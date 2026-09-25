@@ -293,6 +293,7 @@ export function TeamReveal({ sp }) {
   const rightPathRef = useRef(null);
   const rightHighlightPathRef = useRef(null);
   const tearPathRef = useRef(null);
+  const tearHighlightPathRef = useRef(null);
   const [dims, setDims] = useState({ W: 1440, H: 900 });
   const tearPts = useMemo(() => buildTearPoints(dims.H), [dims.H]);
 
@@ -306,6 +307,7 @@ export function TeamReveal({ sp }) {
     rightPathRef.current?.setAttribute('d', nextPaths.R);
     rightHighlightPathRef.current?.setAttribute('d', nextPaths.R);
     tearPathRef.current?.setAttribute('d', nextPaths.T);
+    tearHighlightPathRef.current?.setAttribute('d', nextPaths.T);
   };
 
   useEffect(() => {
@@ -471,6 +473,7 @@ export function TeamReveal({ sp }) {
             <path ref={rightHighlightPathRef} d="" fill="url(#parchR)" opacity="0.18" />
           </g>
           <path ref={tearPathRef} d="" fill="none" stroke="rgba(0,0,0,0.28)"      strokeWidth="14" strokeLinecap="round" />
+          <path ref={tearHighlightPathRef} d="" fill="none" stroke="rgba(0,0,0,0.14)"       strokeWidth="6"  strokeLinecap="round" />
 
         </motion.svg>
 
