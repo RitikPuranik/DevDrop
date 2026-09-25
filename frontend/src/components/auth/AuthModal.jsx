@@ -184,17 +184,30 @@ export default function AuthModal({ isOpen, onClose }) {
     });
 
     containers.forEach((container) => observer.observe(container));
+    return observer;
   }, [handleGoogleCredential]);
 
   useEffect(() => {
     if (!isOpen || !shouldRender) return;
 
-    // Slight delay so the modal layout is ready before Google measures button width.
-    const timer = window.setTimeout(() => {
-      initGoogleButtons();
+    // Slight delay so the modal layout is ready before Google renders the button.
+    let observer = null;
+    let cancelled = false;
+
+    const timer = window.setTimeout(async () => {
+      const nextObserver = await initGoogleButtons();
+      if (cancelled) {
+        nextObserver?.disconnect();
+      } else {
+        observer = nextObserver;
+      }
     }, 100);
 
-    return () => window.clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      observer?.disconnect();
+    };
   }, [isOpen, shouldRender, initGoogleButtons]);
 
   // ── GitHub OAuth (popup + postMessage) ───────────────────────────────────────
