@@ -175,11 +175,8 @@ const SmoothVideoSection = ({ scrollY }) => {
     return () => observer.disconnect();
   }, [shouldLoadVideo]);
 
-  // Use the global scroll position instead of Motion's target-based useScroll.
-  // Target-based useScroll measures the section's DOM rect and can force layout
-  // during startup. The section is positioned directly after the hero, so its
-  // scroll range can be derived from viewport height without DOM measurement.
-  const { scrollY } = useScroll();
+  // Reuse the homepage-level scroll MotionValue. This avoids creating a
+  // second global scroll subscription for the same page.
   const [viewportHeight, setViewportHeight] = useState(
     () => (typeof window !== 'undefined' ? window.innerHeight : 800)
   );
