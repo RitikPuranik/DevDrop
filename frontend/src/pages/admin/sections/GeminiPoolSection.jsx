@@ -138,19 +138,55 @@ export default function GeminiPoolSection() {
   const [form, setForm] = useState(initialForm);
   const [showForm, setShowForm] = useState(false);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(15);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 15,
+    total: 0,
+    totalPages: 0,
+    hasNextPage: false,
+    hasPreviousPage: false,
+  });
 
   useCooldownTick(keys);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search.trim());
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const load = useCallback(async ({ silent = false } = {}) => {
     try {
       if (silent) setRefreshing(true);
       else setLoading(true);
+
+      const params = {
+        page,
+        limit: pageSize,
+        search: debouncedSearch,
+        status: statusFilter,
+      };
+
       const [keysRes, statusRes] = await Promise.all([
-        adminAPI.getGeminiKeys(),
-        adminAPI.getGeminiPoolStatus(),
+        adminAPI.getGeminiKeys(params),
+        adminAPI.getGeminiPoolStatus(params),
       ]);
+
       setKeys(keysRes.data?.data?.keys || []);
+      setPagination(keysRes.data?.pagination || {
+        page,
+        limit: pageSize,
+        total: 0,
+        totalPages: 0,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      });
       setPoolStatus(statusRes.data?.data || null);
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to load the Gemini API pool');
@@ -158,7 +194,7 @@ export default function GeminiPoolSection() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [page, pageSize, debouncedSearch, statusFilter]);
 
   useEffect(() => {
     load();
@@ -239,25 +275,8 @@ export default function GeminiPoolSection() {
     };
   });
 
-  // Apply search + status filter
-  const filteredKeys = enrichedKeys.filter((key) => {
-    // Search filter
-    if (search) {
-      const q = search.toLowerCase();
-      const matchLabel = key.label?.toLowerCase().includes(q);
-      const matchKey = key.maskedKey?.toLowerCase().includes(q);
-      if (!matchLabel && !matchKey) return false;
-    }
-    // Status filter
-    if (statusFilter !== 'all') {
-      if (statusFilter === 'out_of_tokens') {
-        if (!key.isOutOfTokens) return false;
-      } else {
-        if (statusFor(key) !== statusFilter) return false;
-      }
-    }
-    return true;
-  });
+  // Search, status filtering, and pagination are handled server-side.
+  // Only the current page is kept in the browser.
 
   return (
     <div className="space-y-5">
@@ -378,7 +397,10 @@ export default function GeminiPoolSection() {
           <Filter size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/25 pointer-events-none" />
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPage(1);
+            }}
             className="appearance-none pl-8 pr-8 py-2 rounded-xl bg-[#141414] border border-white/10 text-xs text-white/70 focus:outline-none focus:border-[#8b7355] transition-colors cursor-pointer"
             style={{ colorScheme: 'dark' }}
           >
@@ -397,7 +419,7 @@ export default function GeminiPoolSection() {
         {/* Result count */}
         {(search || statusFilter !== 'all') && (
           <span className="text-[10px] text-white/30 font-bold uppercase tracking-wider self-center shrink-0">
-            {filteredKeys.length} / {enrichedKeys.length}
+            {pagination.total} result{pagination.total === 1 ? '' : 's'}
           </span>
         )}
       </div>
@@ -433,7 +455,7 @@ export default function GeminiPoolSection() {
 
               {/* Body */}
               <tbody>
-                {filteredKeys.map((key) => {
+                {enrichedKeys.map((key) => {
                   const status = statusFor(key);
                   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.healthy;
                   const cooldownMs = key.cooldownUntil
@@ -570,6 +592,54 @@ export default function GeminiPoolSection() {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {pagination.total > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-white/10 bg-white/[0.015]">
+            <div className="flex items-center gap-2 text-[10px] text-white/35 uppercase tracking-[0.12em]">
+              <span>Rows</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="bg-[#141414] border border-white/10 rounded-lg px-2 py-1.5 text-[10px] text-white/60 focus:outline-none focus:border-[#8b7355]"
+              >
+                <option value={10}>10</option>
+                <option value={15}>15</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+              <span>
+                {pagination.total === 0
+                  ? '0'
+                  : `${(pagination.page - 1) * pagination.limit + 1}–${Math.min(pagination.page * pagination.limit, pagination.total)} of ${pagination.total}`}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={!pagination.hasPreviousPage || refreshing}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="px-3 py-1.5 rounded-lg border border-white/10 text-[10px] font-bold uppercase tracking-[0.1em] text-white/50 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                Previous
+              </button>
+              <span className="min-w-[90px] text-center text-[10px] font-bold text-white/40 uppercase tracking-[0.1em]">
+                Page {pagination.page} of {Math.max(pagination.totalPages, 1)}
+              </span>
+              <button
+                type="button"
+                disabled={!pagination.hasNextPage || refreshing}
+                onClick={() => setPage((p) => p + 1)}
+                className="px-3 py-1.5 rounded-lg border border-white/10 text-[10px] font-bold uppercase tracking-[0.1em] text-white/50 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                Next
+              </button>
+            </div>
           </div>
         )}
       </div>
