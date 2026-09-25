@@ -68,7 +68,7 @@ exports.listKeys = async (req, res) => {
 
     const query = {};
     if (search) {
-      const escaped = search.replace(/[.*+?^()|[\]\\]/g, '\\const escaped = search.replace(/[.*+?^()|[\]\\]/g, '\\exports.listKeys = async (req, res) => {
+      const escaped = search.split('').map((char) => /[.*+?^${}()|[\]\\]/.test(char) ? '\\' + char : char).join('');
   try {
     const Model = await getModel();
     const keys = await Model.find().sort({ priority: 1, createdAt: 1 });
