@@ -24,7 +24,7 @@ function loadRazorpay() {
     const script = document.createElement('script');
     script.src = RAZORPAY_SRC;
     script.async = true;
-    script.dataset.devd­ropRazorpay = 'true';
+    script.dataset.devdropRazorpay = 'true';
     script.onload = () => window.Razorpay ? resolve(window.Razorpay) : reject(new Error('Razorpay SDK unavailable'));
     script.onerror = () => reject(new Error('Failed to load Razorpay SDK'));
     document.head.appendChild(script);
