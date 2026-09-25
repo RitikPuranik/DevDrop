@@ -154,7 +154,10 @@ export default function AuthModal({ isOpen, onClose }) {
       googleInitializedRef.current = true;
     }
 
-    const containers = Array.from(document.querySelectorAll("[data-google-button]"));
+    const activeMode = isSignUp ? "signup" : "login";
+    const containers = Array.from(
+      document.querySelectorAll(`[data-google-button="${activeMode}"]`)
+    );
     const visibleContainer = containers.find((container) => {
       const style = window.getComputedStyle(container);
       return style.display !== "none" && style.visibility !== "hidden";
@@ -171,7 +174,7 @@ export default function AuthModal({ isOpen, onClose }) {
       text: "continue_with",
       width: 400,
     });
-  }, [handleGoogleCredential]);
+  }, [handleGoogleCredential, isSignUp, isForgotPassword]);
 
   useEffect(() => {
     if (!isOpen || !shouldRender) return;
@@ -439,7 +442,7 @@ export default function AuthModal({ isOpen, onClose }) {
                 <p className="text-[#8b7355] text-sm mb-5">Join DevDrop today</p>
 
                 <div className="w-full flex flex-col gap-2.5 mb-4">
-                  <div data-google-button className="w-full flex justify-center" />
+                  <div data-google-button="signup" className="w-full flex justify-center" />
                   <GithubAuthButton loading={githubLoading} disabled={githubLoading || googleLoading} onClick={handleGithubAuth} />
                 </div>
                 <Divider />
@@ -472,7 +475,7 @@ export default function AuthModal({ isOpen, onClose }) {
                 <p className="text-[#8b7355] text-sm mb-5">Please enter your credentials</p>
 
                 <div className="w-full flex flex-col gap-2.5 mb-4">
-                  <div data-google-button className="w-full flex justify-center" />
+                  <div data-google-button="login" className="w-full flex justify-center" />
                   <GithubAuthButton loading={githubLoading} disabled={githubLoading || googleLoading} onClick={handleGithubAuth} />
                 </div>
                 <Divider />
@@ -508,7 +511,7 @@ export default function AuthModal({ isOpen, onClose }) {
 
               {/* Google + GitHub buttons */}
               <div className="w-full flex flex-col gap-2.5 mb-3">
-                <div data-google-button className="w-full flex justify-center" />
+                <div data-google-button="signup" className="w-full flex justify-center" />
                 <GithubAuthButton loading={githubLoading} disabled={githubLoading || googleLoading} onClick={handleGithubAuth} />
               </div>
               <Divider />
@@ -545,7 +548,7 @@ export default function AuthModal({ isOpen, onClose }) {
 
                 {/* Google + GitHub buttons */}
                 <div className="w-full flex flex-col gap-2.5 mb-3">
-                  <div data-google-button className="w-full flex justify-center" />
+                  <div data-google-button="login" className="w-full flex justify-center" />
                   <GithubAuthButton loading={githubLoading} disabled={githubLoading || googleLoading} onClick={handleGithubAuth} />
                 </div>
                 <Divider />
