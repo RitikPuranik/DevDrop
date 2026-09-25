@@ -18,11 +18,6 @@ if (import.meta.env.VITE_SENTRY_DSN) {
   });
 }
 
-const options = {
-  api_host: import.meta.env.VITE_POSTHOG_HOST || 'https://us.i.posthog.com',
-  person_profiles: 'identified_only',
-}
-
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <PostHogProvider apiKey={import.meta.env.VITE_POSTHOG_PROJECT_TOKEN} options={options}>
