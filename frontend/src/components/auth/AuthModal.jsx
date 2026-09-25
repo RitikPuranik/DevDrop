@@ -137,7 +137,9 @@ export default function AuthModal({ isOpen, onClose }) {
     }
   }, [navigate, onClose]);
 
-  // Render Google buttons into every visible auth container.
+  // Render only the Google button in the currently visible auth panel.
+  // Google injects an iframe when renderButton() runs, so rendering all mobile
+  // and desktop containers unnecessarily can trigger avoidable layout work.
   const initGoogleButtons = useCallback(async () => {
     if (!GOOGLE_CLIENT_ID) return;
     await loadGSI();
@@ -152,61 +154,38 @@ export default function AuthModal({ isOpen, onClose }) {
       googleInitializedRef.current = true;
     }
 
-    const containers = document.querySelectorAll("[data-google-button]");
-    const renderedWidths = new WeakMap();
-
-    // ResizeObserver reports the already-calculated layout size asynchronously.
-    // This avoids getClientRects()/offsetWidth reads that can force synchronous
-    // reflow after Google has modified another button container.
-    const renderContainer = (container, width) => {
-      const buttonWidth = Math.min(400, Math.max(200, Math.round(width)));
-      if (renderedWidths.get(container) === buttonWidth) return;
-
-      renderedWidths.set(container, buttonWidth);
-      container.innerHTML = "";
-
-      window.google.accounts.id.renderButton(container, {
-        type: "standard",
-        shape: "pill",
-        theme: "outline",
-        size: "large",
-        text: "continue_with",
-        width: buttonWidth,
-      });
-    };
-
-    const observer = new ResizeObserver((entries) => {
-      entries.forEach(({ target, contentRect }) => {
-        if (contentRect.width > 0) {
-          renderContainer(target, contentRect.width);
-        }
-      });
+    const containers = Array.from(document.querySelectorAll("[data-google-button]"));
+    const visibleContainer = containers.find((container) => {
+      const style = window.getComputedStyle(container);
+      return style.display !== "none" && style.visibility !== "hidden";
     });
 
-    containers.forEach((container) => observer.observe(container));
-    return observer;
+    if (!visibleContainer) return;
+
+    visibleContainer.innerHTML = "";
+    window.google.accounts.id.renderButton(visibleContainer, {
+      type: "standard",
+      shape: "pill",
+      theme: "outline",
+      size: "large",
+      text: "continue_with",
+      width: 400,
+    });
   }, [handleGoogleCredential]);
 
   useEffect(() => {
     if (!isOpen || !shouldRender) return;
 
-    // Slight delay so the modal layout is ready before Google renders the button.
-    let observer = null;
+    // Let the modal finish its opening transition before Google injects its iframe.
     let cancelled = false;
 
-    const timer = window.setTimeout(async () => {
-      const nextObserver = await initGoogleButtons();
-      if (cancelled) {
-        nextObserver?.disconnect();
-      } else {
-        observer = nextObserver;
-      }
-    }, 100);
+    const timer = window.setTimeout(() => {
+      if (!cancelled) initGoogleButtons();
+    }, 500);
 
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
-      observer?.disconnect();
     };
   }, [isOpen, shouldRender, initGoogleButtons]);
 
