@@ -32,7 +32,7 @@ function webcontainerIsolationHeaders() {
 export default defineConfig({
   plugins: [react(), tailwindcss(), webcontainerIsolationHeaders()],
   build: {
-    target: 'es2015',
+    target: 'es2020',
     minify: 'terser',
     terserOptions: {
       compress: {
