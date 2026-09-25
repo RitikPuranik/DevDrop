@@ -32,7 +32,8 @@ const Home = ({ preloadedVideoRef, introComplete, fromIntro }) => {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    window.scrollTo(0, 0);
+    // The browser already starts a fresh document at the top. Avoid forcing a
+    // synchronous scroll/layout pass during the critical first render.
     const timer = setTimeout(() => setIsReady(true), 150);
     return () => clearTimeout(timer);
   }, []);
