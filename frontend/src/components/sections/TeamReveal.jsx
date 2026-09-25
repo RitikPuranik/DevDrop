@@ -311,19 +311,25 @@ export function TeamReveal({ sp }) {
   };
 
   useEffect(() => {
-    const measure = () => {
-      const el = containerRef.current;
-      setDims({
-        W: el ? el.offsetWidth : window.innerWidth,
-        H: el ? el.offsetHeight : window.innerHeight,
-      });
-    };
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
 
-    // Measure after the current render so the browser only has to resolve
-    // geometry once when the section is mounted or resized.
-    measure();
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
+    // ResizeObserver delivers the already-calculated box asynchronously.
+    // Avoid offsetWidth/offsetHeight reads here because they can force a
+    // synchronous layout after Framer Motion has updated the section.
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      if (width > 0 && height > 0) {
+        setDims((previous) => (
+          previous.W === width && previous.H === height
+            ? previous
+            : { W: width, H: height }
+        ));
+      }
+    });
+
+    observer.observe(el);
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
