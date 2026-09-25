@@ -147,6 +147,34 @@ const VideoHeroSection = ({ preloadedVideoRef, introComplete, fromIntro }) => {
 
 /* ─── SMOOTH VIDEO SECTION ─── */
 const SmoothVideoSection = () => {
+  const videoRef = useRef(null);
+  const [shouldLoadVideo, setShouldLoadVideo] = useState(false);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || shouldLoadVideo) return;
+
+    const loadVideo = () => setShouldLoadVideo(true);
+
+    if (!('IntersectionObserver' in window)) {
+      loadVideo();
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          loadVideo();
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '800px 0px' }
+    );
+
+    observer.observe(video);
+    return () => observer.disconnect();
+  }, [shouldLoadVideo]);
+
   // Use the global scroll position instead of Motion's target-based useScroll.
   // Target-based useScroll measures the section's DOM rect and can force layout
   // during startup. The section is positioned directly after the hero, so its
@@ -209,16 +237,16 @@ const SmoothVideoSection = () => {
           }} 
           className="relative overflow-hidden bg-[#121212] group w-full"
         >
-          <video 
-            src={secondVideo} 
-            autoPlay 
-            loop 
-            muted 
-            playsInline 
-            preload="auto"
-            fetchPriority="high"
+          <video
+            ref={videoRef}
+            {...(shouldLoadVideo ? { src: secondVideo } : {})}
+            autoPlay
+            loop
+            muted
+            playsInline
+            preload="metadata"
             poster="/hero-poster.svg"
-            className="w-full h-full object-cover opacity-90 transition-opacity duration-700 group-hover:opacity-100" 
+            className="w-full h-full object-cover opacity-90 transition-opacity duration-700 group-hover:opacity-100"
           />
           <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
         </motion.div>
