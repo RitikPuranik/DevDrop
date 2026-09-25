@@ -17,6 +17,20 @@ export default function AdminPanel() {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [activeTab, setActiveTab] = useState('review');
+  const [preloadAdminTabs, setPreloadAdminTabs] = useState(false);
+
+  // Let Review Queue paint first, then mount the other admin sections in the
+  // background so their API calls/data loading can happen without blocking
+  // the initial admin screen.
+  useEffect(() => {
+    const startPreload = () => setPreloadAdminTabs(true);
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      const idleId = window.requestIdleCallback(startPreload, { timeout: 1000 });
+      return () => window.cancelIdleCallback(idleId);
+    }
+    const timer = window.setTimeout(startPreload, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const init = async () => {
@@ -61,14 +75,35 @@ export default function AdminPanel() {
         {/* Rendered once globally for all admin routes */}
         <AdminNav activeTab={activeTab} onTabChange={setActiveTab} />
 
-        {/* Content rendering conditionally based on state */}
-        {activeTab === 'review' && <ReviewQueueSection />}
-        {activeTab === 'dashboard' && <DashboardSection />}
-        {activeTab === 'websites' && <WebsitesSection />}
-        {activeTab === 'coupons' && <CouponsSection />}
-        {activeTab === 'payouts' && <PayoutsSection />}
-        {activeTab === 'backup' && <BackupSection />}
-        {activeTab === 'gemini-pool' && <GeminiPoolSection />}
+        {/* Review Queue remains the first visible tab. Other sections are
+            mounted in the background after the first paint so their data
+            preloads without delaying the admin screen. */}
+        <div className={activeTab === 'review' ? 'block' : 'hidden'}>
+          <ReviewQueueSection />
+        </div>
+
+        {preloadAdminTabs && (
+          <>
+            <div className={activeTab === 'dashboard' ? 'block' : 'hidden'}>
+              <DashboardSection />
+            </div>
+            <div className={activeTab === 'websites' ? 'block' : 'hidden'}>
+              <WebsitesSection />
+            </div>
+            <div className={activeTab === 'coupons' ? 'block' : 'hidden'}>
+              <CouponsSection />
+            </div>
+            <div className={activeTab === 'payouts' ? 'block' : 'hidden'}>
+              <PayoutsSection />
+            </div>
+            <div className={activeTab === 'backup' ? 'block' : 'hidden'}>
+              <BackupSection />
+            </div>
+            <div className={activeTab === 'gemini-pool' ? 'block' : 'hidden'}>
+              <GeminiPoolSection />
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
