@@ -36,11 +36,21 @@ export const adminAPI = {
   backupFull: (direction, mode = "replace", supabaseMode = "mirror") => api.post("/admin/backup/full", { direction, mode, supabaseMode }),
 
   // Gemini API Key Pool (AI Studio)
-  getGeminiKeys: () => api.get("/admin/gemini-keys"),
+  getGeminiKeys: ({ page = 1, limit = 20, search = '', status = 'all' } = {}) => {
+    const params = new URLSearchParams({ page, limit });
+    if (search) params.append('search', search);
+    if (status && status !== 'all') params.append('status', status);
+    return api.get(`/admin/gemini-keys?${params.toString()}`);
+  },
   addGeminiKey: (data) => api.post("/admin/gemini-keys", data),
   updateGeminiKey: (id, data) => api.patch(`/admin/gemini-keys/${id}`, data),
   deleteGeminiKey: (id) => api.delete(`/admin/gemini-keys/${id}`),
   testGeminiKey: (id) => api.post(`/admin/gemini-keys/${id}/test`),
   reorderGeminiKeys: (orderedIds) => api.post("/admin/gemini-keys/reorder", { orderedIds }),
-  getGeminiPoolStatus: () => api.get("/admin/gemini-pool/status"),
+  getGeminiPoolStatus: ({ page = 1, limit = 20, search = '', status = 'all' } = {}) => {
+    const params = new URLSearchParams({ page, limit });
+    if (search) params.append('search', search);
+    if (status && status !== 'all') params.append('status', status);
+    return api.get(`/admin/gemini-pool/status?${params.toString()}`);
+  },
 };

@@ -137,7 +137,9 @@ export default function AuthModal({ isOpen, onClose }) {
     }
   }, [navigate, onClose]);
 
-  // Render Google buttons into every visible auth container.
+  // Render only the Google button in the currently visible auth panel.
+  // Google injects an iframe when renderButton() runs, so rendering all mobile
+  // and desktop containers unnecessarily can trigger avoidable layout work.
   const initGoogleButtons = useCallback(async () => {
     if (!GOOGLE_CLIENT_ID) return;
     await loadGSI();
@@ -152,30 +154,51 @@ export default function AuthModal({ isOpen, onClose }) {
       googleInitializedRef.current = true;
     }
 
-    const containers = document.querySelectorAll("[data-google-button]");
-    containers.forEach((container) => {
-      if (container.getClientRects().length === 0) return;
-      container.innerHTML = "";
-      window.google.accounts.id.renderButton(container, {
-        type: "standard",
-        shape: "pill",
-        theme: "outline",
-        size: "large",
-        text: "continue_with",
-        width: container.offsetWidth || 280,
-      });
+    const activeMode = isSignUp ? "signup" : "login";
+    const visibleContainer = document.querySelector(
+      `[data-google-button="${activeMode}"]`
+    );
+
+    if (!visibleContainer) return;
+
+    // The container belongs to the active auth panel, so no synchronous
+    // geometry/style read is needed. Let the browser finish its current paint
+    // before Google injects its iframe.
+    await new Promise((resolve) => {
+      if (typeof window.requestAnimationFrame !== "function") {
+        window.setTimeout(resolve, 0);
+        return;
+      }
+      window.requestAnimationFrame(() => window.requestAnimationFrame(resolve));
     });
-  }, [handleGoogleCredential]);
+
+    if (!document.contains(visibleContainer)) return;
+
+    visibleContainer.replaceChildren();
+    window.google.accounts.id.renderButton(visibleContainer, {
+      type: "standard",
+      shape: "pill",
+      theme: "outline",
+      size: "large",
+      text: "continue_with",
+      width: 400,
+    });
+  }, [handleGoogleCredential, isSignUp, isForgotPassword]);
 
   useEffect(() => {
     if (!isOpen || !shouldRender) return;
 
-    // Slight delay so the modal layout is ready before Google measures button width.
-    const timer = window.setTimeout(() => {
-      initGoogleButtons();
-    }, 100);
+    // Let the modal finish its opening transition before Google injects its iframe.
+    let cancelled = false;
 
-    return () => window.clearTimeout(timer);
+    const timer = window.setTimeout(() => {
+      if (!cancelled) initGoogleButtons();
+    }, 500);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, [isOpen, shouldRender, initGoogleButtons]);
 
   // ── GitHub OAuth (popup + postMessage) ───────────────────────────────────────
@@ -428,7 +451,7 @@ export default function AuthModal({ isOpen, onClose }) {
                 <p className="text-[#8b7355] text-sm mb-5">Join DevDrop today</p>
 
                 <div className="w-full flex flex-col gap-2.5 mb-4">
-                  <div data-google-button className="w-full flex justify-center" />
+                  <div data-google-button="signup" className="w-full flex justify-center" />
                   <GithubAuthButton loading={githubLoading} disabled={githubLoading || googleLoading} onClick={handleGithubAuth} />
                 </div>
                 <Divider />
@@ -461,7 +484,7 @@ export default function AuthModal({ isOpen, onClose }) {
                 <p className="text-[#8b7355] text-sm mb-5">Please enter your credentials</p>
 
                 <div className="w-full flex flex-col gap-2.5 mb-4">
-                  <div data-google-button className="w-full flex justify-center" />
+                  <div data-google-button="login" className="w-full flex justify-center" />
                   <GithubAuthButton loading={githubLoading} disabled={githubLoading || googleLoading} onClick={handleGithubAuth} />
                 </div>
                 <Divider />
@@ -497,7 +520,7 @@ export default function AuthModal({ isOpen, onClose }) {
 
               {/* Google + GitHub buttons */}
               <div className="w-full flex flex-col gap-2.5 mb-3">
-                <div data-google-button className="w-full flex justify-center" />
+                <div data-google-button="signup" className="w-full flex justify-center" />
                 <GithubAuthButton loading={githubLoading} disabled={githubLoading || googleLoading} onClick={handleGithubAuth} />
               </div>
               <Divider />
@@ -534,7 +557,7 @@ export default function AuthModal({ isOpen, onClose }) {
 
                 {/* Google + GitHub buttons */}
                 <div className="w-full flex flex-col gap-2.5 mb-3">
-                  <div data-google-button className="w-full flex justify-center" />
+                  <div data-google-button="login" className="w-full flex justify-center" />
                   <GithubAuthButton loading={githubLoading} disabled={githubLoading || googleLoading} onClick={handleGithubAuth} />
                 </div>
                 <Divider />

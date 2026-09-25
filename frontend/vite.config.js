@@ -7,6 +7,24 @@ import tailwindcss from '@tailwindcss/vite';
 // so normal DevDrop/OAuth pages keep their existing browser behavior.
 const PREVIEW_PATH_PREFIX = '/ai-studio/preview/';
 
+function deferGeneratedCss() {
+  return {
+    name: 'devdrop-defer-generated-css',
+    transformIndexHtml: {
+      order: 'post',
+      handler(html) {
+        return html.replace(
+          /<link\b([^>]*\brel=["']stylesheet["'][^>]*\bhref=["']([^"']+\.css)["'][^>]*)>/gi,
+          (_match, attrs, href) => [
+            `<link rel="preload" as="style" href="${href}" onload="this.onload=null;this.rel='stylesheet'">`,
+            `<noscript><link rel="stylesheet" href="${href}"></noscript>`,
+          ].join('')
+        );
+      },
+    },
+  };
+}
+
 function webcontainerIsolationHeaders() {
   const applyIfMatch = (req, res, next) => {
     const url = req.url || '';
@@ -30,16 +48,10 @@ function webcontainerIsolationHeaders() {
 }
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), webcontainerIsolationHeaders()],
+  plugins: [react(), tailwindcss(), webcontainerIsolationHeaders(), deferGeneratedCss()],
   build: {
-    target: 'es2015',
-    minify: 'terser',
-    terserOptions: {
-      compress: {
-        drop_console: true,
-        drop_debugger: true,
-      },
-    },
+    target: 'esnext',
+    minify: 'oxc',
     rollupOptions: {
       input: {
         main: 'index.html',

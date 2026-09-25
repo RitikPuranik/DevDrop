@@ -288,32 +288,59 @@ export function TeamReveal({ sp }) {
   const bgOpacity      = useTransform(sp, [0.56, 0.60], [0, 1]);
 
   const containerRef = useRef(null);
-  const [dims, setDims]   = useState({ W: 1440, H: 900 });
-  const [paths, setPaths] = useState({ L: '', R: '', T: '' });
+  const leftPathRef = useRef(null);
+  const leftHighlightPathRef = useRef(null);
+  const rightPathRef = useRef(null);
+  const rightHighlightPathRef = useRef(null);
+  const tearPathRef = useRef(null);
+  const tearHighlightPathRef = useRef(null);
+  const [dims, setDims] = useState({ W: 1440, H: 900 });
   const tearPts = useMemo(() => buildTearPoints(dims.H), [dims.H]);
 
+  // Update the animated SVG paths directly instead of putting a new path
+  // string into React state on every spring frame. This avoids a full
+  // TeamReveal re-render for each frame and prevents unnecessary layout work.
+  const applyPaths = (progress, width, height, points) => {
+    const nextPaths = makePaths(progress, width, height, points);
+    leftPathRef.current?.setAttribute('d', nextPaths.L);
+    leftHighlightPathRef.current?.setAttribute('d', nextPaths.L);
+    rightPathRef.current?.setAttribute('d', nextPaths.R);
+    rightHighlightPathRef.current?.setAttribute('d', nextPaths.R);
+    tearPathRef.current?.setAttribute('d', nextPaths.T);
+    tearHighlightPathRef.current?.setAttribute('d', nextPaths.T);
+  };
+
   useEffect(() => {
-    const measure = () => {
-      const el = containerRef.current;
-      setDims({
-        W: el ? el.offsetWidth  : window.innerWidth,
-        H: el ? el.offsetHeight : window.innerHeight,
-      });
-    };
-    measure();
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+
+    // ResizeObserver delivers the already-calculated box asynchronously.
+    // Avoid offsetWidth/offsetHeight reads here because they can force a
+    // synchronous layout after Framer Motion has updated the section.
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      if (width > 0 && height > 0) {
+        setDims((previous) => (
+          previous.W === width && previous.H === height
+            ? previous
+            : { W: width, H: height }
+        ));
+      }
+    });
+
+    observer.observe(el);
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
-    setPaths(makePaths(0, dims.W, dims.H, tearPts));
-  }, [dims, tearPts]);
+    applyPaths(0, dims.W, dims.H, tearPts);
+  }, [dims.W, dims.H, tearPts]);
 
   useEffect(() => {
     return tearSpring.on('change', v => {
-      setPaths(makePaths(v, dims.W, dims.H, tearPts));
+      applyPaths(v, dims.W, dims.H, tearPts);
     });
-  }, [tearSpring, dims, tearPts]);
+  }, [tearSpring, dims.W, dims.H, tearPts]);
 
   const { W, H } = dims;
   const isDesktop = useBreakpoint();
@@ -444,15 +471,15 @@ export function TeamReveal({ sp }) {
             </filter>
           </defs>
           <g filter="url(#shadowL)">
-            <path d={paths.L} fill="url(#parchL)" filter="url(#paperGrain)" />
-            <path d={paths.L} fill="url(#parchL)" opacity="0.18" />
+            <path ref={leftPathRef} d="" fill="url(#parchL)" filter="url(#paperGrain)" />
+            <path ref={leftHighlightPathRef} d="" fill="url(#parchL)" opacity="0.18" />
           </g>
           <g filter="url(#shadowR)">
-            <path d={paths.R} fill="url(#parchR)" filter="url(#paperGrain)" />
-            <path d={paths.R} fill="url(#parchR)" opacity="0.18" />
+            <path ref={rightPathRef} d="" fill="url(#parchR)" filter="url(#paperGrain)" />
+            <path ref={rightHighlightPathRef} d="" fill="url(#parchR)" opacity="0.18" />
           </g>
-          <path d={paths.T} fill="none" stroke="rgba(0,0,0,0.28)"      strokeWidth="14" strokeLinecap="round" />
-          <path d={paths.T} fill="none" stroke="rgba(0,0,0,0.14)"       strokeWidth="6"  strokeLinecap="round" />
+          <path ref={tearPathRef} d="" fill="none" stroke="rgba(0,0,0,0.28)"      strokeWidth="14" strokeLinecap="round" />
+          <path ref={tearHighlightPathRef} d="" fill="none" stroke="rgba(0,0,0,0.14)"       strokeWidth="6"  strokeLinecap="round" />
 
         </motion.svg>
 

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowUp, Loader2, Bot, User, Check, Circle } from 'lucide-react';
-import { usePostHog } from '@posthog/react';
+import { usePostHog } from '../../analytics/PostHogProvider';
 import { aiGenerateAPI } from '../../api/aiGenerate';
 import AppPreview from '../../components/ai-studio/AppPreview';
 import PortfolioBuilder from '../../components/ai-studio/PortfolioBuilder';

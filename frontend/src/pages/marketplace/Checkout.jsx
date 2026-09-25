@@ -5,6 +5,34 @@ import { toast } from 'sonner';
 
 import { paymentAPI } from '../../api/payment';
 
+const RAZORPAY_SRC = 'https://checkout.razorpay.com/v1/checkout.js';
+
+let razorpayPromise = null;
+
+function loadRazorpay() {
+  if (window.Razorpay) return Promise.resolve(window.Razorpay);
+  if (razorpayPromise) return razorpayPromise;
+
+  razorpayPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[data-devdrop-razorpay]');
+    if (existing) {
+      existing.addEventListener('load', () => resolve(window.Razorpay));
+      existing.addEventListener('error', reject);
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = RAZORPAY_SRC;
+    script.async = true;
+    script.dataset.devdropRazorpay = 'true';
+    script.onload = () => window.Razorpay ? resolve(window.Razorpay) : reject(new Error('Razorpay SDK unavailable'));
+    script.onerror = () => reject(new Error('Failed to load Razorpay SDK'));
+    document.head.appendChild(script);
+  });
+
+  return razorpayPromise;
+}
+
 export default function Checkout() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -93,7 +121,9 @@ export default function Checkout() {
         return;
       }
 
-      if (!window.Razorpay) {
+      const Razorpay = await loadRazorpay();
+
+      if (!Razorpay) {
         toast.error('Razorpay SDK not loaded');
         setProcessing(false);
         return;
@@ -134,7 +164,7 @@ export default function Checkout() {
         },
       };
 
-      const rzp = new window.Razorpay(options);
+      const rzp = new Razorpay(options);
       rzp.open();
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to start payment');

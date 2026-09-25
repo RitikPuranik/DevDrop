@@ -81,7 +81,9 @@ const Home = ({ preloadedVideoRef, introComplete, fromIntro }) => {
 /* ─── VIDEO HERO ─── */
 const VideoHeroSection = ({ preloadedVideoRef, introComplete, fromIntro }) => {
   const wrapperRef = useRef(null);
-  const [visible, setVisible] = useState(false);
+  // The hero is mounted behind the intro overlay, so keep it paintable from
+  // the first render. The intro still visually covers it until it exits.
+  const [visible, setVisible] = useState(true);
   const { scrollY } = useScroll();
 
   const videoScale = useTransform(scrollY, [0, 1000], [1.03, 1]);
@@ -108,14 +110,15 @@ const VideoHeroSection = ({ preloadedVideoRef, introComplete, fromIntro }) => {
     if (comingFromIntro) {
       fromIntro.current = false;
       setVisible(true);
-    } else {
-      const timer = setTimeout(() => {
-        setVisible(true);
-        vid.currentTime = 0;
-        vid.play().catch(() => {});
-      }, 1000);
-      return () => clearTimeout(timer);
+      return;
     }
+
+    // Do not delay the LCP hero by an extra second after the page is ready.
+    // Keep the existing fade transition, but let the video become visible
+    // immediately so its first frame can be painted as the LCP candidate.
+    setVisible(true);
+    vid.currentTime = 0;
+    vid.play().catch(() => {});
   }, [introComplete]);
 
   return (
@@ -143,20 +146,24 @@ const SmoothVideoSection = () => {
   const { scrollYProgress } = useScroll({ target: targetRef, offset: ["start end", "end start"] });
   const smoothP = useSpring(scrollYProgress, { stiffness: 40, damping: 24 });
 
-  const desktopWidth = useTransform(smoothP, [0.1, 0.45], ["60%", "92%"]);
-  const desktopHeight = useTransform(smoothP, [0.1, 0.45], ["65vh", "88vh"]);
+  // Keep the layout box at its final dimensions so the card never changes
+  // document geometry while scroll progress settles. Animate only transforms.
+  const desktopScaleX = useTransform(smoothP, [0.1, 0.45], [60 / 92, 1]);
+  const desktopScaleY = useTransform(smoothP, [0.1, 0.45], [65 / 88, 1]);
   const desktopRadius = useTransform(smoothP, [0.1, 0.45], ["80px", "54px"]);
-  
-  const mobileWidth = useTransform(smoothP, [0.1, 0.45], ["100%", "100%"]);
-  const mobileHeight = useTransform(smoothP, [0.1, 0.45], ["35vh", "45vh"]);
+
+  const mobileScaleY = useTransform(smoothP, [0.1, 0.45], [35 / 45, 1]);
   const mobileRadius = useTransform(smoothP, [0.1, 0.45], ["16px", "12px"]);
 
   const cardY = useTransform(smoothP, [0, 0.4], [60, 0]); 
 
-  const [isMobile, setIsMobile] = useState(false);
+  // Read the viewport during the initial client render so mobile does not
+  // briefly render the desktop card dimensions and then jump to mobile.
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < 768
+  );
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
-    checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
@@ -166,9 +173,11 @@ const SmoothVideoSection = () => {
       <div className="relative md:sticky md:top-0 md:h-screen w-full flex items-center justify-center z-10 px-4">
         <motion.div 
           style={{ 
-            width: isMobile ? mobileWidth : desktopWidth, 
-            height: isMobile ? mobileHeight : desktopHeight, 
-            borderRadius: isMobile ? mobileRadius : desktopRadius, 
+            width: isMobile ? "100%" : "92%",
+            height: isMobile ? "45vh" : "88vh",
+            scaleX: isMobile ? 1 : desktopScaleX,
+            scaleY: isMobile ? mobileScaleY : desktopScaleY,
+            borderRadius: isMobile ? mobileRadius : desktopRadius,
             y: isMobile ? 0 : cardY,
             boxShadow: "0 50px 100px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.08)" 
           }} 
@@ -180,6 +189,8 @@ const SmoothVideoSection = () => {
             loop 
             muted 
             playsInline 
+            preload="auto"
+            fetchPriority="high"
             className="w-full h-full object-cover opacity-90 transition-opacity duration-700 group-hover:opacity-100" 
           />
           <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
