@@ -155,17 +155,26 @@ export default function AuthModal({ isOpen, onClose }) {
     }
 
     const activeMode = isSignUp ? "signup" : "login";
-    const containers = Array.from(
-      document.querySelectorAll(`[data-google-button="${activeMode}"]`)
+    const visibleContainer = document.querySelector(
+      `[data-google-button="${activeMode}"]`
     );
-    const visibleContainer = containers.find((container) => {
-      const style = window.getComputedStyle(container);
-      return style.display !== "none" && style.visibility !== "hidden";
-    });
 
     if (!visibleContainer) return;
 
-    visibleContainer.innerHTML = "";
+    // The container belongs to the active auth panel, so no synchronous
+    // geometry/style read is needed. Let the browser finish its current paint
+    // before Google injects its iframe.
+    await new Promise((resolve) => {
+      if (typeof window.requestAnimationFrame !== "function") {
+        window.setTimeout(resolve, 0);
+        return;
+      }
+      window.requestAnimationFrame(() => window.requestAnimationFrame(resolve));
+    });
+
+    if (!document.contains(visibleContainer)) return;
+
+    visibleContainer.replaceChildren();
     window.google.accounts.id.renderButton(visibleContainer, {
       type: "standard",
       shape: "pill",
