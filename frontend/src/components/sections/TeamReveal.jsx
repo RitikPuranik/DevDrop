@@ -289,7 +289,9 @@ export function TeamReveal({ sp }) {
 
   const containerRef = useRef(null);
   const leftPathRef = useRef(null);
+  const leftHighlightPathRef = useRef(null);
   const rightPathRef = useRef(null);
+  const rightHighlightPathRef = useRef(null);
   const tearPathRef = useRef(null);
   const [dims, setDims] = useState({ W: 1440, H: 900 });
   const tearPts = useMemo(() => buildTearPoints(dims.H), [dims.H]);
@@ -300,7 +302,9 @@ export function TeamReveal({ sp }) {
   const applyPaths = (progress, width, height, points) => {
     const nextPaths = makePaths(progress, width, height, points);
     leftPathRef.current?.setAttribute('d', nextPaths.L);
+    leftHighlightPathRef.current?.setAttribute('d', nextPaths.L);
     rightPathRef.current?.setAttribute('d', nextPaths.R);
+    rightHighlightPathRef.current?.setAttribute('d', nextPaths.R);
     tearPathRef.current?.setAttribute('d', nextPaths.T);
   };
 
@@ -460,11 +464,11 @@ export function TeamReveal({ sp }) {
           </defs>
           <g filter="url(#shadowL)">
             <path ref={leftPathRef} d="" fill="url(#parchL)" filter="url(#paperGrain)" />
-            <path d="" fill="url(#parchL)" opacity="0.18" />
+            <path ref={leftHighlightPathRef} d="" fill="url(#parchL)" opacity="0.18" />
           </g>
           <g filter="url(#shadowR)">
             <path ref={rightPathRef} d="" fill="url(#parchR)" filter="url(#paperGrain)" />
-            <path d="" fill="url(#parchR)" opacity="0.18" />
+            <path ref={rightHighlightPathRef} d="" fill="url(#parchR)" opacity="0.18" />
           </g>
           <path ref={tearPathRef} d="" fill="none" stroke="rgba(0,0,0,0.28)"      strokeWidth="14" strokeLinecap="round" />
 
