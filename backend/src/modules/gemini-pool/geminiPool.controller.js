@@ -69,11 +69,7 @@ exports.listKeys = async (req, res) => {
     const query = {};
     if (search) {
       const escaped = search.split('').map((char) => /[.*+?^${}()|[\]\\]/.test(char) ? '\\' + char : char).join('');
-  try {
-    const Model = await getModel();
-    const keys = await Model.find().sort({ priority: 1, createdAt: 1 });
-    res.status(200).json({ success: true, data: { keys: keys.map(serializeKey) } });
-  } catch (error) {');');
+
       query.$or = [
         { label: { $regex: escaped, $options: 'i' } },
         { keySuffix: { $regex: escaped, $options: 'i' } },
