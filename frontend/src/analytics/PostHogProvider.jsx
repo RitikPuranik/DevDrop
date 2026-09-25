@@ -16,10 +16,12 @@ export default function PostHogProvider({ children }) {
     if (!token) return;
 
     let cancelled = false;
-    let idleId;
     let timeoutId;
+    let loaded = false;
 
     const loadPostHog = async () => {
+      if (loaded) return;
+      loaded = true;
       try {
         const { default: posthog } = await import('posthog-js');
         if (cancelled) return;
@@ -37,15 +39,27 @@ export default function PostHogProvider({ children }) {
       }
     };
 
-    if ('requestIdleCallback' in window) {
-      idleId = window.requestIdleCallback(loadPostHog, { timeout: 2000 });
+    const handleFirstInteraction = () => loadPostHog();
+    const scheduleLoad = () => {
+      timeoutId = window.setTimeout(loadPostHog, 3000);
+    };
+
+    if (document.readyState === 'complete') {
+      scheduleLoad();
     } else {
-      timeoutId = window.setTimeout(loadPostHog, 1200);
+      window.addEventListener('load', scheduleLoad, { once: true });
     }
+
+    window.addEventListener('pointerdown', handleFirstInteraction, { once: true, passive: true });
+    window.addEventListener('keydown', handleFirstInteraction, { once: true });
+    window.addEventListener('touchstart', handleFirstInteraction, { once: true, passive: true });
 
     return () => {
       cancelled = true;
-      if (idleId !== undefined) window.cancelIdleCallback(idleId);
+      window.removeEventListener('load', scheduleLoad);
+      window.removeEventListener('pointerdown', handleFirstInteraction);
+      window.removeEventListener('keydown', handleFirstInteraction);
+      window.removeEventListener('touchstart', handleFirstInteraction);
       if (timeoutId !== undefined) window.clearTimeout(timeoutId);
     };
   }, []);
