@@ -397,7 +397,10 @@ export default function GeminiPoolSection() {
           <Filter size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/25 pointer-events-none" />
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPage(1);
+            }}
             className="appearance-none pl-8 pr-8 py-2 rounded-xl bg-[#141414] border border-white/10 text-xs text-white/70 focus:outline-none focus:border-[#8b7355] transition-colors cursor-pointer"
             style={{ colorScheme: 'dark' }}
           >
