@@ -194,7 +194,7 @@ const SmoothVideoSection = () => {
   }, []);
 
   return (
-    <section ref={targetRef} className="h-auto my-12 md:my-0 md:h-[140vh] relative">
+    <section className="h-auto my-12 md:my-0 md:h-[140vh] relative">
       <div className="relative md:sticky md:top-0 md:h-screen w-full flex items-center justify-center z-10 px-4">
         <motion.div 
           style={{ 
