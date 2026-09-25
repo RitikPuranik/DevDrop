@@ -143,12 +143,13 @@ const SmoothVideoSection = () => {
   const { scrollYProgress } = useScroll({ target: targetRef, offset: ["start end", "end start"] });
   const smoothP = useSpring(scrollYProgress, { stiffness: 40, damping: 24 });
 
-  const desktopWidth = useTransform(smoothP, [0.1, 0.45], ["60%", "92%"]);
-  const desktopHeight = useTransform(smoothP, [0.1, 0.45], ["65vh", "88vh"]);
+  // Keep the layout box at its final dimensions so the card never changes
+  // document geometry while scroll progress settles. Animate only transforms.
+  const desktopScaleX = useTransform(smoothP, [0.1, 0.45], [60 / 92, 1]);
+  const desktopScaleY = useTransform(smoothP, [0.1, 0.45], [65 / 88, 1]);
   const desktopRadius = useTransform(smoothP, [0.1, 0.45], ["80px", "54px"]);
-  
-  const mobileWidth = useTransform(smoothP, [0.1, 0.45], ["100%", "100%"]);
-  const mobileHeight = useTransform(smoothP, [0.1, 0.45], ["35vh", "45vh"]);
+
+  const mobileScaleY = useTransform(smoothP, [0.1, 0.45], [35 / 45, 1]);
   const mobileRadius = useTransform(smoothP, [0.1, 0.45], ["16px", "12px"]);
 
   const cardY = useTransform(smoothP, [0, 0.4], [60, 0]); 
@@ -166,9 +167,11 @@ const SmoothVideoSection = () => {
       <div className="relative md:sticky md:top-0 md:h-screen w-full flex items-center justify-center z-10 px-4">
         <motion.div 
           style={{ 
-            width: isMobile ? mobileWidth : desktopWidth, 
-            height: isMobile ? mobileHeight : desktopHeight, 
-            borderRadius: isMobile ? mobileRadius : desktopRadius, 
+            width: isMobile ? "100%" : "92%",
+            height: isMobile ? "45vh" : "88vh",
+            scaleX: isMobile ? 1 : desktopScaleX,
+            scaleY: isMobile ? mobileScaleY : desktopScaleY,
+            borderRadius: isMobile ? mobileRadius : desktopRadius,
             y: isMobile ? 0 : cardY,
             boxShadow: "0 50px 100px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.08)" 
           }} 
