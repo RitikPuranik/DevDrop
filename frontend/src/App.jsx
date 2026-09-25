@@ -86,6 +86,10 @@ function AppContent() {
     vid.loop = false;
     vid.src = HERO_VIDEO_SRC;
     vid.load();
+    // The hero sits behind the intro overlay, so start decoding/playback now.
+    // This makes the first frame ready when the intro exits instead of starting
+    // the video work only after the intro has completed.
+    vid.play().catch(() => {});
 
     preloadedVideoRef.current = vid;
     videoReadyRef.current.element = vid;
