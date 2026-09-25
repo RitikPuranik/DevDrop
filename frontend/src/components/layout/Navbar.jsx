@@ -184,6 +184,7 @@ const Navbar = () => {
         </LinkTransition>
 
         <button
+          aria-label={isOpen ? "Close navigation menu" : "Open navigation menu"}
           onClick={() => {
             if (isOpen) {
               closeMenu();
