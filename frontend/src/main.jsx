@@ -20,7 +20,7 @@ if (import.meta.env.VITE_SENTRY_DSN) {
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <PostHogProvider apiKey={import.meta.env.VITE_POSTHOG_PROJECT_TOKEN} options={options}>
+    <PostHogProvider>
       <App />
     </PostHogProvider>
   </StrictMode>,
