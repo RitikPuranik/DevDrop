@@ -153,12 +153,16 @@ export default function AuthModal({ isOpen, onClose }) {
     }
 
     const containers = document.querySelectorAll("[data-google-button]");
-    containers.forEach((container) => {
-      if (container.getClientRects().length === 0) return;
+    const renderedWidths = new WeakMap();
 
-      // Read geometry before mutating the container. Reading offsetWidth after
-      // clearing innerHTML forces the browser to synchronously recalculate layout.
-      const buttonWidth = container.offsetWidth || 280;
+    // ResizeObserver reports the already-calculated layout size asynchronously.
+    // This avoids getClientRects()/offsetWidth reads that can force synchronous
+    // reflow after Google has modified another button container.
+    const renderContainer = (container, width) => {
+      const buttonWidth = Math.min(400, Math.max(200, Math.round(width)));
+      if (renderedWidths.get(container) === buttonWidth) return;
+
+      renderedWidths.set(container, buttonWidth);
       container.innerHTML = "";
 
       window.google.accounts.id.renderButton(container, {
@@ -169,7 +173,17 @@ export default function AuthModal({ isOpen, onClose }) {
         text: "continue_with",
         width: buttonWidth,
       });
+    };
+
+    const observer = new ResizeObserver((entries) => {
+      entries.forEach(({ target, contentRect }) => {
+        if (contentRect.width > 0) {
+          renderContainer(target, contentRect.width);
+        }
+      });
     });
+
+    containers.forEach((container) => observer.observe(container));
   }, [handleGoogleCredential]);
 
   useEffect(() => {
