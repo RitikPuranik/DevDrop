@@ -30,6 +30,7 @@ const REVIEWS = [
 
 const Home = ({ preloadedVideoRef, introComplete, fromIntro }) => {
   const [isReady, setIsReady] = useState(false);
+  const { scrollY } = useScroll();
 
   useEffect(() => {
     // The browser already starts a fresh document at the top. Avoid forcing a
@@ -51,7 +52,7 @@ const Home = ({ preloadedVideoRef, introComplete, fromIntro }) => {
 
       <div className="relative z-10">
         {/* ── Second Video — Untouched ── */}
-        <SmoothVideoSection />
+        <SmoothVideoSection scrollY={scrollY} />
 
         {/* ── Seamless Blending & Dynamic Flowchart Sections ── */}
         <div className="-mt-16 md:-mt-28 relative z-20 font-napkin bg-[#050505]">
@@ -80,13 +81,11 @@ const Home = ({ preloadedVideoRef, introComplete, fromIntro }) => {
 };
 
 /* ─── VIDEO HERO ─── */
-const VideoHeroSection = ({ preloadedVideoRef, introComplete, fromIntro }) => {
+const VideoHeroSection = ({ scrollY, preloadedVideoRef, introComplete, fromIntro }) => {
   const wrapperRef = useRef(null);
   // The hero is mounted behind the intro overlay, so keep it paintable from
   // the first render. The intro still visually covers it until it exits.
   const [visible, setVisible] = useState(true);
-  const { scrollY } = useScroll();
-
   const videoScale = useTransform(scrollY, [0, 1000], [1.03, 1]);
   const videoBlur = useTransform(scrollY, [200, 800], ["blur(0px)", "blur(8px)"]);
   const opacity = useTransform(scrollY, [0, 800], [1, 0.62]);
@@ -146,7 +145,7 @@ const VideoHeroSection = ({ preloadedVideoRef, introComplete, fromIntro }) => {
 };
 
 /* ─── SMOOTH VIDEO SECTION ─── */
-const SmoothVideoSection = () => {
+const SmoothVideoSection = ({ scrollY }) => {
   const videoRef = useRef(null);
   const [shouldLoadVideo, setShouldLoadVideo] = useState(false);
 
