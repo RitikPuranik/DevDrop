@@ -95,6 +95,10 @@ const VideoHeroSection = ({ preloadedVideoRef, introComplete, fromIntro }) => {
     const vid = preloadedVideoRef?.current;
     if (!wrapper || !vid) return;
 
+    // The initial HTML element is intentionally invisible while it waits
+    // outside the React tree. Remove those preload-only inline styles before
+    // moving the same element into its real hero wrapper.
+    vid.removeAttribute('style');
     vid.className = 'w-full h-full object-cover absolute inset-0 rounded-[1.75rem] sm:rounded-[2rem] lg:rounded-none';
     if (!wrapper.contains(vid)) wrapper.appendChild(vid);
   }, [preloadedVideoRef]);
