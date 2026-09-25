@@ -37,9 +37,25 @@ if (import.meta.env.VITE_SENTRY_DSN) {
     }
   };
 
-  if ('requestIdleCallback' in window) {
-    window.requestIdleCallback(loadSentry, { timeout: 3000 });
-  } else {
-    window.setTimeout(loadSentry, 3000);
-  }
+  let loaded = false;
+
+  const startSentry = () => {
+    if (loaded) return;
+    loaded = true;
+    loadSentry();
+  };
+
+  // Don't load Sentry merely because the browser becomes idle during the
+  // initial page audit. Wait for meaningful interaction, or use a long
+  // fallback so real users still get monitoring without extending the LCP
+  // critical request chain.
+  window.addEventListener('pointerdown', startSentry, { once: true, passive: true });
+  window.addEventListener('keydown', startSentry, { once: true });
+  window.addEventListener('touchstart', startSentry, { once: true, passive: true });
+
+  const sentryFallback = window.setTimeout(startSentry, 15000);
+
+  window.addEventListener('pagehide', () => {
+    window.clearTimeout(sentryFallback);
+  }, { once: true });
 }
