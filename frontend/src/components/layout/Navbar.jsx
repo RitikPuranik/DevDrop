@@ -19,10 +19,11 @@ const Navbar = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 1024);
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
+    const mq = window.matchMedia('(max-width: 1023px)');
+    setIsMobile(mq.matches);
+    const checkMobile = (event) => setIsMobile(event.matches);
+    mq.addEventListener('change', checkMobile);
+    return () => mq.removeEventListener('change', checkMobile);
   }, []);
 
   // Sheryians-style scroll navbar: stays put, but its height shrinks and it
