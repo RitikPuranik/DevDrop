@@ -155,14 +155,19 @@ export default function AuthModal({ isOpen, onClose }) {
     const containers = document.querySelectorAll("[data-google-button]");
     containers.forEach((container) => {
       if (container.getClientRects().length === 0) return;
+
+      // Read geometry before mutating the container. Reading offsetWidth after
+      // clearing innerHTML forces the browser to synchronously recalculate layout.
+      const buttonWidth = container.offsetWidth || 280;
       container.innerHTML = "";
+
       window.google.accounts.id.renderButton(container, {
         type: "standard",
         shape: "pill",
         theme: "outline",
         size: "large",
         text: "continue_with",
-        width: container.offsetWidth || 280,
+        width: buttonWidth,
       });
     });
   }, [handleGoogleCredential]);
