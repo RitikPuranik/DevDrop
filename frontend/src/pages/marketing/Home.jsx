@@ -386,12 +386,14 @@ const AIStudioVideoFlowchart = () => {
           transition={{ duration: 0.5 }}
           className="md:col-span-5 relative rounded-2xl overflow-hidden border border-purple-500/30 bg-black aspect-video md:aspect-square flex items-center justify-center group"
         >
-          <video 
-            src={secondVideo}
+          <video
+            {...(inView ? { src: secondVideo } : {})}
             autoPlay
             loop
             muted
             playsInline
+            preload="metadata"
+            poster="/hero-poster.svg"
             className="w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-700"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-black/30" />
