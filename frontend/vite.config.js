@@ -33,10 +33,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss(), webcontainerIsolationHeaders()],
   build: {
     target: 'esnext',
-    minify: 'esbuild',
-    esbuild: {
-      drop: ['console', 'debugger'],
-    },
+    minify: 'oxc',
     rollupOptions: {
       input: {
         main: 'index.html',
