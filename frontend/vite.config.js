@@ -25,6 +25,34 @@ function deferGeneratedCss() {
   };
 }
 
+function preloadLcpVideo() {
+  return {
+    name: 'devdrop-preload-lcp-video',
+    generateBundle(_options, bundle) {
+      const videoAsset = Object.values(bundle).find(
+        (item) =>
+          item.type === 'asset' &&
+          typeof item.fileName === 'string' &&
+          item.fileName.endsWith('.mp4') &&
+          /(^|[-_])v2([-.]|$)/i.test(item.fileName)
+      );
+
+      if (!videoAsset) return;
+
+      for (const item of Object.values(bundle)) {
+        if (item.type !== 'asset' || !item.fileName.endsWith('.html')) continue;
+
+        const html = String(item.source);
+        const preload = `<link rel="preload" href="/${videoAsset.fileName}" as="video" type="video/mp4" fetchpriority="high">`;
+
+        if (!html.includes('as="video"')) {
+          item.source = html.replace('</head>', `    ${preload}\n  </head>`);
+        }
+      }
+    },
+  };
+}
+
 function webcontainerIsolationHeaders() {
   const applyIfMatch = (req, res, next) => {
     const url = req.url || '';
@@ -48,7 +76,7 @@ function webcontainerIsolationHeaders() {
 }
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), webcontainerIsolationHeaders(), deferGeneratedCss()],
+  plugins: [react(), tailwindcss(), webcontainerIsolationHeaders(), deferGeneratedCss(), preloadLcpVideo()],
   build: {
     target: 'esnext',
     minify: 'oxc',
