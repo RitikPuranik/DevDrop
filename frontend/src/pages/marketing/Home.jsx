@@ -108,14 +108,15 @@ const VideoHeroSection = ({ preloadedVideoRef, introComplete, fromIntro }) => {
     if (comingFromIntro) {
       fromIntro.current = false;
       setVisible(true);
-    } else {
-      const timer = setTimeout(() => {
-        setVisible(true);
-        vid.currentTime = 0;
-        vid.play().catch(() => {});
-      }, 1000);
-      return () => clearTimeout(timer);
+      return;
     }
+
+    // Do not delay the LCP hero by an extra second after the page is ready.
+    // Keep the existing fade transition, but let the video become visible
+    // immediately so its first frame can be painted as the LCP candidate.
+    setVisible(true);
+    vid.currentTime = 0;
+    vid.play().catch(() => {});
   }, [introComplete]);
 
   return (
