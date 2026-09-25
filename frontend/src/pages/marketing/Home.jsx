@@ -45,6 +45,7 @@ const Home = ({ preloadedVideoRef, introComplete, fromIntro }) => {
     <div className="bg-[#050505] text-[#e8e2d6] selection:bg-[#e8e2d6] selection:text-black antialiased overflow-x-hidden">
       {/* ── First Video (Hero) — Untouched ── */}
       <VideoHeroSection
+        scrollY={scrollY}
         preloadedVideoRef={preloadedVideoRef}
         introComplete={showContent}
         fromIntro={fromIntro}
