@@ -82,6 +82,7 @@ function AppContent() {
     vid.muted = true;
     vid.playsInline = true;
     vid.preload = 'auto';
+    vid.fetchPriority = 'high';
     vid.loop = false;
     vid.src = HERO_VIDEO_SRC;
     vid.load();
