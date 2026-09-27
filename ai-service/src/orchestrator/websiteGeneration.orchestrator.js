@@ -16,6 +16,88 @@ const GENERATION_TIMEOUT_MS=Number.parseInt(process.env.WEBSITE_GENERATION_TIMEO
 function normalizeInput(input){const messages=Array.isArray(input.messages)?input.messages:[];const lastUser=[...messages].reverse().find(m=>m?.role==='user')?.content||'';return {websiteType:input.websiteType||input.type||'portfolio',userData:input.userData||input.portfolioData||{},preferences:input.preferences||{},assets:input.assets||[],media:input.media||[],conversation:input.conversation||messages,legacyPrompt:lastUser,fileData:input.fileData||null};}
 function mergeFiles(base,changes){const out={...base};for(const[p,obj]of Object.entries(changes||{}))if(obj?.code)out[p]={code:obj.code};return out;}
 function stage(name,fn,meta,onStage){return runStage(name,fn,meta,onStage);}
+function buildDebugContext({ files, dependencies, architecture, requirements, design, errors, buildOutput }) {
+ return {
+   files: files || {},
+   dependencies: dependencies || {},
+   architecture: architecture || null,
+   requirements: requirements || null,
+   design: design || null,
+   errors: errors || [],
+   buildOutput: buildOutput || [],
+ };
+}
+
+async function debugWebsite(input = {}, { onStage } = {}) {
+ const files = { ...(input.files || {}) };
+ let dependencies = input.dependencies || {};
+ const architecture = input.architecture || { project: { framework: 'react-vite', language: 'javascript' }, files: [] };
+ const requirements = input.requirements || {};
+ const design = input.design || {};
+ const MAX_DEBUG_RETRIES = Math.max(1, Number.parseInt(process.env.MAX_DEBUG_RETRIES || '3', 10) || 3);
+ const meta = [];
+
+ for (let attempt = 0; attempt < MAX_DEBUG_RETRIES; attempt += 1) {
+   const staticErrors = validateGeneratedFiles(files);
+   if (staticErrors.length) {
+     const debug = await stage(`debug-only:${attempt + 1}`, () => debugAgent.run({
+       errors: staticErrors,
+       affectedFiles: Object.keys(files),
+       files,
+       architecture,
+       requirements,
+       design,
+       dependencies,
+       buildOutput: [],
+     }), meta, onStage);
+     for (const change of debug.value?.changes || []) {
+       if (change.path && typeof change.code === 'string') files[change.path] = { code: change.code };
+     }
+     continue;
+   }
+
+   const build = await stage('build-validator', () => buildValidator.run({ files, dependencies }), meta, onStage);
+   if (build.success) {
+     return {
+       assistantMessage: 'Debug repair completed successfully. The existing generated website was repaired without regenerating it.',
+       title: requirements.userData?.name ? `${requirements.userData.name} Portfolio` : 'Generated Portfolio',
+       files,
+       dependencies,
+       generationMeta: { agents: meta },
+     };
+   }
+
+   const debug = await stage(`debug-only:${attempt + 1}`, () => debugAgent.run({
+     errors: build.errors || [],
+     affectedFiles: Object.keys(files),
+     files,
+     architecture,
+     requirements,
+     design,
+     dependencies,
+     buildOutput: build.errors || [],
+   }), meta, onStage);
+   for (const change of debug.value?.changes || []) {
+     if (change.path && typeof change.code === 'string') files[change.path] = { code: change.code };
+   }
+ }
+
+ const finalErrors = validateGeneratedFiles(files);
+ const finalBuild = finalErrors.length ? null : await buildValidator.run({ files, dependencies });
+ throw Object.assign(new Error('Debug repair failed after maximum repair attempts'), {
+   userMessage: `Debug repair could not fix the existing generated website after the maximum repair attempts: ${(finalErrors.length ? finalErrors : finalBuild?.errors || []).join(' | ').slice(0, 1200)}`,
+   debugContext: buildDebugContext({
+     files,
+     dependencies,
+     architecture,
+     requirements,
+     design,
+     errors: finalErrors.length ? finalErrors : finalBuild?.errors || [],
+     buildOutput: finalBuild?.errors || [],
+   }),
+ });
+}
+
 async function generateWebsite(input,options={}){
  return withTimeout(runGeneration(input,options),GENERATION_TIMEOUT_MS,'website-generation');
 }
@@ -35,10 +117,10 @@ async function runGeneration(input,{onStage}={}){
  if(files['/package.json']?.code){try{dependencies={...dependencies,...(JSON.parse(files['/package.json'].code).dependencies||{})};}catch{}}
  for(let attempt=0;attempt<=MAX_BUILD_FIX_RETRIES;attempt+=1){
   const staticErrors=validateGeneratedFiles(files);
-  if(staticErrors.length){console.warn('[VALIDATOR] static validation failed',{attempt,errors:staticErrors});if(attempt===MAX_BUILD_FIX_RETRIES)throw Object.assign(new Error(staticErrors.join(' | ')),{userMessage:`Generated code failed validation after the maximum repair attempts: ${staticErrors.join(' | ').slice(0,1200)}`});const debug=await stage(`debug:${attempt+1}`,()=>debugAgent.run({errors:staticErrors,affectedFiles:Object.keys(files),files,architecture,requirements,design,dependencies}),meta,onStage);for(const change of debug.value?.changes||[])if(change.path&&change.code)files[change.path]={code:change.code};continue;}
+  if(staticErrors.length){console.warn('[VALIDATOR] static validation failed',{attempt,errors:staticErrors});if(attempt===MAX_BUILD_FIX_RETRIES)throw Object.assign(new Error(staticErrors.join(' | ')),{userMessage:`Generated code failed validation after the maximum repair attempts: ${staticErrors.join(' | ').slice(0,1200)}`,debugContext:buildDebugContext({files,dependencies,architecture,requirements,design,errors:staticErrors})});const debug=await stage(`debug:${attempt+1}`,()=>debugAgent.run({errors:staticErrors,affectedFiles:Object.keys(files),files,architecture,requirements,design,dependencies}),meta,onStage);for(const change of debug.value?.changes||[])if(change.path&&change.code)files[change.path]={code:change.code};continue;}
   console.log('[VALIDATOR] static validation passed');const build=await stage('build-validator',()=>buildValidator.run({files,dependencies}),meta,onStage);if(build.success){console.log('[VALIDATOR] build passed');console.log('[ORCHESTRATOR] generation completed');return {assistantMessage:`Generated a ${requirements.websiteType} website through the multi-agent pipeline.`,title:requirements.userData?.name?`${requirements.userData.name} Portfolio`:'Generated Portfolio',files,dependencies,generationMeta:{agents:meta}};}
-  console.warn('[VALIDATOR] build failed',{attempt,errors:build.errors});if(attempt===MAX_BUILD_FIX_RETRIES)throw Object.assign(new Error('Build failed after maximum repair attempts'),{userMessage:`DevDrop could not produce a buildable website after the maximum repair attempts: ${(build.errors||[]).join(' | ').slice(0,1200)}`});const debug=await stage(`debug:${attempt+1}`,()=>debugAgent.run({errors:build.errors,affectedFiles:Object.keys(files),files,architecture,requirements,design,dependencies,buildOutput:build.errors}),meta,onStage);for(const change of debug.value?.changes||[])if(change.path&&change.code)files[change.path]={code:change.code};
+  console.warn('[VALIDATOR] build failed',{attempt,errors:build.errors});if(attempt===MAX_BUILD_FIX_RETRIES)throw Object.assign(new Error('Build failed after maximum repair attempts'),{userMessage:`DevDrop could not produce a buildable website after the maximum repair attempts: ${(build.errors||[]).join(' | ').slice(0,1200)}`,debugContext:buildDebugContext({files,dependencies,architecture,requirements,design,errors:build.errors||[],buildOutput:build.errors||[]})});const debug=await stage(`debug:${attempt+1}`,()=>debugAgent.run({errors:build.errors,affectedFiles:Object.keys(files),files,architecture,requirements,design,dependencies,buildOutput:build.errors}),meta,onStage);for(const change of debug.value?.changes||[])if(change.path&&change.code)files[change.path]={code:change.code};
  }
  throw new Error('Generation failed after maximum repair attempts');
 }
-module.exports={generateWebsite};
+module.exports={generateWebsite,debugWebsite};
