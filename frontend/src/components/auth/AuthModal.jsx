@@ -182,12 +182,19 @@ export default function AuthModal({ isOpen, onClose }) {
     const googleContainers = Array.from(
       document.querySelectorAll(`[data-google-button="${activeMode}"]`)
     );
+
+    // The mount div is intentionally empty before GSI renders its iframe, so
+    // its own width/height is zero at this point. Do not use a bounding-box
+    // size check. The hidden mobile/desktop layout uses display:none, which
+    // is reliably detectable through offsetParent.
     const visibleContainer = googleContainers.find((container) => {
-      const rect = container.getBoundingClientRect();
-      return rect.width > 0 && rect.height > 0 && container.getClientRects().length > 0;
+      return container.offsetParent !== null;
     });
 
-    if (!visibleContainer) return;
+    if (!visibleContainer) {
+      console.warn('Google Sign-In mount point is not visible.');
+      return;
+    }
 
     // The container belongs to the active auth panel, so no synchronous
     // geometry/style read is needed. Let the browser finish its current paint
