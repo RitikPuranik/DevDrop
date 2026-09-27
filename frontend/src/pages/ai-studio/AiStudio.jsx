@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowUp, Loader2, Bot, User, Check, Circle } from 'lucide-react';
 import { usePostHog } from '../../analytics/PostHogProvider';
 import { aiGenerateAPI } from '../../api/aiGenerate';
+import { subscribeToJob } from '../../api/socket';
 import AppPreview from '../../components/ai-studio/AppPreview';
 import PortfolioBuilder from '../../components/ai-studio/PortfolioBuilder';
 import { WEBSITE_TYPES } from '../../config/aiStudio.config';
@@ -29,39 +30,48 @@ export default function AiStudio() {
   useEffect(()=>{scrollRef.current?.scrollTo({top:scrollRef.current.scrollHeight,behavior:'smooth'});},[messages,isGenerating]);
   useEffect(()=>()=>{if(pollTimeoutRef.current)clearTimeout(pollTimeoutRef.current);},[]);
   if(!aiStudioEnabled)return null;
-  const POLL_INTERVAL_MS=2000;
+  // Safety-net resync only — NOT a poll loop. If the socket silently missed
+  // an event (brief disconnect, etc.) this checks in once, well after the
+  // job should have produced *some* stage event, rather than re-hitting the
+  // backend/ai-service every couple of seconds for the whole run.
+  const RESYNC_AFTER_MS=20000;
   const stageLabel=(stage)=>{if(stage.startsWith('code:'))return `Generating ${stage.slice(5)}…`;if(stage==='build-validator')return 'Validating build…';if(stage==='relevant-files')return 'Finding affected files…';if(stage==='edit')return 'Applying edit…';if(stage.startsWith('edit-debug'))return 'Fixing an issue…';return `${stage.charAt(0).toUpperCase()+stage.slice(1)}…`;};
   const updateProgress=(job)=>{const agents=job?.generationMeta?.agents||[]; const next={}; for(const a of agents)next[a.name]=a.status; setPipeline(next); if(job?.mode)setGenMode(job.mode); setCurrentStage(job?.currentStage||null); if(job?.currentStage)setGenStatusLabel(stageLabel(job.currentStage));};
-  const pollJob=(jobId)=>new Promise((resolve,reject)=>{
-    let consecutivePollErrors=0;
-    let pollCount=0;
-    const MAX_POLL_ERRORS=30;
-    const tick=async()=>{
-      pollCount+=1;
-      try{
-        const {data}=await aiGenerateAPI.getJob(jobId);
-        consecutivePollErrors=0;
-        const job=data?.data;
-        updateProgress(job);
-        if(job?.status==='completed'){resolve(job.result);return;}
-        if(job?.status==='failed'){reject(new Error(job.error||'AI generation failed.'));return;}
-        pollTimeoutRef.current=setTimeout(tick,POLL_INTERVAL_MS);
-      }catch(err){
-        consecutivePollErrors+=1;
-        const status=err?.response?.status;
-        const message=err?.response?.data?.message||err?.message||'Unknown status polling error';
-        console.warn('[AI Studio] Status check failed; generation may still be running', {jobId,pollCount,consecutivePollErrors,status,message});
-        // A transient timeout/network/5xx must not kill an otherwise healthy
-        // long-running generation. Keep polling and let the backend/ai-service
-        // report the final job state on the next successful request.
-        if(status===401||status===403||status===404||consecutivePollErrors>=MAX_POLL_ERRORS){
-          reject(err);
-          return;
+  // Waits for a job's result over its ai-job:<jobId> socket room. Each agent
+  // completion (onStage in ai-service) arrives here the moment it happens,
+  // pushed via ai-service -> backend webhook -> this socket event, instead
+  // of the frontend asking "done yet?" on a timer.
+  const waitForJob=(jobId)=>new Promise((resolve,reject)=>{
+    let lastEventAt=Date.now();
+    const armResync=()=>{
+      if(pollTimeoutRef.current)clearTimeout(pollTimeoutRef.current);
+      pollTimeoutRef.current=setTimeout(async()=>{
+        if(Date.now()-lastEventAt<RESYNC_AFTER_MS)return; // an event arrived meanwhile
+        try{
+          const {data}=await aiGenerateAPI.getJob(jobId);
+          const job=data?.data;
+          if(job)updateProgress(job);
+          if(job?.status==='completed'){cleanup();resolve(job.result);return;}
+          if(job?.status==='failed'){cleanup();reject(new Error(job.error||'AI generation failed.'));return;}
+        }catch(err){
+          const status=err?.response?.status;
+          if(status===401||status===403||status===404){cleanup();reject(err);return;}
         }
-        pollTimeoutRef.current=setTimeout(tick,Math.min(POLL_INTERVAL_MS*consecutivePollErrors,10000));
-      }
+        lastEventAt=Date.now();
+        armResync();
+      },RESYNC_AFTER_MS);
     };
-    tick();
+    const cleanup=()=>{unsubscribe();if(pollTimeoutRef.current){clearTimeout(pollTimeoutRef.current);pollTimeoutRef.current=null;}};
+    const unsubscribe=subscribeToJob(jobId,{
+      onStage:({stage,status,details})=>{
+        lastEventAt=Date.now();
+        if(details)setPipeline(prev=>({...prev,[stage]:status}));
+        setCurrentStage(stage); setGenStatusLabel(stageLabel(stage));
+      },
+      onCompleted:({result})=>{cleanup();resolve(result);},
+      onFailed:({error})=>{cleanup();reject(new Error(error||'AI generation failed.'));},
+    });
+    armResync();
   });
   const runGeneration=async(nextMessages,spec={})=>{setIsGenerating(true);setError(null);setPipeline({});setCurrentStage('queued');
     // Optimistic guess so the sidebar shows the right stage list immediately,
@@ -70,7 +80,7 @@ export default function AiStudio() {
     const expectingEdit=Boolean(fileData?.files&&Object.keys(fileData.files).length);
     setGenMode(expectingEdit?'edit':'generate');
     setGenStatusLabel(expectingEdit?'Queuing edit…':'Queuing AI job…');
-    try{const {data}=await aiGenerateAPI.generate(nextMessages,fileData,spec);const {jobId}=data?.data||{};if(!jobId)throw new Error('No jobId returned from server.');const result=await pollJob(jobId);setMessages(prev=>[...prev,{role:'assistant',content:result.assistantMessage||'Done.'}]);setFileData({files:result.files,dependencies:result.dependencies});if(result.title)setAppTitle(result.title);}catch(err){const msg=err.response?.data?.message||err.message||'Something went wrong generating your app. Please try again.';setError(msg);setMessages(prev=>[...prev,{role:'assistant',content:`⚠️ ${msg}`}]);}finally{if(pollTimeoutRef.current){clearTimeout(pollTimeoutRef.current);pollTimeoutRef.current=null;}setIsGenerating(false);}};
+    try{const {data}=await aiGenerateAPI.generate(nextMessages,fileData,spec);const {jobId}=data?.data||{};if(!jobId)throw new Error('No jobId returned from server.');const result=await waitForJob(jobId);setMessages(prev=>[...prev,{role:'assistant',content:result.assistantMessage||'Done.'}]);setFileData({files:result.files,dependencies:result.dependencies});if(result.title)setAppTitle(result.title);}catch(err){const msg=err.response?.data?.message||err.message||'Something went wrong generating your app. Please try again.';setError(msg);setMessages(prev=>[...prev,{role:'assistant',content:`⚠️ ${msg}`}]);}finally{if(pollTimeoutRef.current){clearTimeout(pollTimeoutRef.current);pollTimeoutRef.current=null;}setIsGenerating(false);}};
   const handlePortfolioGenerate=async(prompt,spec)=>{const nextMessages=[{role:'user',content:prompt}];setStudioMode('chat');setMessages(nextMessages);await runGeneration(nextMessages,{websiteType:'portfolio',userData:spec?.details||{},preferences:spec?.design||{},assets:{profileImage:null,resume:null,projectImages:[]}});};
   const handleSend=()=>{const trimmed=input.trim();if(!trimmed||isGenerating)return;setInput('');const nextMessages=[...messages,{role:'user',content:trimmed}];setMessages(nextMessages);runGeneration(nextMessages,{websiteType:'portfolio',userData:{},preferences:{},conversation:nextMessages});};
   const handleFixError=(previewError)=>{if(isGenerating)return;const prompt=`The preview threw this error, please fix it:\n\n${previewError}`;const nextMessages=[...messages,{role:'user',content:prompt}];setMessages(nextMessages);runGeneration(nextMessages,{websiteType:'portfolio',userData:{},preferences:{},conversation:nextMessages});};

@@ -1,6 +1,7 @@
 const { randomUUID } = require('crypto');
 const { generateWebsite } = require('./orchestrator/websiteGeneration.orchestrator');
 const { editWebsite } = require('./orchestrator/websiteEditing.orchestrator');
+const webhook = require('./webhook.service');
 
 const JOB_TTL_MS = Number.parseInt(process.env.AI_JOB_TTL_MS || String(30 * 60 * 1000), 10);
 const CONCURRENCY = Math.max(1, Number.parseInt(process.env.AI_CONCURRENCY || '1', 10) || 1);
@@ -14,10 +15,20 @@ async function runJob(id) {
   job.status = 'processing'; job.currentStage = 'starting';
   try {
     const run = job.payload.mode === 'edit' ? editWebsite : generateWebsite;
-    const result = await run(job.payload, { onStage: (stage, status, details) => { job.currentStage = stage; job.stageStatus = status; if (details) job.generationMeta.agents = job.generationMeta.agents.filter((a) => a.name !== stage).concat(details); } });
+    const result = await run(job.payload, {
+      onStage: (stage, status, details) => {
+        job.currentStage = stage; job.stageStatus = status;
+        if (details) job.generationMeta.agents = job.generationMeta.agents.filter((a) => a.name !== stage).concat(details);
+        // Push this agent's progress to the backend as it happens, instead
+        // of waiting for the backend to poll GET /jobs/:id for it.
+        webhook.notifyStage(id, stage, status, details);
+      },
+    });
     job.status = 'completed'; job.result = result; job.error = null; job.currentStage = 'completed';
+    webhook.notifyComplete(id, job);
   } catch (error) {
     job.status = 'failed'; job.error = error.userMessage || error.message || 'AI generation failed'; job.currentStage = 'failed';
+    webhook.notifyComplete(id, job);
   } finally { job.payload = null; scheduleExpiry(id); running -= 1; processQueue(); }
 }
 function processQueue() { while (running < CONCURRENCY && queue.length) { const id = queue.shift(); if (!jobs.has(id)) continue; running += 1; runJob(id); } }
