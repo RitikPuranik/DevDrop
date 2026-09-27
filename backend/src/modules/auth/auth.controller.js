@@ -554,10 +554,7 @@ const resetPassword = async (req, res) => {
 module.exports = {
   signup,
   login,
-  googleConfig,
   googleAuth,
-  googleAuthRedirect,
-  googleAuthCallback,
   githubAuthRedirect,
   githubAuthCallback,
   githubAuthExchange,
