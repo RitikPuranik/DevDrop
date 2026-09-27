@@ -33,8 +33,8 @@ function normalize(result, expectedPath) {
   return { ...result, value: { ...value, path, code } };
 }
 
-async function run({ fileContract, relatedContracts, requirements, design, userData }) {
-  const result = await callGemini({ system: SYSTEM, input: { fileContract, relatedContracts, requirements, design, userData } });
+async function run({ fileContract, relatedContracts, requirements, design, userData, media = [] }) {
+  const result = await callGemini({ system: SYSTEM, input: { fileContract, relatedContracts, requirements, design, userData, media } });
   return normalize(result, fileContract.path);
 }
 module.exports = { run };
