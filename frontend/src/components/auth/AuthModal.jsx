@@ -435,7 +435,10 @@ export default function AuthModal({ isOpen, onClose }) {
 
               {/* Google + GitHub buttons */}
               <div className="w-full flex flex-col gap-2.5 mb-3">
-                <div data-google-button="signup" className="w-full flex justify-center" />
+                <button type="button" onClick={handleGoogleSignIn} disabled={googleLoading || githubLoading} aria-label="Continue with Google" className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl border-2 border-[#8b7355]/20 bg-white text-[#3d342b] text-xs font-bold uppercase tracking-widest hover:bg-[#EAE3D8]/50 hover:border-[#8b7355]/30 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed">
+                  {googleLoading ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <GoogleIcon />}
+                  {googleLoading ? "Connecting…" : "Continue with Google"}
+                </button>
                 <GithubAuthButton loading={githubLoading} disabled={githubLoading || googleLoading} onClick={handleGithubAuth} />
               </div>
               <Divider />
@@ -472,7 +475,10 @@ export default function AuthModal({ isOpen, onClose }) {
 
                 {/* Google + GitHub buttons */}
                 <div className="w-full flex flex-col gap-2.5 mb-3">
-                  <div data-google-button="login" className="w-full flex justify-center" />
+                  <button type="button" onClick={handleGoogleSignIn} disabled={googleLoading || githubLoading} aria-label="Continue with Google" className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl border-2 border-[#8b7355]/20 bg-white text-[#3d342b] text-xs font-bold uppercase tracking-widest hover:bg-[#EAE3D8]/50 hover:border-[#8b7355]/30 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed">
+                  {googleLoading ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <GoogleIcon />}
+                  {googleLoading ? "Connecting…" : "Continue with Google"}
+                </button>
                   <GithubAuthButton loading={githubLoading} disabled={githubLoading || googleLoading} onClick={handleGithubAuth} />
                 </div>
                 <Divider />
