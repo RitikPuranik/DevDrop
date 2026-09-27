@@ -108,6 +108,26 @@ function TextField({ label, value, onChange, placeholder, multiline }) {
   );
 }
 
+
+function MediaUpload({ images = [], videos = [], onImages, onVideos }) {
+  const add = (files, current, setter, prefix) => {
+    const accepted = Array.from(files || []).filter((file) => file.type.startsWith(prefix));
+    const next = [...current];
+    accepted.forEach((file) => {
+      if (!next.some((existing) => existing.name === file.name && existing.size === file.size)) next.push(file);
+    });
+    setter(next);
+  };
+  const Picker = ({ type, list, setter }) => (
+    <div className="rounded-xl border border-white/8 bg-white/[0.02] p-4">
+      <div className="mb-2 flex items-center justify-between"><label className="text-[13px] font-semibold text-[#c9a876]">{type === 'image' ? 'Images' : 'Videos'} <span className="font-normal text-white/30">(optional, multiple)</span></label><span className="text-[10px] text-white/25">{list.length} selected</span></div>
+      <input type="file" multiple accept={type === 'image' ? 'image/*' : 'video/*'} onChange={(e) => { add(e.target.files, list, setter, type); e.target.value = ''; }} className="block w-full cursor-pointer rounded-lg border border-white/10 bg-white/[0.03] p-2 text-xs text-white/50 file:mr-3 file:rounded-md file:border-0 file:bg-violet-600 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white" />
+      <div className="mt-3 space-y-2">{list.map((file, index) => <div key={file.name + file.size + index} className="flex items-center gap-3 rounded-lg border border-white/8 bg-black/20 px-3 py-2"><span className="min-w-0 flex-1 truncate text-xs text-white/70">{file.name}</span><span className="text-[10px] text-white/25">{(file.size / 1024 / 1024).toFixed(1)} MB</span><button type="button" onClick={() => setter(list.filter((_, i) => i !== index))} className="text-white/30 hover:text-white" aria-label={`Remove ${file.name}`}><span aria-hidden="true">×</span></button></div>)}</div>
+    </div>
+  );
+  return <section><div className="mb-3"><p className="text-[13px] font-semibold text-[#c9a876]">Media assets</p><p className="text-[11px] text-white/35">Optional. Add multiple images and/or videos for the AI to use.</p></div><div className="grid gap-3 sm:grid-cols-2"><Picker type="image" list={images} setter={onImages} /><Picker type="video" list={videos} setter={onVideos} /></div></section>;
+}
+
 function DetailsStep({ type, details, onChange, onBack, onNext }) {
   const schema = SCHEMAS[type];
   const update = (key, value) => onChange({ ...details, [key]: value });
@@ -127,6 +147,8 @@ function DetailsStep({ type, details, onChange, onBack, onNext }) {
             </div>
           </section>
         ))}
+
+        <MediaUpload images={details.images || []} videos={details.videos || []} onImages={(images) => update('images', images)} onVideos={(videos) => update('videos', videos)} />
 
         <section className="rounded-2xl border border-violet-500/20 bg-violet-500/[0.04] p-5">
           <label className="mb-2 block text-[13px] font-semibold text-violet-300">
