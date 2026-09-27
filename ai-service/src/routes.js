@@ -29,6 +29,7 @@ router.post('/jobs', requireServiceKey, (req, res) => {
     userData: body.userData || body.portfolioData || {},
     preferences: body.preferences || {},
     assets: body.assets || [],
+    media: body.media || [],
     conversation: body.conversation || body.messages,
     mode,
     existingFiles,
