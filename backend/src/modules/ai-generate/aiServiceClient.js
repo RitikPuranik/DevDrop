@@ -62,6 +62,20 @@ async function createJob({messages,fileData,websiteType,userData,preferences,ass
   }
 }
 
+async function debugRetry(jobId){
+  try{
+    const response=await axios.post(`${baseUrl()}/jobs/${encodeURIComponent(jobId)}/debug-retry`,{},{
+      headers:headers(), timeout:10000, httpAgent:HTTP_AGENT, httpsAgent:HTTPS_AGENT, proxy:false,
+    });
+    return response.data?.data;
+  }catch(error){
+    const err=new Error(error.message);
+    err.userMessage=error.response?.data?.message||'Failed to start debug retry.';
+    err.statusCode=error.response?.status||502;
+    throw err;
+  }
+}
+
 async function getJob(jobId){
   let lastError;
   for(let attempt=0;attempt<=STATUS_RETRIES;attempt+=1){
@@ -88,4 +102,4 @@ async function getJob(jobId){
   throw err;
 }
 
-module.exports={createJob,getJob};
+module.exports={createJob,getJob,debugRetry};
