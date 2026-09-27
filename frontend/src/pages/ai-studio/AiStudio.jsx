@@ -105,19 +105,41 @@ export default function AiStudio() {
         const uploaded=await aiStudioSession.uploadAsset(spec.details.resumeFile);
         resumeAsset=uploaded?.data?.data||null;
       }
-      await runGeneration(nextMessages,{websiteType:'portfolio',userData:spec?.details||{},preferences:spec?.design||{},assets:{profileImage:null,resume:resumeAsset,projectImages:[]}});
+      const images=Array.isArray(spec?.details?.images)?spec.details.images:[]; const videos=Array.isArray(spec?.details?.videos)?spec.details.videos:[];
+      const media=await uploadMediaAssets('portfolio',{images,videos});
+      const promptWithMedia=buildPortfolioPrompt({...spec.details,images:media.images,videos:media.videos},spec.design);
+      const portfolioMessage=[{role:'user',content:promptWithMedia}];
+      setMessages(portfolioMessage);
+      await runGeneration(portfolioMessage,{websiteType:'portfolio',userData:{...spec?.details,images:undefined,videos:undefined},preferences:spec?.design||{},assets:{profileImage:null,resume:resumeAsset,projectImages:media.images,mediaVideos:media.videos}});
     }catch(error){
       const msg=error?.response?.data?.message||error?.message||'Failed to save the resume to AI Studio storage.';
       setError(msg);
       setMessages(prev=>[...prev,{role:'assistant',content:`⚠️ ${msg}`}]);
     }
   };
+  const uploadMediaAssets = async (websiteType, details) => {
+    const images = Array.isArray(details?.images) ? details.images : [];
+    const videos = Array.isArray(details?.videos) ? details.videos : [];
+    if (!images.length && !videos.length) return { images: [], videos: [] };
+    if (!aiStudioSession.projectId) await aiStudioSession.open(websiteType);
+    const upload = async (file, kind) => {
+      const response = await aiStudioSession.uploadAsset(file);
+      return { ...(response?.data?.data || {}), kind, originalName: file.name };
+    };
+    const [uploadedImages, uploadedVideos] = await Promise.all([
+      Promise.all(images.map((file) => upload(file, 'image'))),
+      Promise.all(videos.map((file) => upload(file, 'video'))),
+    ]);
+    return { images: uploadedImages, videos: uploadedVideos };
+  };
+
   const handleWebsiteGenerate=async(type,details,design)=>{
-    const prompt=buildWebsitePrompt(type,details,design);
+    const media=await uploadMediaAssets(type,details);
+    const prompt=buildWebsitePrompt(type,{...details,images:media.images,videos:media.videos},design);
     const nextMessages=[{role:'user',content:prompt}];
     setStudioMode('chat');
     setMessages(nextMessages);
-    await runGeneration(nextMessages,{websiteType:type,userData:details,preferences:design,assets:{profileImage:null,resume:null,projectImages:[]}});
+    await runGeneration(nextMessages,{websiteType:type,userData:{...details,images:undefined,videos:undefined},preferences:design,assets:{profileImage:null,resume:null,projectImages:media.images,mediaVideos:media.videos}});
   };
   const handleSend=()=>{const trimmed=input.trim();if(!trimmed||isGenerating)return;setInput('');const nextMessages=[...messages,{role:'user',content:trimmed}];setMessages(nextMessages);runGeneration(nextMessages,{websiteType:'portfolio',userData:{},preferences:{},conversation:nextMessages});};
   const handleFixError=(previewError)=>{if(isGenerating)return;const prompt=`The preview threw this error, please fix it:\n\n${previewError}`;const nextMessages=[...messages,{role:'user',content:prompt}];setMessages(nextMessages);runGeneration(nextMessages,{websiteType:'portfolio',userData:{},preferences:{},conversation:nextMessages});};
