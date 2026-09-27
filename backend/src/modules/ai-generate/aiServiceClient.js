@@ -43,9 +43,9 @@ async function requestStatus(jobId){
   });
 }
 
-async function createJob({messages,fileData,websiteType,userData,preferences,assets,conversation}){
+async function createJob({messages,fileData,websiteType,userData,preferences,assets,media,conversation}){
   try{
-    const response=await axios.post(`${baseUrl()}/jobs`,{messages,fileData:fileData||null,websiteType:websiteType||'portfolio',userData:userData||{},preferences:preferences||{},assets:assets||[],conversation:conversation||messages},{
+    const response=await axios.post(`${baseUrl()}/jobs`,{messages,fileData:fileData||null,websiteType:websiteType||'portfolio',userData:userData||{},preferences:preferences||{},assets:assets||[],media:media||[],conversation:conversation||messages},{
       headers:headers(),
       timeout:10000,
       httpAgent:HTTP_AGENT,
