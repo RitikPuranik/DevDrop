@@ -89,8 +89,26 @@ async function run({ files, dependencies = {} }) {
       fs.mkdirSync(path.dirname(target), { recursive: true });
       fs.writeFileSync(target, obj.code, 'utf8');
     }
-    const spawnOpts = { cwd: dir, timeout: BUILD_TIMEOUT_MS, maxBuffer: 5 * 1024 * 1024, shell: process.platform === 'win32' };
-    await execFileAsync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['install', '--no-audit', '--no-fund'], spawnOpts);
+    // The validator builds the generated project itself, so devDependencies
+    // are required even when the AI-service process is running in a production
+    // environment. Without this, Vite and @vitejs/plugin-react can be omitted
+    // by npm and the build fails with "vite: not found".
+    const spawnOpts = {
+      cwd: dir,
+      timeout: BUILD_TIMEOUT_MS,
+      maxBuffer: 5 * 1024 * 1024,
+      shell: process.platform === 'win32',
+      env: {
+        ...process.env,
+        NODE_ENV: 'development',
+        npm_config_production: 'false',
+      },
+    };
+    await execFileAsync(
+      process.platform === 'win32' ? 'npm.cmd' : 'npm',
+      ['install', '--no-audit', '--no-fund', '--include=dev'],
+      spawnOpts
+    );
     const result = await execFileAsync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'build'], spawnOpts);
     return { success: true, errors: [], warnings: result.stderr ? result.stderr.split('\n').filter(Boolean).slice(0, 20) : [], durationMs: Date.now() - started };
   } catch (error) {
