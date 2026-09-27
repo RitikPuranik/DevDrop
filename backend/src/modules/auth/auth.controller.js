@@ -183,6 +183,73 @@ const googleAuthCallback = async (req, res) => {
     return res.send("<script>window.opener?.postMessage({type:'devdrop-google-auth-success',token:" + JSON.stringify(token) + ",user:" + JSON.stringify(safeUser) + "}," + JSON.stringify(frontendOrigin) + ");window.close();</script>");
   } catch (error) { console.error('Google OAuth callback error:', error); return sendError(error?.message || 'Google authentication failed'); }
 };
+const googleAuthCode = async (req, res) => {
+  try {
+    const code = String(req.body?.code || '').trim();
+    if (!code) return res.status(400).json({ success: false, message: 'Google authorization code is required' });
+
+    const { OAuth2Client } = require('google-auth-library');
+    const frontendOrigin = new URL(process.env.FRONTEND_URL).origin;
+    const client = new OAuth2Client(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      frontendOrigin
+    );
+
+    const { tokens } = await client.getToken({ code, redirect_uri: frontendOrigin });
+    client.setCredentials(tokens);
+
+    const ticket = await client.verifyIdToken({
+      idToken: tokens.id_token,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    const { sub: googleId, email, name, picture } = payload;
+
+    if (!email) return res.status(400).json({ success: false, message: 'Could not retrieve email from Google account' });
+
+    let user = await User.findOne({ $or: [{ googleId }, { email }] });
+    if (user) {
+      if (!user.googleId) {
+        user.googleId = googleId;
+        user.authProvider = 'google';
+        user.isVerified = true;
+        if (!user.avatar && picture) user.avatar = picture;
+        await user.save();
+      }
+    } else {
+      user = new User({
+        name,
+        email,
+        googleId,
+        avatar: picture,
+        authProvider: 'google',
+        isVerified: true,
+        role: 'user',
+      });
+      await user.save();
+    }
+
+    const token = generateAccessToken(user._id);
+    const avatarUrl = await getPublicAssetUrl(user.avatar);
+
+    return res.json({
+      success: true,
+      message: 'Google login successful',
+      data: {
+        user: { id: user._id, name: user.name, email: user.email, role: user.role, isVerified: user.isVerified, avatar: avatarUrl },
+        token,
+      },
+    });
+  } catch (error) {
+    console.error('Google code exchange error:', error);
+    return res.status(getAuthErrorStatus(error, 401)).json({
+      success: false,
+      message: getAuthErrorMessage(error, 'Google authentication failed'),
+    });
+  }
+};
+
 const googleAuth = async (req, res) => {
   try {
     const { credential } = req.body;
