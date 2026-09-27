@@ -33,14 +33,14 @@ export function useAiStudioSession() {
     try {
       const { data } = await aiStudioAPI.openSession(sessionIdRef.current, null, websiteType);
       const id = data?.data?.projectId;
-      if (id) {
-        projectIdRef.current = id;
-        setProjectId(id);
-      }
+      if (!id) throw new Error(data?.message || 'AI Studio session was created without a project ID.');
+      projectIdRef.current = id;
+      setProjectId(id);
       return id;
     } catch (err) {
-      console.warn('AI Studio session open failed (continuing without persistence):', err.message);
-      return null;
+      const message = err?.response?.data?.message || err?.message || 'Failed to initialize AI Studio project.';
+      console.error('AI Studio session open failed:', err);
+      throw new Error(message);
     }
   }, []);
 
@@ -102,9 +102,9 @@ export function useAiStudioSession() {
   );
 
   const uploadAsset = useCallback(
-    (file) => {
-      const id = projectIdRef.current || projectId;
-      if (!id) return Promise.reject(new Error('AI Studio project is not initialized.'));
+    (file, projectIdOverride = null) => {
+      const id = projectIdOverride || projectIdRef.current || projectId;
+      if (!id) return Promise.reject(new Error('AI Studio project is not initialized. Start the AI Studio session first.'));
       return aiStudioAPI.uploadAsset(id, file);
     },
     [projectId]
