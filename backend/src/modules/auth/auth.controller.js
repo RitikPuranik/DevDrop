@@ -143,6 +143,46 @@ const googleConfig = async (req, res) => {
   return res.json({ success: true, data: { clientId } });
 };
 
+const getGoogleRedirectUri = () => {
+  const backendOrigin = new URL(process.env.BACKEND_URL || process.env.API_URL || process.env.RENDER_EXTERNAL_URL || 'http://localhost:5000').origin;
+  return backendOrigin + '/api/auth/google/callback';
+};
+
+const googleAuthRedirect = (req, res) => {
+  const clientId = String(process.env.GOOGLE_CLIENT_ID || '').trim();
+  if (!clientId) return res.status(503).json({ success: false, message: 'Google Sign-In is not configured on the server.' });
+  const params = new URLSearchParams({ client_id: clientId, redirect_uri: getGoogleRedirectUri(), response_type: 'code', scope: 'openid email profile', access_type: 'offline', prompt: 'select_account' });
+  return res.redirect('https://accounts.google.com/o/oauth2/v2/auth?' + params.toString());
+};
+
+const googleAuthCallback = async (req, res) => {
+  const { code, error: oauthError } = req.query;
+  let frontendOrigin = process.env.FRONTEND_URL || '*';
+  try { frontendOrigin = new URL(frontendOrigin).origin; } catch {}
+  const sendError = (message) => res.send("<script>window.opener?.postMessage({type:'devdrop-google-auth-error',message:" + JSON.stringify(message) + "}," + JSON.stringify(frontendOrigin) + ");window.close();</script>");
+  if (oauthError || !code) return sendError('Google sign-in was cancelled.');
+  try {
+    const { OAuth2Client } = require('google-auth-library');
+    const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, getGoogleRedirectUri());
+    const { tokens } = await client.getToken(String(code));
+    client.setCredentials(tokens);
+    const ticket = await client.verifyIdToken({ idToken: tokens.id_token, audience: process.env.GOOGLE_CLIENT_ID });
+    const payload = ticket.getPayload();
+    const { sub: googleId, email, name, picture } = payload;
+    if (!email) throw new Error('Could not retrieve email from Google account');
+    let user = await User.findOne({ $or: [{ googleId }, { email }] });
+    if (user) {
+      if (!user.googleId) { user.googleId = googleId; user.authProvider = 'google'; user.isVerified = true; if (!user.avatar && picture) user.avatar = picture; await user.save(); }
+    } else {
+      user = new User({ name, email, googleId, avatar: picture, authProvider: 'google', isVerified: true, role: 'user' });
+      await user.save();
+    }
+    const token = generateAccessToken(user._id);
+    const avatarUrl = await getPublicAssetUrl(user.avatar);
+    const safeUser = { id: user._id, name: user.name, email: user.email, role: user.role, isVerified: user.isVerified, avatar: avatarUrl };
+    return res.send("<script>window.opener?.postMessage({type:'devdrop-google-auth-success',token:" + JSON.stringify(token) + ",user:" + JSON.stringify(safeUser) + "}," + JSON.stringify(frontendOrigin) + ");window.close();</script>");
+  } catch (error) { console.error('Google OAuth callback error:', error); return sendError(error?.message || 'Google authentication failed'); }
+};
 const googleAuth = async (req, res) => {
   try {
     const { credential } = req.body;
@@ -567,6 +607,8 @@ module.exports = {
   login,
   googleConfig,
   googleAuth,
+  googleAuthRedirect,
+  googleAuthCallback,
   githubAuthRedirect,
   githubAuthCallback,
   githubAuthExchange,
