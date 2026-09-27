@@ -182,10 +182,15 @@ function AnimatedCards({ t }) {
   const [vh, setVh] = useState(600);
 
   useEffect(() => {
-    const update = () => { setVw(window.innerWidth); setVh(window.innerHeight); };
-    update();
-    window.addEventListener('resize', update);
-    return () => window.removeEventListener('resize', update);
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      if (width > 0 && height > 0) {
+        setVw(width);
+        setVh(height);
+      }
+    });
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => observer.disconnect();
   }, []);
 
   const GAP    = 10;

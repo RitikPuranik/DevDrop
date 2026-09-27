@@ -41,7 +41,9 @@ export default function PostHogProvider({ children }) {
 
     const handleFirstInteraction = () => loadPostHog();
     const scheduleLoad = () => {
-      timeoutId = window.setTimeout(loadPostHog, 3000);
+      // Keep analytics out of the first several seconds of the page lifecycle.
+      // Interaction still initializes PostHog immediately for engaged users.
+      timeoutId = window.setTimeout(loadPostHog, 15000);
     };
 
     if (document.readyState === 'complete') {

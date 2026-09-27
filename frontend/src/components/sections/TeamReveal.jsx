@@ -16,8 +16,10 @@ const TEAM = [
 
 
 function useBreakpoint() {
-  const [isDesktop, setIsDesktop] = useState(
-    typeof window !== 'undefined' ? window.innerWidth >= 1280 : true
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window !== 'undefined'
+      ? window.matchMedia('(min-width: 1280px)').matches
+      : true
   );
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 1280px)');

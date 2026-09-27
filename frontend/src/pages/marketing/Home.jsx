@@ -11,14 +11,14 @@ import {
 import secondVideo from '../../assets/videos/v2.mp4';
 
 const ARTIFACTS = [
-  { id: 'kinetic', name: 'Kinetic', h: 'h-64', img: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?q=80&w=500' },
-  { id: 'lunar', name: 'Lunar', h: 'h-40', img: 'https://images.unsplash.com/photo-1551650975-87deedd944c3?q=80&w=500' },
-  { id: 'veil', name: 'Veil', h: 'h-80', img: 'https://images.unsplash.com/photo-1545231027-637d2f6210f8?q=80&w=500' },
-  { id: 'apex', name: 'Apex', h: 'h-48', img: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?q=80&w=500' },
-  { id: 'nova', name: 'Nova', h: 'h-72', img: 'https://images.unsplash.com/photo-1497366412874-3415097a27e7?q=80&w=500' },
-  { id: 'onyx', name: 'Onyx', h: 'h-52', img: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=500' },
-  { id: 'ghost', name: 'Ghost', h: 'h-44', img: 'https://images.unsplash.com/photo-1618005198919-d3d4b5a92ead?q=80&w=500' },
-  { id: 'shadow', name: 'Shadow', h: 'h-60', img: 'https://images.unsplash.com/photo-1518005020951-eccb494ad742?q=80&w=500' },
+  { id: 'kinetic', name: 'Kinetic', h: 'h-64', img: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?auto=format&fm=webp&q=65&w=500' },
+  { id: 'lunar', name: 'Lunar', h: 'h-40', img: 'https://images.unsplash.com/photo-1551650975-87deedd944c3?auto=format&fm=webp&q=65&w=500' },
+  { id: 'veil', name: 'Veil', h: 'h-80', img: 'https://images.unsplash.com/photo-1545231027-637d2f6210f8?auto=format&fm=webp&q=65&w=500' },
+  { id: 'apex', name: 'Apex', h: 'h-48', img: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fm=webp&q=65&w=500' },
+  { id: 'nova', name: 'Nova', h: 'h-72', img: 'https://images.unsplash.com/photo-1497366412874-3415097a27e7?auto=format&fm=webp&q=65&w=500' },
+  { id: 'onyx', name: 'Onyx', h: 'h-52', img: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fm=webp&q=65&w=500' },
+  { id: 'ghost', name: 'Ghost', h: 'h-44', img: 'https://images.unsplash.com/photo-1618005198919-d3d4b5a92ead?auto=format&fm=webp&q=65&w=500' },
+  { id: 'shadow', name: 'Shadow', h: 'h-60', img: 'https://images.unsplash.com/photo-1518005020951-eccb494ad742?auto=format&fm=webp&q=65&w=500' },
 ];
 
 const REVIEWS = [
@@ -30,9 +30,11 @@ const REVIEWS = [
 
 const Home = ({ preloadedVideoRef, introComplete, fromIntro }) => {
   const [isReady, setIsReady] = useState(false);
+  const { scrollY } = useScroll();
 
   useEffect(() => {
-    window.scrollTo(0, 0);
+    // The browser already starts a fresh document at the top. Avoid forcing a
+    // synchronous scroll/layout pass during the critical first render.
     const timer = setTimeout(() => setIsReady(true), 150);
     return () => clearTimeout(timer);
   }, []);
@@ -43,6 +45,7 @@ const Home = ({ preloadedVideoRef, introComplete, fromIntro }) => {
     <div className="bg-[#050505] text-[#e8e2d6] selection:bg-[#e8e2d6] selection:text-black antialiased overflow-x-hidden">
       {/* ── First Video (Hero) — Untouched ── */}
       <VideoHeroSection
+        scrollY={scrollY}
         preloadedVideoRef={preloadedVideoRef}
         introComplete={showContent}
         fromIntro={fromIntro}
@@ -50,7 +53,7 @@ const Home = ({ preloadedVideoRef, introComplete, fromIntro }) => {
 
       <div className="relative z-10">
         {/* ── Second Video — Untouched ── */}
-        <SmoothVideoSection />
+        <SmoothVideoSection scrollY={scrollY} />
 
         {/* ── Seamless Blending & Dynamic Flowchart Sections ── */}
         <div className="-mt-16 md:-mt-28 relative z-20 font-napkin bg-[#050505]">
@@ -79,13 +82,11 @@ const Home = ({ preloadedVideoRef, introComplete, fromIntro }) => {
 };
 
 /* ─── VIDEO HERO ─── */
-const VideoHeroSection = ({ preloadedVideoRef, introComplete, fromIntro }) => {
+const VideoHeroSection = ({ scrollY, preloadedVideoRef, introComplete, fromIntro }) => {
   const wrapperRef = useRef(null);
   // The hero is mounted behind the intro overlay, so keep it paintable from
   // the first render. The intro still visually covers it until it exits.
   const [visible, setVisible] = useState(true);
-  const { scrollY } = useScroll();
-
   const videoScale = useTransform(scrollY, [0, 1000], [1.03, 1]);
   const videoBlur = useTransform(scrollY, [200, 800], ["blur(0px)", "blur(8px)"]);
   const opacity = useTransform(scrollY, [0, 800], [1, 0.62]);
@@ -95,6 +96,10 @@ const VideoHeroSection = ({ preloadedVideoRef, introComplete, fromIntro }) => {
     const vid = preloadedVideoRef?.current;
     if (!wrapper || !vid) return;
 
+    // The initial HTML element is intentionally invisible while it waits
+    // outside the React tree. Remove those preload-only inline styles before
+    // moving the same element into its real hero wrapper.
+    vid.removeAttribute('style');
     vid.className = 'w-full h-full object-cover absolute inset-0 rounded-[1.75rem] sm:rounded-[2rem] lg:rounded-none';
     if (!wrapper.contains(vid)) wrapper.appendChild(vid);
   }, [preloadedVideoRef]);
@@ -141,10 +146,53 @@ const VideoHeroSection = ({ preloadedVideoRef, introComplete, fromIntro }) => {
 };
 
 /* ─── SMOOTH VIDEO SECTION ─── */
-const SmoothVideoSection = () => {
-  const targetRef = useRef(null);
-  const { scrollYProgress } = useScroll({ target: targetRef, offset: ["start end", "end start"] });
-  const smoothP = useSpring(scrollYProgress, { stiffness: 40, damping: 24 });
+const SmoothVideoSection = ({ scrollY }) => {
+  const videoRef = useRef(null);
+  const [shouldLoadVideo, setShouldLoadVideo] = useState(false);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || shouldLoadVideo) return;
+
+    const loadVideo = () => setShouldLoadVideo(true);
+
+    if (!('IntersectionObserver' in window)) {
+      loadVideo();
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          loadVideo();
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '800px 0px' }
+    );
+
+    observer.observe(video);
+    return () => observer.disconnect();
+  }, [shouldLoadVideo]);
+
+  // Reuse the homepage-level scroll MotionValue. This avoids creating a
+  // second global scroll subscription for the same page.
+  const [viewportHeight, setViewportHeight] = useState(
+    () => (typeof window !== 'undefined' ? window.innerHeight : 800)
+  );
+
+  useEffect(() => {
+    const updateViewportHeight = () => setViewportHeight(window.innerHeight);
+    window.addEventListener('resize', updateViewportHeight);
+    return () => window.removeEventListener('resize', updateViewportHeight);
+  }, []);
+
+  const sectionStart = useTransform(scrollY, (value) => {
+    const start = viewportHeight * 0.72;
+    const end = start + viewportHeight * 1.4;
+    return Math.min(1, Math.max(0, (value - start) / (end - start)));
+  });
+  const smoothP = useSpring(sectionStart, { stiffness: 40, damping: 24 });
 
   // Keep the layout box at its final dimensions so the card never changes
   // document geometry while scroll progress settles. Animate only transforms.
@@ -159,17 +207,20 @@ const SmoothVideoSection = () => {
 
   // Read the viewport during the initial client render so mobile does not
   // briefly render the desktop card dimensions and then jump to mobile.
-  const [isMobile, setIsMobile] = useState(
-    () => typeof window !== 'undefined' && window.innerWidth < 768
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined'
+      ? window.matchMedia('(max-width: 767px)').matches
+      : false
   );
   useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
+    const mq = window.matchMedia('(max-width: 767px)');
+    const checkMobile = (event) => setIsMobile(event.matches);
+    mq.addEventListener('change', checkMobile);
+    return () => mq.removeEventListener('change', checkMobile);
   }, []);
 
   return (
-    <section ref={targetRef} className="h-auto my-12 md:my-0 md:h-[140vh] relative">
+    <section className="h-auto my-12 md:my-0 md:h-[140vh] relative">
       <div className="relative md:sticky md:top-0 md:h-screen w-full flex items-center justify-center z-10 px-4">
         <motion.div 
           style={{ 
@@ -183,15 +234,16 @@ const SmoothVideoSection = () => {
           }} 
           className="relative overflow-hidden bg-[#121212] group w-full"
         >
-          <video 
-            src={secondVideo} 
-            autoPlay 
-            loop 
-            muted 
-            playsInline 
-            preload="auto"
-            fetchPriority="high"
-            className="w-full h-full object-cover opacity-90 transition-opacity duration-700 group-hover:opacity-100" 
+          <video
+            ref={videoRef}
+            {...(shouldLoadVideo ? { src: secondVideo } : {})}
+            autoPlay
+            loop
+            muted
+            playsInline
+            preload="none"
+            poster="/hero-poster.svg"
+            className="w-full h-full object-cover opacity-90 transition-opacity duration-700 group-hover:opacity-100"
           />
           <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
         </motion.div>
@@ -331,12 +383,14 @@ const AIStudioVideoFlowchart = () => {
           transition={{ duration: 0.5 }}
           className="md:col-span-5 relative rounded-2xl overflow-hidden border border-purple-500/30 bg-black aspect-video md:aspect-square flex items-center justify-center group"
         >
-          <video 
-            src={secondVideo}
+          <video
+            {...(inView ? { src: secondVideo } : {})}
             autoPlay
             loop
             muted
             playsInline
+            preload="metadata"
+            poster="/hero-poster.svg"
             className="w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-700"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-black/30" />
