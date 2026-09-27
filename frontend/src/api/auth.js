@@ -31,7 +31,9 @@ export const authAPI = {
   googleAuth: (credential) =>
     API.post("/google", { credential }),
 
-  // Opens the backend Google OAuth endpoint, which redirects to Google.
+  googleAuthCode: (code) =>
+    API.post("/google/code", { code }),
+
   googleAuthUrl: () => `${import.meta.env.VITE_API_URL}/api/auth/google`,
 
   // GET /api/auth/github redirects straight to GitHub's authorize screen —
