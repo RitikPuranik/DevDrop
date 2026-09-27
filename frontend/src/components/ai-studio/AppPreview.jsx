@@ -100,7 +100,7 @@ function PipelineProgress({ pipeline = {}, currentStage, isGenerating }) {
   );
 }
 
-function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiveTab, pipeline, currentStage, onHardReload }) {
+function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiveTab, pipeline, currentStage, onHardReload, onDownload }) {
   const { sandpack, listen } = useSandpack();
   const [previewError, setPreviewError] = useState(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -136,6 +136,7 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
   const handleExportZip = async () => {
     if (isExporting) return;
     setIsExporting(true);
+    onDownload?.();
     try {
       const filesToZip = Object.keys(sandpack.files).length > 0 ? sandpack.files : fileData?.files ?? {};
       const dependencies = { ...BASE_DEPENDENCIES, ...(fileData?.dependencies ?? {}) };
@@ -241,7 +242,7 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
   );
 }
 
-export default function AppPreview({ fileData, isGenerating, onFixError, pipeline = {}, currentStage }) {
+export default function AppPreview({ fileData, isGenerating, onFixError, pipeline = {}, currentStage, onDownload }) {
   const [activeTab, setActiveTab] = useState('preview');
   const [sessionNonce, setSessionNonce] = useState(0);
 
@@ -278,6 +279,7 @@ export default function AppPreview({ fileData, isGenerating, onFixError, pipelin
           pipeline={pipeline}
           currentStage={currentStage}
           onHardReload={handleHardReload}
+          onDownload={onDownload}
         />
       </SandpackProvider>
     </div>

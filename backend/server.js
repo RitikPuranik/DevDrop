@@ -45,6 +45,14 @@ const startServer = async () => {
     console.warn('⚠️  Backup cron not started:', e.message);
   }
 
+  try {
+    const aiStudioCleanupCron = require('./src/services/ai-studio/aiStudio.cleanup.cron.service');
+    aiStudioCleanupCron.startAiStudioCleanupCron();
+    console.log('✅ AI Studio cleanup cron jobs started');
+  } catch (e) {
+    console.warn('⚠️  AI Studio cleanup cron not started:', e.message);
+  }
+
   httpServer.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
 
