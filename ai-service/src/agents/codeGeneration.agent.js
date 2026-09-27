@@ -34,7 +34,7 @@ function normalize(result, expectedPath) {
 }
 
 async function run({ fileContract, relatedContracts, requirements, design, userData, mediaManifest = [] }) {
-  const result = await callGemini({ system: SYSTEM, input: { fileContract, relatedContracts, requirements, design, userData, mediaManifest });
+  const result = await callGemini({ system: SYSTEM, input: { fileContract, relatedContracts, requirements, design, userData, mediaManifest } });
   return normalize(result, fileContract.path);
 }
 module.exports = { run };
