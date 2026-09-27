@@ -1,6 +1,6 @@
 const express = require('express');
 const axios = require('axios');
-const { createJob, getJob } = require('./jobs.service');
+const { createJob, createDebugJob, getJob } = require('./jobs.service');
 const geminiPool = require('./geminiPool.service');
 const GeminiApiKey = require('./models/geminiApiKey.model');
 const router = express.Router();
@@ -37,9 +37,26 @@ router.post('/jobs', requireServiceKey, (req, res) => {
   });
   res.status(202).json({ success: true, data: { jobId, status: 'queued', mode } });
 });
+router.post('/jobs/:id/debug-retry', requireServiceKey, (req, res) => {
+  const original = getJob(req.params.id);
+  if (!original || original.status !== 'failed' || !original.debugContext) {
+    return res.status(404).json({ success: false, message: 'No debug context is available for this job.' });
+  }
+  const debugJobId = createDebugJob({
+    files: original.debugContext.files,
+    dependencies: original.debugContext.dependencies,
+    architecture: original.debugContext.architecture,
+    requirements: original.debugContext.requirements,
+    design: original.debugContext.design,
+    errors: original.debugContext.errors,
+    buildOutput: original.debugContext.buildOutput,
+  });
+  res.status(202).json({ success: true, data: { jobId: debugJobId, status: 'queued', mode: 'debug' } });
+});
+
 router.get('/jobs/:id', requireServiceKey, (req, res) => {
   const job = getJob(req.params.id); if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
-  const progress = { currentStage: job.currentStage, stageStatus: job.stageStatus, generationMeta: job.generationMeta, mode: job.mode };
+  const progress = { currentStage: job.currentStage, stageStatus: job.stageStatus, generationMeta: job.generationMeta, mode: job.mode, debugAvailable: Boolean(job.debugContext) };
   if (job.status === 'completed') return res.status(200).json({ success: true, data: { jobId: job.id, status: job.status, ...progress, result: job.result } });
   if (job.status === 'failed') return res.status(200).json({ success: true, data: { jobId: job.id, status: job.status, ...progress, error: job.error } });
   return res.status(200).json({ success: true, data: { jobId: job.id, status: job.status, ...progress } });
