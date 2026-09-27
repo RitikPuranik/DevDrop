@@ -173,9 +173,19 @@ export default function AuthModal({ isOpen, onClose }) {
     }
 
     const activeMode = isSignUp ? "signup" : "login";
-    const visibleContainer = document.querySelector(
-      `[data-google-button="${activeMode}"]`
+
+    // AuthModal renders separate mobile and desktop layouts. Both contain a
+    // Google mount point with the same data attribute, but querySelector()
+    // returns the hidden mobile one first on desktop. Google then renders its
+    // iframe into an invisible container, making it look like Google Sign-In
+    // does not exist while GitHub remains visible.
+    const googleContainers = Array.from(
+      document.querySelectorAll(`[data-google-button="${activeMode}"]`)
     );
+    const visibleContainer = googleContainers.find((container) => {
+      const rect = container.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0 && container.getClientRects().length > 0;
+    });
 
     if (!visibleContainer) return;
 
