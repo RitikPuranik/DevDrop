@@ -21,6 +21,7 @@ const HEARTBEAT_INTERVAL_MS = 60 * 1000;
  */
 export function useAiStudioSession() {
   const [projectId, setProjectId] = useState(null);
+  const projectIdRef = useRef(null);
   const sessionIdRef = useRef(null);
   const heartbeatRef = useRef(null);
 
@@ -32,7 +33,10 @@ export function useAiStudioSession() {
     try {
       const { data } = await aiStudioAPI.openSession(sessionIdRef.current, null, websiteType);
       const id = data?.data?.projectId;
-      if (id) setProjectId(id);
+      if (id) {
+        projectIdRef.current = id;
+        setProjectId(id);
+      }
       return id;
     } catch (err) {
       console.warn('AI Studio session open failed (continuing without persistence):', err.message);
@@ -90,11 +94,18 @@ export function useAiStudioSession() {
 
   const syncFiles = useCallback(
     (payload) => {
-      if (!projectId) return Promise.resolve(null);
-      return aiStudioAPI.sync(projectId, payload).catch((err) => {
-        console.warn('AI Studio sync failed:', err.message);
-        return null;
-      });
+      const id = projectIdRef.current || projectId;
+      if (!id) return Promise.reject(new Error('AI Studio project is not initialized.'));
+      return aiStudioAPI.sync(id, payload);
+    },
+    [projectId]
+  );
+
+  const uploadAsset = useCallback(
+    (file) => {
+      const id = projectIdRef.current || projectId;
+      if (!id) return Promise.reject(new Error('AI Studio project is not initialized.'));
+      return aiStudioAPI.uploadAsset(id, file);
     },
     [projectId]
   );
@@ -104,5 +115,5 @@ export function useAiStudioSession() {
     aiStudioAPI.recordActivity(projectId).catch(() => {});
   }, [projectId]);
 
-  return { projectId, sessionId: sessionIdRef.current, open, syncFiles, recordActivity };
+  return { projectId, sessionId: sessionIdRef.current, open, syncFiles, uploadAsset, recordActivity };
 }
