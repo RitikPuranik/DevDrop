@@ -82,6 +82,15 @@ const deleteProjectStorage = async (projectId) => {
   return { deleted: paths.length };
 };
 
+const downloadAsset = async (storagePath) => {
+  const { data, error } = await aiStudioSupabase.storage
+    .from(AI_STUDIO_SUPABASE_BUCKET)
+    .download(storagePath);
+  if (error) throw new Error(`AI Studio asset download error: ${error.message}`);
+  const arrayBuffer = await data.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+};
+
 const deleteAsset = async (storagePath) => {
   const { error } = await aiStudioSupabase.storage.from(AI_STUDIO_SUPABASE_BUCKET).remove([storagePath]);
   if (error) throw new Error(`AI Studio asset delete error: ${error.message}`);
@@ -96,6 +105,7 @@ module.exports = {
   downloadProjectZip,
   createSignedZipUrl,
   uploadAsset,
+  downloadAsset,
   listAllObjects,
   deleteProjectStorage,
   deleteAsset,
