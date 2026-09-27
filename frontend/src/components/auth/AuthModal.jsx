@@ -13,7 +13,7 @@ import { authAPI } from "../../api/auth";
 import { toast } from "sonner";
 
 // ─── Google One-Tap / GSI button helper ───────────────────────────────────────
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_ID = String(import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
 let gsiScriptPromise = null;
 const SKIP_LOADER_SESSION_KEY = "devdrop_skip_next_loader";
 
@@ -89,6 +89,8 @@ export default function AuthModal({ isOpen, onClose }) {
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleClientId, setGoogleClientId] = useState(GOOGLE_CLIENT_ID);
+  const googleConfigRequestedRef = useRef(false);
   const [githubLoading, setGithubLoading] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [signupLoading, setSignupLoading] = useState(false);
@@ -141,13 +143,29 @@ export default function AuthModal({ isOpen, onClose }) {
   // Google injects an iframe when renderButton() runs, so rendering all mobile
   // and desktop containers unnecessarily can trigger avoidable layout work.
   const initGoogleButtons = useCallback(async () => {
-    if (!GOOGLE_CLIENT_ID) return;
+    let clientId = googleClientId;
+
+    // Prefer the Vite value, but fall back to the backend's public Google
+    // client configuration. This prevents a missing frontend env var from
+    // making the Google button disappear completely after deployment.
+    if (!clientId && !googleConfigRequestedRef.current) {
+      googleConfigRequestedRef.current = true;
+      try {
+        const response = await authAPI.googleConfig();
+        clientId = String(response?.data?.data?.clientId || '').trim();
+        if (clientId) setGoogleClientId(clientId);
+      } catch (error) {
+        console.warn('Google Sign-In configuration unavailable:', error?.response?.data?.message || error?.message);
+      }
+    }
+
+    if (!clientId) return;
     await loadGSI();
     if (!window.google?.accounts) return;
 
     if (!googleInitializedRef.current) {
       window.google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
+        client_id: clientId,
         callback: handleGoogleCredential,
         ux_mode: "popup",
       });
@@ -183,7 +201,7 @@ export default function AuthModal({ isOpen, onClose }) {
       text: "continue_with",
       width: 400,
     });
-  }, [handleGoogleCredential, isSignUp, isForgotPassword]);
+  }, [googleClientId, handleGoogleCredential, isSignUp, isForgotPassword]);
 
   useEffect(() => {
     if (!isOpen || !shouldRender) return;
