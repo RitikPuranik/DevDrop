@@ -91,7 +91,7 @@ export default function AiStudio() {
     try{
       const projectId=aiStudioSession.getProjectId()||await aiStudioSession.open(spec?.websiteType);
       if(!projectId)throw new Error('AI Studio project could not be initialized.');
-      const {data}=await aiGenerateAPI.generate(nextMessages,fileData,spec);const {jobId}=data?.data||{};if(!jobId)throw new Error('No jobId returned from server.');const result=await waitForJob(jobId);setMessages(prev=>[...prev,{role:'assistant',content:result.assistantMessage||'Done.'}]);setFileData({files:result.files,dependencies:result.dependencies});if(result.title)setAppTitle(result.title);
+      const {data}=await aiGenerateAPI.generate(nextMessages,fileData,{...spec,projectId});const {jobId}=data?.data||{};if(!jobId)throw new Error('No jobId returned from server.');const result=await waitForJob(jobId);setMessages(prev=>[...prev,{role:'assistant',content:result.assistantMessage||'Done.'}]);setFileData({files:result.files,dependencies:result.dependencies});if(result.title)setAppTitle(result.title);
       // Persist the latest generated state -- this is what makes the
       // project outlive an individual (30-minute-TTL'd) AI generation job.
       await aiStudioSession.syncFiles({files:result.files,dependencies:result.dependencies,title:result.title});
