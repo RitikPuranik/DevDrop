@@ -25,16 +25,8 @@ export const authAPI = {
       password: data.password,
     }),
 
-  googleConfig: () =>
-    API.get("/google/config"),
-
   googleAuth: (credential) =>
     API.post("/google", { credential }),
-
-  googleAuthCode: (code) =>
-    API.post("/google/code", { code }),
-
-  googleAuthUrl: () => `${import.meta.env.VITE_API_URL}/api/auth/google`,
 
   // GET /api/auth/github redirects straight to GitHub's authorize screen —
   // no preceding API call needed, just open this URL in a popup.
