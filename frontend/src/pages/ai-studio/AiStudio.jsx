@@ -23,6 +23,9 @@ const PIPELINE_STAGES = [
 const EDIT_PIPELINE_STAGES = [
   ['relevant-files', 'Finding affected files'], ['edit', 'Applying edit'], ['edit-debug', 'Fixing an issue'],
 ];
+const DEBUG_PIPELINE_STAGES = [
+  ['debug-only', 'Debugging existing code'], ['build-validator', 'Re-validating build'],
+];
 
 export default function AiStudio() {
   const navigate = useNavigate(); const posthog = usePostHog();
@@ -171,7 +174,7 @@ export default function AiStudio() {
     // was actually needed -- most edits never touch it.
     if(key==='edit-debug'&&!active&&!done)return null;
     return <div key={key} className="flex items-center gap-2 text-xs"><span className="flex h-4 w-4 items-center justify-center">{done?<Check className="h-3.5 w-3.5 text-emerald-400"/>:active?<Loader2 className="h-3.5 w-3.5 animate-spin text-violet-400"/>:<Circle className="h-3 w-3 text-white/20"/>}</span><span className={done?'text-white/70':active?'text-white':'text-white/30'}>{label}</span></div>;};
-  const activeStageList=genMode==='edit'?EDIT_PIPELINE_STAGES:PIPELINE_STAGES;
+  const activeStageList=genMode==='debug'?DEBUG_PIPELINE_STAGES:(genMode==='edit'?EDIT_PIPELINE_STAGES:PIPELINE_STAGES);
   if(studioMode==='types')return <div className="fixed inset-0 z-40 overflow-y-auto bg-neutral-950 text-white"><div className="mx-auto max-w-5xl px-5 py-8 md:px-8 md:py-12"><button type="button" onClick={()=>navigate('/workspace')} className="mb-10 inline-flex items-center gap-2 text-sm text-white/50 hover:text-white"><ArrowLeft size={16}/> Back to DevDrop</button><div className="mb-10"><p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-violet-400">AI Studio</p><h1 className="text-3xl font-bold tracking-tight md:text-4xl">What do you want to build?</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-white/40">Choose a website type first. You will then provide the information specific to that type, and DevDrop will turn it into a detailed build specification for the AI.</p></div><div className="grid gap-4 sm:grid-cols-2">{WEBSITE_TYPES.map(type=>{const Icon=type.icon;return <button key={type.id} type="button" disabled={!type.enabled} onClick={()=>type.enabled&&setStudioMode(type.id)} className={`group rounded-3xl border p-6 text-left transition-all ${type.enabled?'border-white/10 bg-white/[0.03] hover:border-violet-500/50 hover:bg-violet-500/[0.05]':'cursor-not-allowed border-white/5 bg-white/[0.015] opacity-45'}`}><div className="mb-5 flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5"><Icon size={19} className="text-violet-400"/></div><h2 className="text-lg font-semibold">{type.title}</h2><p className="mt-2 text-sm leading-6 text-white/35">{type.description}</p>{!type.enabled&&<p className="mt-4 text-[10px] font-bold uppercase tracking-[0.16em] text-white/25">Coming soon</p>}</button>;})}</div></div></div>;
   if(studioMode==='portfolio')return <div className="fixed inset-0 z-40 overflow-y-auto bg-neutral-950"><PortfolioBuilder onBack={()=>setStudioMode('types')} onGenerate={handlePortfolioGenerate}/></div>;
   if(['ecommerce','blog','landing'].includes(studioMode))return <div className="fixed inset-0 z-40 overflow-y-auto bg-neutral-950"><WebsiteBuilder type={studioMode} onBack={()=>setStudioMode('types')} onGenerate={handleWebsiteGenerate}/></div>;
