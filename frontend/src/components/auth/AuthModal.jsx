@@ -137,13 +137,13 @@ export default function AuthModal({ isOpen, onClose }) {
     }
   }, [navigate, onClose]);
 
-  // Render only the Google button in the currently visible auth panel.
-  // Google injects an iframe when renderButton() runs, so rendering all mobile
-  // and desktop containers unnecessarily can trigger avoidable layout work.
+  // Google GSI mounts asynchronously. Keep retrying briefly while the modal
+  // finishes its transition instead of relying on one arbitrary timeout.
   const initGoogleButtons = useCallback(async () => {
-    if (!GOOGLE_CLIENT_ID) return;
+    if (!GOOGLE_CLIENT_ID || !isOpen || !shouldRender || isForgotPassword) return;
+
     await loadGSI();
-    if (!window.google?.accounts) return;
+    if (!window.google?.accounts?.id) return;
 
     if (!googleInitializedRef.current) {
       window.google.accounts.id.initialize({
@@ -158,39 +158,60 @@ export default function AuthModal({ isOpen, onClose }) {
     const containers = Array.from(
       document.querySelectorAll(`[data-google-button="${activeMode}"]`)
     );
+
     const visibleContainer = containers.find((container) => {
       const style = window.getComputedStyle(container);
+      let node = container.parentElement;
+      while (node) {
+        const nodeStyle = window.getComputedStyle(node);
+        if (nodeStyle.display === "none" || nodeStyle.visibility === "hidden") return false;
+        node = node.parentElement;
+      }
       return style.display !== "none" && style.visibility !== "hidden";
     });
 
-    if (!visibleContainer) return;
+    if (!visibleContainer) return false;
 
     visibleContainer.innerHTML = "";
     window.google.accounts.id.renderButton(visibleContainer, {
       type: "standard",
-      shape: "pill",
+      shape: "rectangular",
       theme: "outline",
       size: "large",
       text: "continue_with",
-      width: 400,
+      width: Math.min(400, Math.max(280, visibleContainer.clientWidth || 400)),
     });
-  }, [handleGoogleCredential, isSignUp, isForgotPassword]);
+    return true;
+  }, [handleGoogleCredential, isSignUp, isForgotPassword, isOpen, shouldRender]);
 
   useEffect(() => {
-    if (!isOpen || !shouldRender) return;
+    if (!isOpen || !shouldRender || isForgotPassword) return;
 
-    // Let the modal finish its opening transition before Google injects its iframe.
     let cancelled = false;
+    let attempts = 0;
+    let timer;
 
-    const timer = window.setTimeout(() => {
-      if (!cancelled) initGoogleButtons();
-    }, 500);
+    const attempt = async () => {
+      if (cancelled) return;
+      attempts += 1;
+      try {
+        const mounted = await initGoogleButtons();
+        if (!mounted && attempts < 20) {
+          timer = window.setTimeout(attempt, 150);
+        }
+      } catch (error) {
+        console.error("Google Sign-In initialization failed:", error);
+        if (attempts < 20) timer = window.setTimeout(attempt, 150);
+      }
+    };
+
+    attempt();
 
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
+      if (timer) window.clearTimeout(timer);
     };
-  }, [isOpen, shouldRender, initGoogleButtons]);
+  }, [isOpen, shouldRender, isForgotPassword, isSignUp, initGoogleButtons]);
 
   // ── GitHub OAuth (popup + postMessage) ───────────────────────────────────────
   // Mirrors the popup pattern used for the GitHub *integration* connect flow
