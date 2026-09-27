@@ -451,6 +451,20 @@ export default function PortfolioDetailsStep({ details, onChange, onBack, onNext
           <Field label="Main CTA text" value={details.ctaText} onChange={(value) => update({ ctaText: value })} placeholder="Let's work together" />
           <Field label="Main CTA link" value={details.ctaLink} onChange={(value) => update({ ctaLink: value })} placeholder="mailto:you@example.com or https://..." />
         </div>
+
+        <section className="rounded-2xl border border-violet-500/20 bg-violet-500/[0.04] p-5">
+          <label className="mb-2 block text-[13px] font-semibold text-violet-300">
+            Anything else you want? <span className="font-normal text-white/35">(optional)</span>
+          </label>
+          <textarea
+            value={details.specialRequests || ''}
+            onChange={(e) => update({ specialRequests: e.target.value })}
+            rows={5}
+            placeholder="Tell the AI about any specific section, layout, animation, wording, reference, feature, or personal preference you want."
+            className="w-full rounded-xl border border-violet-500/20 bg-black/20 px-4 py-3 text-sm focus:border-violet-500/50 focus:outline-none"
+          />
+          <p className="mt-2 text-[11px] text-white/35">Optional. Leave this empty if you have no extra instructions.</p>
+        </section>
       </div>
 
       <div className="mt-8 flex gap-3">
