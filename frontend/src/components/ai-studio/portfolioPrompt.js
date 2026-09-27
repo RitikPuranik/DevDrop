@@ -72,6 +72,9 @@ Instagram: ${clean(details.socialLinks?.instagram)}
 CTA text: ${clean(details.ctaText)}
 CTA destination: ${clean(details.ctaLink)}
 
+## Additional user instructions
+${section('Anything else you want', clean(details.specialRequests)) || 'No additional instructions provided.'}
+
 ## Design direction
 Style: ${clean(design.style) || 'modern'}
 Theme: ${clean(design.theme) || 'dark'}
