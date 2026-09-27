@@ -91,9 +91,26 @@ export default function AiStudio() {
       const {data}=await aiGenerateAPI.generate(nextMessages,fileData,spec);const {jobId}=data?.data||{};if(!jobId)throw new Error('No jobId returned from server.');const result=await waitForJob(jobId);setMessages(prev=>[...prev,{role:'assistant',content:result.assistantMessage||'Done.'}]);setFileData({files:result.files,dependencies:result.dependencies});if(result.title)setAppTitle(result.title);
       // Persist the latest generated state -- this is what makes the
       // project outlive an individual (30-minute-TTL'd) AI generation job.
-      aiStudioSession.syncFiles({files:result.files,dependencies:result.dependencies,title:result.title});
+      await aiStudioSession.syncFiles({files:result.files,dependencies:result.dependencies,title:result.title});
     }catch(err){const msg=err.response?.data?.message||err.message||'Something went wrong generating your app. Please try again.';setError(msg);setMessages(prev=>[...prev,{role:'assistant',content:`⚠️ ${msg}`}]);}finally{if(pollTimeoutRef.current){clearTimeout(pollTimeoutRef.current);pollTimeoutRef.current=null;}setIsGenerating(false);}};
-  const handlePortfolioGenerate=async(prompt,spec)=>{const nextMessages=[{role:'user',content:prompt}];setStudioMode('chat');setMessages(nextMessages);await runGeneration(nextMessages,{websiteType:'portfolio',userData:spec?.details||{},preferences:spec?.design||{},assets:{profileImage:null,resume:null,projectImages:[]}});};
+  const handlePortfolioGenerate=async(prompt,spec)=>{
+    const nextMessages=[{role:'user',content:prompt}];
+    setStudioMode('chat');
+    setMessages(nextMessages);
+    try{
+      let resumeAsset=null;
+      if(spec?.details?.resumeFile){
+        if(!aiStudioSession.projectId) await aiStudioSession.open('portfolio');
+        const uploaded=await aiStudioSession.uploadAsset(spec.details.resumeFile);
+        resumeAsset=uploaded?.data?.data||null;
+      }
+      await runGeneration(nextMessages,{websiteType:'portfolio',userData:spec?.details||{},preferences:spec?.design||{},assets:{profileImage:null,resume:resumeAsset,projectImages:[]}});
+    }catch(error){
+      const msg=error?.response?.data?.message||error?.message||'Failed to save the resume to AI Studio storage.';
+      setError(msg);
+      setMessages(prev=>[...prev,{role:'assistant',content:`⚠️ ${msg}`}]);
+    }
+  };
   const handleSend=()=>{const trimmed=input.trim();if(!trimmed||isGenerating)return;setInput('');const nextMessages=[...messages,{role:'user',content:trimmed}];setMessages(nextMessages);runGeneration(nextMessages,{websiteType:'portfolio',userData:{},preferences:{},conversation:nextMessages});};
   const handleFixError=(previewError)=>{if(isGenerating)return;const prompt=`The preview threw this error, please fix it:\n\n${previewError}`;const nextMessages=[...messages,{role:'user',content:prompt}];setMessages(nextMessages);runGeneration(nextMessages,{websiteType:'portfolio',userData:{},preferences:{},conversation:nextMessages});};
   const handleDownload=()=>{aiStudioSession.recordActivity();};
