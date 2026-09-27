@@ -82,6 +82,14 @@ const deleteProjectStorage = async (projectId) => {
   return { deleted: paths.length };
 };
 
+const createSignedAssetUrl = async (storagePath, expiresIn = 86400) => {
+  const { data, error } = await aiStudioSupabase.storage
+    .from(AI_STUDIO_SUPABASE_BUCKET)
+    .createSignedUrl(storagePath, expiresIn);
+  if (error) throw new Error(`AI Studio asset signed URL error: ${error.message}`);
+  return data.signedUrl;
+};
+
 const downloadAsset = async (storagePath) => {
   const { data, error } = await aiStudioSupabase.storage
     .from(AI_STUDIO_SUPABASE_BUCKET)
@@ -106,6 +114,7 @@ module.exports = {
   createSignedZipUrl,
   uploadAsset,
   downloadAsset,
+  createSignedAssetUrl,
   listAllObjects,
   deleteProjectStorage,
   deleteAsset,
