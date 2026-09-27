@@ -92,6 +92,8 @@ export function useAiStudioSession() {
     };
   }, [projectId, startHeartbeat, stopHeartbeat]);
 
+  const getProjectId = useCallback(() => projectIdRef.current || projectId, [projectId]);
+
   const syncFiles = useCallback(
     (payload) => {
       const id = projectIdRef.current || projectId;
@@ -115,5 +117,5 @@ export function useAiStudioSession() {
     aiStudioAPI.recordActivity(projectId).catch(() => {});
   }, [projectId]);
 
-  return { projectId, sessionId: sessionIdRef.current, open, syncFiles, uploadAsset, recordActivity };
+  return { projectId, sessionId: sessionIdRef.current, open, getProjectId, syncFiles, uploadAsset, recordActivity };
 }
