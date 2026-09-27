@@ -6,6 +6,7 @@ import { aiGenerateAPI } from '../../api/aiGenerate';
 import { subscribeToJob } from '../../api/socket';
 import AppPreview from '../../components/ai-studio/AppPreview';
 import PortfolioBuilder from '../../components/ai-studio/PortfolioBuilder';
+import { buildPortfolioPrompt } from '../../components/ai-studio/portfolioPrompt';
 import WebsiteBuilder, { buildWebsitePrompt } from '../../components/ai-studio/WebsiteBuilder';
 import { WEBSITE_TYPES } from '../../config/aiStudio.config';
 import { useAiStudioSession } from '../../hooks/ai-studio/useAiStudioSession';
