@@ -15,11 +15,13 @@ exports.generate = async (req, res) => {
         const storedAssets = await AIStudioAsset.find({ _id: { $in: assetIds }, projectId, userId: req.userId }).lean();
         multimodalAssets = await Promise.all(storedAssets.map(async (asset) => {
           const buffer = await aiStudioStorage.downloadAsset(asset.storagePath);
+          const previewUrl = await aiStudioStorage.createSignedAssetUrl(asset.storagePath, 86400);
           return {
             assetId: String(asset._id),
             fileName: asset.fileName,
             mimeType: asset.mimeType,
             size: asset.size,
+            previewUrl,
             data: buffer.toString('base64'),
           };
         }));
