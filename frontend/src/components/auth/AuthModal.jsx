@@ -13,6 +13,8 @@ import { authAPI } from "../../api/auth";
 import { toast } from "sonner";
 
 // ─── Google One-Tap / GSI button helper ───────────────────────────────────────
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+let gsiScriptPromise = null;
 const SKIP_LOADER_SESSION_KEY = "devdrop_skip_next_loader";
 
 function getBackendOrigin() {
@@ -30,6 +32,33 @@ function getApiErrorMessage(error, fallbackMessage) {
     responseData?.errors?.[0];
 
   return firstDetailedError || responseData?.message || fallbackMessage;
+}
+
+function loadGSI() {
+  if (window.google?.accounts) {
+    return Promise.resolve();
+  }
+
+  if (gsiScriptPromise) {
+    return gsiScriptPromise;
+  }
+
+  gsiScriptPromise = new Promise((resolve) => {
+    const existingScript = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
+    if (existingScript) {
+      existingScript.addEventListener("load", resolve, { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.onload = resolve;
+    document.head.appendChild(script);
+  });
+
+  return gsiScriptPromise;
 }
 
 // ─── Google SVG Icon ──────────────────────────────────────────────────────────
@@ -60,11 +89,11 @@ export default function AuthModal({ isOpen, onClose }) {
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const googleCodeClientRef = useRef(null);
-  const googleClientIdRef = useRef(null);
   const [githubLoading, setGithubLoading] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [signupLoading, setSignupLoading] = useState(false);
+  const googleInitializedRef = useRef(false);
+  const lastGoogleCredentialRef = useRef(null);
   const githubPopupRef = useRef(null);
   const githubPopupWatcherRef = useRef(null);
   const navigate = useNavigate();
@@ -76,100 +105,92 @@ export default function AuthModal({ isOpen, onClose }) {
   const handleSignupChange = (e) => setSignupData({ ...signupData, [e.target.name]: e.target.value });
   const skipNextPageLoader = () => sessionStorage.setItem(SKIP_LOADER_SESSION_KEY, "true");
 
-  // ── Google OAuth (official Google Identity Services code popup) ─────────────
-  const finishGoogleSignIn = useCallback((token, user) => {
-    localStorage.setItem("token", token);
-    localStorage.setItem("user", JSON.stringify(user));
-    window.dispatchEvent(new Event("auth-changed"));
-    toast.success("Signed in with Google!");
-    skipNextPageLoader();
-    onClose();
-    if (user.role === "admin") navigate("/admin");
-    else navigate("/profile");
-  }, [navigate, onClose]);
+  // ── Google callback ──────────────────────────────────────────────────────────
+  const handleGoogleCredential = useCallback(async (response) => {
+    const credential = response?.credential;
+    if (!credential) {
+      toast.error("Google sign-in did not return a credential.");
+      return;
+    }
 
-  const loadGoogleIdentityServices = useCallback(() => {
-    if (window.google?.accounts?.oauth2) return Promise.resolve();
-
-    if (window.__devdropGoogleScriptPromise) return window.__devdropGoogleScriptPromise;
-
-    window.__devdropGoogleScriptPromise = new Promise((resolve, reject) => {
-      const existing = document.querySelector('script[data-devdrop-google-gsi]');
-      if (existing) {
-        existing.addEventListener("load", resolve, { once: true });
-        existing.addEventListener("error", () => reject(new Error("Google Sign-In could not load.")), { once: true });
-        return;
-      }
-      const script = document.createElement("script");
-      script.src = "https://accounts.google.com/gsi/client";
-      script.async = true;
-      script.defer = true;
-      script.dataset.devdopGoogleGsi = "true";
-      script.onload = resolve;
-      script.onerror = () => reject(new Error("Google Sign-In could not load."));
-      document.head.appendChild(script);
-    });
-
-    return window.__devdropGoogleScriptPromise;
-  }, []);
-
-  const handleGoogleSignIn = useCallback(async () => {
-    if (googleLoading) return;
+    // React Strict Mode and repeated popup callbacks can retry the same credential.
+    if (lastGoogleCredentialRef.current === credential) return;
+    lastGoogleCredentialRef.current = credential;
 
     try {
       setGoogleLoading(true);
-      let clientId = googleClientIdRef.current;
-
-      if (!clientId) {
-        const response = await authAPI.googleConfig();
-        clientId = String(response?.data?.data?.clientId || "").trim();
-        if (!clientId) throw new Error("Google Sign-In is not configured.");
-        googleClientIdRef.current = clientId;
-      }
-
-      await loadGoogleIdentityServices();
-
-      if (!window.google?.accounts?.oauth2) {
-        throw new Error("Google Sign-In is unavailable. Please try again.");
-      }
-
-      googleCodeClientRef.current = window.google.accounts.oauth2.initCodeClient({
-        client_id: clientId,
-        scope: "openid email profile",
-        ux_mode: "popup",
-        callback: async (response) => {
-          if (!response?.code) {
-            setGoogleLoading(false);
-            toast.error("Google sign-in was cancelled.");
-            return;
-          }
-
-          try {
-            const result = await authAPI.googleAuthCode(response.code);
-            const data = result?.data?.data;
-            if (!data?.token || !data?.user) throw new Error("Google authentication returned an invalid response.");
-            finishGoogleSignIn(data.token, data.user);
-          } catch (error) {
-            toast.error(error?.response?.data?.message || error?.message || "Google sign-in failed");
-          } finally {
-            setGoogleLoading(false);
-          }
-        },
-      });
-
-      googleCodeClientRef.current.requestCode();
-    } catch (error) {
+      const res = await authAPI.googleAuth(credential);
+      const { token, user } = res.data.data;
+      localStorage.setItem("token", token);
+      localStorage.setItem("user", JSON.stringify(user));
+      window.dispatchEvent(new Event("auth-changed"));
+      toast.success("Signed in with Google!");
+      skipNextPageLoader();
+      onClose();
+      if (user.role === "admin") navigate("/admin");
+      else navigate("/profile");
+    } catch (err) {
+      lastGoogleCredentialRef.current = null;
+      toast.error(getApiErrorMessage(err, "Google sign-in failed"));
+    } finally {
       setGoogleLoading(false);
-      toast.error(error?.response?.data?.message || error?.message || "Google sign-in failed");
     }
-  }, [finishGoogleSignIn, googleLoading, loadGoogleIdentityServices]);
+  }, [navigate, onClose]);
+
+  // Render only the Google button in the currently visible auth panel.
+  // Google injects an iframe when renderButton() runs, so rendering all mobile
+  // and desktop containers unnecessarily can trigger avoidable layout work.
+  const initGoogleButtons = useCallback(async () => {
+    if (!GOOGLE_CLIENT_ID) return;
+    await loadGSI();
+    if (!window.google?.accounts) return;
+
+    if (!googleInitializedRef.current) {
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: handleGoogleCredential,
+        ux_mode: "popup",
+      });
+      googleInitializedRef.current = true;
+    }
+
+    const activeMode = isSignUp ? "signup" : "login";
+    const containers = Array.from(
+      document.querySelectorAll(`[data-google-button="${activeMode}"]`)
+    );
+    const visibleContainer = containers.find((container) => {
+      const style = window.getComputedStyle(container);
+      return style.display !== "none" && style.visibility !== "hidden";
+    });
+
+    if (!visibleContainer) return;
+
+    visibleContainer.innerHTML = "";
+    window.google.accounts.id.renderButton(visibleContainer, {
+      type: "standard",
+      shape: "pill",
+      theme: "outline",
+      size: "large",
+      text: "continue_with",
+      width: 400,
+    });
+  }, [handleGoogleCredential, isSignUp, isForgotPassword]);
 
   useEffect(() => {
-    if (!isOpen) {
-      setGoogleLoading(false);
-      googleCodeClientRef.current = null;
-    }
-  }, [isOpen]);
+    if (!isOpen || !shouldRender) return;
+
+    // Let the modal finish its opening transition before Google injects its iframe.
+    let cancelled = false;
+
+    const timer = window.setTimeout(() => {
+      if (!cancelled) initGoogleButtons();
+    }, 500);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [isOpen, shouldRender, initGoogleButtons]);
 
   // ── GitHub OAuth (popup + postMessage) ───────────────────────────────────────
   // Mirrors the popup pattern used for the GitHub *integration* connect flow
@@ -356,6 +377,7 @@ export default function AuthModal({ isOpen, onClose }) {
     setLoginLoading(false);
     setSignupLoading(false);
     setGithubLoading(false);
+    lastGoogleCredentialRef.current = null;
     clearInterval(githubPopupWatcherRef.current);
     if (githubPopupRef.current && !githubPopupRef.current.closed) {
       githubPopupRef.current.close();
@@ -420,10 +442,7 @@ export default function AuthModal({ isOpen, onClose }) {
                 <p className="text-[#8b7355] text-sm mb-5">Join DevDrop today</p>
 
                 <div className="w-full flex flex-col gap-2.5 mb-4">
-                  <button type="button" onClick={handleGoogleSignIn} disabled={googleLoading || githubLoading} aria-label="Continue with Google" className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl border-2 border-[#8b7355]/20 bg-white text-[#3d342b] text-xs font-bold uppercase tracking-widest hover:bg-[#EAE3D8]/50 hover:border-[#8b7355]/30 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed">
-                    {googleLoading ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <GoogleIcon />}
-                    {googleLoading ? "Connecting…" : "Continue with Google"}
-                  </button>
+                  <div data-google-button="signup" className="w-full flex justify-center" />
                   <GithubAuthButton loading={githubLoading} disabled={githubLoading || googleLoading} onClick={handleGithubAuth} />
                 </div>
                 <Divider />
@@ -456,10 +475,7 @@ export default function AuthModal({ isOpen, onClose }) {
                 <p className="text-[#8b7355] text-sm mb-5">Please enter your credentials</p>
 
                 <div className="w-full flex flex-col gap-2.5 mb-4">
-                  <button type="button" onClick={handleGoogleSignIn} disabled={googleLoading || githubLoading} aria-label="Continue with Google" className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl border-2 border-[#8b7355]/20 bg-white text-[#3d342b] text-xs font-bold uppercase tracking-widest hover:bg-[#EAE3D8]/50 hover:border-[#8b7355]/30 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed">
-                    {googleLoading ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <GoogleIcon />}
-                    {googleLoading ? "Connecting…" : "Continue with Google"}
-                  </button>
+                  <div data-google-button="login" className="w-full flex justify-center" />
                   <GithubAuthButton loading={githubLoading} disabled={githubLoading || googleLoading} onClick={handleGithubAuth} />
                 </div>
                 <Divider />
@@ -495,10 +511,7 @@ export default function AuthModal({ isOpen, onClose }) {
 
               {/* Google + GitHub buttons */}
               <div className="w-full flex flex-col gap-2.5 mb-3">
-                <button type="button" onClick={handleGoogleSignIn} disabled={googleLoading || githubLoading} aria-label="Continue with Google" className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl border-2 border-[#8b7355]/20 bg-white text-[#3d342b] text-xs font-bold uppercase tracking-widest hover:bg-[#EAE3D8]/50 hover:border-[#8b7355]/30 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed">
-                  {googleLoading ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <GoogleIcon />}
-                  {googleLoading ? "Connecting…" : "Continue with Google"}
-                </button>
+                <div data-google-button="signup" className="w-full flex justify-center" />
                 <GithubAuthButton loading={githubLoading} disabled={githubLoading || googleLoading} onClick={handleGithubAuth} />
               </div>
               <Divider />
@@ -535,10 +548,7 @@ export default function AuthModal({ isOpen, onClose }) {
 
                 {/* Google + GitHub buttons */}
                 <div className="w-full flex flex-col gap-2.5 mb-3">
-                  <button type="button" onClick={handleGoogleSignIn} disabled={googleLoading || githubLoading} aria-label="Continue with Google" className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl border-2 border-[#8b7355]/20 bg-white text-[#3d342b] text-xs font-bold uppercase tracking-widest hover:bg-[#EAE3D8]/50 hover:border-[#8b7355]/30 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed">
-                  {googleLoading ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <GoogleIcon />}
-                  {googleLoading ? "Connecting…" : "Continue with Google"}
-                </button>
+                  <div data-google-button="login" className="w-full flex justify-center" />
                   <GithubAuthButton loading={githubLoading} disabled={githubLoading || googleLoading} onClick={handleGithubAuth} />
                 </div>
                 <Divider />
