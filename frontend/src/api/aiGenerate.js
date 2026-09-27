@@ -9,6 +9,7 @@ export const aiGenerateAPI = {
       userData: spec.userData,
       preferences: spec.preferences,
       assets: spec.assets,
+      projectId: spec.projectId,
       conversation: spec.conversation,
     }),
   getJob: (jobId) => api.get(`/ai-generate/jobs/${jobId}`),
