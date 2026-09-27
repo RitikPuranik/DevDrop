@@ -31,6 +31,12 @@ function buildDebugContext({ files, dependencies, architecture, requirements, de
 async function debugWebsite(input = {}, { onStage } = {}) {
  const files = { ...(input.files || {}) };
  let dependencies = input.dependencies || {};
+ if (input.files?.['/package.json']?.code) {
+   try {
+     const pkg = JSON.parse(input.files['/package.json'].code);
+     dependencies = { ...dependencies, ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+   } catch {}
+ }
  const architecture = input.architecture || { project: { framework: 'react-vite', language: 'javascript' }, files: [] };
  const requirements = input.requirements || {};
  const design = input.design || {};
@@ -114,7 +120,7 @@ async function runGeneration(input,{onStage}={}){
    if(result.value?.path!==fileContract.path||typeof result.value.code!=='string')throw new Error(`Code agent returned an invalid path/contract for ${fileContract.path}`);
    files[fileContract.path]={code:result.value.code};
  }const integrationResult=await stage('integration',()=>integrationAgent.run({requirements,design,architecture,files}),meta,onStage);files=mergeFiles(files,integrationResult.value?.files);let dependencies=architecture.dependencies||{};
- if(files['/package.json']?.code){try{dependencies={...dependencies,...(JSON.parse(files['/package.json'].code).dependencies||{})};}catch{}}
+ if(files['/package.json']?.code){try{const pkg=JSON.parse(files['/package.json'].code);dependencies={...dependencies,...(pkg.dependencies||{}),...(pkg.devDependencies||{})};}catch{}}
  for(let attempt=0;attempt<=MAX_BUILD_FIX_RETRIES;attempt+=1){
   const staticErrors=validateGeneratedFiles(files);
   if(staticErrors.length){console.warn('[VALIDATOR] static validation failed',{attempt,errors:staticErrors});if(attempt===MAX_BUILD_FIX_RETRIES)throw Object.assign(new Error(staticErrors.join(' | ')),{userMessage:`Generated code failed validation after the maximum repair attempts: ${staticErrors.join(' | ').slice(0,1200)}`,debugContext:buildDebugContext({files,dependencies,architecture,requirements,design,errors:staticErrors})});const debug=await stage(`debug:${attempt+1}`,()=>debugAgent.run({errors:staticErrors,affectedFiles:Object.keys(files),files,architecture,requirements,design,dependencies}),meta,onStage);for(const change of debug.value?.changes||[])if(change.path&&change.code)files[change.path]={code:change.code};continue;}
