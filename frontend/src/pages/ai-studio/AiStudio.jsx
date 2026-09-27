@@ -89,7 +89,7 @@ export default function AiStudio() {
     setGenMode(expectingEdit?'edit':'generate');
     setGenStatusLabel(expectingEdit?'Queuing edit…':'Queuing AI job…');
     try{
-      const projectId=aiStudioSession.projectId||await aiStudioSession.open(spec?.websiteType);
+      const projectId=aiStudioSession.getProjectId()||await aiStudioSession.open(spec?.websiteType);
       if(!projectId)throw new Error('AI Studio project could not be initialized.');
       const {data}=await aiGenerateAPI.generate(nextMessages,fileData,spec);const {jobId}=data?.data||{};if(!jobId)throw new Error('No jobId returned from server.');const result=await waitForJob(jobId);setMessages(prev=>[...prev,{role:'assistant',content:result.assistantMessage||'Done.'}]);setFileData({files:result.files,dependencies:result.dependencies});if(result.title)setAppTitle(result.title);
       // Persist the latest generated state -- this is what makes the
@@ -103,7 +103,7 @@ export default function AiStudio() {
     try{
       let resumeAsset=null;
       if(spec?.details?.resumeFile){
-        const projectId=aiStudioSession.projectId||await aiStudioSession.open('portfolio');
+        const projectId=aiStudioSession.getProjectId()||await aiStudioSession.open('portfolio');
         const uploaded=await aiStudioSession.uploadAsset(spec.details.resumeFile,projectId);
         resumeAsset=uploaded?.data?.data||null;
       }
@@ -123,7 +123,7 @@ export default function AiStudio() {
     const images = Array.isArray(details?.images) ? details.images : [];
     const videos = Array.isArray(details?.videos) ? details.videos : [];
     if (!images.length && !videos.length) return { images: [], videos: [] };
-    const projectId=aiStudioSession.projectId||await aiStudioSession.open(websiteType);
+    const projectId=aiStudioSession.getProjectId()||await aiStudioSession.open(websiteType);
     const upload = async (file, kind) => {
       const response = await aiStudioSession.uploadAsset(file,projectId);
       return { ...(response?.data?.data || {}), kind, originalName: file.name };
