@@ -56,14 +56,32 @@ async function getOwnedProject(projectId, userId) {
 
 /** Lightweight heartbeat — keeps the session (and project) marked alive. */
 async function heartbeat({ projectId, userId, sessionId }) {
-  const project = await getOwnedProject(projectId, userId);
-  if (!project) return null;
-  project.touchActivity();
-  const session = project.sessions.find((s) => s.sessionId === sessionId);
-  if (session) session.lastHeartbeatAt = now();
-  else project.sessions.push({ sessionId, lastHeartbeatAt: now() });
-  await project.save();
-  return project;
+  // Atomically update liveness so cleanup cannot claim this project between
+  // the liveness check and the heartbeat save.
+  const at = now();
+  const updated = await AIStudioProject.findOneAndUpdate(
+    {
+      _id: projectId,
+      userId,
+      status: { $in: [AI_STUDIO_PROJECT_STATUS.ACTIVE, AI_STUDIO_PROJECT_STATUS.INACTIVE] },
+    },
+    {
+      $set: {
+        lastActivityAt: at,
+        lastHeartbeatAt: at,
+        lastVisibleAt: at,
+        status: AI_STUDIO_PROJECT_STATUS.ACTIVE,
+      },
+    },
+    { new: true }
+  );
+  if (!updated) return null;
+
+  const session = updated.sessions.find((s) => s.sessionId === sessionId);
+  if (session) session.lastHeartbeatAt = at;
+  else updated.sessions.push({ sessionId, lastHeartbeatAt: at });
+  await updated.save();
+  return updated;
 }
 
 /** Records a meaningful action (generate, edit, asset change, download, ...). */
@@ -171,21 +189,23 @@ async function markInactiveProjects(threshold = INACTIVITY_THRESHOLD_MS) {
  * finish the job.
  */
 async function cleanupProject(projectId, { threshold = INACTIVITY_THRESHOLD_MS } = {}) {
-  const project = await AIStudioProject.findById(projectId);
-  if (!project || project.status === AI_STUDIO_PROJECT_STATUS.DELETED) return { skipped: true };
+  const cutoff = new Date(now().getTime() - threshold);
 
-  // Final re-check immediately before destructive work (Section 12): the
-  // user may have come back since this project was queued for cleanup.
-  if (!isAbandoned(project, threshold)) {
-    if (project.status === AI_STUDIO_PROJECT_STATUS.INACTIVE) {
-      project.status = AI_STUDIO_PROJECT_STATUS.ACTIVE;
-      await project.save();
-    }
-    return { skipped: true, reason: 'project became active again' };
-  }
+  // Claim cleanup atomically. A heartbeat that arrives before this query
+  // completes makes the query fail, so an active tab cannot be deleted by a
+  // stale cleanup snapshot.
+  const project = await AIStudioProject.findOneAndUpdate(
+    {
+      _id: projectId,
+      status: { $in: [AI_STUDIO_PROJECT_STATUS.INACTIVE, AI_STUDIO_PROJECT_STATUS.ACTIVE] },
+      lastActivityAt: { $lte: cutoff },
+      sessions: { $not: { $elemMatch: { lastHeartbeatAt: { $gt: cutoff } } } },
+    },
+    { $set: { status: AI_STUDIO_PROJECT_STATUS.CLEANING } },
+    { new: true }
+  );
 
-  project.status = AI_STUDIO_PROJECT_STATUS.CLEANING;
-  await project.save();
+  if (!project) return { skipped: true, reason: 'project became active again' };
 
   try {
     await storage.deleteProjectStorage(project._id);
