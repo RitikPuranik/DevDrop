@@ -21,7 +21,6 @@ router.post('/login', authLimiter, [body('emailOrPhone').trim().notEmpty().withM
 
 // Google OAuth
 router.post('/google', authLimiter, [body('credential').notEmpty().withMessage('Google credential is required'), handleValidationErrors], authController.googleAuth);
-router.post('/google', authLimiter, [body('credential').notEmpty().withMessage('Google credential is required'), handleValidationErrors], authController.googleAuth);
 
 // GitHub OAuth login is intentionally separate from the GitHub repository
 // integration flow under /api/github.
