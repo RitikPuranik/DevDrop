@@ -295,7 +295,6 @@ export default function AuthModal({ isOpen, onClose }) {
     setLoginLoading(false);
     setSignupLoading(false);
     setGithubLoading(false);
-    lastGoogleCredentialRef.current = null;
     clearInterval(githubPopupWatcherRef.current);
     if (githubPopupRef.current && !githubPopupRef.current.closed) {
       githubPopupRef.current.close();
