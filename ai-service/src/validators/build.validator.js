@@ -54,8 +54,23 @@ const DEFAULT_MAIN_JSX = 'import React from "react"; import { createRoot } from 
 function withScaffold(files, dependencies) {
   const out = { ...(files || {}) };
   if (!out['/package.json']) {
-    const pkg = { ...DEFAULT_PACKAGE, dependencies: { ...DEFAULT_PACKAGE.dependencies, ...dependencies } };
+    const pkg = {
+      ...DEFAULT_PACKAGE,
+      dependencies: { ...DEFAULT_PACKAGE.dependencies, ...dependencies },
+      devDependencies: { ...DEFAULT_PACKAGE.devDependencies },
+    };
     out['/package.json'] = { code: JSON.stringify(pkg, null, 2) };
+  } else {
+    try {
+      const pkg = JSON.parse(out['/package.json'].code);
+      pkg.dependencies = { ...DEFAULT_PACKAGE.dependencies, ...(pkg.dependencies || {}), ...dependencies };
+      pkg.devDependencies = { ...DEFAULT_PACKAGE.devDependencies, ...(pkg.devDependencies || {}) };
+      if (!pkg.scripts?.build) pkg.scripts = { ...(pkg.scripts || {}), build: DEFAULT_PACKAGE.scripts.build };
+      if (!pkg.type) pkg.type = DEFAULT_PACKAGE.type;
+      out['/package.json'] = { code: JSON.stringify(pkg, null, 2) };
+    } catch {
+      // Static validation owns malformed package.json errors.
+    }
   }
   if (!out['/index.html']) out['/index.html'] = { code: DEFAULT_INDEX_HTML };
   if (!out['/main.jsx']) out['/main.jsx'] = { code: DEFAULT_MAIN_JSX };
