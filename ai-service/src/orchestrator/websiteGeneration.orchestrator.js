@@ -13,7 +13,7 @@ const MAX_BUILD_FIX_RETRIES=Math.max(0,Number.parseInt(process.env.MAX_BUILD_FIX
 // (requirements -> design -> architecture -> code-gen -> integration ->
 // validation/debug loop). Replaces the old per-agent/per-stage timeouts.
 const GENERATION_TIMEOUT_MS=Number.parseInt(process.env.WEBSITE_GENERATION_TIMEOUT_MS||'900000',10);
-function normalizeInput(input){const messages=Array.isArray(input.messages)?input.messages:[];const lastUser=[...messages].reverse().find(m=>m?.role==='user')?.content||'';return {websiteType:input.websiteType||input.type||'portfolio',userData:input.userData||input.portfolioData||{},preferences:input.preferences||{},assets:input.assets||[],conversation:input.conversation||messages,legacyPrompt:lastUser,fileData:input.fileData||null};}
+function normalizeInput(input){const messages=Array.isArray(input.messages)?input.messages:[];const lastUser=[...messages].reverse().find(m=>m?.role==='user')?.content||'';return {websiteType:input.websiteType||input.type||'portfolio',userData:input.userData||input.portfolioData||{},preferences:input.preferences||{},assets:input.assets||[],media:input.media||[],conversation:input.conversation||messages,legacyPrompt:lastUser,fileData:input.fileData||null};}
 function mergeFiles(base,changes){const out={...base};for(const[p,obj]of Object.entries(changes||{}))if(obj?.code)out[p]={code:obj.code};return out;}
 function stage(name,fn,meta,onStage){return runStage(name,fn,meta,onStage);}
 async function generateWebsite(input,options={}){
@@ -22,13 +22,13 @@ async function generateWebsite(input,options={}){
 async function runGeneration(input,{onStage}={}){
  const meta=[];console.log('[ORCHESTRATOR] Starting generation');const normalized=normalizeInput(input);
  const requirementsResult=await stage('requirements',()=>requirementsAgent.run(normalized),meta,onStage);const requirements=validateRequirements(requirementsResult.value);
- const designResult=await stage('design',()=>designAgent.run({requirements,preferences:normalized.preferences,websiteType:normalized.websiteType}),meta,onStage);const design=validateDesign(designResult.value);
+ const designResult=await stage('design',()=>designAgent.run({requirements,preferences:normalized.preferences,websiteType:normalized.websiteType,media:normalized.media}),meta,onStage);const design=validateDesign(designResult.value);
  const architectureResult=await stage('architecture',()=>architectureAgent.run({requirements,design}),meta,onStage);const architecture=validateArchitecture(architectureResult.value);
  const ordered=[...architecture.files].sort((a,b)=>{const rank=f=>f.path==='/package.json'?0:f.path==='/index.html'?1:f.path==='/main.jsx'?2:f.path==='/App.js'?3:/data|content/i.test(f.path)?4:/component/i.test(f.type||'')?5:6;return rank(a)-rank(b);});
  let files={};
  for(const fileContract of ordered){
    const relatedContracts=architecture.files.filter(f=>f.path!==fileContract.path&&(fileContract.imports||[]).includes(f.path));
-   const result=await stage(`code:${fileContract.path}`,()=>codeGenerationAgent.run({fileContract,relatedContracts,requirements,design,userData:requirements.userData}),meta,onStage);
+   const result=await stage(`code:${fileContract.path}`,()=>codeGenerationAgent.run({fileContract,relatedContracts,requirements,design,userData:requirements.userData,media:normalized.media}),meta,onStage);
    if(result.value?.path!==fileContract.path||typeof result.value.code!=='string')throw new Error(`Code agent returned an invalid path/contract for ${fileContract.path}`);
    files[fileContract.path]={code:result.value.code};
  }const integrationResult=await stage('integration',()=>integrationAgent.run({requirements,design,architecture,files}),meta,onStage);files=mergeFiles(files,integrationResult.value?.files);let dependencies=architecture.dependencies||{};
