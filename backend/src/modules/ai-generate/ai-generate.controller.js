@@ -58,3 +58,19 @@ exports.getJob = async (req,res) => {
     res.status(error.statusCode||500).json({success:false,message:error.userMessage||'Failed to check AI generation status'});
   }
 };
+
+exports.debugRetry = async (req, res) => {
+  try {
+    const originalJobId = req.params.id;
+    if (!jobOwners.isOwner(originalJobId, req.userId)) return res.status(404).json({ success:false, message:'Job not found' });
+    const original = await aiServiceClient.getJob(originalJobId);
+    if (!original || original.status !== 'failed' || !original.debugAvailable) {
+      return res.status(404).json({ success:false, message:'No debug retry is available for this job' });
+    }
+    const debugJobId = await aiServiceClient.debugRetry(originalJobId);
+    jobOwners.record(debugJobId, req.userId);
+    res.status(202).json({ success:true, data:{jobId:debugJobId,status:'queued',mode:'debug'} });
+  } catch(error) {
+    res.status(error.statusCode||500).json({success:false,message:error.userMessage||'Failed to start debug retry'});
+  }
+};
