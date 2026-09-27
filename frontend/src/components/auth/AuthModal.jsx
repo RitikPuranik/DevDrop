@@ -60,6 +60,8 @@ export default function AuthModal({ isOpen, onClose }) {
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const googleCodeClientRef = useRef(null);
+  const googleClientIdRef = useRef(null);
   const [githubLoading, setGithubLoading] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [signupLoading, setSignupLoading] = useState(false);
@@ -74,42 +76,101 @@ export default function AuthModal({ isOpen, onClose }) {
   const handleSignupChange = (e) => setSignupData({ ...signupData, [e.target.name]: e.target.value });
   const skipNextPageLoader = () => sessionStorage.setItem(SKIP_LOADER_SESSION_KEY, "true");
 
-  // ── Google OAuth popup ─────────────────────────────────────────────────────
+  // ── Google OAuth (official Google Identity Services code popup) ─────────────
   const finishGoogleSignIn = useCallback((token, user) => {
-    localStorage.setItem('token', token);
-    localStorage.setItem('user', JSON.stringify(user));
-    window.dispatchEvent(new Event('auth-changed'));
-    toast.success('Signed in with Google!');
+    localStorage.setItem("token", token);
+    localStorage.setItem("user", JSON.stringify(user));
+    window.dispatchEvent(new Event("auth-changed"));
+    toast.success("Signed in with Google!");
     skipNextPageLoader();
     onClose();
-    if (user.role === 'admin') navigate('/admin');
-    else navigate('/profile');
+    if (user.role === "admin") navigate("/admin");
+    else navigate("/profile");
   }, [navigate, onClose]);
 
-  const handleGoogleSignIn = useCallback(() => {
-    if (googleLoading) return;
-    const popup = window.open(authAPI.googleAuthUrl(), 'devdrop-google-login', 'width=520,height=650,left=200,top=100,resizable=yes,scrollbars=yes');
-    if (!popup) { toast.error('Please allow popups for DevDrop to continue with Google.'); return; }
-    setGoogleLoading(true);
-    const onMessage = (event) => {
-      if (event.origin !== window.location.origin) return;
-      if (event.data?.type === 'devdrop-google-auth-success') {
-        window.removeEventListener('message', onMessage);
-        setGoogleLoading(false);
-        try { if (!popup.closed) popup.close(); } catch {}
-        finishGoogleSignIn(event.data.token, event.data.user);
-      } else if (event.data?.type === 'devdrop-google-auth-error') {
-        window.removeEventListener('message', onMessage);
-        setGoogleLoading(false);
-        try { if (!popup.closed) popup.close(); } catch {}
-        toast.error(event.data.message || 'Google sign-in failed');
+  const loadGoogleIdentityServices = useCallback(() => {
+    if (window.google?.accounts?.oauth2) return Promise.resolve();
+
+    if (window.__devdropGoogleScriptPromise) return window.__devdropGoogleScriptPromise;
+
+    window.__devdropGoogleScriptPromise = new Promise((resolve, reject) => {
+      const existing = document.querySelector('script[data-devdrop-google-gsi]');
+      if (existing) {
+        existing.addEventListener("load", resolve, { once: true });
+        existing.addEventListener("error", () => reject(new Error("Google Sign-In could not load.")), { once: true });
+        return;
       }
-    };
-    window.addEventListener('message', onMessage);
-    const timer = window.setInterval(() => {
-      if (popup.closed) { window.clearInterval(timer); window.removeEventListener('message', onMessage); setGoogleLoading(false); }
-    }, 500);
-  }, [finishGoogleSignIn, googleLoading]);
+      const script = document.createElement("script");
+      script.src = "https://accounts.google.com/gsi/client";
+      script.async = true;
+      script.defer = true;
+      script.dataset.devdopGoogleGsi = "true";
+      script.onload = resolve;
+      script.onerror = () => reject(new Error("Google Sign-In could not load."));
+      document.head.appendChild(script);
+    });
+
+    return window.__devdropGoogleScriptPromise;
+  }, []);
+
+  const handleGoogleSignIn = useCallback(async () => {
+    if (googleLoading) return;
+
+    try {
+      setGoogleLoading(true);
+      let clientId = googleClientIdRef.current;
+
+      if (!clientId) {
+        const response = await authAPI.googleConfig();
+        clientId = String(response?.data?.data?.clientId || "").trim();
+        if (!clientId) throw new Error("Google Sign-In is not configured.");
+        googleClientIdRef.current = clientId;
+      }
+
+      await loadGoogleIdentityServices();
+
+      if (!window.google?.accounts?.oauth2) {
+        throw new Error("Google Sign-In is unavailable. Please try again.");
+      }
+
+      googleCodeClientRef.current = window.google.accounts.oauth2.initCodeClient({
+        client_id: clientId,
+        scope: "openid email profile",
+        ux_mode: "popup",
+        callback: async (response) => {
+          if (!response?.code) {
+            setGoogleLoading(false);
+            toast.error("Google sign-in was cancelled.");
+            return;
+          }
+
+          try {
+            const result = await authAPI.googleAuthCode(response.code);
+            const data = result?.data?.data;
+            if (!data?.token || !data?.user) throw new Error("Google authentication returned an invalid response.");
+            finishGoogleSignIn(data.token, data.user);
+          } catch (error) {
+            toast.error(error?.response?.data?.message || error?.message || "Google sign-in failed");
+          } finally {
+            setGoogleLoading(false);
+          }
+        },
+      });
+
+      googleCodeClientRef.current.requestCode();
+    } catch (error) {
+      setGoogleLoading(false);
+      toast.error(error?.response?.data?.message || error?.message || "Google sign-in failed");
+    }
+  }, [finishGoogleSignIn, googleLoading, loadGoogleIdentityServices]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setGoogleLoading(false);
+      googleCodeClientRef.current = null;
+    }
+  }, [isOpen]);
+
   // ── GitHub OAuth (popup + postMessage) ───────────────────────────────────────
   // Mirrors the popup pattern used for the GitHub *integration* connect flow
   // (components/github/PushToGithubModal.jsx) — separate message types
