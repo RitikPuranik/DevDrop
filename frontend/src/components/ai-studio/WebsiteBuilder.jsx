@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Check, Sparkles, X } from 'lucide-react';
+import { ArrowLeft, Check, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 import StepShell from './StepShell';
 import DesignPreferencesStep from './DesignPreferencesStep';
