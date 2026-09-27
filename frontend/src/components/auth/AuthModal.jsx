@@ -183,18 +183,21 @@ export default function AuthModal({ isOpen, onClose }) {
       document.querySelectorAll(`[data-google-button="${activeMode}"]`)
     );
 
-    // The mount div is intentionally empty before GSI renders its iframe, so
-    // its own width/height is zero at this point. Do not use a bounding-box
-    // size check. The hidden mobile/desktop layout uses display:none, which
-    // is reliably detectable through offsetParent.
-    const visibleContainer = googleContainers.find((container) => {
-      return container.offsetParent !== null;
-    });
+    // The outer container owns the DevDrop-styled button. The actual Google
+    // iframe is rendered into its child mount and made transparent, so the
+    // user sees the same structure as GitHub while the click still goes to
+    // Google's real authentication control.
+    const visibleContainer = googleContainers.find(
+      (container) => container.offsetParent !== null
+    );
 
     if (!visibleContainer) {
       console.warn('Google Sign-In mount point is not visible.');
       return;
     }
+
+    const gsiMount = visibleContainer.querySelector('[data-google-gsi-mount]');
+    if (!gsiMount) return;
 
     // The container belongs to the active auth panel, so no synchronous
     // geometry/style read is needed. Let the browser finish its current paint
@@ -207,12 +210,12 @@ export default function AuthModal({ isOpen, onClose }) {
       window.requestAnimationFrame(() => window.requestAnimationFrame(resolve));
     });
 
-    if (!document.contains(visibleContainer)) return;
+    if (!document.contains(gsiMount)) return;
 
-    visibleContainer.replaceChildren();
-    window.google.accounts.id.renderButton(visibleContainer, {
+    gsiMount.replaceChildren();
+    window.google.accounts.id.renderButton(gsiMount, {
       type: "standard",
-      shape: "pill",
+      shape: "rectangular",
       theme: "outline",
       size: "large",
       text: "continue_with",
@@ -486,7 +489,18 @@ export default function AuthModal({ isOpen, onClose }) {
                 <p className="text-[#8b7355] text-sm mb-5">Join DevDrop today</p>
 
                 <div className="w-full flex flex-col gap-2.5 mb-4">
-                  <div data-google-button="signup" className="w-full flex justify-center" />
+                  <div data-google-button="signup" className="relative w-full h-[50px]">
+                    <button
+                      type="button"
+                      disabled={googleLoading || githubLoading}
+                      aria-label="Continue with Google"
+                      className="absolute inset-0 z-0 w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl border-2 border-[#8b7355]/20 bg-white text-[#3d342b] text-xs font-bold uppercase tracking-widest hover:bg-[#EAE3D8]/50 hover:border-[#8b7355]/30 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                    >
+                      {googleLoading ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <GoogleIcon />}
+                      {googleLoading ? "Connecting…" : "Continue with Google"}
+                    </button>
+                    <div data-google-gsi-mount className="absolute inset-0 z-10 overflow-hidden opacity-0" aria-hidden="true" />
+                  </div>
                   <GithubAuthButton loading={githubLoading} disabled={githubLoading || googleLoading} onClick={handleGithubAuth} />
                 </div>
                 <Divider />
@@ -519,7 +533,18 @@ export default function AuthModal({ isOpen, onClose }) {
                 <p className="text-[#8b7355] text-sm mb-5">Please enter your credentials</p>
 
                 <div className="w-full flex flex-col gap-2.5 mb-4">
-                  <div data-google-button="login" className="w-full flex justify-center" />
+                  <div data-google-button="login" className="relative w-full h-[50px]">
+                    <button
+                      type="button"
+                      disabled={googleLoading || githubLoading}
+                      aria-label="Continue with Google"
+                      className="absolute inset-0 z-0 w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl border-2 border-[#8b7355]/20 bg-white text-[#3d342b] text-xs font-bold uppercase tracking-widest hover:bg-[#EAE3D8]/50 hover:border-[#8b7355]/30 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                    >
+                      {googleLoading ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <GoogleIcon />}
+                      {googleLoading ? "Connecting…" : "Continue with Google"}
+                    </button>
+                    <div data-google-gsi-mount className="absolute inset-0 z-10 overflow-hidden opacity-0" aria-hidden="true" />
+                  </div>
                   <GithubAuthButton loading={githubLoading} disabled={githubLoading || googleLoading} onClick={handleGithubAuth} />
                 </div>
                 <Divider />
