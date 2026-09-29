@@ -132,17 +132,6 @@ const login = async (req, res) => {
 // GOOGLE OAUTH
 // ─────────────────────────────────────────
 
-// Google Client IDs are public browser configuration. Expose the backend's
-// configured ID so the Vite frontend does not silently lose Google Sign-In
-// when VITE_GOOGLE_CLIENT_ID is missing from a deployment environment.
-const googleConfig = async (req, res) => {
-  const clientId = String(process.env.GOOGLE_CLIENT_ID || '').trim();
-  if (!clientId) {
-    return res.status(503).json({ success: false, message: 'Google Sign-In is not configured on the server.' });
-  }
-  return res.json({ success: true, data: { clientId } });
-};
-
 const googleAuth = async (req, res) => {
   try {
     const { credential } = req.body;
@@ -565,7 +554,6 @@ const resetPassword = async (req, res) => {
 module.exports = {
   signup,
   login,
-  googleConfig,
   googleAuth,
   githubAuthRedirect,
   githubAuthCallback,

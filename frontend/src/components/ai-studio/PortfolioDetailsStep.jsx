@@ -385,6 +385,49 @@ function Repeatable({ label, items, onChange, fields, addLabel }) {
   );
 }
 
+
+function MediaUpload({ images = [], videos = [], onChangeImages, onChangeVideos }) {
+  const add = (files, current, setter, kind) => {
+    const accepted = Array.from(files || []).filter((file) => {
+      if (kind === 'image') return file.type.startsWith('image/');
+      return file.type.startsWith('video/');
+    });
+    const next = [...current];
+    accepted.forEach((file) => {
+      if (!next.some((existing) => existing.name === file.name && existing.size === file.size)) next.push(file);
+    });
+    setter(next);
+  };
+  const remove = (list, index, setter) => setter(list.filter((_, i) => i !== index));
+  const Picker = ({ kind, list, setter }) => (
+    <div className="rounded-xl border border-white/8 bg-white/[0.02] p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <label className="text-[13px] font-semibold text-[#c9a876]">{kind === 'image' ? 'Images' : 'Videos'} <span className="font-normal text-white/30">(optional, multiple)</span></label>
+        <span className="text-[10px] text-white/25">{list.length} selected</span>
+      </div>
+      <input type="file" multiple accept={kind === 'image' ? 'image/*' : 'video/*'} onChange={(e) => { add(e.target.files, list, setter, kind); e.target.value = ''; }} className="block w-full cursor-pointer rounded-lg border border-white/10 bg-white/[0.03] p-2 text-xs text-white/50 file:mr-3 file:rounded-md file:border-0 file:bg-violet-600 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white" />
+      <div className="mt-3 space-y-2">
+        {list.map((file, index) => (
+          <div key={file.name + file.size + index} className="flex items-center gap-3 rounded-lg border border-white/8 bg-black/20 px-3 py-2">
+            <span className="min-w-0 flex-1 truncate text-xs text-white/70">{file.name}</span>
+            <span className="text-[10px] text-white/25">{(file.size / 1024 / 1024).toFixed(1)} MB</span>
+            <button type="button" onClick={() => remove(list, index, setter)} className="text-white/30 hover:text-white" aria-label={`Remove ${file.name}`}><X size={14} /></button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+  return (
+    <section>
+      <div className="mb-3"><p className="text-[13px] font-semibold text-[#c9a876]">Media assets</p><p className="text-[11px] text-white/35">Optional. Add multiple images and/or videos for the AI to use in the website.</p></div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Picker kind="image" list={images} setter={onChangeImages} />
+        <Picker kind="video" list={videos} setter={onChangeVideos} />
+      </div>
+    </section>
+  );
+}
+
 /* ─── Main step ──────────────────────────────────────────────── */
 export default function PortfolioDetailsStep({ details, onChange, onBack, onNext }) {
   const [errors, setErrors] = useState({});
@@ -447,10 +490,26 @@ export default function PortfolioDetailsStep({ details, onChange, onBack, onNext
           </div>
         </div>
 
+        <MediaUpload images={details.images || []} videos={details.videos || []} onChangeImages={(images) => update({ images })} onChangeVideos={(videos) => update({ videos })} />
+
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Main CTA text" value={details.ctaText} onChange={(value) => update({ ctaText: value })} placeholder="Let's work together" />
           <Field label="Main CTA link" value={details.ctaLink} onChange={(value) => update({ ctaLink: value })} placeholder="mailto:you@example.com or https://..." />
         </div>
+
+        <section className="rounded-2xl border border-violet-500/20 bg-violet-500/[0.04] p-5">
+          <label className="mb-2 block text-[13px] font-semibold text-violet-300">
+            Anything else you want? <span className="font-normal text-white/35">(optional)</span>
+          </label>
+          <textarea
+            value={details.specialRequests || ''}
+            onChange={(e) => update({ specialRequests: e.target.value })}
+            rows={5}
+            placeholder="Tell the AI about any specific section, layout, animation, wording, reference, feature, or personal preference you want."
+            className="w-full rounded-xl border border-violet-500/20 bg-black/20 px-4 py-3 text-sm focus:border-violet-500/50 focus:outline-none"
+          />
+          <p className="mt-2 text-[11px] text-white/35">Optional. Leave this empty if you have no extra instructions.</p>
+        </section>
       </div>
 
       <div className="mt-8 flex gap-3">

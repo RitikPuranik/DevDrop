@@ -54,8 +54,23 @@ const DEFAULT_MAIN_JSX = 'import React from "react"; import { createRoot } from 
 function withScaffold(files, dependencies) {
   const out = { ...(files || {}) };
   if (!out['/package.json']) {
-    const pkg = { ...DEFAULT_PACKAGE, dependencies: { ...DEFAULT_PACKAGE.dependencies, ...dependencies } };
+    const pkg = {
+      ...DEFAULT_PACKAGE,
+      dependencies: { ...DEFAULT_PACKAGE.dependencies, ...dependencies },
+      devDependencies: { ...DEFAULT_PACKAGE.devDependencies },
+    };
     out['/package.json'] = { code: JSON.stringify(pkg, null, 2) };
+  } else {
+    try {
+      const pkg = JSON.parse(out['/package.json'].code);
+      pkg.dependencies = { ...DEFAULT_PACKAGE.dependencies, ...(pkg.dependencies || {}), ...dependencies };
+      pkg.devDependencies = { ...DEFAULT_PACKAGE.devDependencies, ...(pkg.devDependencies || {}) };
+      if (!pkg.scripts?.build) pkg.scripts = { ...(pkg.scripts || {}), build: DEFAULT_PACKAGE.scripts.build };
+      if (!pkg.type) pkg.type = DEFAULT_PACKAGE.type;
+      out['/package.json'] = { code: JSON.stringify(pkg, null, 2) };
+    } catch {
+      // Static validation owns malformed package.json errors.
+    }
   }
   if (!out['/index.html']) out['/index.html'] = { code: DEFAULT_INDEX_HTML };
   if (!out['/main.jsx']) out['/main.jsx'] = { code: DEFAULT_MAIN_JSX };
@@ -74,8 +89,26 @@ async function run({ files, dependencies = {} }) {
       fs.mkdirSync(path.dirname(target), { recursive: true });
       fs.writeFileSync(target, obj.code, 'utf8');
     }
-    const spawnOpts = { cwd: dir, timeout: BUILD_TIMEOUT_MS, maxBuffer: 5 * 1024 * 1024, shell: process.platform === 'win32' };
-    await execFileAsync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['install', '--no-audit', '--no-fund'], spawnOpts);
+    // The validator builds the generated project itself, so devDependencies
+    // are required even when the AI-service process is running in a production
+    // environment. Without this, Vite and @vitejs/plugin-react can be omitted
+    // by npm and the build fails with "vite: not found".
+    const spawnOpts = {
+      cwd: dir,
+      timeout: BUILD_TIMEOUT_MS,
+      maxBuffer: 5 * 1024 * 1024,
+      shell: process.platform === 'win32',
+      env: {
+        ...process.env,
+        NODE_ENV: 'development',
+        npm_config_production: 'false',
+      },
+    };
+    await execFileAsync(
+      process.platform === 'win32' ? 'npm.cmd' : 'npm',
+      ['install', '--no-audit', '--no-fund', '--include=dev'],
+      spawnOpts
+    );
     const result = await execFileAsync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'build'], spawnOpts);
     return { success: true, errors: [], warnings: result.stderr ? result.stderr.split('\n').filter(Boolean).slice(0, 20) : [], durationMs: Date.now() - started };
   } catch (error) {

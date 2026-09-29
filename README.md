@@ -386,3 +386,14 @@ git commit -m "feat: add your feature"
 **Ritik Puranik**
 
 GitHub: https://github.com/RitikPuranik
+
+## ⚙️ Worker Service
+
+Background and scheduled jobs (auction processing, Supabase cleanup, AI Studio cleanup, backups) run in a separate service in `worker/`, not in the backend. The backend talks to it over HMAC-signed internal webhooks (`POST /internal/webhooks/tasks` on the worker, `POST /internal/webhooks/task-result` on the backend), both secured by `INTERNAL_WEBHOOK_SECRET`.
+
+```bash
+cd worker
+cp .env.example .env   # only the variables the worker needs
+npm install            # also installs backend dependencies, which the worker reuses
+npm start              # GET /health on PORT (default 4000)
+```

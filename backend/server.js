@@ -20,38 +20,7 @@ socket.init(httpServer, { allowedOrigins });
 const startServer = async () => {
   await connectDB();
 
-  // Start auction cron jobs
-  try {
-    const auctionCron = require('./src/services/auction.cron.service');
-    auctionCron.startAuctionCron();
-    console.log('✅ Auction cron jobs started');
-  } catch (e) {
-    console.warn('⚠️  Auction cron not started:', e.message);
-  }
-
-  try {
-    const supabaseCleanupCron = require('./src/services/supabase.cleanup.cron.service');
-    supabaseCleanupCron.startSupabaseCleanupCron();
-    console.log('✅ Supabase cleanup cron jobs started');
-  } catch (e) {
-    console.warn('⚠️  Supabase cleanup cron not started:', e.message);
-  }
-
-  try {
-    const backupCron = require('./src/services/backup.cron.service');
-    backupCron.startBackupCron();
-    console.log('✅ Backup cron jobs started');
-  } catch (e) {
-    console.warn('⚠️  Backup cron not started:', e.message);
-  }
-
-  try {
-    const aiStudioCleanupCron = require('./src/services/ai-studio/aiStudio.cleanup.cron.service');
-    aiStudioCleanupCron.startAiStudioCleanupCron();
-    console.log('✅ AI Studio cleanup cron jobs started');
-  } catch (e) {
-    console.warn('⚠️  AI Studio cleanup cron not started:', e.message);
-  }
+  // Background/scheduled jobs (auctions, backups, cleanups) run in the Worker service (../worker).
 
   httpServer.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);

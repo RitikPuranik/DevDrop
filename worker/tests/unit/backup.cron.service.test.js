@@ -1,7 +1,7 @@
-jest.mock('../../../src/services/backup/backup.orchestrator');
+jest.mock('../../../backend/src/services/backup/backup.orchestrator');
 
-const orchestrator = require('../../../src/services/backup/backup.orchestrator');
-const { runScheduledBackup, startBackupCron } = require('../../../src/services/backup.cron.service');
+const orchestrator = require('../../../backend/src/services/backup/backup.orchestrator');
+const { runScheduledBackup, startBackupCron } = require('../../src/jobs/backup.cron.service');
 
 const ORIGINAL_ENV = process.env;
 

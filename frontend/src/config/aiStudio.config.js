@@ -13,21 +13,21 @@ export const WEBSITE_TYPES = [
     title: 'E-commerce',
     description: 'Product catalog, shopping experience, cart and conversion-focused storefront.',
     icon: ShoppingBag,
-    enabled: false,
+    enabled: true,
   },
   {
     id: 'blog',
     title: 'Blog / Magazine',
     description: 'Editorial website for articles, stories, news and long-form content.',
     icon: Newspaper,
-    enabled: false,
+    enabled: true,
   },
   {
     id: 'landing',
     title: 'Landing Page',
     description: 'Focused marketing page for a product, service, startup or campaign.',
     icon: LayoutTemplate,
-    enabled: false,
+    enabled: true,
   },
 ];
 

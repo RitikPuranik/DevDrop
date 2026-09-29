@@ -25,9 +25,6 @@ export const authAPI = {
       password: data.password,
     }),
 
-  googleConfig: () =>
-    API.get("/google/config"),
-
   googleAuth: (credential) =>
     API.post("/google", { credential }),
 

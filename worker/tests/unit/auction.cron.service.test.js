@@ -1,9 +1,9 @@
-jest.mock('../../../src/modules/auction/auction.model');
-jest.mock('../../../src/modules/auction/bid.model');
+jest.mock('../../../backend/src/modules/auction/auction.model');
+jest.mock('../../../backend/src/modules/auction/bid.model');
 
-const Auction = require('../../../src/modules/auction/auction.model');
-const Bid = require('../../../src/modules/auction/bid.model');
-const { processEndedAuctions, startAuctionCron } = require('../../../src/services/auction.cron.service');
+const Auction = require('../../../backend/src/modules/auction/auction.model');
+const Bid = require('../../../backend/src/modules/auction/bid.model');
+const { processEndedAuctions, startAuctionCron } = require('../../src/jobs/auction.cron.service');
 
 // Builds a chainable populate().populate() query mock resolving to `result`.
 const populateChain = (result) => {

@@ -10,3 +10,4 @@ process.env.TAX_PERCENTAGE = '18';
 process.env.EXCLUSIVE_COMMISSION_PERCENTAGE = '20';
 process.env.AI_SERVICE_URL = 'http://ai-service.test.internal';
 process.env.AI_SERVICE_TOKEN = 'test-ai-service-token';
+process.env.INTERNAL_WEBHOOK_SECRET = 'test-internal-webhook-secret';

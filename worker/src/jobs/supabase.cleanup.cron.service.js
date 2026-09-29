@@ -1,5 +1,5 @@
 const cron = require('node-cron');
-const { runCleanup } = require('../../scripts/cleanup-supabase-template-assets');
+const { runCleanup } = require('../../../backend/scripts/cleanup-supabase-template-assets');
 
 let cleanupRunning = false;
 
@@ -24,8 +24,9 @@ const runScheduledCleanup = async () => {
 
 const startSupabaseCleanupCron = () => {
   const schedule = process.env.SUPABASE_CLEANUP_CRON || '0 3 * * 0';
-  cron.schedule(schedule, runScheduledCleanup, { timezone: process.env.CRON_TIMEZONE || 'UTC' });
+  const task = cron.schedule(schedule, runScheduledCleanup, { timezone: process.env.CRON_TIMEZONE || 'UTC' });
   console.log(`✅ Supabase cleanup cron started (${schedule})`);
+  return { stop: () => task.stop() };
 };
 
 module.exports = { startSupabaseCleanupCron, runScheduledCleanup };

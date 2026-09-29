@@ -374,7 +374,18 @@ async function callGemini({ system, input, timeout = DEFAULT_TIMEOUT_MS }) {
         const response = await axios.post(
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
           {
-            contents: [{ role: 'user', parts: [{ text: JSON.stringify(input) }] }],
+            contents: [{
+              role: 'user',
+              parts: [
+                { text: JSON.stringify((({ media, ...rest }) => rest)(input || {})) },
+                ...((input?.media || []).map((asset) => ({
+                  inlineData: {
+                    mimeType: asset.mimeType,
+                    data: asset.data,
+                  },
+                }))),
+              ],
+            }],
             systemInstruction: { parts: [{ text: system }] },
             generationConfig: {
               responseMimeType: 'application/json',

@@ -1,5 +1,5 @@
 const { randomUUID } = require('crypto');
-const { generateWebsite } = require('./orchestrator/websiteGeneration.orchestrator');
+const { generateWebsite, debugWebsite } = require('./orchestrator/websiteGeneration.orchestrator');
 const { editWebsite } = require('./orchestrator/websiteEditing.orchestrator');
 const webhook = require('./webhook.service');
 
@@ -14,7 +14,7 @@ async function runJob(id) {
   const job = jobs.get(id); if (!job) return;
   job.status = 'processing'; job.currentStage = 'starting';
   try {
-    const run = job.payload.mode === 'edit' ? editWebsite : generateWebsite;
+    const run = job.payload.mode === 'debug' ? debugWebsite : (job.payload.mode === 'edit' ? editWebsite : generateWebsite);
     const result = await run(job.payload, {
       onStage: (stage, status, details) => {
         job.currentStage = stage; job.stageStatus = status;
@@ -27,15 +27,22 @@ async function runJob(id) {
     job.status = 'completed'; job.result = result; job.error = null; job.currentStage = 'completed';
     webhook.notifyComplete(id, job);
   } catch (error) {
-    job.status = 'failed'; job.error = error.userMessage || error.message || 'AI generation failed'; job.currentStage = 'failed';
+    job.status = 'failed'; job.error = error.userMessage || error.message || 'AI generation failed'; job.currentStage = 'failed'; if (error.debugContext) job.debugContext = error.debugContext;
     webhook.notifyComplete(id, job);
   } finally { job.payload = null; scheduleExpiry(id); running -= 1; processQueue(); }
 }
 function processQueue() { while (running < CONCURRENCY && queue.length) { const id = queue.shift(); if (!jobs.has(id)) continue; running += 1; runJob(id); } }
 function createJob(input) {
   const id = randomUUID();
-  jobs.set(id, { id, mode: input.mode || 'generate', status: 'queued', currentStage: 'queued', stageStatus: 'queued', payload: input, result: null, error: null, generationMeta: { agents: [] }, createdAt: Date.now() });
+  jobs.set(id, { id, mode: input.mode || 'generate', status: 'queued', currentStage: 'queued', stageStatus: 'queued', payload: input, result: null, error: null, debugContext: input.debugContext || null, generationMeta: { agents: [] }, createdAt: Date.now() });
   queue.push(id); processQueue(); return id;
 }
+
+function createDebugJob(input) {
+ const id = randomUUID();
+ jobs.set(id, { id, mode: 'debug', status: 'queued', currentStage: 'queued', stageStatus: 'queued', payload: { mode: 'debug', ...input }, result: null, error: null, debugContext: null, generationMeta: { agents: [] }, createdAt: Date.now() });
+ queue.push(id); processQueue(); return id;
+}
+
 function getJob(id) { return jobs.get(id) || null; }
-module.exports = { createJob, getJob };
+module.exports = { createJob, createDebugJob, getJob };

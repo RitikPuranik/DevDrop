@@ -1,6 +1,5 @@
-const Auction = require('../modules/auction/auction.model');
-const Bid     = require('../modules/auction/bid.model');
-const emailService = require('./email.service');
+const Auction = require('../../../backend/src/modules/auction/auction.model');
+const Bid     = require('../../../backend/src/modules/auction/bid.model');
 
 const processEndedAuctions = async () => {
   try {
@@ -29,8 +28,9 @@ const processEndedAuctions = async () => {
 
 const startAuctionCron = () => {
   // Check every minute
-  setInterval(processEndedAuctions, 60 * 1000);
+  const timer = setInterval(processEndedAuctions, 60 * 1000);
   console.log('✅ Auction cron started');
+  return { stop: () => clearInterval(timer) };
 };
 
 module.exports = { startAuctionCron, processEndedAuctions };

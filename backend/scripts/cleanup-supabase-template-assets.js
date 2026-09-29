@@ -2,9 +2,12 @@ const fs = require('fs');
 const path = require('path');
 const mongoose = require('mongoose');
 
-const envPath = path.resolve(__dirname, '../.env');
-if (fs.existsSync(envPath)) {
-  require('dotenv').config({ path: envPath });
+if (require.main === module) {
+  // CLI usage only: never pull the Backend .env into the Worker process.
+  const envPath = path.resolve(__dirname, '../.env');
+  if (fs.existsSync(envPath)) {
+    require('dotenv').config({ path: envPath });
+  }
 }
 
 const connectDB = require('../src/shared/config/database');

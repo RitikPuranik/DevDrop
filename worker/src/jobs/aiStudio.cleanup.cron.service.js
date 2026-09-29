@@ -1,5 +1,5 @@
 const cron = require('node-cron');
-const { runCleanupSweep } = require('./aiStudioLifecycle.service');
+const { runCleanupSweep } = require('../../../backend/src/services/ai-studio/aiStudioLifecycle.service');
 
 let cleanupRunning = false;
 
@@ -26,8 +26,9 @@ const startAiStudioCleanupCron = () => {
   // detection, not a once-a-week sweep — abandoned projects should stop
   // costing storage well before a fixed calendar cleanup would ever catch them.
   const schedule = process.env.AI_STUDIO_CLEANUP_CRON || '*/5 * * * *';
-  cron.schedule(schedule, runScheduledAiStudioCleanup, { timezone: process.env.CRON_TIMEZONE || 'UTC' });
+  const task = cron.schedule(schedule, runScheduledAiStudioCleanup, { timezone: process.env.CRON_TIMEZONE || 'UTC' });
   console.log(`✅ AI Studio cleanup cron started (${schedule})`);
+  return { stop: () => task.stop() };
 };
 
 module.exports = { startAiStudioCleanupCron, runScheduledAiStudioCleanup };

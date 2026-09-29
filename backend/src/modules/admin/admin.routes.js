@@ -30,6 +30,7 @@ router.get('/backup/history', backupController.getHistory);
 router.post('/backup/mongo', backupController.backupMongo);
 router.post('/backup/supabase', backupController.backupSupabase);
 router.post('/backup/full', backupController.backupFull);
+router.get('/backup/task/:taskId', backupController.getTaskStatus);
 
 // Gemini API key pool (AI Studio) — Gemini credentials live in a dedicated
 // MongoDB deployment. This router authenticates/authorizes admin requests;

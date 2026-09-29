@@ -14,6 +14,7 @@ router.post('/', auth, aiGenerateController.generate);
 // GET /api/ai-generate/jobs/:id — resync fallback only (page refresh,
 // missed socket events, socket.io unreachable). Not meant to be polled on
 // an interval anymore — the frontend now listens on sockets for updates.
+router.post('/jobs/:id/debug-retry', auth, aiGenerateController.debugRetry);
 router.get('/jobs/:id', auth, aiJobPollingLimiter, aiGenerateController.getJob);
 
 // POST /api/ai-generate/webhook — internal, called by ai-service (not by

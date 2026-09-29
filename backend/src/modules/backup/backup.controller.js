@@ -1,12 +1,11 @@
 const {
-  runMongoBackup,
-  runSupabaseBackup,
-  runFullBackup,
   testEndpointConnections,
   isBackupTargetConfigured,
   getScheduleInfo,
   getRecentLogs,
 } = require('../../services/backup/backup.orchestrator');
+const { dispatchTask } = require('../../services/worker.client');
+const taskRegistry = require('../../services/taskRegistry.service');
 
 const VALID_DIRECTIONS = ['main_to_backup', 'backup_to_main'];
 const VALID_SUPABASE_MODES = ['mirror', 'add-only'];
@@ -63,19 +62,41 @@ const getHistory = async (req, res) => {
 };
 
 /**
+ * Hands a backup/restore run to the Worker. The Backend never runs the copy
+ * itself: it validates, dispatches a signed task, and answers 202 right away.
+ * The outcome is written to the backup history (BackupLog) by the Worker and
+ * can also be polled via GET /api/admin/backup/task/:taskId.
+ */
+const dispatchBackup = async (res, { kind, label, params }) => {
+  try {
+    const { taskId } = await dispatchTask('RUN_BACKUP', { kind, ...params });
+    res.status(202).json({
+      success: true,
+      message: `${label} started in the background worker. Check backup history for the result.`,
+      data: { taskId, status: 'queued' },
+    });
+  } catch (error) {
+    console.error(`❌ Could not hand ${label.toLowerCase()} to the worker: ${error.message}`);
+    res.status(503).json({ success: false, message: `Worker unavailable — ${label.toLowerCase()} was not started (${error.message})` });
+  }
+};
+
+/**
  * POST /api/admin/backup/mongo
  * body: { direction: 'main_to_backup' | 'backup_to_main', mode: 'replace' | 'merge' }
  */
 const backupMongo = async (req, res) => {
+  let params;
   try {
-    const direction = parseDirection(req);
-    const mode = req.body?.mode === 'merge' ? 'merge' : 'replace';
-
-    const result = await runMongoBackup({ direction, trigger: 'manual', triggeredBy: req.userId, mode });
-    res.json({ success: true, message: 'MongoDB sync completed', data: result });
+    params = {
+      direction: parseDirection(req),
+      mode: req.body?.mode === 'merge' ? 'merge' : 'replace',
+      triggeredBy: req.userId,
+    };
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message || 'MongoDB sync failed' });
+    return res.status(400).json({ success: false, message: error.message });
   }
+  return dispatchBackup(res, { kind: 'mongo', label: 'MongoDB sync', params });
 };
 
 /**
@@ -83,15 +104,17 @@ const backupMongo = async (req, res) => {
  * body: { direction: 'main_to_backup' | 'backup_to_main', supabaseMode: 'mirror' | 'add-only' }
  */
 const backupSupabase = async (req, res) => {
+  let params;
   try {
-    const direction = parseDirection(req);
-    const supabaseMode = parseSupabaseMode(req);
-
-    const result = await runSupabaseBackup({ direction, trigger: 'manual', triggeredBy: req.userId, supabaseMode });
-    res.json({ success: true, message: 'Supabase storage sync completed', data: result });
+    params = {
+      direction: parseDirection(req),
+      supabaseMode: parseSupabaseMode(req),
+      triggeredBy: req.userId,
+    };
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message || 'Supabase storage sync failed' });
+    return res.status(400).json({ success: false, message: error.message });
   }
+  return dispatchBackup(res, { kind: 'supabase', label: 'Supabase storage sync', params });
 };
 
 /**
@@ -101,25 +124,34 @@ const backupSupabase = async (req, res) => {
  * and "Restore" (backup -> main).
  */
 const backupFull = async (req, res) => {
+  let params;
+  let label;
   try {
     const direction = parseDirection(req);
-    const mode = req.body?.mode === 'merge' ? 'merge' : 'replace';
-    const supabaseMode = parseSupabaseMode(req);
-
-    const result = await runFullBackup({ direction, trigger: 'manual', triggeredBy: req.userId, mode, supabaseMode });
-
-    const statusCode = result.status === 'failed' ? 500 : 200;
-    res.status(statusCode).json({
-      success: result.status !== 'failed',
-      message:
-        direction === 'backup_to_main'
-          ? `Restore from backup ${result.status === 'success' ? 'completed' : result.status}`
-          : `Backup ${result.status === 'success' ? 'completed' : result.status}`,
-      data: result,
-    });
+    params = {
+      direction,
+      mode: req.body?.mode === 'merge' ? 'merge' : 'replace',
+      supabaseMode: parseSupabaseMode(req),
+      triggeredBy: req.userId,
+    };
+    label = direction === 'backup_to_main' ? 'Restore from backup' : 'Backup';
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message || 'Backup/restore failed' });
+    return res.status(400).json({ success: false, message: error.message });
   }
+  return dispatchBackup(res, { kind: 'full', label, params });
 };
 
-module.exports = { getStatus, getHistory, backupMongo, backupSupabase, backupFull };
+/**
+ * GET /api/admin/backup/task/:taskId
+ * Live status of a dispatched backup (queued | running | completed | failed).
+ */
+const getTaskStatus = (req, res) => {
+  const task = taskRegistry.get(req.params.taskId);
+  if (!task) {
+    return res.status(404).json({ success: false, message: 'Task not found (it may have expired or the backend restarted)' });
+  }
+  const { taskId, type, status, result, error, createdAt, updatedAt } = task;
+  res.json({ success: true, data: { taskId, type, status, result, error, createdAt, updatedAt } });
+};
+
+module.exports = { getStatus, getHistory, backupMongo, backupSupabase, backupFull, getTaskStatus };
