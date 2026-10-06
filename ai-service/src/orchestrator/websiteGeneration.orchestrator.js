@@ -14,6 +14,9 @@ const MAX_BUILD_FIX_RETRIES=Math.max(0,Number.parseInt(process.env.MAX_BUILD_FIX
 // (requirements -> design -> architecture -> code-gen -> integration ->
 // validation/debug loop). Replaces the old per-agent/per-stage timeouts.
 const GENERATION_TIMEOUT_MS=Number.parseInt(process.env.WEBSITE_GENERATION_TIMEOUT_MS||'900000',10);
+// The style-preview screenshot travels as preferences.referenceImage (a data URL). Pull it out of the
+// text preferences (so it is never JSON-stringified into a prompt) and expose it as an inline media part.
+function extractReferenceImage(preferences){const prefs={...(preferences||{})};const ref=prefs.referenceImage;delete prefs.referenceImage;const m=typeof ref==='string'?/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(ref):null;return {preferences:prefs,referenceMedia:m?[{assetId:'style-reference',fileName:'style-reference-preview',mimeType:m[1],data:m[2],label:'STYLE REFERENCE IMAGE: a screenshot of the style preview the user selected. Reproduce its visual language (colors, surface treatment, shadows, border radius, typography feel, spacing, component shapes) in the generated website. It is a style reference, not content: use the real content/copy from the requirements.'}]:[]};}
 function normalizeInput(input){const messages=Array.isArray(input.messages)?input.messages:[];const lastUser=[...messages].reverse().find(m=>m?.role==='user')?.content||'';return {websiteType:input.websiteType||input.type||'portfolio',userData:input.userData||input.portfolioData||{},preferences:input.preferences||{},assets:normalizeAssets(input.assets),media:input.media||[],conversation:input.conversation||messages,legacyPrompt:lastUser,fileData:input.fileData||null};}
 function mergeFiles(base,changes){const out={...base};for(const[p,obj]of Object.entries(changes||{}))if(obj?.code)out[p]={code:obj.code};return out;}
 function stage(name,fn,meta,onStage){return runStage(name,fn,meta,onStage);}
@@ -120,16 +123,16 @@ async function generateWebsite(input,options={}){
  return withTimeout(runGeneration(input,options),GENERATION_TIMEOUT_MS,'website-generation');
 }
 async function runGeneration(input,{onStage}={}){
- const meta=[];console.log('[ORCHESTRATOR] Starting generation');const normalized=normalizeInput(input);
+ const meta=[];console.log('[ORCHESTRATOR] Starting generation');const normalized=normalizeInput(input);const {preferences:cleanPrefs,referenceMedia}=extractReferenceImage(normalized.preferences);normalized.preferences=cleanPrefs;
  const mediaManifest=buildMediaManifest(normalized.assets);const modelManifest=toModelManifest(mediaManifest);const assetSummaries=buildAssetSummaries(normalized.assets);
- console.log('[AI STUDIO MEDIA] inputs', {assets:assetSummaries.length,inlineMedia:(normalized.media||[]).length});
+ console.log('[AI STUDIO MEDIA] inputs', {assets:assetSummaries.length,inlineMedia:(normalized.media||[]).length,styleReference:referenceMedia.length});
  const requirementsResult=await stage('requirements',()=>requirementsAgent.run({...normalized,assetSummaries}),meta,onStage);const requirements=validateRequirements(requirementsResult.value);
  // Server-side truth: one mediaPlan entry per real image/video asset, and asset metadata (never URLs) from the manifest rather than model output.
  requirements.mediaPlan=normalizeMediaPlan(requirements.mediaPlan,normalized.assets);
  requirements.assets=assetSummaries.map(({extraction,...a})=>({...a,...(extraction?{extractionStatus:extraction.status}:{})}));
  const mediaPlan=requirements.mediaPlan;
  console.log('[AI STUDIO MEDIA] requirements analysis complete', {mediaPlan:mediaPlan.length});
- const designResult=await stage('design',()=>designAgent.run({requirements,mediaPlan,preferences:normalized.preferences,websiteType:normalized.websiteType}),meta,onStage);const design=validateDesign(designResult.value);
+ const designResult=await stage('design',()=>designAgent.run({requirements,mediaPlan,preferences:normalized.preferences,websiteType:normalized.websiteType,media:referenceMedia}),meta,onStage);const design=validateDesign(designResult.value);
  console.log('[AI STUDIO MEDIA] design plan complete');
  const architectureResult=await stage('architecture',()=>architectureAgent.run({requirements,design,mediaPlan}),meta,onStage);const architecture=validateArchitecture(architectureResult.value);
  const ordered=[...architecture.files].sort((a,b)=>{const rank=f=>f.path==='/package.json'?0:f.path==='/index.html'?1:f.path==='/main.jsx'?2:f.path==='/App.js'?3:/data|content/i.test(f.path)?4:/component/i.test(f.type||'')?5:6;return rank(a)-rank(b);});
@@ -137,7 +140,7 @@ async function runGeneration(input,{onStage}={}){
  console.log('[AI STUDIO MEDIA] code manifest prepared', {assets:mediaManifest.length});
  for(const fileContract of ordered){
    const relatedContracts=architecture.files.filter(f=>f.path!==fileContract.path&&(fileContract.imports||[]).includes(f.path));
-   const result=await stage(`code:${fileContract.path}`,()=>codeGenerationAgent.run({fileContract,relatedContracts,requirements,design,userData:requirements.userData,mediaManifest:modelManifest,mediaPlan}),meta,onStage);
+   const result=await stage(`code:${fileContract.path}`,()=>codeGenerationAgent.run({fileContract,relatedContracts,requirements,design,userData:requirements.userData,mediaManifest:modelManifest,mediaPlan,media:referenceMedia}),meta,onStage);
    if(result.value?.path!==fileContract.path||typeof result.value.code!=='string')throw new Error(`Code agent returned an invalid path/contract for ${fileContract.path}`);
    files[fileContract.path]={code:result.value.code};
  }const integrationResult=await stage('integration',()=>integrationAgent.run({requirements,design,architecture,files}),meta,onStage);files=resolveAssetUrls(mergeFiles(files,integrationResult.value?.files),mediaManifest);let dependencies=architecture.dependencies||{};

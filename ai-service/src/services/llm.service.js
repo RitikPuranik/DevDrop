@@ -382,7 +382,7 @@ async function callGemini({ system, input, timeout = DEFAULT_TIMEOUT_MS }) {
                 // inline parts in order with no names, so without the label it could
                 // not tie what it observes back to a mediaPlan assetId.
                 ...((input?.media || []).flatMap((asset) => [
-                  ...(asset.assetId ? [{ text: `Uploaded asset assetId=${asset.assetId} fileName=${asset.fileName || 'unknown'} mimeType=${asset.mimeType}` }] : []),
+                  ...(asset.label ? [{ text: asset.label }] : asset.assetId ? [{ text: `Uploaded asset assetId=${asset.assetId} fileName=${asset.fileName || 'unknown'} mimeType=${asset.mimeType}` }] : []),
                   { inlineData: { mimeType: asset.mimeType, data: asset.data } },
                 ])),
               ],

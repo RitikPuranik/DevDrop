@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
+import { toJpeg } from 'html-to-image';
 import { motion, useReducedMotion } from 'framer-motion';
 import {
   ArrowLeft, ArrowRight, Ban, Check, ChevronsDown, Layers, Loader2, MousePointerClick, Plus, Sparkles, Spline, Timer, Type,
@@ -36,6 +37,7 @@ const STYLE_TOKENS = {
   bold: { layout: 'poster', radius: 0, border: 'none', shadow: 'none', hw: 900, upper: true, ls: '-0.04em', size: 34, btn: 'block' },
   editorial: { layout: 'editorial', radius: 0, border: 'hairline', shadow: 'none', hw: 600, upper: false, ls: '-0.01em', size: 28, btn: 'outline' },
   creative: { layout: 'split', variant: 'creative', radius: 26, border: 'none', shadow: 'soft', hw: 800, upper: false, ls: '-0.03em', size: 26, btn: 'pill' },
+  clay: { layout: 'clay', radius: 28, border: 'none', shadow: 'clay', hw: 800, upper: false, ls: '-0.02em', size: 26, btn: 'clay' },
   glass: { layout: 'glass', radius: 20, border: 'hairline', shadow: 'soft', hw: 700, upper: false, ls: '-0.02em', size: 25, btn: 'pill' },
   brutalist: { layout: 'poster', variant: 'brutal', radius: 0, border: 'thick', shadow: 'hard', hw: 800, upper: true, ls: '-0.02em', size: 24, btn: 'brutal' },
   bento: { layout: 'bento', radius: 16, border: 'hairline', shadow: 'none', hw: 700, upper: false, ls: '-0.02em', size: 19, btn: 'soft' },
@@ -48,7 +50,7 @@ const STYLE_TOKENS = {
 const HEADLINE = 'Build something people remember';
 
 /* ───────────── live preview (full re-layout per style) ───────────── */
-function LivePreview({ design, palette, paletteName, typo }) {
+function LivePreview({ design, palette, paletteName, typo, captureRef }) {
   const reduce = useReducedMotion();
   const th = THEME_COLORS[design.theme] || THEME_COLORS.dark;
   const t = STYLE_TOKENS[design.style] || STYLE_TOKENS.modern;
@@ -62,6 +64,12 @@ function LivePreview({ design, palette, paletteName, typo }) {
   const themeLabel = DESIGN_THEMES.find((s) => s.id === design.theme)?.label || 'Dark';
   const motionLabel = ANIMATION_OPTIONS.find((s) => s.id === design.animations)?.label || 'Subtle';
   const glass = t.layout === 'glass';
+  const clay = t.layout === 'clay';
+  const dark = lum(th.bg) < 0.3;
+  /* clay: pale tinted canvas (or deep tinted on dark themes) + three-layer "inflated" shadow */
+  const clayBase = dark ? shade(th.bg, 0.1) : shade(accent, 0.9);
+  const clayFill = dark ? shade(th.bg, 0.2) : shade(accent, 0.96);
+  const clayShadow = (d = 1) => `${10 * d}px ${10 * d}px ${24 * d}px ${dark ? 'rgba(0,0,0,.55)' : alpha(accent, 0.38)}, inset ${-6 * d}px ${-6 * d}px ${12 * d}px ${dark ? 'rgba(0,0,0,.35)' : 'rgba(0,0,0,.10)'}, inset ${6 * d}px ${6 * d}px ${12 * d}px ${dark ? 'rgba(255,255,255,.12)' : 'rgba(255,255,255,.85)'}`;
   const sub = `${styleLabel} direction · ${themeLabel} theme · ${motionLabel} motion`;
 
   const mp = (i = 0) => {
@@ -77,10 +85,10 @@ function LivePreview({ design, palette, paletteName, typo }) {
   };
 
   const surface = {
-    background: glass ? 'rgba(255,255,255,.14)' : th.panel,
+    background: glass ? 'rgba(255,255,255,.14)' : clay ? clayFill : th.panel,
     border: glass ? '1px solid rgba(255,255,255,.3)' : t.border === 'thick' ? `2.5px solid ${th.fg}` : t.border === 'none' ? 'none' : `1px solid ${th.line}`,
     borderRadius: t.radius,
-    boxShadow: t.shadow === 'hard' ? `4px 4px 0 ${th.fg}` : t.shadow === 'soft' ? '0 10px 30px -14px rgba(0,0,0,.5)' : 'none',
+    boxShadow: t.shadow === 'clay' ? clayShadow() : t.shadow === 'hard' ? `4px 4px 0 ${th.fg}` : t.shadow === 'soft' ? '0 10px 30px -14px rgba(0,0,0,.5)' : 'none',
     backdropFilter: glass ? 'blur(14px)' : undefined,
     WebkitBackdropFilter: glass ? 'blur(14px)' : undefined,
   };
@@ -99,6 +107,7 @@ function LivePreview({ design, palette, paletteName, typo }) {
       block: { borderRadius: t.radius, background: bg, color: col, textTransform: 'uppercase', letterSpacing: '.08em', border: primary ? 'none' : `2px solid ${th.fg}` },
       brutal: { borderRadius: 0, background: primary ? accent : th.bg, color: primary ? onAcc : th.fg, border: `2.5px solid ${th.fg}`, boxShadow: `3px 3px 0 ${th.fg}`, textTransform: 'uppercase' },
       chrome: { borderRadius: 999, background: primary ? `linear-gradient(180deg,${shade(accent, 0.55)},${accent} 55%,${shade(accent, -0.2)})` : th.panel, color: primary ? onAcc : th.fg, border: `2px solid ${th.fg}`, boxShadow: 'inset 0 1px 0 rgba(255,255,255,.7)' },
+      clay: { borderRadius: 999, background: primary ? `linear-gradient(145deg,${shade(accent, 0.3)},${accent})` : clayFill, color: primary ? onAcc : th.fg, border: 'none', boxShadow: clayShadow(0.5), padding: '7px 16px' },
       gold: { borderRadius: 0, background: 'transparent', color: accent, border: `1px solid ${accent}`, textTransform: 'uppercase', letterSpacing: '.2em', fontSize: 9 },
     };
     return <span key={label} style={{ ...base, ...map[t.btn] }}>{label}</span>;
@@ -116,7 +125,7 @@ function LivePreview({ design, palette, paletteName, typo }) {
   const logo = <span style={{ fontWeight: 800, fontFamily: headFont }}>● YourBrand</span>;
   const links = <span style={{ display: 'flex', gap: 14, color: th.sub }}><span>Home</span><span>Work</span><span>Contact</span></span>;
   const toggle = design.theme === 'auto' ? <span style={{ fontSize: 9, border: `1px solid ${th.line}`, borderRadius: 99, padding: '2px 7px', color: th.sub }}>☾ / ☀</span> : null;
-  const navWrap = glass ? { ...surface, borderRadius: 999, padding: '6px 14px' }
+  const navWrap = (glass || clay) ? { ...surface, borderRadius: 999, padding: '6px 14px', ...(clay ? { boxShadow: clayShadow(0.6) } : {}) }
     : t.border === 'thick' ? { borderBottom: `2.5px solid ${th.fg}`, paddingBottom: 8 }
       : (t.layout === 'center' || t.variant === 'corporate') ? { borderBottom: `1px solid ${th.line}`, paddingBottom: 8 } : {};
   const nav = () => (
@@ -307,9 +316,44 @@ function LivePreview({ design, palette, paletteName, typo }) {
     );
   };
 
-  const layouts = { center: centerLayout, split: splitLayout, bento: bentoLayout, editorial: editorialLayout, poster: posterLayout, glass: glassLayout, retro: retroLayout };
+  const clayLayout = () => {
+    const blob = (st, c) => <motion.i animate={anim === 'none' ? {} : { y: [0, -8, 0] }} transition={{ repeat: Infinity, duration: 5, ease: 'easeInOut' }} style={{ position: 'absolute', borderRadius: '50%', background: `linear-gradient(145deg,${shade(c, 0.35)},${c})`, boxShadow: clayShadow(1.2), ...st }} />;
+    const tile = (c, glyph, size = 26) => <span style={{ width: size, height: size, borderRadius: size * 0.36, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(145deg,${shade(c, 0.35)},${c})`, boxShadow: clayShadow(0.35), fontSize: size * 0.5, color: lum(c) > 0.55 ? '#111' : '#fff', fontWeight: 800 }}>{glyph}</span>;
+    const features = [[accent, '★', 'Playful'], [second, '♥', 'Friendly'], [third, '✦', 'Tactile']];
+    return (
+      <div style={{ height: '100%', position: 'relative', overflow: 'hidden', padding: '16px 22px', background: clayBase }}>
+        {blob({ right: -28, top: 54, width: 130, height: 130 }, accent)}
+        {blob({ left: -26, bottom: 40, width: 96, height: 96 }, second)}
+        {blob({ right: '36%', bottom: -22, width: 70, height: 70 }, third)}
+        <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%' }}>
+          {nav()}
+          <div style={{ display: 'grid', gridTemplateColumns: '1.05fr 1fr', gap: 18, marginTop: 20, alignItems: 'center' }}>
+            <div>
+              <span style={{ display: 'inline-block', fontSize: 9, fontWeight: 800, padding: '3px 10px', borderRadius: 999, background: clayFill, boxShadow: clayShadow(0.35), color: accent, marginBottom: 8 }}>✦ New &amp; squishy</span>
+              {headline()}
+              {para()}
+              {btns}
+            </div>
+            <div style={{ position: 'relative', height: 180 }}>
+              {card(0, { position: 'absolute', top: 0, left: 8, width: '78%', padding: 12, borderRadius: 26 }, <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>{tile(accent, '↗', 28)}<div style={{ flex: 1 }}><div style={{ fontWeight: 800, fontSize: 13, fontFamily: headFont }}>12.4k</div>{bar('70%', 0.4)}</div></div>)}
+              {card(1, { position: 'absolute', top: 64, right: 0, width: '70%', padding: 12, borderRadius: 26 }, <>
+                <div style={{ fontSize: 9, fontWeight: 700, marginBottom: 6 }}>Progress</div>
+                <div style={{ height: 12, borderRadius: 99, background: dark ? 'rgba(0,0,0,.35)' : alpha(accent, 0.18), boxShadow: dark ? 'inset 2px 2px 5px rgba(0,0,0,.5)' : `inset 2px 2px 5px ${alpha(accent, 0.35)}, inset -2px -2px 4px rgba(255,255,255,.8)`, padding: 2 }}><i style={{ display: 'block', height: '100%', width: '68%', borderRadius: 99, background: `linear-gradient(145deg,${shade(accent, 0.3)},${accent})`, boxShadow: '1px 1px 3px rgba(0,0,0,.25)' }} /></div>
+              </>)}
+              {card(2, { position: 'absolute', bottom: 0, left: 0, width: '62%', padding: '10px 12px', borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }, <><span style={{ fontSize: 9, fontWeight: 700 }}>Dark mode</span><i style={{ width: 34, height: 18, borderRadius: 99, background: accent, boxShadow: clayShadow(0.25), position: 'relative' }}><i style={{ position: 'absolute', right: 2, top: 2, width: 14, height: 14, borderRadius: '50%', background: clayFill, boxShadow: '1px 2px 4px rgba(0,0,0,.3)' }} /></i></>)}
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginTop: 'auto', paddingTop: 14 }}>
+            {features.map(([c, g, label], i) => card(i + 3, { padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8, borderRadius: 24 }, <>{tile(c, g, 24)}<div style={{ flex: 1 }}><div style={{ fontSize: 10, fontWeight: 800 }}>{label}</div>{bar('80%', 0.3)}</div></>))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const layouts = { clay: clayLayout, center: centerLayout, split: splitLayout, bento: bentoLayout, editorial: editorialLayout, poster: posterLayout, glass: glassLayout, retro: retroLayout };
   const render = layouts[t.layout] || splitLayout;
-  const frameBg = t.layout === 'retro' ? th.bg : th.bg;
+  const frameBg = clay ? clayBase : th.bg;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -321,6 +365,7 @@ function LivePreview({ design, palette, paletteName, typo }) {
         <motion.div
           key={`${design.style}-${design.theme}-${anim}-${typo.id}-${accent}`}
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.25 }}
+          ref={captureRef}
           style={{ background: frameBg, color: th.fg, fontFamily: typo.font, flex: 1, minHeight: 430, position: 'relative', overflow: 'hidden', fontSize: 11 }}
         >
           <div style={{ position: 'absolute', inset: 0 }}>{render()}</div>
@@ -339,6 +384,7 @@ function StyleArt({ id, accent }) {
     case 'bold': return <div className={`${box} bg-black text-[32px] font-black tracking-tight text-white`}>Bold</div>;
     case 'editorial': return <div className={`${box} flex-col bg-neutral-200 text-black`}><span style={{ fontFamily: 'Georgia,serif' }} className="text-[21px] leading-none">Editorial</span><span className="mt-1.5 h-px w-4/5 bg-black/30" /><span className="mt-1 h-px w-4/5 bg-black/30" /></div>;
     case 'creative': return <div className={`${box} relative`} style={{ background: 'linear-gradient(135deg,#6d28d9,#ec4899)' }}><i className="absolute -left-3 top-6 h-14 w-14 rounded-full bg-yellow-400/90" /><i className="absolute right-2 top-0 h-12 w-12 rounded-full bg-orange-400" /><i className="absolute bottom-1 left-1/2 h-8 w-8 rounded-full bg-indigo-500" /></div>;
+    case 'clay': return <div className={`${box} gap-2 bg-[#efe4ff]`}><i className="h-11 w-11 rounded-[16px]" style={{ background: 'linear-gradient(145deg,#ffd0e6,#ff9ec9)', boxShadow: '5px 5px 11px rgba(190,120,200,.45), inset -3px -3px 6px rgba(0,0,0,.10), inset 3px 3px 6px rgba(255,255,255,.85)' }} /><i className="h-8 w-16 rounded-full" style={{ background: 'linear-gradient(145deg,#c9d8ff,#9db8ff)', boxShadow: '5px 5px 11px rgba(120,130,220,.45), inset -3px -3px 6px rgba(0,0,0,.10), inset 3px 3px 6px rgba(255,255,255,.85)' }} /></div>;
     case 'glass': return <div className={`${box} relative`} style={{ background: 'linear-gradient(135deg,#6366f1,#ec4899 60%,#f59e0b)' }}><i className="h-10 w-24 rounded-xl border border-white/40 bg-white/20 backdrop-blur-md" /></div>;
     case 'brutalist': return <div className={`${box} bg-yellow-300`}><span className="border-[3px] border-black bg-white px-3 py-1 text-[11px] font-black uppercase text-black" style={{ boxShadow: '4px 4px 0 #000' }}>Raw</span></div>;
     case 'bento': return <div className={`${box} grid grid-cols-4 grid-rows-2 gap-1 bg-neutral-900 p-2`}><i className="col-span-2 row-span-2 rounded-md bg-white/20" /><i className="rounded-md" style={{ background: accent }} /><i className="rounded-md bg-white/10" /><i className="col-span-2 rounded-md bg-white/15" /></div>;
@@ -377,6 +423,8 @@ function Section({ n, title, children }) {
 /* ───────────── main step ───────────── */
 export default function DesignPreferencesStep({ design, onChange, onBack, onNext, topBar }) {
   const [customColor, setCustomColor] = useState('#e0b25c');
+  const previewRef = useRef(null);
+  const [capturing, setCapturing] = useState(false);
   const paletteId = design.paletteId || 'amber';
   const activePalette = DESIGN_PALETTES.find((p) => p.id === paletteId);
   const palette = paletteId === 'custom' ? [customColor, '#ffffff', '#222222'] : (activePalette || DESIGN_PALETTES[0]).colors;
@@ -385,6 +433,26 @@ export default function DesignPreferencesStep({ design, onChange, onBack, onNext
   const accent = design.primaryColor || palette[0];
   const onAcc = lum(accent) > 0.55 ? '#111' : '#fff';
   const set = (patch) => onChange({ ...design, ...patch });
+
+  /* Screenshot the live mockup (downscaled to ~1024px JPEG) so the generator can use it as a visual reference. */
+  const handleContinue = async () => {
+    if (capturing) return;
+    setCapturing(true);
+    let referenceImage = null;
+    try {
+      const node = previewRef.current;
+      if (node && node.offsetWidth > 0) {
+        const width = 1024;
+        const height = Math.round((width * node.offsetHeight) / node.offsetWidth);
+        referenceImage = await toJpeg(node, { quality: 0.82, pixelRatio: 1, cacheBust: true, skipFonts: true, canvasWidth: width, canvasHeight: height, backgroundColor: '#ffffff' });
+      }
+    } catch (err) {
+      console.warn('[AI Studio] could not capture style reference image', err);
+    }
+    onChange({ ...design, referenceImage });
+    setCapturing(false);
+    onNext();
+  };
 
   const pickStyle = (s) => set({ style: s.id, ...(design.typographyTouched ? {} : { typography: s.typo }) });
   const pickPalette = (p) => set({ paletteId: p.id, palette: p.colors.join(', '), primaryColor: p.colors[0] });
@@ -498,7 +566,7 @@ export default function DesignPreferencesStep({ design, onChange, onBack, onNext
             <h2 className="text-[22px] font-bold tracking-tight">Live Mockup Preview <span className="text-white/60">(Agent Draft)</span></h2>
             <span className="inline-flex shrink-0 items-center gap-2 text-xs text-white/50"><Loader2 size={14} className="animate-spin" style={{ color: accent }} /> Rendering in Real-Time</span>
           </div>
-          <LivePreview design={design} palette={palette} paletteName={paletteName} typo={typo} />
+          <LivePreview design={design} palette={palette} paletteName={paletteName} typo={typo} captureRef={previewRef} />
         </div>
       </div>
 
@@ -507,8 +575,8 @@ export default function DesignPreferencesStep({ design, onChange, onBack, onNext
         <button type="button" onClick={onBack} className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-6 py-3 text-[14px] font-bold"><ArrowLeft size={15} /> Back</button>
         <div className="flex items-center gap-4">
           <span className="hidden items-center gap-2 text-xs text-white/40 sm:inline-flex"><Timer size={14} /> AI is ready to generate</span>
-          <button type="button" onClick={onNext} className="inline-flex items-center gap-2 rounded-xl px-7 py-3 text-[14px] font-bold" style={{ background: `linear-gradient(135deg,${shade(accent, 0.25)},${accent},${shade(accent, -0.25)})`, color: onAcc, boxShadow: `0 0 28px -6px ${alpha(accent, 0.75)}` }}>
-            Continue to Generate <ArrowRight size={16} />
+          <button type="button" onClick={handleContinue} disabled={capturing} className="inline-flex items-center gap-2 rounded-xl px-7 py-3 text-[14px] font-bold disabled:opacity-70" style={{ background: `linear-gradient(135deg,${shade(accent, 0.25)},${accent},${shade(accent, -0.25)})`, color: onAcc, boxShadow: `0 0 28px -6px ${alpha(accent, 0.75)}` }}>
+            {capturing ? <><Loader2 size={16} className="animate-spin" /> Capturing style…</> : <>Continue to Generate <ArrowRight size={16} /></>}
           </button>
         </div>
       </footer>

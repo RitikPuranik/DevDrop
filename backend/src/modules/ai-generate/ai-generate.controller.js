@@ -2,6 +2,23 @@ const aiServiceClient = require('./aiServiceClient');
 const jobOwners = require('./jobOwners');
 const { resolveGenerationAssets } = require('../../services/ai-studio/aiStudioAssetPipeline.service');
 
+const REFERENCE_IMAGE_RE = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/;
+const MAX_REFERENCE_IMAGE_BYTES = 1.5 * 1024 * 1024;
+
+// preferences.referenceImage is a screenshot of the selected style preview.
+// Anything that is not a small base64 jpeg/png/webp data URL is dropped (never fails the request).
+function sanitizePreferences(preferences) {
+  const prefs = preferences && typeof preferences === 'object' ? { ...preferences } : {};
+  const ref = prefs.referenceImage;
+  delete prefs.referenceImage;
+  if (typeof ref === 'string') {
+    const m = REFERENCE_IMAGE_RE.exec(ref);
+    if (m && Buffer.byteLength(m[2], 'base64') <= MAX_REFERENCE_IMAGE_BYTES) prefs.referenceImage = ref;
+  }
+  return prefs;
+}
+exports.sanitizePreferences = sanitizePreferences;
+
 exports.generate = async (req, res) => {
   try {
     const { messages, fileData, websiteType, userData, preferences, assets, conversation, projectId } = req.body;
@@ -23,7 +40,7 @@ exports.generate = async (req, res) => {
       fileData:fileData||null,
       websiteType:websiteType||'portfolio',
       userData:userData||{},
-      preferences:preferences||{},
+      preferences:sanitizePreferences(preferences),
       assets:resolvedAssets,
       media,
       conversation:conversation||messages
