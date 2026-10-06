@@ -3,6 +3,7 @@ import { ArrowLeft, Check, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 import StepShell from './StepShell';
 import DesignPreferencesStep from './DesignPreferencesStep';
+import { describeDesign } from '../../config/aiStudio.config';
 
 const SCHEMAS = {
   ecommerce: {
@@ -260,7 +261,7 @@ function DetailsStep({ type, details, onChange, onBack, onNext }) {
 export default function WebsiteBuilder({ type, onBack, onGenerate }) {
   const [step, setStep] = useState(0);
   const [details, setDetails] = useState({});
-  const [design, setDesign] = useState({ style: 'modern', theme: 'dark', animations: 'subtle', primaryColor: null });
+  const [design, setDesign] = useState({ style: 'modern', theme: 'dark', animations: 'subtle', primaryColor: '#b8935a', paletteId: 'amber', palette: '#b8935a, #e8d9bf, #b4583a, #2f3436, #f1f1f1', typography: 'grotesk' });
   const [generating, setGenerating] = useState(false);
   const schema = SCHEMAS[type];
 
@@ -347,10 +348,7 @@ USER SPECIFICATION:
 ${specification || 'No detailed content supplied. Create a sensible structure without inventing factual claims.'}
 
 DESIGN:
-Style: ${design.style || 'modern'}
-Theme: ${design.theme || 'dark'}
-Animation: ${design.animations || 'subtle'}
-Primary color: ${design.primaryColor || 'Choose a tasteful palette.'}
+${describeDesign(design)}
 
 Return the website using DevDrop's existing structured file-generation contract. Include every file required for the preview to run. Do not return commentary outside the required JSON contract.`;
 }

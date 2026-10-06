@@ -1,3 +1,4 @@
+import { describeDesign } from '../../config/aiStudio.config';
 const clean = (value) => String(value ?? '').trim();
 const list = (items = []) => items.filter(Boolean).map((item) => clean(item)).filter(Boolean);
 
@@ -76,10 +77,7 @@ CTA destination: ${clean(details.ctaLink)}
 ${section('Anything else you want', clean(details.specialRequests)) || 'No additional instructions provided.'}
 
 ## Design direction
-Style: ${clean(design.style) || 'modern'}
-Theme: ${clean(design.theme) || 'dark'}
-Animation: ${clean(design.animations) || 'subtle'}
-Primary color: ${clean(design.primaryColor) || 'Choose a tasteful palette that fits the requested theme.'}
+${describeDesign(design)}
 
 ## Required page structure
 Use the available information to decide the best section order, but normally include:
