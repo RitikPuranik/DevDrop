@@ -18,7 +18,7 @@ const editAgent = require('../src/agents/edit.agent');
 const buildValidator = require('../src/validators/build.validator');
 const { generateWebsite, debugWebsite } = require('../src/orchestrator/websiteGeneration.orchestrator');
 const { editWebsite } = require('../src/orchestrator/websiteEditing.orchestrator');
-const { normalizeMediaPlan, buildMediaManifest } = require('../src/utils/assetContract');
+const { normalizeMediaPlan, buildMediaManifest, resolveAssetUrls } = require('../src/utils/assetContract');
 
 const assets = {
   resume: { assetId: 'r1', fileName: 'resume.pdf', mimeType: 'application/pdf', size: 10, kind: 'document', previewUrl: 'https://s/r1', downloadUrl: 'https://s/r1?dl', extraction: { status: 'inline_pdf' } },
@@ -79,12 +79,25 @@ describe('generation pipeline carries uploaded media end to end', () => {
     expect(codeAgent.run).toHaveBeenCalledTimes(2);
     for (const [arg] of codeAgent.run.mock.calls) {
       const byId = Object.fromEntries(arg.mediaManifest.map((m) => [m.assetId, m]));
-      expect(byId.i1).toMatchObject({ kind: 'image', previewUrl: 'https://s/i1', fileName: 'profile.jpg', mimeType: 'image/jpeg' });
-      expect(byId.v1).toMatchObject({ kind: 'video', previewUrl: 'https://s/v1' });
-      expect(byId.r1).toMatchObject({ kind: 'document', previewUrl: 'https://s/r1', downloadUrl: 'https://s/r1?dl', isResume: true });
+      // the model sees short asset:// references, never the 600-char signed URL
+      expect(byId.i1).toMatchObject({ kind: 'image', previewUrl: 'asset://i1', fileName: 'profile.jpg', mimeType: 'image/jpeg' });
+      expect(byId.v1).toMatchObject({ kind: 'video', previewUrl: 'asset://v1' });
+      expect(byId.r1).toMatchObject({ kind: 'document', previewUrl: 'asset://r1', downloadUrl: 'asset://r1/download', isResume: true });
+      expect(JSON.stringify(arg.mediaManifest)).not.toContain('https://');
       expect(arg.mediaManifest.every((m) => !('data' in m))).toBe(true);
       expect(arg.mediaPlan).toHaveLength(3);
     }
+  });
+
+  test('placeholders written by the code agent come out as the exact real URLs', async () => {
+    codeAgent.run.mockImplementation(async ({ fileContract }) => ({ value: { path: fileContract.path, code: fileContract.path === '/package.json' ? '{"dependencies":{}}' : 'export default function App(){ return <div><img src="asset://i1"/><video src="asset://v1"/><a href="asset://r1">View</a><a href="asset://r1/download" download>Get</a></div>; }' } }));
+    const result = await generateWebsite({ messages: [{ role: 'user', content: 'x' }], assets, media });
+    const code = result.files['/App.js'].code;
+    expect(code).toContain('src="https://s/i1"');
+    expect(code).toContain('src="https://s/v1"');
+    expect(code).toContain('href="https://s/r1"');
+    expect(code).toContain('href="https://s/r1?dl"');
+    expect(code).not.toContain('asset://');
   });
 
   test('no assets: pipeline runs normally with empty media plan/manifest', async () => {
@@ -101,13 +114,39 @@ describe('generation pipeline carries uploaded media end to end', () => {
   });
 });
 
+describe('signed URL integrity', () => {
+  const real = [{ assetId: 'a1', previewUrl: 'https://x.supabase.co/storage/v1/object/sign/b/ai-studio/p/assets/a1/p.jpeg?token=GOOD', downloadUrl: 'https://x.supabase.co/storage/v1/object/sign/b/ai-studio/p/assets/a1/p.jpeg?token=GOOD2&download=p.jpeg' }];
+  const u = (t, extra = '') => `https://x.supabase.co/storage/v1/object/sign/b/ai-studio/p/assets/a1/p.jpeg?token=${t}${extra}`;
+
+  test('a URL the model altered by one character is repaired to the exact real URL', () => {
+    const out = resolveAssetUrls({ '/Hero.js': { code: `<img src="${u('GOOd')}"/>` }, '/About.js': { code: `<img src={\`${u('BAD')}\`}/>` } }, real);
+    expect(out['/Hero.js'].code).toBe(`<img src="${real[0].previewUrl}"/>`);
+    expect(out['/About.js'].code).toContain(real[0].previewUrl);
+    expect(out['/About.js'].code).not.toContain('BAD');
+  });
+  test('altered download URLs are repaired to the download URL, not the preview URL', () => {
+    const out = resolveAssetUrls({ '/R.js': { code: `<a href="${u('BAD', '&download=p.jpeg')}" download/>` } }, real);
+    expect(out['/R.js'].code).toContain(real[0].downloadUrl);
+  });
+  test('correct URLs, unrelated URLs and non-code files are left untouched', () => {
+    const files = { '/A.js': { code: `<a href="https://github.com/x"/><img src="${real[0].previewUrl}"/>` }, '/p.json': { code: '{}' } };
+    expect(resolveAssetUrls(files, real)).toEqual(files);
+    expect(resolveAssetUrls(files, [])).toBe(files);
+  });
+  test('an edit repairs mangled URLs already present in the project', async () => {
+    editAgent.run.mockResolvedValue({ value: { assistantMessage: 'ok', changes: [], newFiles: [] } });
+    const result = await editWebsite({ messages: [{ role: 'user', content: 'x' }], existingFiles: { '/App.js': { code: `export default function App(){ return <img src="${u('BAD')}"/>; }` } }, existingDependencies: {}, assets: { images: [{ assetId: 'a1', fileName: 'p.jpeg', mimeType: 'image/jpeg', kind: 'image', previewUrl: real[0].previewUrl }] } });
+    expect(result.files['/App.js'].code).toContain(real[0].previewUrl);
+  });
+});
+
 describe('edit and debug keep media', () => {
   const files = { '/App.js': { code: 'export default function App(){ return <img src="https://s/i1"/>; }' }, '/Other.js': { code: 'export default function O(){ return null; }' } };
 
   test('edit passes the manifest to the edit agent and leaves untouched files (and their media URLs) alone', async () => {
     editAgent.run.mockResolvedValue({ value: { assistantMessage: 'ok', changes: [{ path: '/Other.js', code: 'export default function O(){ return <p>hi</p>; }' }], newFiles: [] } });
     const result = await editWebsite({ messages: [{ role: 'user', content: 'change other' }], existingFiles: files, existingDependencies: {}, assets });
-    expect(editAgent.run.mock.calls[0][0].mediaManifest.find((m) => m.assetId === 'i1').previewUrl).toBe('https://s/i1');
+    expect(editAgent.run.mock.calls[0][0].mediaManifest.find((m) => m.assetId === 'i1').previewUrl).toBe('asset://i1');
     expect(result.files['/App.js'].code).toContain('https://s/i1');
     expect(requirementsAgent.run).not.toHaveBeenCalled(); // no full regeneration
     expect(codeAgent.run).not.toHaveBeenCalled();

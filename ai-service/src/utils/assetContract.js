@@ -84,4 +84,44 @@ function normalizeMediaPlan(mediaPlan, assets) {
   });
 }
 
-module.exports = { normalizeAssets, flattenAssets, buildMediaManifest, buildAssetSummaries, normalizeMediaPlan };
+/**
+ * Signed URLs are ~600 characters of base64 token. An LLM copying one will
+ * occasionally change a character, which silently invalidates the signature
+ * (a broken image in the preview). So the model only ever sees short
+ * `asset://<assetId>` references; real URLs are swapped in afterwards by
+ * resolveAssetUrls(), which also repairs any real URL the model altered.
+ */
+function toModelManifest(manifest) {
+  return (manifest || []).map((m) => {
+    const out = { ...m, previewUrl: `asset://${m.assetId}` };
+    if (m.downloadUrl) out.downloadUrl = `asset://${m.assetId}/download`;
+    return out;
+  });
+}
+
+const escapeRe = (v) => String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+function resolveAssetUrls(files, manifest) {
+  if (!files || !manifest?.length) return files;
+  const out = {};
+  for (const [path, file] of Object.entries(files)) {
+    let code = file?.code;
+    if (typeof code !== 'string') { out[path] = file; continue; }
+    for (const m of manifest) {
+      const id = escapeRe(m.assetId);
+      // 1) placeholders (download first: it is the longer form)
+      if (m.downloadUrl) code = code.split(`asset://${m.assetId}/download`).join(m.downloadUrl);
+      code = code.split(`asset://${m.assetId}`).join(m.previewUrl);
+      // 2) any signed URL for this asset that is not exactly the real one
+      //    (the model changed a character, or an old URL from an earlier run)
+      code = code.replace(new RegExp(`https?://[^\\s"'\`<>)\\\\]*?/storage/v1/object/sign/[^\\s"'\`<>)\\\\]*?/assets/${id}/[^\\s"'\`<>)\\\\]*`, 'g'), (url) => {
+        if (url === m.previewUrl || url === m.downloadUrl) return url;
+        return m.downloadUrl && /[?&]download=/.test(url) ? m.downloadUrl : m.previewUrl;
+      });
+    }
+    out[path] = code === file.code ? file : { ...file, code };
+  }
+  return out;
+}
+
+module.exports = { toModelManifest, resolveAssetUrls, normalizeAssets, flattenAssets, buildMediaManifest, buildAssetSummaries, normalizeMediaPlan };

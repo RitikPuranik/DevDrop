@@ -3,7 +3,7 @@ const debugAgent = require('../agents/debug.agent');
 const { validateGeneratedFiles } = require('../validators/generatedFiles.validator');
 const { identifyRelevantFiles } = require('./relevantFiles');
 const { withTimeout, stage: runStage } = require('./stageRunner');
-const { buildMediaManifest } = require('../utils/assetContract');
+const { buildMediaManifest, toModelManifest, resolveAssetUrls } = require('../utils/assetContract');
 
 // Single overall timeout for the entire incremental-edit pipeline
 // (relevant-files detection -> edit agent -> validation/debug repair loop).
@@ -87,7 +87,7 @@ async function runEdit(input, { onStage } = {}) {
       fileTree: existingPaths,
       relevantFiles,
       dependencies: normalized.dependencies,
-      mediaManifest: normalized.mediaManifest,
+      mediaManifest: toModelManifest(normalized.mediaManifest),
     }),
     meta,
     onStage
@@ -117,7 +117,7 @@ async function runEdit(input, { onStage } = {}) {
   if (changedPaths.size === 0) {
     return {
       assistantMessage: editResult.value?.assistantMessage || 'No changes were necessary for that request.',
-      files,
+      files: resolveAssetUrls(files, normalized.mediaManifest),
       dependencies: normalized.dependencies,
       generationMeta: { agents: meta, mode: 'edit', changedFiles: [], newFiles: [] },
     };
@@ -127,6 +127,7 @@ async function runEdit(input, { onStage } = {}) {
   // that fails do we spend an extra Gemini call -- scoped to just the
   // affected files, never the whole project -- to repair it.
   for (let attempt = 0; attempt <= MAX_EDIT_REPAIR_RETRIES; attempt += 1) {
+    files = resolveAssetUrls(files, normalized.mediaManifest);
     const staticErrors = validateGeneratedFiles(files);
     if (staticErrors.length === 0) break;
 
@@ -147,7 +148,7 @@ async function runEdit(input, { onStage } = {}) {
         requirements: {},
         design: {},
         dependencies: normalized.dependencies,
-        mediaManifest: normalized.mediaManifest,
+        mediaManifest: toModelManifest(normalized.mediaManifest),
       }),
       meta,
       onStage
@@ -160,6 +161,7 @@ async function runEdit(input, { onStage } = {}) {
     }
   }
 
+  files = resolveAssetUrls(files, normalized.mediaManifest);
   const dependencies = dependenciesFromPackageJson(files, normalized.dependencies);
 
   console.log('[EDIT-ORCHESTRATOR] edit completed', { changedFiles: [...changedPaths] });
