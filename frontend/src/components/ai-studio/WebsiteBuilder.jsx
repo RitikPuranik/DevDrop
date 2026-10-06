@@ -187,6 +187,124 @@ const SCHEMAS = {
       ]],
     ],
   },
+  saas: {
+    title: 'Build your SaaS / web app website',
+    subtitle: 'Define the product, users, feature story, conversion path and app-facing requirements.',
+    sections: [
+      ['Product', [
+        ['productName','Product / app name','e.g. Flowbase AI'],
+        ['productDescription','What does it do?','Explain the product in plain language.',true],
+        ['problem','Problem it solves','What is difficult or slow today?',true],
+        ['solution','Core solution','How does your product solve it?',true],
+        ['targetUsers','Target users','Founders, developers, teams, students...'],
+      ]],
+      ['Features & value', [
+        ['keyFeatures','Key features','List the most important features and what each does.',true],
+        ['differentiators','What makes it different?','Unique workflow, technology, UX, pricing model...'],
+        ['integrations','Integrations','GitHub, Slack, Stripe, APIs, devices, etc.'],
+        ['securityNotes','Security / compliance notes','Only include claims you provide.',true],
+      ]],
+      ['Conversion', [
+        ['primaryGoal','Primary goal','Signup, demo, waitlist, install, contact, purchase...'],
+        ['primaryCTA','Primary CTA','e.g. Start building free'],
+        ['pricing','Pricing / plans','Plans, price, limits or "contact sales"',true],
+        ['proof','Proof / trust content','Real customers, testimonials, metrics, certifications...',true],
+      ]],
+      ['Website structure', [
+        ['sections','Required sections','Hero, features, workflow, integrations, pricing, FAQ, footer...',true],
+        ['appScreens','App screens / dashboard ideas','Describe screens that should appear in product visuals.',true],
+        ['brandNotes','Brand direction','Colors, typography, imagery, references...',true],
+      ]],
+    ],
+  },
+  event: {
+    title: 'Build your event / conference website',
+    subtitle: 'Define the event identity, schedule, speakers, venue and attendee journey.',
+    sections: [
+      ['Event identity', [
+        ['eventName','Event name','e.g. BuildNext 2027'],
+        ['tagline','Event tagline','Short theme or positioning line'],
+        ['description','Event description','What is the event about?',true],
+        ['eventType','Event type','Conference, meetup, workshop, launch, festival...'],
+        ['targetAudience','Target attendees','Developers, founders, students, creators...'],
+      ]],
+      ['Schedule & speakers', [
+        ['dateTime','Date & time','Exact dates and time zone if known'],
+        ['schedule','Agenda / schedule','Sessions, timings, tracks, breaks...',true],
+        ['speakers','Speakers / guests','Names, roles and bios. Only supplied information.',true],
+        ['tracks','Tracks / categories','e.g. AI, Web, Product, Career'],
+      ]],
+      ['Venue & tickets', [
+        ['venue','Venue / location','Address, city, online platform, or hybrid details'],
+        ['ticketing','Tickets / registration','Prices, tiers, limits or registration method',true],
+        ['sponsors','Sponsors / partners','Real organizations only.'],
+        ['contact','Contact / socials','Email, phone, social links',true],
+      ]],
+      ['Attendee experience', [
+        ['sections','Required sections','Hero, countdown, speakers, schedule, tickets, venue, FAQ...',true],
+        ['attendeeInfo','Attendee information','What visitors need to know before registering',true],
+        ['specialRequests','Special interactions','Countdown, schedule filters, calendar add, maps, animations...',true],
+      ]],
+    ],
+  },
+  education: {
+    title: 'Build your education / course website',
+    subtitle: 'Define the learning offer, curriculum, instructors, enrollment path and student experience.',
+    sections: [
+      ['Learning offer', [
+        ['academyName','Academy / course name','e.g. CodeCraft Academy'],
+        ['courseTopic','What is taught?','Subject, skill or learning outcome'],
+        ['description','Course / program description','What will students learn?',true],
+        ['level','Level / format','Beginner, advanced, live, self-paced, cohort...'],
+        ['targetStudents','Target students','Students, professionals, career switchers...'],
+      ]],
+      ['Curriculum & instructors', [
+        ['curriculum','Curriculum / modules','Modules, lessons, projects or weeks',true],
+        ['instructors','Instructor information','Names, roles, bios and credentials you provide.',true],
+        ['learningFeatures','Learning features','Quizzes, projects, certificates, community, mentoring...'],
+        ['outcomes','Learning outcomes','What students should be able to do after completion.',true],
+      ]],
+      ['Enrollment', [
+        ['price','Pricing / plans','Course price, plans, scholarship info, or "on request"'],
+        ['enrollmentMethod','Enrollment method','Checkout, application, WhatsApp, form, external platform...'],
+        ['startDate','Start date / schedule','Cohort dates or self-paced availability'],
+        ['ctaText','Primary CTA','e.g. Enroll now'],
+      ]],
+      ['Website structure', [
+        ['sections','Required sections','Hero, curriculum, instructors, outcomes, pricing, FAQ, contact...',true],
+        ['studentProof','Proof / social proof','Real testimonials, student projects, outcomes...',true],
+        ['brandNotes','Brand direction','Colors, visual references, typography, imagery...',true],
+      ]],
+    ],
+  },
+  custom: {
+    title: 'Build your custom website',
+    subtitle: 'Start with the idea in your head. Give DevDrop enough context to turn it into a complete website brief.',
+    sections: [
+      ['Your idea', [
+        ['siteName','Website / brand name','What should appear in the navbar?'],
+        ['siteType','What kind of website is it?','Describe it in your own words: community, marketplace, directory, personal tool, booking site...'],
+        ['purpose','What should the website achieve?','The main outcome you want from visitors.',true],
+        ['targetAudience','Who is it for?','Describe the people who will use or visit it.',true],
+      ]],
+      ['Content & structure', [
+        ['pages','Pages you want','Home, about, pricing, dashboard, contact, etc.',true],
+        ['sections','Sections / content','Describe the sections, content blocks and information hierarchy.',true],
+        ['features','Features / interactions','Forms, search, filters, calculators, dashboards, auth, bookings, animations...',true],
+        ['contentProvided','Content you already have','Copy, data, documents, links, product info, etc.',true],
+      ]],
+      ['Brand & experience', [
+        ['brandDirection','Visual direction','Style, colors, typography, mood, references, competitors...',true],
+        ['references','Reference websites / inspiration','URLs or descriptions of websites whose feel you like.',true],
+        ['responsiveNeeds','Responsive / device needs','Mobile-first, desktop-heavy, tablet, kiosk, etc.'],
+        ['integrations','Integrations / external tools','APIs, payments, analytics, forms, maps, CRMs...',true],
+      ]],
+      ['Final instructions', [
+        ['successCriteria','What would make this website feel complete?','List the details that must be right.',true],
+        ['constraints','Constraints','Technology, performance, accessibility, content, compliance, or things to avoid.',true],
+      ]],
+    ],
+  },
 };
 
 function TextField({ label, value, onChange, placeholder, multiline }) {
@@ -278,14 +396,14 @@ export default function WebsiteBuilder({ type, onBack, onGenerate }) {
         onChange={setDesign}
         onBack={() => setStep(0)}
         onNext={() => setStep(2)}
-        topBar={<StudioTopBar onBack={onBack} disabled={generating} title={schema?.title || 'AI Studio'} step={step} />}
+        topBar={<div className="pt-24 md:pt-28"><StudioTopBar title={schema?.title || 'Website builder'} step={step} /></div>}
       />
     );
   }
 
   return (
     <div className="min-h-full bg-neutral-950 text-white">
-      <div className="mx-auto max-w-4xl px-5 py-6 md:px-8">
+      <div className="mx-auto max-w-4xl px-5 pb-10 pt-24 md:px-8 md:pt-28">
         <div className="mb-8 flex items-center justify-between">
           <button type="button" onClick={onBack} disabled={generating} className="inline-flex items-center gap-2 text-sm text-white/50 hover:text-white"><ArrowLeft size={16} /> Website types</button>
           <div className="inline-flex items-center gap-2 text-xs text-white/35"><Sparkles size={14} className="text-violet-400" /> {schema?.title || 'AI Studio'}</div>
@@ -302,7 +420,7 @@ export default function WebsiteBuilder({ type, onBack, onGenerate }) {
 
         <motion.div key={step} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
           {step === 0 && <DetailsStep type={type} details={details} onChange={setDetails} onBack={onBack} onNext={() => setStep(1)} />}
-          {step === 1 && <DesignPreferencesStep websiteType={type} design={design} onChange={setDesign} onBack={() => setStep(0)} onNext={() => setStep(2)} />}
+          
           {step === 2 && (
             <StepShell stepIndex={3} title="Review your website" subtitle="Review everything before sending it to the AI builder.">
               <div className="space-y-3">
@@ -332,7 +450,7 @@ export default function WebsiteBuilder({ type, onBack, onGenerate }) {
 }
 
 export function buildWebsitePrompt(type, details, design) {
-  const labels = { ecommerce: 'e-commerce store', blog: 'blog / magazine', landing: 'marketing landing page', cafe: 'cafe / restaurant website', hotel: 'hotel / stay website', studio: 'freelancing studio / agency website' };
+  const labels = { ecommerce: 'e-commerce store', blog: 'blog / magazine', landing: 'marketing landing page', cafe: 'cafe / restaurant website', hotel: 'hotel / stay website', studio: 'freelancing studio / agency website', saas: 'SaaS / web app website', event: 'event / conference website', education: 'education / course website', custom: 'custom website' };
   const title = labels[type] || 'website';
   const specification = Object.entries(details)
     .filter(([, value]) => value !== '' && value !== null && value !== undefined)
@@ -353,6 +471,10 @@ GENERATION RULES:
 - For cafes/restaurants, build an appetizing menu (by category), ambience/gallery, hours, location, reservation/order CTA and contact sections using only the supplied menu items and prices.
 - For hotels, build clear room cards, amenities, gallery, location/nearby highlights, policies and an enquiry/booking CTA without inventing rates, ratings, reviews or availability.
 - For freelancing studios, build services, packages, process, case studies, testimonials and a strong inquiry/booking CTA using only real supplied work, clients and quotes.
+- For SaaS/web apps, prioritize product clarity, feature storytelling, workflow visuals, pricing, integrations and signup/demo conversion without inventing product capabilities, customer metrics or security claims.
+- For events/conferences, prioritize event identity, date/time, schedule, speakers, venue, tickets/registration, sponsors and attendee information using only supplied facts.
+- For education/course sites, prioritize curriculum, instructor credibility, outcomes, format, pricing/enrollment and student proof using only supplied information.
+- For custom websites, treat the user's description as the source of truth and infer only information architecture, layout and interaction patterns. Do not force the project into a predefined category when the brief describes something different.
 - Check all JSX component references before returning the structured file-generation JSON.
 
 WEBSITE TYPE: ${title}

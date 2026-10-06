@@ -38,10 +38,8 @@ const HERO_VIDEO_SRC = '/dewdrop.s3.mp4';
 function AppContent() {
   const location = useLocation();
   const isBuilder = location.pathname === "/website";
-  // AiStudio.jsx is a full-bleed native chat+preview page (its own header,
-  // own "back to DevDrop" affordance) — same chrome-less treatment as /website.
-  // Replaces the old isPreviewWorkspace flag now that /ai-studio/preview/:jobId
-  // no longer exists.
+  // AI Studio owns its full-bleed workspace content, but keeps the global
+  // DevDrop navbar so it feels like a first-class page rather than a separate app.
   const isAiStudio = location.pathname.startsWith("/ai-studio");
   const isWorkspace = location.pathname.startsWith("/workspace") || location.pathname.startsWith("/dashboard");
   const isVerifyEmail = location.pathname === "/verify-email";
@@ -124,7 +122,7 @@ function AppContent() {
       {appReady && (
         <>
           {!isStandaloneAuthPage && !isAiStudio && <Loader suppressOnce={suppressNextLoader} />}
-          {!isBuilder && !isAiStudio && !isStandaloneAuthPage && <Navbar />}
+          {!isBuilder && !isStandaloneAuthPage && <Navbar />}
           <main className="bg-black min-h-screen">
             <Suspense fallback={null}>
               <Routes>

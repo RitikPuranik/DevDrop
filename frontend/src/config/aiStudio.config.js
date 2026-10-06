@@ -1,4 +1,4 @@
-import { BriefcaseBusiness, ShoppingBag, Newspaper, LayoutTemplate, Coffee, Hotel, Clapperboard } from 'lucide-react';
+import { BriefcaseBusiness, ShoppingBag, Newspaper, LayoutTemplate, Coffee, Hotel, Clapperboard, AppWindow, CalendarDays, GraduationCap, WandSparkles } from 'lucide-react';
 
 export const WEBSITE_TYPES = [
   {
@@ -48,6 +48,34 @@ export const WEBSITE_TYPES = [
     title: 'Freelancing Studio',
     description: 'Services, packages, case studies and client inquiry flow for freelancers, agencies and creative studios.',
     icon: Clapperboard,
+    enabled: true,
+  },
+  {
+    id: 'saas',
+    title: 'SaaS / Web App',
+    description: 'Product-led website for software, AI tools, dashboards and web applications.',
+    icon: AppWindow,
+    enabled: true,
+  },
+  {
+    id: 'event',
+    title: 'Event / Conference',
+    description: 'Event site for conferences, meetups, launches, workshops and live experiences.',
+    icon: CalendarDays,
+    enabled: true,
+  },
+  {
+    id: 'education',
+    title: 'Education / Course',
+    description: 'Course, academy, coaching or learning platform website with clear enrollment paths.',
+    icon: GraduationCap,
+    enabled: true,
+  },
+  {
+    id: 'custom',
+    title: 'Custom Website',
+    description: 'Start from scratch. Describe exactly what you need and shape the brief around your idea.',
+    icon: WandSparkles,
     enabled: true,
   },
 ];

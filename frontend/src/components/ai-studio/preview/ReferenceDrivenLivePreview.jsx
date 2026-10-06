@@ -10,6 +10,10 @@ const TYPE_LABEL = {
   cafe: 'CAFE',
   hotel: 'STAY',
   studio: 'STUDIO',
+  saas: 'SAAS',
+  event: 'EVENT',
+  education: 'LEARN',
+  custom: 'CUSTOM',
 };
 
 const TYPE_COPY = {
@@ -88,6 +92,50 @@ const TYPE_COPY = {
       ['01', 'Strategy', 'Positioning, narrative, digital direction', '01'],
       ['02', 'Design Systems', 'Websites, products, identities', '02'],
       ['03', 'Launch', 'Build, ship, measure, refine', '03'],
+    ],
+  },
+  saas: {
+    eyebrow: 'Product / software',
+    hero: 'Make the product easy to understand.',
+    copy: 'A product-led story for software and web apps, with feature clarity, proof, pricing, and a focused signup path.',
+    stats: ['01 product', '04 pillars', '01 CTA'],
+    cards: [
+      ['01', 'Core workflow', 'Show the product flow from problem to outcome', 'FLOW'],
+      ['02', 'Feature story', 'Turn capabilities into clear user value', 'VALUE'],
+      ['03', 'Conversion', 'Move visitors toward signup or demo', 'CTA'],
+    ],
+  },
+  event: {
+    eyebrow: 'Event / experience',
+    hero: 'Turn an event into a destination.',
+    copy: 'Schedule, speakers, venue, tickets, and attendee details organized around one clear registration journey.',
+    stats: ['01 event', '03 tracks', '01 RSVP'],
+    cards: [
+      ['01', 'The lineup', 'Speakers, sessions, and the moments people care about', 'SPEAKERS'],
+      ['02', 'The schedule', 'A readable agenda that survives mobile screens', 'AGENDA'],
+      ['03', 'The room', 'Venue, tickets, and the final registration step', 'JOIN'],
+    ],
+  },
+  education: {
+    eyebrow: 'Learning / program',
+    hero: 'Give learning a clear path forward.',
+    copy: 'Curriculum, instructors, outcomes, and enrollment arranged so students know exactly what comes next.',
+    stats: ['01 program', '04 modules', '01 outcome'],
+    cards: [
+      ['01', 'Curriculum', 'Show what students will learn and in what order', 'MODULES'],
+      ['02', 'Instructors', 'Make the people behind the learning visible', 'TEACH'],
+      ['03', 'Enrollment', 'Make the next step obvious and reassuring', 'ENROLL'],
+    ],
+  },
+  custom: {
+    eyebrow: 'Custom / from scratch',
+    hero: 'Start with the idea. Shape everything around it.',
+    copy: 'A flexible starting point for websites that do not belong in a preset. The structure follows the brief, not the template.',
+    stats: ['01 idea', '∞ directions', '01 build'],
+    cards: [
+      ['01', 'Your structure', 'Choose the pages, sections, and hierarchy you actually need', 'BUILD'],
+      ['02', 'Your behavior', 'Describe the interactions and product logic that matter', 'DEFINE'],
+      ['03', 'Your identity', 'Translate your visual references into a consistent system', 'STYLE'],
     ],
   },
 };

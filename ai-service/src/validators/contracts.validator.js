@@ -19,7 +19,8 @@ function validateRequirements(value) {
   ]) {
     if (!(key in value)) throw new Error(`requirements.${key} is missing`);
   }
-  if (value.websiteType !== 'portfolio') {
+  const supportedTypes = new Set(['portfolio', 'ecommerce', 'blog', 'landing', 'cafe', 'hotel', 'studio', 'saas', 'event', 'education', 'custom']);
+  if (!supportedTypes.has(value.websiteType)) {
     throw new Error(`Unsupported website type: ${value.websiteType}`);
   }
   return value;
@@ -115,7 +116,7 @@ function validateArchitecture(value) {
     files.push({
       path: '/App.js',
       type: 'component',
-      responsibility: 'Main portfolio application entry component.',
+      responsibility: 'Main website application entry component.',
       exports: ['default'],
       imports: [],
     });

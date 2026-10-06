@@ -21,6 +21,32 @@ function normalizeInput(input){const messages=Array.isArray(input.messages)?inpu
 function mergeFiles(base,changes){const out={...base};for(const[p,obj]of Object.entries(changes||{}))if(obj?.code)out[p]={code:obj.code};return out;}
 function stage(name,fn,meta,onStage){return runStage(name,fn,meta,onStage);}
 function warnUnusedAssets(files,manifest){const code=Object.values(files||{}).map(f=>f?.code||'').join('\n');const missing=(manifest||[]).filter(a=>a.previewUrl&&!code.includes(a.previewUrl)&&!(a.downloadUrl&&code.includes(a.downloadUrl))).map(a=>a.assetId);if(missing.length)console.warn('[AI STUDIO MEDIA] uploaded assets not referenced by generated code',{missing});}
+
+function buildGeneratedTitle(requirements = {}) {
+ const data = requirements.userData || {};
+ const type = requirements.websiteType || 'portfolio';
+ const names = {
+   portfolio: data.name || data.fullName,
+   ecommerce: data.storeName,
+   blog: data.publicationName,
+   landing: data.productName,
+   cafe: data.venueName,
+   hotel: data.hotelName,
+   studio: data.studioName,
+   saas: data.productName,
+   event: data.eventName,
+   education: data.academyName,
+   custom: data.siteName,
+ };
+ const name = names[type];
+ const suffixes = {
+   portfolio: 'Portfolio', ecommerce: 'Store', blog: 'Publication', landing: 'Landing Page',
+   cafe: 'Cafe', hotel: 'Stay', studio: 'Studio', saas: 'SaaS', event: 'Event',
+   education: 'Academy', custom: 'Website',
+ };
+ return name ? `${name} ${suffixes[type] || 'Website'}` : `Generated ${suffixes[type] || 'Website'}`;
+}
+
 function buildDebugContext({ files, dependencies, architecture, requirements, design, errors, buildOutput, mediaManifest, mediaPlan }) {
  return {
    files: files || {},
@@ -78,7 +104,7 @@ async function debugWebsite(input = {}, { onStage } = {}) {
    if (build.success) {
      return {
        assistantMessage: 'Debug repair completed successfully. The existing generated website was repaired without regenerating it.',
-       title: requirements.userData?.name ? `${requirements.userData.name} Portfolio` : 'Generated Portfolio',
+       title: buildGeneratedTitle(requirements),
        files,
        dependencies,
        generationMeta: { agents: meta },
@@ -149,7 +175,7 @@ async function runGeneration(input,{onStage}={}){
   files=resolveAssetUrls(files,mediaManifest);
   const staticErrors=validateGeneratedFiles(files);
   if(staticErrors.length){console.warn('[VALIDATOR] static validation failed',{attempt,errors:staticErrors});if(attempt===MAX_BUILD_FIX_RETRIES)throw Object.assign(new Error(staticErrors.join(' | ')),{userMessage:`Generated code failed validation after the maximum repair attempts: ${staticErrors.join(' | ').slice(0,1200)}`,debugContext:buildDebugContext({files,dependencies,architecture,requirements,design,errors:staticErrors,mediaManifest,mediaPlan})});const debug=await stage(`debug:${attempt+1}`,()=>debugAgent.run({errors:staticErrors,affectedFiles:Object.keys(files),files,architecture,requirements,design,dependencies,mediaManifest:modelManifest}),meta,onStage);for(const change of debug.value?.changes||[])if(change.path&&change.code)files[change.path]={code:change.code};continue;}
-  console.log('[VALIDATOR] static validation passed');const build=await stage('build-validator',()=>buildValidator.run({files,dependencies}),meta,onStage);if(build.success){console.log('[VALIDATOR] build passed');warnUnusedAssets(files,mediaManifest);console.log('[ORCHESTRATOR] generation completed');return {assistantMessage:`Generated a ${requirements.websiteType} website through the multi-agent pipeline.`,title:requirements.userData?.name?`${requirements.userData.name} Portfolio`:'Generated Portfolio',files,dependencies,generationMeta:{agents:meta}};}
+  console.log('[VALIDATOR] static validation passed');const build=await stage('build-validator',()=>buildValidator.run({files,dependencies}),meta,onStage);if(build.success){console.log('[VALIDATOR] build passed');warnUnusedAssets(files,mediaManifest);console.log('[ORCHESTRATOR] generation completed');return {assistantMessage:`Generated a ${requirements.websiteType} website through the multi-agent pipeline.`,title:buildGeneratedTitle(requirements),files,dependencies,generationMeta:{agents:meta}};}
   console.warn('[VALIDATOR] build failed',{attempt,errors:build.errors});if(attempt===MAX_BUILD_FIX_RETRIES)throw Object.assign(new Error('Build failed after maximum repair attempts'),{userMessage:`DevDrop could not produce a buildable website after the maximum repair attempts: ${(build.errors||[]).join(' | ').slice(0,1200)}`,debugContext:buildDebugContext({files,dependencies,architecture,requirements,design,errors:build.errors||[],buildOutput:build.errors||[],mediaManifest,mediaPlan})});const debug=await stage(`debug:${attempt+1}`,()=>debugAgent.run({errors:build.errors,affectedFiles:Object.keys(files),files,architecture,requirements,design,dependencies,buildOutput:build.errors,mediaManifest:modelManifest}),meta,onStage);for(const change of debug.value?.changes||[])if(change.path&&change.code)files[change.path]={code:change.code};
  }
  throw new Error('Generation failed after maximum repair attempts');

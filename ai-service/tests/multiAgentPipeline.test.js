@@ -8,6 +8,13 @@ describe('multi-agent contracts', () => {
     expect(() => validateArchitecture({ project:{framework:'react-vite',language:'javascript'}, files:[{path:'/App.js',type:'entry',responsibility:'entry',exports:['default'],imports:[]}], dependencies:{}, routes:[], dataModel:{} })).not.toThrow();
   });
 
+  test('accepts every website type exposed by AI Studio', () => {
+    const websiteTypes = ['portfolio', 'ecommerce', 'blog', 'landing', 'cafe', 'hotel', 'studio', 'saas', 'event', 'education', 'custom'];
+    for (const websiteType of websiteTypes) {
+      expect(() => validateRequirements({ websiteType, goal:'build', targetAudience:'visitors', pages:[], sections:[], contentRequirements:{}, features:[], userData:{}, constraints:[], assets:[] })).not.toThrow();
+    }
+  });
+
   test('catches undefined JSX components with AST parsing', () => {
     const errors = validateGeneratedFiles({ '/App.js': { code: 'export default function App(){ return <Hero />; }' } });
     expect(errors.some((e) => e.includes('Hero') && e.includes('undefined'))).toBe(true);
