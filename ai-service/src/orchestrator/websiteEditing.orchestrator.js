@@ -3,6 +3,7 @@ const debugAgent = require('../agents/debug.agent');
 const { validateGeneratedFiles } = require('../validators/generatedFiles.validator');
 const { identifyRelevantFiles } = require('./relevantFiles');
 const { withTimeout, stage: runStage } = require('./stageRunner');
+const { buildMediaManifest } = require('../utils/assetContract');
 
 // Single overall timeout for the entire incremental-edit pipeline
 // (relevant-files detection -> edit agent -> validation/debug repair loop).
@@ -29,6 +30,7 @@ function normalizeInput(input) {
     conversation,
     files: existingFiles,
     dependencies: existingDependencies,
+    mediaManifest: buildMediaManifest(input.assets),
   };
 }
 
@@ -85,6 +87,7 @@ async function runEdit(input, { onStage } = {}) {
       fileTree: existingPaths,
       relevantFiles,
       dependencies: normalized.dependencies,
+      mediaManifest: normalized.mediaManifest,
     }),
     meta,
     onStage
@@ -144,6 +147,7 @@ async function runEdit(input, { onStage } = {}) {
         requirements: {},
         design: {},
         dependencies: normalized.dependencies,
+        mediaManifest: normalized.mediaManifest,
       }),
       meta,
       onStage

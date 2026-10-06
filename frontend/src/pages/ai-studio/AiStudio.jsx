@@ -1,3 +1,4 @@
+import {buildAssetContract} from '../../components/ai-studio/assetContract';
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowUp, Loader2, Bot, User, Check, Circle } from 'lucide-react';
@@ -116,7 +117,7 @@ export default function AiStudio() {
       const promptWithMedia=buildPortfolioPrompt({...spec.details,images:media.images,videos:media.videos},spec.design);
       const portfolioMessage=[{role:'user',content:promptWithMedia}];
       setMessages(portfolioMessage);
-      await runGeneration(portfolioMessage,{websiteType:'portfolio',userData:{...spec?.details,images:undefined,videos:undefined},preferences:spec?.design||{},assets:{profileImage:null,resume:resumeAsset,projectImages:media.images,mediaVideos:media.videos}});
+      await runGeneration(portfolioMessage,{websiteType:'portfolio',userData:{...spec?.details,images:undefined,videos:undefined},preferences:spec?.design||{},assets:buildAssetContract({resume:resumeAsset,images:media.images,videos:media.videos})});
     }catch(error){
       const msg=error?.response?.data?.message||error?.message||'Failed to save the resume to AI Studio storage.';
       setError(msg);
@@ -145,7 +146,7 @@ export default function AiStudio() {
     const nextMessages=[{role:'user',content:prompt}];
     setStudioMode('chat');
     setMessages(nextMessages);
-    await runGeneration(nextMessages,{websiteType:type,userData:{...details,images:undefined,videos:undefined},preferences:design,assets:{profileImage:null,resume:null,projectImages:media.images,mediaVideos:media.videos}});
+    await runGeneration(nextMessages,{websiteType:type,userData:{...details,images:undefined,videos:undefined},preferences:design,assets:buildAssetContract({images:media.images,videos:media.videos})});
   };
   const handleSend=()=>{const trimmed=input.trim();if(!trimmed||isGenerating)return;setInput('');const nextMessages=[...messages,{role:'user',content:trimmed}];setMessages(nextMessages);runGeneration(nextMessages,{websiteType:'portfolio',userData:{},preferences:{},conversation:nextMessages});};
   const handleFixError=(previewError)=>{if(isGenerating)return;const prompt=`The preview threw this error, please fix it:\n\n${previewError}`;const nextMessages=[...messages,{role:'user',content:prompt}];setMessages(nextMessages);runGeneration(nextMessages,{websiteType:'portfolio',userData:{},preferences:{},conversation:nextMessages});};

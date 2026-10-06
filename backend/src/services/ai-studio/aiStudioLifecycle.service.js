@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const AIStudioProject = require('../../modules/ai-studio/aiStudioProject.model');
 const AIStudioAsset = require('../../modules/ai-studio/aiStudioAsset.model');
 const storage = require('./aiStudioStorage.service');
@@ -117,15 +118,27 @@ async function syncGeneratedFiles({ projectId, userId, files, dependencies, titl
 async function addAsset({ projectId, userId, buffer, fileName, mimeType, size }) {
   const project = await getOwnedProject(projectId, userId);
   if (!project) return null;
-  const storagePath = await storage.uploadAsset(project._id, fileName, buffer, mimeType);
-  const asset = await AIStudioAsset.create({
+  // Allocate the id first so the storage path is unique per asset (same file
+  // name uploaded twice must not overwrite the first upload).
+  const assetId = new mongoose.Types.ObjectId();
+  const storagePath = await storage.uploadAsset(project._id, assetId, fileName, buffer, mimeType);
+  let asset;
+  try {
+    asset = await AIStudioAsset.create({
+    _id: assetId,
     projectId: project._id,
     userId,
     storagePath,
     fileName,
     mimeType,
     size,
-  });
+    });
+  } catch (error) {
+    // Don't leave an orphaned object behind if the DB write fails.
+    await storage.deleteAsset(storagePath).catch(() => {});
+    throw error;
+  }
+  console.log('[AI STUDIO ASSET] uploaded', { projectId: String(project._id), assetId: String(assetId), mimeType, size });
   project.touchActivity();
   await project.save();
   return asset;

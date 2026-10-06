@@ -3,10 +3,11 @@ let idCounter = 1;
 
 class QueryMock {
   constructor(result) { this.result = result; }
+  lean() { return this; }
   then(resolve, reject) { return Promise.resolve(this.result).then(resolve, reject); }
 }
 
-const matches = (doc, query) => Object.entries(query).every(([k, v]) => String(doc[k]) === String(v));
+const matches = (doc, query) => Object.entries(query).every(([k, v]) => (v && typeof v === 'object' && Array.isArray(v.$in) ? v.$in.map(String).includes(String(doc[k])) : String(doc[k]) === String(v)));
 
 class FakeAIStudioAsset {
   constructor(fields = {}) {

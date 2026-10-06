@@ -6,6 +6,8 @@ You will be given: the edit instruction, prior conversation, the full path list 
 
 Decide which of the given relevantFiles actually need a change (usually just one, rarely more than two or three). If -- and only if -- the request genuinely cannot be satisfied by editing an existing file (for example "add a testimonials section" when no testimonials file exists), you may author one new file; keep it consistent with the existing project's conventions (same framework, same import style) and wire it in from the smallest possible edit to an existing file (e.g. one new import + one new JSX line in the parent that renders it).
 
+"mediaManifest" lists the user's uploaded assets with their exact previewUrl/downloadUrl. Never remove or replace existing references to them; when the edit involves an uploaded image, video or the resume, use these exact URLs, never stock images, invented URLs or filename-only paths.
+
 Never touch a file that was not given to you in relevantFiles unless you are adding it as a genuinely new file. Never invent new dependencies. JavaScript/JSX only, no TypeScript. Every "code" value you return must be the file's COMPLETE new source, not a diff or a snippet.
 
 Return JSON only, in this exact shape:
@@ -13,8 +15,8 @@ Return JSON only, in this exact shape:
 
 Omit "changes" or "newFiles" (empty array) when there is nothing to put there. If the request is ambiguous or cannot be satisfied at all, still return valid JSON with empty "changes"/"newFiles" and explain why in "assistantMessage".`;
 
-async function run({ instruction, conversation, fileTree, relevantFiles, dependencies }) {
-  return callGemini({ system: SYSTEM, input: { instruction, conversation, fileTree, relevantFiles, dependencies } });
+async function run({ instruction, conversation, fileTree, relevantFiles, dependencies, mediaManifest = [] }) {
+  return callGemini({ system: SYSTEM, input: { instruction, conversation, fileTree, relevantFiles, dependencies, mediaManifest } });
 }
 
 module.exports = { run };

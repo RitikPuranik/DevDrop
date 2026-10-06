@@ -2,7 +2,17 @@ const { aiStudioSupabase, AI_STUDIO_SUPABASE_BUCKET } = require('../../shared/co
 
 const storagePrefixFor = (projectId) => `ai-studio/${projectId}`;
 const zipPathFor = (projectId) => `${storagePrefixFor(projectId)}/project.zip`;
-const assetPathFor = (projectId, fileName) => `${storagePrefixFor(projectId)}/assets/${fileName}`;
+// Strips directory components and anything outside a conservative charset so a
+// hostile or odd file name can never escape the asset folder.
+const sanitizeFileName = (fileName) => {
+  const base = String(fileName || 'file').split(/[\\/]/).pop().normalize('NFKD');
+  const cleaned = base.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^\.+/, '').slice(-120);
+  return cleaned || 'file';
+};
+// One folder per asset id, so two uploads with the same file name can never
+// overwrite each other. Existing records keep the storagePath saved on them.
+const assetPathFor = (projectId, assetId, fileName) =>
+  `${storagePrefixFor(projectId)}/assets/${assetId}/${sanitizeFileName(fileName)}`;
 
 /**
  * Uploads/replaces the project's zip. Uses upsert so re-running an edit
@@ -32,11 +42,11 @@ const createSignedZipUrl = async (zipPath, expiresIn = 300) => {
   return data.signedUrl;
 };
 
-const uploadAsset = async (projectId, fileName, buffer, contentType) => {
-  const path = assetPathFor(projectId, fileName);
+const uploadAsset = async (projectId, assetId, fileName, buffer, contentType) => {
+  const path = assetPathFor(projectId, assetId, fileName);
   const { error } = await aiStudioSupabase.storage
     .from(AI_STUDIO_SUPABASE_BUCKET)
-    .upload(path, buffer, { contentType: contentType || 'application/octet-stream', upsert: true });
+    .upload(path, buffer, { contentType: contentType || 'application/octet-stream', upsert: false });
   if (error) throw new Error(`AI Studio asset upload error: ${error.message}`);
   return path;
 };
@@ -82,10 +92,15 @@ const deleteProjectStorage = async (projectId) => {
   return { deleted: paths.length };
 };
 
-const createSignedAssetUrl = async (storagePath, expiresIn = 86400) => {
+// Signed asset URLs are baked into generated code, so they must outlive the
+// time a user keeps an AI Studio session open. Inactivity cleanup (default 20
+// min) deletes the objects anyway, so 24h is a ceiling, not a retention period.
+const ASSET_URL_TTL_SECONDS = Number.parseInt(process.env.AI_STUDIO_ASSET_URL_TTL_SECONDS || '86400', 10) || 86400;
+
+const createSignedAssetUrl = async (storagePath, expiresIn = ASSET_URL_TTL_SECONDS, { download } = {}) => {
   const { data, error } = await aiStudioSupabase.storage
     .from(AI_STUDIO_SUPABASE_BUCKET)
-    .createSignedUrl(storagePath, expiresIn);
+    .createSignedUrl(storagePath, expiresIn, download ? { download } : undefined);
   if (error) throw new Error(`AI Studio asset signed URL error: ${error.message}`);
   return data.signedUrl;
 };
@@ -109,6 +124,8 @@ module.exports = {
   storagePrefixFor,
   zipPathFor,
   assetPathFor,
+  sanitizeFileName,
+  ASSET_URL_TTL_SECONDS,
   uploadProjectZip,
   downloadProjectZip,
   createSignedZipUrl,

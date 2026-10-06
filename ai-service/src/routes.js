@@ -50,6 +50,8 @@ router.post('/jobs/:id/debug-retry', requireServiceKey, (req, res) => {
     design: original.debugContext.design,
     errors: original.debugContext.errors,
     buildOutput: original.debugContext.buildOutput,
+    mediaManifest: original.debugContext.mediaManifest || [],
+    mediaPlan: original.debugContext.mediaPlan || [],
   });
   res.status(202).json({ success: true, data: { jobId: debugJobId, status: 'queued', mode: 'debug' } });
 });

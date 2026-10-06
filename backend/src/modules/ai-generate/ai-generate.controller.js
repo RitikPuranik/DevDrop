@@ -1,32 +1,22 @@
 const aiServiceClient = require('./aiServiceClient');
 const jobOwners = require('./jobOwners');
-const AIStudioAsset = require('../ai-studio/aiStudioAsset.model');
-const aiStudioStorage = require('../../services/ai-studio/aiStudioStorage.service');
+const { resolveGenerationAssets } = require('../../services/ai-studio/aiStudioAssetPipeline.service');
 
 exports.generate = async (req, res) => {
   try {
     const { messages, fileData, websiteType, userData, preferences, assets, conversation, projectId } = req.body;
     if (!Array.isArray(messages) || messages.length === 0) return res.status(400).json({ success:false, message:'No messages provided' });
 
-    let multimodalAssets = [];
-    if (projectId && Array.isArray(assets) && assets.length) {
-      const assetIds = assets.map((asset) => asset?._id || asset?.id).filter(Boolean);
-      if (assetIds.length) {
-        const storedAssets = await AIStudioAsset.find({ _id: { $in: assetIds }, projectId, userId: req.userId }).lean();
-        multimodalAssets = await Promise.all(storedAssets.map(async (asset) => {
-          const buffer = await aiStudioStorage.downloadAsset(asset.storagePath);
-          const previewUrl = await aiStudioStorage.createSignedAssetUrl(asset.storagePath, 86400);
-          return {
-            assetId: String(asset._id),
-            fileName: asset.fileName,
-            mimeType: asset.mimeType,
-            size: asset.size,
-            previewUrl,
-            data: buffer.toString('base64'),
-          };
-        }));
-      }
-    }
+    const hasExistingFiles = Boolean(fileData && fileData.files && typeof fileData.files === 'object' && Object.keys(fileData.files).length);
+    // Throws 400/403/404/502 with a user-facing message for critical asset
+    // problems; optional document-extraction problems are reported per asset
+    // (assets.*.extraction.status) and never fail the request.
+    const { assets: resolvedAssets, media } = await resolveGenerationAssets({
+      projectId,
+      userId: req.userId,
+      rawAssets: assets,
+      hasExistingFiles,
+    });
 
     const jobId = await aiServiceClient.createJob({
       messages,
@@ -34,8 +24,8 @@ exports.generate = async (req, res) => {
       websiteType:websiteType||'portfolio',
       userData:userData||{},
       preferences:preferences||{},
-      assets:assets||[],
-      media:multimodalAssets,
+      assets:resolvedAssets,
+      media,
       conversation:conversation||messages
     });
     jobOwners.record(jobId, req.userId);

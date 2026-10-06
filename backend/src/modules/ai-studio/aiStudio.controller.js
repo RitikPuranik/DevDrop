@@ -99,6 +99,14 @@ exports.downloadProject = async (req, res) => {
   }
 };
 
+const { classifyKind } = require('../../services/ai-studio/aiStudioAssetContract');
+
+// Keeps `_id` (existing consumers) and adds the canonical `assetId` + server-detected `kind`.
+const serializeAsset = (asset) => {
+  const o = asset.toObject ? asset.toObject() : asset;
+  return { ...o, assetId: String(o._id), kind: classifyKind(o.mimeType, o.fileName) };
+};
+
 // POST /api/ai-studio/:projectId/assets (multer buffer upload expected on req.file)
 exports.uploadAsset = async (req, res) => {
   try {
@@ -112,7 +120,7 @@ exports.uploadAsset = async (req, res) => {
       size: req.file.size,
     });
     if (!asset) return res.status(404).json({ success: false, message: 'Project not found' });
-    res.status(201).json({ success: true, data: asset });
+    res.status(201).json({ success: true, data: serializeAsset(asset) });
   } catch (error) {
     console.error('AI Studio uploadAsset error:', error.message);
     res.status(500).json({ success: false, message: 'Failed to upload asset' });
