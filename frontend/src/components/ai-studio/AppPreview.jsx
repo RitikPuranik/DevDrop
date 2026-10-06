@@ -31,6 +31,124 @@ const PLACEHOLDER_FILES = {
   },
 };
 
+const RESPONSIVE_PREVIEW_CSS = `
+html, body {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+#root::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+}
+
+html {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+body {
+  overflow-y: auto;
+  overflow-x: hidden;
+  overflow-wrap: anywhere;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+img, picture, video, canvas, svg {
+  max-width: 100%;
+}
+
+img, video {
+  height: auto;
+}
+
+table {
+  width: 100%;
+  max-width: 100%;
+  display: block;
+  overflow-x: auto;
+}
+
+pre, code {
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+iframe {
+  max-width: 100%;
+}
+
+button, input, textarea, select {
+  max-width: 100%;
+  min-width: 0;
+}
+
+#root {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+@media (max-width: 768px) {
+  h1, h2, h3, h4, h5, h6 {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  nav, header, main, section, article, aside, footer {
+    max-width: 100%;
+  }
+
+  [style*="grid-template-columns"],
+  [style*="display: grid"] {
+    min-width: 0;
+  }
+}
+`;
+
+function normalizeGeneratedFiles(sourceFiles) {
+  const files = { ...(sourceFiles || {}) };
+  const responsivePath = '/__devdrop-responsive.css';
+  const existingResponsive = files[responsivePath];
+  const appFile = files['/App.js'];
+
+  const existingCode = typeof existingResponsive?.code === 'string' ? existingResponsive.code : '';
+  files[responsivePath] = {
+    ...(existingResponsive && typeof existingResponsive === 'object' ? existingResponsive : {}),
+    code: existingCode.includes('DevDrop responsive runtime')
+      ? existingCode
+      : `${existingCode}${existingCode ? '\n\n' : ''}/* DevDrop responsive runtime */\n${RESPONSIVE_PREVIEW_CSS}`,
+  };
+
+  if (appFile && typeof appFile === 'object' && typeof appFile.code === 'string') {
+    const importStatement = `import './__devdrop-responsive.css';`;
+    if (!appFile.code.includes("./__devdrop-responsive.css") && !appFile.code.includes("/__devdrop-responsive.css")) {
+      files['/App.js'] = {
+        ...appFile,
+        code: `${importStatement}\n${appFile.code}`,
+      };
+    }
+  }
+
+  return files;
+}
+
 const BASE_DEPENDENCIES = {
   'react-router-dom': 'latest',
   'lucide-react': 'latest',
@@ -250,7 +368,7 @@ export default function AppPreview({ fileData, isGenerating, onFixError, pipelin
     if (fileData) setActiveTab('preview');
   }, [fileData]);
 
-  const files = fileData?.files ?? PLACEHOLDER_FILES;
+  const files = normalizeGeneratedFiles(fileData?.files ?? PLACEHOLDER_FILES);
   const dependencies = { ...BASE_DEPENDENCIES, ...(fileData?.dependencies ?? {}) };
   const filePathKey = Object.keys(files).sort().join('|');
 

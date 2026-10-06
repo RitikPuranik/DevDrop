@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const AIStudioProject = require('../../modules/ai-studio/aiStudioProject.model');
 const AIStudioAsset = require('../../modules/ai-studio/aiStudioAsset.model');
 const storage = require('./aiStudioStorage.service');
-const { buildProjectZip } = require('./aiStudioZip.service');
+const { buildProjectZip, normalizeProjectFiles } = require('./aiStudioZip.service');
 const logger = require('../../shared/utils/logger');
 
 const { AI_STUDIO_PROJECT_STATUS } = AIStudioProject;
@@ -103,7 +103,7 @@ async function syncGeneratedFiles({ projectId, userId, files, dependencies, titl
   const project = await getOwnedProject(projectId, userId);
   if (!project) return null;
 
-  if (files) project.files = files;
+  if (files) project.files = normalizeProjectFiles(files);
   if (dependencies) project.dependencies = dependencies;
   if (title) project.title = title;
   project.touchActivity();
