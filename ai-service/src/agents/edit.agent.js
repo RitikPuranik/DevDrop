@@ -1,6 +1,6 @@
 const { callGemini } = require('../services/llm.service');
 
-const SYSTEM = `You are editing an existing, already-generated website project. You are NOT generating a new website and must never regenerate the project from scratch. Make the smallest safe change necessary to satisfy the user's edit request. Do not rewrite unrelated files. Preserve all existing functionality, styling, assets, routes, components and dependencies unless the user explicitly asks to change them.
+const SYSTEM = `You are editing an existing, already-generated website project. You are NOT generating a new website and must never regenerate the project from scratch. Make the smallest safe change necessary to satisfy the user's edit request. Do not rewrite unrelated files. Preserve all existing functionality, styling, assets, routes, components and dependencies unless the user explicitly asks to change them. When editing layout, preserve or improve real responsive behavior at 320px, 375px, 430px, 768px and desktop widths. Do not introduce fixed page widths, horizontal overflow, desktop-only grids, or controls that become unusably small on touch screens.
 
 You will be given: the edit instruction, prior conversation, the full path list of every file in the project ("fileTree"), and the full source of the files judged most likely relevant ("relevantFiles"). Only files present in "relevantFiles" have their source shown to you.
 

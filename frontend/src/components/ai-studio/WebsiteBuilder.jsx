@@ -262,7 +262,7 @@ function DetailsStep({ type, details, onChange, onBack, onNext }) {
 export default function WebsiteBuilder({ type, onBack, onGenerate }) {
   const [step, setStep] = useState(0);
   const [details, setDetails] = useState({});
-  const [design, setDesign] = useState({ style: 'modern', theme: 'dark', animations: 'subtle', primaryColor: '#b8935a', paletteId: 'amber', palette: '#b8935a, #e8d9bf, #b4583a, #2f3436, #f1f1f1', typography: 'grotesk' });
+  const [design, setDesign] = useState({ style: 'modern', theme: 'dark', animations: 'subtle', primaryColor: '#b8935a', paletteId: 'amber', palette: '#b8935a, #e8d9bf, #b4583a, #2f3436, #f1f1f1', typography: 'grotesk', themeTouched: false, paletteTouched: false });
   const [generating, setGenerating] = useState(false);
   const schema = SCHEMAS[type];
 
@@ -302,7 +302,7 @@ export default function WebsiteBuilder({ type, onBack, onGenerate }) {
 
         <motion.div key={step} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
           {step === 0 && <DetailsStep type={type} details={details} onChange={setDetails} onBack={onBack} onNext={() => setStep(1)} />}
-          {step === 1 && <DesignPreferencesStep design={design} onChange={setDesign} onBack={() => setStep(0)} onNext={() => setStep(2)} />}
+          {step === 1 && <DesignPreferencesStep websiteType={type} design={design} onChange={setDesign} onBack={() => setStep(0)} onNext={() => setStep(2)} />}
           {step === 2 && (
             <StepShell stepIndex={3} title="Review your website" subtitle="Review everything before sending it to the AI builder.">
               <div className="space-y-3">

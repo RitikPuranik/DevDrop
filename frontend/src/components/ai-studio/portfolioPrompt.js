@@ -29,7 +29,7 @@ IMPORTANT GENERATION RULES:
 - Use the supplied personal information as the source of truth. Do not invent employers, degrees, projects, achievements, statistics, testimonials, URLs, or contact details.
 - If a field is empty, omit that content rather than displaying filler text.
 - Make the website feel intentionally designed around this person, not like a generic portfolio template.
-- Include accessible semantic HTML, responsive layouts, keyboard-friendly controls, and working navigation.
+- Include accessible semantic HTML, responsive layouts, keyboard-friendly controls, and working navigation. Treat responsiveness as part of the design, not a final patch: the generated site must remain polished at 320px, 375px, 430px, 768px, tablet and desktop widths, with no horizontal page overflow. Use fluid typography, flexible containers/grids, max-width media, responsive navigation, stacked mobile sections, preserved hierarchy, and touch-friendly controls.
 - Make all buttons and links meaningful. External links should open safely in a new tab when appropriate.
 - Use the requested visual direction consistently across every section.
 - Use tasteful motion only according to the requested animation level and respect prefers-reduced-motion.

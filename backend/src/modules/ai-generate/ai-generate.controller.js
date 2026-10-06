@@ -3,10 +3,10 @@ const jobOwners = require('./jobOwners');
 const { resolveGenerationAssets } = require('../../services/ai-studio/aiStudioAssetPipeline.service');
 
 const REFERENCE_IMAGE_RE = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/;
-const MAX_REFERENCE_IMAGE_BYTES = 1.5 * 1024 * 1024;
+const MAX_REFERENCE_IMAGE_BYTES = 2.5 * 1024 * 1024;
 
-// preferences.referenceImage is a screenshot of the selected style preview.
-// Anything that is not a small base64 jpeg/png/webp data URL is dropped (never fails the request).
+// preferences.referenceImage is a whole-website screenshot of the selected style preview.
+// Anything that is not a bounded base64 jpeg/png/webp data URL is dropped (never fails the request).
 function sanitizePreferences(preferences) {
   const prefs = preferences && typeof preferences === 'object' ? { ...preferences } : {};
   const ref = prefs.referenceImage;
