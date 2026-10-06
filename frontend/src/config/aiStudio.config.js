@@ -1,4 +1,4 @@
-import { BriefcaseBusiness, ShoppingBag, Newspaper, LayoutTemplate } from 'lucide-react';
+import { BriefcaseBusiness, ShoppingBag, Newspaper, LayoutTemplate, Coffee, Hotel, Clapperboard } from 'lucide-react';
 
 export const WEBSITE_TYPES = [
   {
@@ -27,6 +27,27 @@ export const WEBSITE_TYPES = [
     title: 'Landing Page',
     description: 'Focused marketing page for a product, service, startup or campaign.',
     icon: LayoutTemplate,
+    enabled: true,
+  },
+  {
+    id: 'cafe',
+    title: 'Cafe / Restaurant',
+    description: 'Menu, ambience, reservations, location and ordering for cafes, restaurants and food brands.',
+    icon: Coffee,
+    enabled: true,
+  },
+  {
+    id: 'hotel',
+    title: 'Hotel / Stay',
+    description: 'Rooms, amenities, gallery, booking enquiries and local highlights for hotels, resorts and homestays.',
+    icon: Hotel,
+    enabled: true,
+  },
+  {
+    id: 'studio',
+    title: 'Freelancing Studio',
+    description: 'Services, packages, case studies and client inquiry flow for freelancers, agencies and creative studios.',
+    icon: Clapperboard,
     enabled: true,
   },
 ];

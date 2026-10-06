@@ -95,6 +95,96 @@ const SCHEMAS = {
       ]],
     ],
   },
+  cafe: {
+    title: 'Build your cafe / restaurant website',
+    subtitle: 'Define the venue, menu, atmosphere, ordering and visit experience.',
+    sections: [
+      ['Venue identity', [
+        ['venueName','Cafe / restaurant name','e.g. Brew & Bloom'],
+        ['cuisine','Cuisine / concept','e.g. specialty coffee, North Indian, bakery, fine dining'],
+        ['story','Story / positioning','What makes this place special?',true],
+        ['ambience','Ambience & vibe','Cozy, rooftop, family, premium, casual...'],
+      ]],
+      ['Menu', [
+        ['menuCategories','Menu categories','e.g. Coffee, Breakfast, Mains, Desserts'],
+        ['menuItems','Menu items & prices','List dishes with prices and short descriptions. Only listed items will appear.',true],
+        ['signatureDishes','Signature dishes / specials','What should be highlighted?',true],
+        ['dietaryInfo','Dietary options','Veg, vegan, gluten-free, allergens info...'],
+      ]],
+      ['Visit & ordering', [
+        ['address','Address / location','Full address or area'],
+        ['hours','Opening hours','e.g. Mon-Sun 8am-11pm',true],
+        ['reservations','Reservations / booking','Phone, WhatsApp, form, third-party link...'],
+        ['ordering','Online ordering / delivery','Zomato, Swiggy, own ordering, none...'],
+        ['contact','Phone / email / socials','Contact details to show',true],
+      ]],
+      ['Extras', [
+        ['events','Events / offers','Live music, happy hours, private parties, catering...',true],
+        ['sections','Required sections','Hero, menu, gallery, about, reviews, contact, map...',true],
+      ]],
+    ],
+  },
+  hotel: {
+    title: 'Build your hotel / stay website',
+    subtitle: 'Define the property, rooms, amenities, location and booking flow.',
+    sections: [
+      ['Property', [
+        ['hotelName','Hotel / property name','e.g. The Lakeview Residency'],
+        ['propertyType','Property type','Hotel, resort, homestay, villa, boutique stay...'],
+        ['story','Description / positioning','What makes this stay different?',true],
+        ['starRating','Category / star rating','Only if applicable'],
+        ['targetGuests','Target guests','Families, couples, business, backpackers...'],
+      ]],
+      ['Rooms & pricing', [
+        ['roomTypes','Room types','Name, size, bed type, capacity, view for each room',true],
+        ['pricing','Pricing info','Per-night rates or "on request"'],
+        ['amenities','Amenities & services','Wi-Fi, pool, spa, breakfast, parking, restaurant...',true],
+        ['policies','Policies','Check-in/out, cancellation, pets, ID requirements...',true],
+      ]],
+      ['Location & experience', [
+        ['address','Address / location','Full address or area'],
+        ['nearby','Nearby attractions','Landmarks, distances, travel tips',true],
+        ['diningActivities','Dining & activities','On-site restaurant, tours, experiences...',true],
+      ]],
+      ['Booking & contact', [
+        ['bookingMethod','Booking method','Enquiry form, WhatsApp, phone, external booking link...'],
+        ['contact','Phone / email / socials','Contact details to show',true],
+        ['sections','Required sections','Hero, rooms, amenities, gallery, reviews, location, FAQ...',true],
+      ]],
+    ],
+  },
+  studio: {
+    title: 'Build your freelancing studio website',
+    subtitle: 'Define your services, process, proof of work and how clients reach you.',
+    sections: [
+      ['Studio identity', [
+        ['studioName','Studio / freelancer name','e.g. Pixel & Pine Studio'],
+        ['tagline','Tagline / one-liner','What you do in one sentence'],
+        ['niche','Specialty / niche','Web development, branding, video editing, UI/UX...'],
+        ['about','About / story','Who you are and how you work',true],
+        ['targetClients','Target clients','Startups, local businesses, creators, agencies...'],
+      ]],
+      ['Services & pricing', [
+        ['services','Services offered','Each service with a short description',true],
+        ['packages','Packages / pricing','Tiers, starting prices, or "custom quote"',true],
+        ['process','Work process','e.g. Discovery, Design, Build, Launch, Support',true],
+        ['techStack','Tools / tech stack','Figma, React, Webflow, Premiere...'],
+      ]],
+      ['Proof of work', [
+        ['caseStudies','Case studies / projects','Client, problem, solution, result for each. Only real work.',true],
+        ['testimonials','Testimonials','Real client quotes with names',true],
+        ['clients','Clients / logos','Companies you have worked with'],
+        ['stats','Key numbers','Years of experience, projects delivered, etc.'],
+      ]],
+      ['Client inquiry', [
+        ['primaryGoal','Primary goal','Get inquiries, book calls, sell packages...'],
+        ['ctaText','Primary CTA','e.g. Book a free call'],
+        ['availability','Availability','Open for projects, booking from next month...'],
+        ['contact','Email / WhatsApp / socials','Contact details to show',true],
+        ['sections','Required sections','Hero, services, work, process, pricing, testimonials, FAQ, contact...',true],
+      ]],
+    ],
+  },
 };
 
 function TextField({ label, value, onChange, placeholder, multiline }) {
@@ -228,7 +318,7 @@ export default function WebsiteBuilder({ type, onBack, onGenerate }) {
 }
 
 export function buildWebsitePrompt(type, details, design) {
-  const labels = { ecommerce: 'e-commerce store', blog: 'blog / magazine', landing: 'marketing landing page' };
+  const labels = { ecommerce: 'e-commerce store', blog: 'blog / magazine', landing: 'marketing landing page', cafe: 'cafe / restaurant website', hotel: 'hotel / stay website', studio: 'freelancing studio / agency website' };
   const title = labels[type] || 'website';
   const specification = Object.entries(details)
     .filter(([, value]) => value !== '' && value !== null && value !== undefined)
@@ -246,6 +336,9 @@ GENERATION RULES:
 - For e-commerce, build polished catalog, product, search/filter, cart and checkout UI from supplied requirements without inventing real inventory or payment credentials.
 - For blogs, build clear editorial hierarchy, article cards, article detail structure, categories/tags/search and subscription UI from supplied requirements without inventing factual claims.
 - For landing pages, prioritize the supplied conversion goal and make the CTA hierarchy obvious without fabricating proof.
+- For cafes/restaurants, build an appetizing menu (by category), ambience/gallery, hours, location, reservation/order CTA and contact sections using only the supplied menu items and prices.
+- For hotels, build clear room cards, amenities, gallery, location/nearby highlights, policies and an enquiry/booking CTA without inventing rates, ratings, reviews or availability.
+- For freelancing studios, build services, packages, process, case studies, testimonials and a strong inquiry/booking CTA using only real supplied work, clients and quotes.
 - Check all JSX component references before returning the structured file-generation JSON.
 
 WEBSITE TYPE: ${title}
