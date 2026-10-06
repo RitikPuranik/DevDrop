@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Check, Sparkles } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
-import StepShell from './StepShell';
+import { Card, Field, StepHeader, MediaDrop, SpecialRequestsCard } from './studioUi';
+import { GRAD, PAGE_BG } from './studioStyles';
 import DesignPreferencesStep from './DesignPreferencesStep';
 import StudioTopBar from './StudioTopBar';
 import { describeDesign } from '../../config/aiStudio.config';
@@ -307,73 +308,48 @@ const SCHEMAS = {
   },
 };
 
-function TextField({ label, value, onChange, placeholder, multiline }) {
-  const Component = multiline ? 'textarea' : 'input';
-  return (
-    <div>
-      <label className="mb-2 block text-[13px] font-semibold text-[#c9a876]">{label}</label>
-      <Component value={value || ''} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={multiline ? 4 : undefined} className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm focus:border-violet-500/50 focus:outline-none" />
-      <p className="mt-1 text-[10px] text-white/25">{multiline ? 'Be specific. The AI will use this as source material.' : 'Optional unless marked required.'}</p>
-    </div>
-  );
-}
-
-
-function MediaUpload({ images = [], videos = [], onImages, onVideos }) {
-  const add = (files, current, setter, prefix) => {
-    const accepted = Array.from(files || []).filter((file) => file.type.startsWith(prefix));
-    const next = [...current];
-    accepted.forEach((file) => {
-      if (!next.some((existing) => existing.name === file.name && existing.size === file.size)) next.push(file);
-    });
-    setter(next);
-  };
-  const Picker = ({ type, list, setter }) => (
-    <div className="rounded-xl border border-white/8 bg-white/[0.02] p-4">
-      <div className="mb-2 flex items-center justify-between"><label className="text-[13px] font-semibold text-[#c9a876]">{type === 'image' ? 'Images' : 'Videos'} <span className="font-normal text-white/30">(optional, multiple)</span></label><span className="text-[10px] text-white/25">{list.length} selected</span></div>
-      <input type="file" multiple accept={type === 'image' ? 'image/*' : 'video/*'} onChange={(e) => { add(e.target.files, list, setter, type); e.target.value = ''; }} className="block w-full cursor-pointer rounded-lg border border-white/10 bg-white/[0.03] p-2 text-xs text-white/50 file:mr-3 file:rounded-md file:border-0 file:bg-violet-600 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white" />
-      <div className="mt-3 space-y-2">{list.map((file, index) => <div key={file.name + file.size + index} className="flex items-center gap-3 rounded-lg border border-white/8 bg-black/20 px-3 py-2"><span className="min-w-0 flex-1 truncate text-xs text-white/70">{file.name}</span><span className="text-[10px] text-white/25">{(file.size / 1024 / 1024).toFixed(1)} MB</span><button type="button" onClick={() => setter(list.filter((_, i) => i !== index))} className="text-white/30 hover:text-white" aria-label={`Remove ${file.name}`}><span aria-hidden="true">×</span></button></div>)}</div>
-    </div>
-  );
-  return <section><div className="mb-3"><p className="text-[13px] font-semibold text-[#c9a876]">Media assets</p><p className="text-[11px] text-white/35">Optional. Add multiple images and/or videos for the AI to use.</p></div><div className="grid gap-3 sm:grid-cols-2"><Picker type="image" list={images} setter={onImages} /><Picker type="video" list={videos} setter={onVideos} /></div></section>;
+function splitTitle(title, lead = 'Build your ') {
+  return title.startsWith(lead) ? [lead, title.slice(lead.length)] : ['', title];
 }
 
 function DetailsStep({ type, details, onChange, onBack, onNext }) {
   const schema = SCHEMAS[type];
   const update = (key, value) => onChange({ ...details, [key]: value });
+  const [lead, accent] = splitTitle(schema.title);
 
   return (
-    <StepShell stepIndex={1} title={schema.title} subtitle={schema.subtitle}>
-      <div className="space-y-8">
+    <div>
+      <StepHeader lead={lead} accent={accent} subtitle={schema.subtitle} />
+
+      <div className="grid gap-4 lg:grid-cols-12">
         {schema.sections.map(([sectionTitle, fields]) => (
-          <section key={sectionTitle}>
-            <h3 className="mb-4 text-sm font-semibold text-white">{sectionTitle}</h3>
-            <div className="grid gap-4 sm:grid-cols-2">
+          <Card key={sectionTitle} title={sectionTitle} className="lg:col-span-6">
+            <div className="grid gap-3 sm:grid-cols-2">
               {fields.map(([key, label, placeholder, multiline]) => (
                 <div key={key} className={multiline ? 'sm:col-span-2' : ''}>
-                  <TextField label={label} value={details[key]} onChange={(value) => update(key, value)} placeholder={placeholder} multiline={multiline} />
+                  <Field label={label} value={details[key] || ''} onChange={(value) => update(key, value)} placeholder={placeholder} multiline={multiline} rows={3} />
                 </div>
               ))}
             </div>
-          </section>
+          </Card>
         ))}
 
-        <MediaUpload images={details.images || []} videos={details.videos || []} onImages={(images) => update('images', images)} onVideos={(videos) => update('videos', videos)} />
+        <Card title="Media Assets" className="lg:col-span-12">
+          <p className="-mt-2 mb-3 text-[11px] text-white/35">Optional. The AI can use these in your website.</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <MediaDrop kind="image" list={details.images || []} onChange={(images) => update('images', images)} />
+            <MediaDrop kind="video" list={details.videos || []} onChange={(videos) => update('videos', videos)} />
+          </div>
+        </Card>
 
-        <section className="rounded-2xl border border-violet-500/20 bg-violet-500/[0.04] p-5">
-          <label className="mb-2 block text-[13px] font-semibold text-violet-300">
-            Anything else you want? <span className="font-normal text-white/35">(optional)</span>
-          </label>
-          <textarea value={details.specialRequests || ''} onChange={(e) => update('specialRequests', e.target.value)} rows={5} placeholder="Add any specific idea, section, behavior, animation, reference, wording, feature, constraint, or anything else you want the AI to know." className="w-full rounded-xl border border-violet-500/20 bg-black/20 px-4 py-3 text-sm focus:border-violet-500/50 focus:outline-none" />
-          <p className="mt-2 text-[11px] text-white/35">Leave it empty if you have nothing extra to add.</p>
-        </section>
+        <SpecialRequestsCard className="lg:col-span-12" value={details.specialRequests || ''} onChange={(value) => update('specialRequests', value)} placeholder="Add any specific idea, section, behavior, animation, reference, wording, feature, constraint, or anything else you want the AI to know." />
       </div>
 
-      <div className="mt-8 flex gap-3">
-        <button type="button" onClick={onBack} className="rounded-xl border border-white/10 bg-white/5 px-6 py-3 text-[13px] font-bold">Back</button>
-        <button type="button" onClick={onNext} className="flex-1 rounded-xl bg-white px-8 py-3 text-[13px] font-bold text-black sm:flex-none">Continue</button>
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+        <button type="button" onClick={onBack} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-5 py-3 text-[13px] font-semibold text-white/70 transition-colors hover:text-white"><ArrowLeft size={14} /> Previous Step</button>
+        <button type="button" onClick={onNext} className={`inline-flex items-center gap-2 rounded-xl px-6 py-3 text-[13px] font-semibold shadow-[0_0_28px_rgba(139,92,246,.35)] transition-opacity hover:opacity-90 ${GRAD}`}>Continue to Design <ArrowRight size={14} /></button>
       </div>
-    </StepShell>
+    </div>
   );
 }
 
@@ -401,45 +377,54 @@ export default function WebsiteBuilder({ type, onBack, onGenerate }) {
     );
   }
 
+  const reviewEntries = Object.entries(details).filter(([key, value]) => !['specialRequests', 'images', 'videos'].includes(key) && value !== '' && value !== null && value !== undefined);
+
   return (
-    <div className="min-h-full bg-neutral-950 text-white">
-      <div className="mx-auto max-w-4xl px-5 pb-10 pt-24 md:px-8 md:pt-28">
+    <div className={`min-h-full ${PAGE_BG} text-white`}>
+      <div className={`mx-auto px-5 pb-12 pt-24 md:px-8 md:pt-28 ${step === 0 ? 'max-w-6xl' : 'max-w-4xl'}`}>
         <div className="mb-8 flex items-center justify-between">
-          <button type="button" onClick={onBack} disabled={generating} className="inline-flex items-center gap-2 text-sm text-white/50 hover:text-white"><ArrowLeft size={16} /> Website types</button>
-          <div className="inline-flex items-center gap-2 text-xs text-white/35"><Sparkles size={14} className="text-violet-400" /> {schema?.title || 'AI Studio'}</div>
+          <button type="button" onClick={onBack} disabled={generating} className="inline-flex items-center gap-2 text-sm text-white/60 hover:text-white disabled:opacity-40"><ArrowLeft size={16} /> Website types</button>
+          <div className="inline-flex items-center gap-2 text-sm text-violet-200/80"><Sparkles size={15} className="text-violet-400" /> {schema?.title || 'AI Studio'}</div>
         </div>
 
-        <div className="mb-8 flex gap-2">
+        <div className="mb-8 flex gap-4">
           {['Details', 'Design', 'Review'].map((label, index) => (
             <div key={label} className="flex-1">
-              <div className={`h-1.5 rounded-full ${index <= step ? 'bg-violet-500' : 'bg-white/10'}`} />
-              <p className={`mt-2 text-[11px] ${index === step ? 'text-white' : 'text-white/30'}`}>{label}</p>
+              <div className={`h-1.5 rounded-full ${index <= step ? 'bg-[linear-gradient(90deg,#7c3aed,#a78bfa)]' : 'bg-white/10'}`} />
+              <div className={`mt-2 flex justify-between text-[11px] ${index === step ? 'text-white' : 'text-white/35'}`}><span>{label}</span><span>Step {String(index + 1).padStart(2, '0')}</span></div>
             </div>
           ))}
         </div>
 
         <motion.div key={step} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
           {step === 0 && <DetailsStep type={type} details={details} onChange={setDetails} onBack={onBack} onNext={() => setStep(1)} />}
-          
+
           {step === 2 && (
-            <StepShell stepIndex={3} title="Review your website" subtitle="Review everything before sending it to the AI builder.">
-              <div className="space-y-3">
-                {Object.entries(details).filter(([, value]) => value !== '' && value !== null).map(([key, value]) => (
-                  <div key={key} className="rounded-xl border border-white/8 bg-white/[0.02] p-4">
-                    <p className="text-[11px] uppercase tracking-wider text-white/30">{key.replace(/([A-Z])/g, ' $1')}</p>
-                    <p className="mt-1 whitespace-pre-wrap text-sm text-white/75">{String(value)}</p>
+            <div>
+              <StepHeader lead="Review your " accent="website" subtitle="Review everything before sending it to the AI builder." />
+              <div className="grid gap-3 md:grid-cols-2">
+                {reviewEntries.map(([key, value]) => (
+                  <div key={key} className="rounded-2xl border border-white/10 bg-[linear-gradient(150deg,rgba(255,255,255,.05),rgba(12,12,18,.92))] p-4">
+                    <p className="text-[11px] uppercase tracking-wider text-white/35">{key.replace(/([A-Z])/g, ' $1')}</p>
+                    <p className="mt-1 whitespace-pre-wrap text-sm text-white/80">{String(value)}</p>
                   </div>
                 ))}
+                {((details.images || []).length > 0 || (details.videos || []).length > 0) && (
+                  <div className="rounded-2xl border border-white/10 bg-[linear-gradient(150deg,rgba(255,255,255,.05),rgba(12,12,18,.92))] p-4">
+                    <p className="text-[11px] uppercase tracking-wider text-white/35">Media assets</p>
+                    <p className="mt-1 text-sm text-white/80">{(details.images || []).length} image(s), {(details.videos || []).length} video(s)</p>
+                  </div>
+                )}
               </div>
-              <div className="mt-5 rounded-xl border border-violet-500/20 bg-violet-500/[0.04] p-4">
-                <p className="text-xs font-semibold text-violet-300">Anything else you want?</p>
-                <p className="mt-1 text-sm text-white/60">{details.specialRequests || 'Nothing extra provided.'}</p>
+              <div className="mt-4 rounded-2xl border border-fuchsia-400/30 bg-[linear-gradient(135deg,rgba(124,58,237,.16),rgba(192,38,211,.10)_60%,rgba(12,12,18,.9))] p-4">
+                <p className="text-xs font-semibold text-violet-200">Anything else you want?</p>
+                <p className="mt-1 whitespace-pre-wrap text-sm text-white/65">{details.specialRequests || 'Nothing extra provided.'}</p>
               </div>
-              <div className="mt-8 flex gap-3">
-                <button type="button" onClick={() => setStep(1)} disabled={generating} className="rounded-xl border border-white/10 bg-white/5 px-6 py-3 text-[13px] font-bold">Back</button>
-                <button type="button" onClick={generate} disabled={generating} className="flex-1 rounded-xl bg-white px-8 py-3 text-[13px] font-bold text-black">{generating ? 'Generating…' : `Generate ${schema?.title || 'Website'}`}</button>
+              <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+                <button type="button" onClick={() => setStep(1)} disabled={generating} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-5 py-3 text-[13px] font-semibold text-white/70 hover:text-white disabled:opacity-40"><ArrowLeft size={14} /> Previous Step</button>
+                <button type="button" onClick={generate} disabled={generating} className={`inline-flex items-center gap-2 rounded-xl px-6 py-3 text-[13px] font-semibold shadow-[0_0_28px_rgba(139,92,246,.35)] transition-opacity hover:opacity-90 disabled:opacity-60 ${GRAD}`}>{generating ? 'Generating…' : `Generate ${schema?.title?.replace(/^Build your /, '') || 'Website'}`} <Sparkles size={14} /></button>
               </div>
-            </StepShell>
+            </div>
           )}
         </motion.div>
 

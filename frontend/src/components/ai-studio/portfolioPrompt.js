@@ -68,6 +68,7 @@ GitHub: ${clean(details.socialLinks?.github)}
 LinkedIn: ${clean(details.socialLinks?.linkedin)}
 Twitter / X: ${clean(details.socialLinks?.twitter)}
 Instagram: ${clean(details.socialLinks?.instagram)}
+Kaggle: ${clean(details.socialLinks?.kaggle)}
 
 ## Call to action
 CTA text: ${clean(details.ctaText)}
