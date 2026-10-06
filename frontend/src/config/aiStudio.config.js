@@ -1,4 +1,21 @@
-import { BriefcaseBusiness, ShoppingBag, Newspaper, LayoutTemplate, Coffee, Hotel, Clapperboard, AppWindow, CalendarDays, GraduationCap, WandSparkles } from 'lucide-react';
+import { BriefcaseBusiness, ShoppingBag, Newspaper, LayoutTemplate, Coffee, Hotel, Clapperboard, CalendarDays, GraduationCap, WandSparkles } from 'lucide-react';
+
+// Resolve the artwork from the user's ai-studio asset folder without depending on
+// exact capitalization, extension, or minor filename spelling differences.
+const AI_STUDIO_ASSETS = import.meta.glob('../assets/ai-studio/*', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+});
+
+const findStudioArt = (...terms) => {
+  const normalizedTerms = terms.map((term) => term.toLowerCase().replace(/[^a-z0-9]/g, ''));
+  const match = Object.entries(AI_STUDIO_ASSETS).find(([path]) => {
+    const normalizedPath = path.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return normalizedTerms.every((term) => normalizedPath.includes(term));
+  });
+  return match?.[1] || '';
+};
 
 export const WEBSITE_TYPES = [
   {
@@ -6,6 +23,7 @@ export const WEBSITE_TYPES = [
     title: 'Portfolio',
     description: 'Personal portfolio for developers, designers, creators, students and professionals.',
     icon: BriefcaseBusiness,
+    artImage: findStudioArt('portfolio'),
     enabled: true,
   },
   {
@@ -13,6 +31,7 @@ export const WEBSITE_TYPES = [
     title: 'E-commerce',
     description: 'Product catalog, shopping experience, cart and conversion-focused storefront.',
     icon: ShoppingBag,
+    artImage: findStudioArt('ecommerce'),
     enabled: true,
   },
   {
@@ -20,6 +39,7 @@ export const WEBSITE_TYPES = [
     title: 'Blog / Magazine',
     description: 'Editorial website for articles, stories, news and long-form content.',
     icon: Newspaper,
+    artImage: findStudioArt('blog', 'mazine') || findStudioArt('blog', 'magazine'),
     enabled: true,
   },
   {
@@ -27,6 +47,7 @@ export const WEBSITE_TYPES = [
     title: 'Landing Page',
     description: 'Focused marketing page for a product, service, startup or campaign.',
     icon: LayoutTemplate,
+    artImage: findStudioArt('landing'),
     enabled: true,
   },
   {
@@ -34,6 +55,7 @@ export const WEBSITE_TYPES = [
     title: 'Cafe / Restaurant',
     description: 'Menu, ambience, reservations, location and ordering for cafes, restaurants and food brands.',
     icon: Coffee,
+    artImage: findStudioArt('cafe', 'restaurant') || findStudioArt('restaurant') || findStudioArt('cafe'),
     enabled: true,
   },
   {
@@ -41,6 +63,7 @@ export const WEBSITE_TYPES = [
     title: 'Hotel / Stay',
     description: 'Rooms, amenities, gallery, booking enquiries and local highlights for hotels, resorts and homestays.',
     icon: Hotel,
+    artImage: findStudioArt('hotel', 'stay') || findStudioArt('hotel'),
     enabled: true,
   },
   {
@@ -48,13 +71,7 @@ export const WEBSITE_TYPES = [
     title: 'Freelancing Studio',
     description: 'Services, packages, case studies and client inquiry flow for freelancers, agencies and creative studios.',
     icon: Clapperboard,
-    enabled: true,
-  },
-  {
-    id: 'saas',
-    title: 'SaaS / Web App',
-    description: 'Product-led website for software, AI tools, dashboards and web applications.',
-    icon: AppWindow,
+    artImage: findStudioArt('freelancing', 'studio') || findStudioArt('freelancing'),
     enabled: true,
   },
   {
@@ -62,6 +79,7 @@ export const WEBSITE_TYPES = [
     title: 'Event / Conference',
     description: 'Event site for conferences, meetups, launches, workshops and live experiences.',
     icon: CalendarDays,
+    artImage: findStudioArt('event', 'conference') || findStudioArt('event') || findStudioArt('conference'),
     enabled: true,
   },
   {
@@ -69,6 +87,7 @@ export const WEBSITE_TYPES = [
     title: 'Education / Course',
     description: 'Course, academy, coaching or learning platform website with clear enrollment paths.',
     icon: GraduationCap,
+    artImage: findStudioArt('education', 'course') || findStudioArt('education') || findStudioArt('course'),
     enabled: true,
   },
   {
@@ -76,6 +95,7 @@ export const WEBSITE_TYPES = [
     title: 'Custom Website',
     description: 'Start from scratch. Describe exactly what you need and shape the brief around your idea.',
     icon: WandSparkles,
+    artImage: new URL('../assets/ai-studio/custom.png', import.meta.url).href,
     enabled: true,
   },
 ];
