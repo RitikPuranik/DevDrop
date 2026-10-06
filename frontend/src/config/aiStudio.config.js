@@ -74,12 +74,12 @@ export const DESIGN_STYLES = [
 ];
 
 export const DESIGN_THEMES = [
-  { id: 'dark', label: 'Dark', direction: 'Near-black background (#0b0b0d), light text, subtle translucent surfaces; maintain WCAG AA contrast.' },
-  { id: 'light', label: 'Light', direction: 'Off-white background (#f8f8f6), near-black text, white surfaces with soft borders.' },
-  { id: 'neutral', label: 'Neutral', direction: 'Mid-grey/stone background, calm low-saturation surfaces, dark text.' },
-  { id: 'midnight', label: 'Midnight', direction: 'Deep navy background (#0a1228) with cool blue-tinted surfaces and pale blue-white text.' },
-  { id: 'warm', label: 'Warm Cream', direction: 'Warm cream/sand background (#f3ead9, "Cloud Dancer"-like comfort), dark brown text, earthy surfaces.' },
-  { id: 'auto', label: 'Auto (Light + Dark)', direction: 'Implement both light and dark themes using CSS variables and prefers-color-scheme, with a visible theme toggle; default to dark.' },
+  { id: 'dark', label: 'Dark', direction: 'Near-black background (#0b0b0d) with a deliberate text palette: white headings (#fff), soft white body text (#f2f4f7), muted white-secondary text, cool cyan links (#8de9ff), and light-on-accent text where needed. Preserve WCAG AA contrast.' },
+  { id: 'light', label: 'Light', direction: 'Off-white background (#f8f8f6) with near-black headings (#0a0a0a), charcoal body text (#242424), softer muted copy, blue links (#2458c6), and white inverse text on dark/accent surfaces.' },
+  { id: 'neutral', label: 'Neutral', direction: 'Mid-grey/stone background (#d9d9d6) with charcoal headings (#121212), softer charcoal body text (#2a2a2a), muted secondary copy, slate-blue links (#365a88), and high-contrast inverse text.' },
+  { id: 'midnight', label: 'Midnight', direction: 'Deep navy background (#0a1228) with white headings, pale blue body text (#e6edff), cool muted copy, electric sky links (#73ddff), and dark inverse text on pale surfaces.' },
+  { id: 'warm', label: 'Warm Cream', direction: 'Warm cream/sand background (#f3ead9) with espresso headings (#21150e), warm brown body text (#3a2b20), earthy muted copy, terracotta-brown links (#8a4f25), and warm ivory inverse text.' },
+  { id: 'auto', label: 'Auto (Light + Dark)', direction: 'Implement both the Light and Dark text palettes with CSS variables and prefers-color-scheme. Switch heading, body, muted, link, inverse, surface and border colors together; default to dark when no system preference is available.' },
 ];
 
 export const ANIMATION_OPTIONS = [
@@ -153,6 +153,7 @@ export function describeDesign(design = {}) {
   return [
     `Style: ${style.label} — ${style.direction}`,
     `Theme: ${theme.label} — ${theme.direction}`,
+    'Theme text-color contract: use semantic text tokens for heading, body, muted/secondary, link/accent, inverse-on-accent, and text-on-surface colors. Never hardcode a conflicting text color when a theme token applies. Keep text colors paired with the chosen background/surface for accessible contrast.',
     `Animation: ${motion.label} — ${motion.direction}`,
     `Primary color: ${design.primaryColor || 'Choose a tasteful accent that fits the theme.'}`,
     `Color palette${palette ? ` (${palette.name})` : ''}: ${design.palette || (palette ? palette.colors.join(', ') : 'AI-selected palette')}`,

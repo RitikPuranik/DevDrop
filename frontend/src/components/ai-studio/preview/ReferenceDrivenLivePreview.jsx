@@ -187,26 +187,31 @@ const textOn = (hex) => (lum(hex) > 0.58 ? '#171717' : '#ffffff');
 const THEME_PRESETS = {
   dark: {
     page: '#0b0b0d', ink: '#f7f8fb', muted: 'rgba(247,248,251,.62)',
+    heading: '#ffffff', body: '#f2f4f7', link: '#8de9ff', inverse: '#111216',
     surface: 'rgba(255,255,255,.075)', soft: '#15171c', line: 'rgba(255,255,255,.15)',
     accentBoost: '#ffffff', themeText: '#f7f8fb',
   },
   light: {
     page: '#f8f8f6', ink: '#141414', muted: 'rgba(20,20,20,.58)',
+    heading: '#0a0a0a', body: '#242424', link: '#2458c6', inverse: '#ffffff',
     surface: '#ffffff', soft: '#f1f2f4', line: 'rgba(20,20,20,.12)',
     accentBoost: '#111111', themeText: '#141414',
   },
   neutral: {
     page: '#d9d9d6', ink: '#1b1b1b', muted: 'rgba(27,27,27,.58)',
+    heading: '#121212', body: '#2a2a2a', link: '#365a88', inverse: '#f8f8f6',
     surface: 'rgba(255,255,255,.66)', soft: '#d2d2cf', line: 'rgba(27,27,27,.14)',
     accentBoost: '#111111', themeText: '#1b1b1b',
   },
   midnight: {
     page: '#0a1228', ink: '#eaf0ff', muted: 'rgba(220,230,255,.60)',
+    heading: '#ffffff', body: '#e6edff', link: '#73ddff', inverse: '#09111f',
     surface: 'rgba(120,150,255,.10)', soft: '#101b37', line: 'rgba(150,175,255,.22)',
     accentBoost: '#b6c9ff', themeText: '#eaf0ff',
   },
   warm: {
     page: '#f3ead9', ink: '#2b2118', muted: 'rgba(43,33,24,.60)',
+    heading: '#21150e', body: '#3a2b20', link: '#8a4f25', inverse: '#fffaf0',
     surface: 'rgba(255,255,255,.60)', soft: '#e9ddc9', line: 'rgba(43,33,24,.15)',
     accentBoost: '#251c15', themeText: '#2b2118',
   },
@@ -221,7 +226,11 @@ function themedStyle(base, theme) {
       theme: theme || 'dark',
       themeBg: base.page,
       themeInk: base.ink,
+      themeHeading: base.ink,
+      themeBody: base.ink,
       themeMuted: base.muted,
+      themeLink: base.accent,
+      themeInverse: textOn(base.page),
       themeSurface: base.surface,
       themeSoft: base.page,
       themeLine: base.line,
@@ -238,7 +247,11 @@ function themedStyle(base, theme) {
     theme,
     themeBg: preset.page,
     themeInk: preset.ink,
+    themeHeading: preset.heading,
+    themeBody: preset.body,
     themeMuted: preset.muted,
+    themeLink: preset.link,
+    themeInverse: preset.inverse,
     themeSurface: preset.surface,
     themeSoft: preset.soft,
     themeLine: preset.line,
@@ -619,7 +632,11 @@ function Page({ design, palette, typo, websiteType }) {
     muted: themedBase.muted,
     themeBg: themedBase.themeBg,
     themeInk: themedBase.themeInk,
+    themeHeading: themedBase.themeHeading,
+    themeBody: themedBase.themeBody,
     themeMuted: themedBase.themeMuted,
+    themeLink: themedBase.themeLink,
+    themeInverse: themedBase.themeInverse,
     themeSurface: themedBase.themeSurface,
     themeSoft: themedBase.themeSoft,
     themeLine: themedBase.themeLine,
@@ -634,7 +651,7 @@ function Page({ design, palette, typo, websiteType }) {
       ? { initial:{opacity:0,y:14}, whileInView:{opacity:1,y:0}, viewport:{once:true,amount:.12}, transition:{duration:.4} }
       : { initial:{opacity:0,y:7}, animate:{opacity:1,y:0}, transition:{duration:.35} };
   return (
-    <div className={`rdp-page rdp-style-${themedBase.mode} rdp-theme-${themeId}`} style={{'--rdp-bg':cfg.themeBg,'--rdp-ink':cfg.fg,'--rdp-muted':cfg.muted,'--rdp-accent':cfg.accent,'--rdp-second':cfg.second,'--rdp-third':cfg.third,'--rdp-fourth':cfg.fourth,'--rdp-line':cfg.themeLine,'--rdp-radius':`${cfg.radius}px`,'--rdp-theme-surface':cfg.themeSurface,'--rdp-theme-soft':cfg.themeSoft,'--rdp-theme-bg':cfg.themeBg,'--rdp-theme-ink':cfg.themeInk,'--rdp-theme-muted':cfg.themeMuted,'--rdp-theme-line':cfg.themeLine}}>
+    <div className={`rdp-page rdp-style-${themedBase.mode} rdp-theme-${themeId}`} style={{'--rdp-bg':cfg.themeBg,'--rdp-ink':cfg.fg,'--rdp-muted':cfg.muted,'--rdp-accent':cfg.accent,'--rdp-second':cfg.second,'--rdp-third':cfg.third,'--rdp-fourth':cfg.fourth,'--rdp-line':cfg.themeLine,'--rdp-radius':`${cfg.radius}px`,'--rdp-theme-surface':cfg.themeSurface,'--rdp-theme-soft':cfg.themeSoft,'--rdp-theme-bg':cfg.themeBg,'--rdp-theme-ink':cfg.themeInk,'--rdp-theme-heading':cfg.themeHeading,'--rdp-theme-body':cfg.themeBody,'--rdp-theme-muted':cfg.themeMuted,'--rdp-theme-link':cfg.themeLink,'--rdp-theme-inverse':cfg.themeInverse,'--rdp-theme-line':cfg.themeLine}}>
       <div className="rdp-stack">
         <StyleNav cfg={cfg} type={typeId}/>
         <motion.div {...reveal}><Hero cfg={cfg} typeId={typeId} headFont={headFont}/></motion.div>
@@ -817,6 +834,18 @@ const css = `
 .rdp-page[class*="rdp-theme-"] .rdp-sec,
 .rdp-page[class*="rdp-theme-"] .rdp-final,
 .rdp-page[class*="rdp-theme-"] .rdp-footer{color:var(--rdp-theme-ink)}
+.rdp-page[class*="rdp-theme-"] h1,
+.rdp-page[class*="rdp-theme-"] h2,
+.rdp-page[class*="rdp-theme-"] h3,
+.rdp-page[class*="rdp-theme-"] h4,
+.rdp-page[class*="rdp-theme-"] h5,
+.rdp-page[class*="rdp-theme-"] h6,
+.rdp-page[class*="rdp-theme-"] strong,
+.rdp-page[class*="rdp-theme-"] b{color:var(--rdp-theme-heading)}
+.rdp-page[class*="rdp-theme-"] p,
+.rdp-page[class*="rdp-theme-"] li,
+.rdp-page[class*="rdp-theme-"] dd,
+.rdp-page[class*="rdp-theme-"] dt{color:var(--rdp-theme-body)}
 .rdp-page[class*="rdp-theme-"] .rdp-nav span,
 .rdp-page[class*="rdp-theme-"] .rdp-nav small,
 .rdp-page[class*="rdp-theme-"] .rdp-nav p,
@@ -824,6 +853,7 @@ const css = `
 .rdp-page[class*="rdp-theme-"] .rdp-final p,
 .rdp-page[class*="rdp-theme-"] .rdp-footer p,
 .rdp-page[class*="rdp-theme-"] .rdp-footer nav span{color:var(--rdp-theme-muted)}
+.rdp-page[class*="rdp-theme-"] a{color:var(--rdp-theme-link)}
 .rdp-page[class*="rdp-theme-"] .rdp-nav,
 .rdp-page[class*="rdp-theme-"] .rdp-stats>div>div,
 .rdp-page[class*="rdp-theme-"] .rdp-card,
@@ -887,8 +917,8 @@ const css = `
 .rdp-theme-light .rdp-hero-retrofuturist,.rdp-theme-neutral .rdp-hero-retrofuturist,.rdp-theme-warm .rdp-hero-retrofuturist,.rdp-theme-light .rdp-sec.retrofuturist,.rdp-theme-neutral .rdp-sec.retrofuturist,.rdp-theme-warm .rdp-sec.retrofuturist{background:var(--rdp-theme-bg)}
 .rdp-theme-light .rdp-hero-maximalist,.rdp-theme-neutral .rdp-hero-maximalist,.rdp-theme-warm .rdp-hero-maximalist,.rdp-theme-light .rdp-sec.maximalist,.rdp-theme-neutral .rdp-sec.maximalist,.rdp-theme-warm .rdp-sec.maximalist{background:var(--rdp-theme-bg)}
 .rdp-theme-auto{color-scheme:dark light}
-@media (prefers-color-scheme:light){.rdp-theme-auto{--rdp-theme-bg:#f8f8f6!important;--rdp-theme-ink:#141414!important;--rdp-theme-muted:rgba(20,20,20,.58)!important;--rdp-theme-surface:#fff!important;--rdp-theme-line:rgba(20,20,20,.12)!important}}
-@media (prefers-color-scheme:dark){.rdp-theme-auto{--rdp-theme-bg:#0b0b0d!important;--rdp-theme-ink:#f7f8fb!important;--rdp-theme-muted:rgba(247,248,251,.62)!important;--rdp-theme-surface:rgba(255,255,255,.075)!important;--rdp-theme-line:rgba(255,255,255,.15)!important}}
+@media (prefers-color-scheme:light){.rdp-theme-auto{--rdp-theme-bg:#f8f8f6!important;--rdp-theme-ink:#141414!important;--rdp-theme-heading:#0a0a0a!important;--rdp-theme-body:#242424!important;--rdp-theme-muted:rgba(20,20,20,.58)!important;--rdp-theme-link:#2458c6!important;--rdp-theme-surface:#fff!important;--rdp-theme-line:rgba(20,20,20,.12)!important}}
+@media (prefers-color-scheme:dark){.rdp-theme-auto{--rdp-theme-bg:#0b0b0d!important;--rdp-theme-ink:#f7f8fb!important;--rdp-theme-heading:#fff!important;--rdp-theme-body:#f2f4f7!important;--rdp-theme-muted:rgba(247,248,251,.62)!important;--rdp-theme-link:#8de9ff!important;--rdp-theme-surface:rgba(255,255,255,.075)!important;--rdp-theme-line:rgba(255,255,255,.15)!important}}
 
 .rdp-device-stage{min-height:0;flex:1;display:flex;flex-direction:column;overflow:hidden}.rdp-device-stage.rdp-device-mobile{align-items:center;justify-content:center;padding:0;background:radial-gradient(circle at 50% 8%,rgba(255,255,255,.09),transparent 52%)}.rdp-mobile-device-shell{position:relative;flex:0 0 auto;width:auto;height:calc(100% - 2px);max-height:calc(100% - 2px);max-width:calc(100% - 18px);aspect-ratio:9 / 18.7;min-height:0;padding:6px;border-radius:34px;background:linear-gradient(145deg,#3b3f48 0%,#1d2027 26%,#101217 68%,#090b0e 100%);border:1px solid rgba(255,255,255,.22);box-shadow:0 28px 62px -30px rgba(0,0,0,.96),inset 0 1px 0 rgba(255,255,255,.13),inset -1px -1px 0 rgba(0,0,0,.74);display:flex;flex-direction:column;overflow:visible}.rdp-mobile-device-shell::before{content:"";position:absolute;left:-3px;top:82px;width:3px;height:36px;border-radius:3px 0 0 3px;background:linear-gradient(#51555f,#1a1c22);box-shadow:0 48px 0 #1a1c22,0 63px 0 #1a1c22}.rdp-mobile-device-shell::after{content:"";position:absolute;right:-3px;top:112px;width:3px;height:60px;border-radius:0 3px 3px 0;background:linear-gradient(#51555f,#1a1c22)}.rdp-mobile-screen{min-height:0;flex:1;display:flex;flex-direction:column;overflow:hidden;border-radius:28px;background:#0d0e11;border:1px solid rgba(255,255,255,.10);box-shadow:inset 0 0 0 1px rgba(255,255,255,.03)}.rdp-device-stage.rdp-device-mobile .rdp-device-scroll{width:100%;min-width:0;flex:1;min-height:0;height:auto;max-height:none;overflow-y:auto;overflow-x:hidden;border:0;border-radius:0;background:#111;box-shadow:none;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.35) transparent}.rdp-device-stage.rdp-device-mobile .rdp-page{width:100%;max-width:none;transform-origin:top center}.rdp-mobile-chrome{position:relative;flex:0 0 auto;background:#16181d;color:#fff;padding:16px 11px 8px;border:0;box-shadow:none}.rdp-mobile-notch{position:absolute;left:50%;top:5px;transform:translateX(-50%);width:58px;height:10px;border-radius:999px;background:#050506;box-shadow:inset 0 -1px 0 rgba(255,255,255,.06)}.rdp-mobile-status{display:flex;justify-content:space-between;align-items:center;font-size:6px;padding-bottom:6px;opacity:.78}.rdp-mobile-url{border:1px solid rgba(255,255,255,.13);background:rgba(255,255,255,.055);border-radius:999px;padding:5px 8px;font-size:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rdp-mobile-chrome small{display:block;margin-top:5px;font-size:5px;letter-spacing:.12em;text-transform:uppercase;opacity:.35}.rdp-mobile-home{flex:0 0 auto;height:18px;display:grid;place-items:center;background:#111;color:rgba(255,255,255,.42)}.rdp-mobile-home span{display:block;width:58px;height:3px;border-radius:999px;background:currentColor}.rdp-device-stage.rdp-device-desktop .rdp-device-scroll{min-width:0}.rdp-device-stage.rdp-device-desktop .rdp-page{width:100%}.rdp-device-stage.rdp-device-desktop .rdp-browser{flex:0 0 auto}.
 

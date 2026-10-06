@@ -23,12 +23,12 @@ const shade = (h, amt) => {
 const MOTION_ICONS = { none: Ban, subtle: Spline, scroll: ChevronsDown, interactive: MousePointerClick, parallax: Layers, kinetic: Type, dynamic: Sparkles };
 
 const THEME_COLORS = {
-  dark: { bg: '#0b0b0d', fg: '#ffffff', sub: 'rgba(255,255,255,.55)', panel: 'rgba(255,255,255,.06)', line: 'rgba(255,255,255,.14)' },
-  light: { bg: '#f8f8f6', fg: '#141414', sub: 'rgba(0,0,0,.55)', panel: 'rgba(255,255,255,.92)', line: 'rgba(0,0,0,.12)' },
-  neutral: { bg: '#d9d9d6', fg: '#1b1b1b', sub: 'rgba(0,0,0,.55)', panel: 'rgba(255,255,255,.6)', line: 'rgba(0,0,0,.14)' },
-  midnight: { bg: '#0a1228', fg: '#eaf0ff', sub: 'rgba(220,230,255,.55)', panel: 'rgba(120,150,255,.09)', line: 'rgba(150,175,255,.2)' },
-  warm: { bg: '#f3ead9', fg: '#2b2118', sub: 'rgba(43,33,24,.6)', panel: 'rgba(255,255,255,.55)', line: 'rgba(43,33,24,.15)' },
-  auto: { bg: '#0b0b0d', fg: '#ffffff', sub: 'rgba(255,255,255,.55)', panel: 'rgba(255,255,255,.06)', line: 'rgba(255,255,255,.14)' },
+  dark: { bg: '#0b0b0d', fg: '#ffffff', body: '#f2f4f7', link: '#8de9ff', sub: 'rgba(255,255,255,.55)', panel: 'rgba(255,255,255,.06)', line: 'rgba(255,255,255,.14)' },
+  light: { bg: '#f8f8f6', fg: '#0a0a0a', body: '#242424', link: '#2458c6', sub: 'rgba(0,0,0,.55)', panel: 'rgba(255,255,255,.92)', line: 'rgba(0,0,0,.12)' },
+  neutral: { bg: '#d9d9d6', fg: '#121212', body: '#2a2a2a', link: '#365a88', sub: 'rgba(0,0,0,.55)', panel: 'rgba(255,255,255,.6)', line: 'rgba(0,0,0,.14)' },
+  midnight: { bg: '#0a1228', fg: '#ffffff', body: '#e6edff', link: '#73ddff', sub: 'rgba(220,230,255,.55)', panel: 'rgba(120,150,255,.09)', line: 'rgba(150,175,255,.2)' },
+  warm: { bg: '#f3ead9', fg: '#21150e', body: '#3a2b20', link: '#8a4f25', sub: 'rgba(43,33,24,.6)', panel: 'rgba(255,255,255,.55)', line: 'rgba(43,33,24,.15)' },
+  auto: { bg: '#0b0b0d', fg: '#ffffff', body: '#f2f4f7', link: '#8de9ff', sub: 'rgba(255,255,255,.55)', panel: 'rgba(255,255,255,.06)', line: 'rgba(255,255,255,.14)' },
 };
 
 /* The preview is a code-built reconstruction of the reference packs, not an image gallery. */
@@ -70,7 +70,7 @@ function ThemeArt({ id }) {
     <div className="relative h-[84px] w-full" style={{ background: c.bg }}>
       <div className="absolute bottom-0 right-0 h-[66px] w-[62%] rounded-tl-xl p-2" style={{ background: dark ? 'rgba(255,255,255,.1)' : '#fff' }}>
         <div className="mb-1.5 flex gap-1"><i className="h-1.5 w-1.5 rounded-full bg-red-400" /><i className="h-1.5 w-1.5 rounded-full bg-yellow-400" /><i className="h-1.5 w-1.5 rounded-full bg-green-400" /></div>
-        <i className="mb-1 block h-1 w-3/5 rounded" style={{ background: c.line }} /><i className="block h-7 w-full rounded" style={{ background: dark ? 'rgba(255,255,255,.12)' : '#fde9c4' }} />
+        <i className="mb-1 block h-1 w-3/5 rounded" style={{ background: c.line }} /><div className="flex items-end justify-between gap-2"><span className="text-[14px] font-black leading-none" style={{ color:c.fg }}>Aa</span><span className="text-[8px] font-medium" style={{ color:c.body }}>body</span><span className="text-[8px] font-semibold underline" style={{ color:c.link }}>link</span></div><i className="mt-1 block h-5 w-full rounded" style={{ background: dark ? 'rgba(255,255,255,.12)' : '#fde9c4' }} />
       </div>
     </div>
   );
