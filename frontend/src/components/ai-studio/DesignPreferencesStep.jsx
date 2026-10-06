@@ -312,24 +312,19 @@ function LivePreview({ design, palette, paletteName, typo }) {
   const frameBg = t.layout === 'retro' ? th.bg : th.bg;
 
   return (
-    <div>
-      <div className="overflow-hidden rounded-2xl border border-white/15" style={{ boxShadow: `0 24px 60px -24px ${alpha(accent, 0.55)}` }}>
-        <div className="flex items-center gap-2 bg-neutral-800 px-3 py-2">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/15" style={{ boxShadow: `0 24px 60px -24px ${alpha(accent, 0.55)}` }}>
+        <div className="flex shrink-0 items-center gap-2 bg-neutral-800 px-3 py-2">
           <i className="h-2.5 w-2.5 rounded-full bg-red-400" /><i className="h-2.5 w-2.5 rounded-full bg-yellow-400" /><i className="h-2.5 w-2.5 rounded-full bg-green-400" />
           <div className="ml-2 flex-1 truncate rounded-md bg-black/40 px-3 py-1 text-[10px] text-white/50">yourwebsite.com</div>
         </div>
         <motion.div
           key={`${design.style}-${design.theme}-${anim}-${typo.id}-${accent}`}
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.25 }}
-          style={{ background: frameBg, color: th.fg, fontFamily: typo.font, height: 430, overflow: 'hidden', fontSize: 11 }}
+          style={{ background: frameBg, color: th.fg, fontFamily: typo.font, flex: 1, minHeight: 430, position: 'relative', overflow: 'hidden', fontSize: 11 }}
         >
-          {render()}
+          <div style={{ position: 'absolute', inset: 0 }}>{render()}</div>
         </motion.div>
-      </div>
-      <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-white/80">
-        {[`${styleLabel} Layout Draft`, `${themeLabel} Theme`, `${paletteName} Applied`, `Typography: ${typo.label}`, `Motion: ${motionLabel}`].map((chip) => (
-          <span key={chip} className="rounded-lg border border-white/15 bg-neutral-900/95 px-3 py-1.5">{chip}</span>
-        ))}
       </div>
     </div>
   );
@@ -380,7 +375,7 @@ function Section({ n, title, children }) {
 }
 
 /* ───────────── main step ───────────── */
-export default function DesignPreferencesStep({ design, onChange, onBack, onNext }) {
+export default function DesignPreferencesStep({ design, onChange, onBack, onNext, topBar }) {
   const [customColor, setCustomColor] = useState('#e0b25c');
   const paletteId = design.paletteId || 'amber';
   const activePalette = DESIGN_PALETTES.find((p) => p.id === paletteId);
@@ -404,11 +399,12 @@ export default function DesignPreferencesStep({ design, onChange, onBack, onNext
   );
 
   return (
-    <div className="relative left-1/2 w-[min(1280px,94vw)] -translate-x-1/2">
-      <div className="pointer-events-none absolute -inset-8 -z-10 opacity-60 transition-all duration-500" style={{ background: `radial-gradient(60% 50% at 75% 20%, ${alpha(accent, 0.18)}, transparent 70%)` }} />
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
-        {/* Left: controls */}
-        <div className="rounded-3xl border border-white/10 bg-[#0a0a0c] p-6 lg:max-h-[calc(100vh-150px)] lg:overflow-y-auto">
+    <div className="relative flex min-h-[100dvh] w-full flex-col overflow-hidden bg-neutral-950 text-white lg:h-[100dvh]">
+      <div className="pointer-events-none absolute inset-0 -z-0 opacity-60 transition-all duration-500" style={{ background: `radial-gradient(60% 50% at 75% 20%, ${alpha(accent, 0.18)}, transparent 70%)` }} />
+      {topBar && <div className="relative z-10 shrink-0">{topBar}</div>}
+      <div className="relative z-10 grid min-h-0 flex-1 gap-4 px-4 pb-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
+        {/* Controls: fills full height, scrolls inside */}
+        <div className="min-h-0 rounded-3xl border border-white/10 bg-[#0a0a0c] p-6 lg:h-full lg:overflow-y-auto">
           <h2 className="text-[26px] font-bold tracking-tight">Design Preferences</h2>
           <p className="mb-6 mt-1 text-sm text-white/45">Guide the AI's Design Agent to match your exact brand aesthetic. The whole preview re-designs as you choose.</p>
 
@@ -496,24 +492,26 @@ export default function DesignPreferencesStep({ design, onChange, onBack, onNext
           </div>
         </div>
 
-        {/* Right: live preview */}
-        <div className="flex flex-col self-start rounded-3xl border bg-[#0a0a0c] p-6 transition-colors" style={{ borderColor: alpha(accent, 0.28) }}>
-          <div className="mb-5 flex items-center justify-between gap-3">
+        {/* Preview: pinned in place, never scrolls with the options */}
+        <div className="flex min-h-[560px] flex-col rounded-3xl border bg-[#0a0a0c] p-6 transition-colors lg:h-full lg:min-h-0" style={{ borderColor: alpha(accent, 0.28) }}>
+          <div className="mb-5 flex shrink-0 items-center justify-between gap-3">
             <h2 className="text-[22px] font-bold tracking-tight">Live Mockup Preview <span className="text-white/60">(Agent Draft)</span></h2>
             <span className="inline-flex shrink-0 items-center gap-2 text-xs text-white/50"><Loader2 size={14} className="animate-spin" style={{ color: accent }} /> Rendering in Real-Time</span>
           </div>
           <LivePreview design={design} palette={palette} paletteName={paletteName} typo={typo} />
-          <div className="mt-6 flex items-center justify-between gap-3">
-            <button type="button" onClick={onBack} className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-6 py-3 text-[14px] font-bold"><ArrowLeft size={15} /> Back</button>
-            <div className="flex items-center gap-4">
-              <span className="hidden items-center gap-2 text-xs text-white/40 sm:inline-flex"><Timer size={14} /> AI is ready to generate</span>
-              <button type="button" onClick={onNext} className="inline-flex items-center gap-2 rounded-xl px-7 py-3 text-[14px] font-bold" style={{ background: `linear-gradient(135deg,${shade(accent, 0.25)},${accent},${shade(accent, -0.25)})`, color: onAcc, boxShadow: `0 0 28px -6px ${alpha(accent, 0.75)}` }}>
-                Continue to Generate <ArrowRight size={16} />
-              </button>
-            </div>
-          </div>
         </div>
       </div>
+
+      {/* Bottom action bar */}
+      <footer className="sticky bottom-0 z-20 flex shrink-0 items-center justify-between gap-3 border-t border-white/10 bg-neutral-950/90 px-4 py-3 backdrop-blur">
+        <button type="button" onClick={onBack} className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-6 py-3 text-[14px] font-bold"><ArrowLeft size={15} /> Back</button>
+        <div className="flex items-center gap-4">
+          <span className="hidden items-center gap-2 text-xs text-white/40 sm:inline-flex"><Timer size={14} /> AI is ready to generate</span>
+          <button type="button" onClick={onNext} className="inline-flex items-center gap-2 rounded-xl px-7 py-3 text-[14px] font-bold" style={{ background: `linear-gradient(135deg,${shade(accent, 0.25)},${accent},${shade(accent, -0.25)})`, color: onAcc, boxShadow: `0 0 28px -6px ${alpha(accent, 0.75)}` }}>
+            Continue to Generate <ArrowRight size={16} />
+          </button>
+        </div>
+      </footer>
     </div>
   );
 }

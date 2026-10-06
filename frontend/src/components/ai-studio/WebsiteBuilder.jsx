@@ -3,6 +3,7 @@ import { ArrowLeft, Check, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 import StepShell from './StepShell';
 import DesignPreferencesStep from './DesignPreferencesStep';
+import StudioTopBar from './StudioTopBar';
 import { describeDesign } from '../../config/aiStudio.config';
 
 const SCHEMAS = {
@@ -269,6 +270,18 @@ export default function WebsiteBuilder({ type, onBack, onGenerate }) {
     setGenerating(true);
     try { await onGenerate(type, details, design); } finally { setGenerating(false); }
   };
+
+  if (step === 1) {
+    return (
+      <DesignPreferencesStep
+        design={design}
+        onChange={setDesign}
+        onBack={() => setStep(0)}
+        onNext={() => setStep(2)}
+        topBar={<StudioTopBar onBack={onBack} disabled={generating} title={schema?.title || 'AI Studio'} step={step} />}
+      />
+    );
+  }
 
   return (
     <div className="min-h-full bg-neutral-950 text-white">
