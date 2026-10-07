@@ -19,6 +19,13 @@
   font-family: var(--font-napkin-display);
 }
 
+/* Editorial display face for the home page's refined sections. */
+.font-display {
+  font-family: 'Cormorant Garamond', 'Playfair Display', Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.015em;
+}
+
 /* Product-UI surfaces (Workspace, Profile, Deploy flows) use a plain,
    high-legibility sans stack — deliberately NOT the marketing site's
    serif/editorial voice. This is meant to read like a real dev tool. */
