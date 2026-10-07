@@ -17,12 +17,31 @@ const RATE_LIMIT_COOLDOWN_MAX_MS = Math.max(
   RATE_LIMIT_COOLDOWN_MS,
   Number.parseInt(process.env.GEMINI_RATE_LIMIT_COOLDOWN_MAX_MS || '60000', 10) || 60000
 );
-const MODELS = [
+const DEFAULT_GEMINI_MODELS = [
   'gemini-3.7-flash',
   'gemini-3.6-flash',
   'gemini-3.5-flash',
   'gemini-3.5-flash-lite',
-].filter((model, index, models) => models.indexOf(model) === index);
+];
+
+function configuredGeminiModels() {
+  const configured = String(process.env.GEMINI_MODELS || '')
+    .split(',')
+    .map((model) => model.trim())
+    .filter(Boolean);
+
+  const primary = String(process.env.GEMINI_MODEL || '').trim();
+  const candidates = configured.length ? configured : [primary, ...DEFAULT_GEMINI_MODELS];
+  const unique = candidates.filter((model, index, models) => models.indexOf(model) === index);
+
+  return unique.length ? unique : DEFAULT_GEMINI_MODELS.slice();
+}
+
+const MODEL_ATTEMPT_LIMIT = Math.max(
+  1,
+  Number.parseInt(process.env.GEMINI_MAX_MODEL_ATTEMPTS || '', 10) || configuredGeminiModels().length
+);
+const MODELS = configuredGeminiModels().slice(0, MODEL_ATTEMPT_LIMIT);
 
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

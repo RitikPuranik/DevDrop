@@ -16,6 +16,7 @@ function resetPool() {
   process.env.GEMINI_API_KEYS = 'KEY_A_1234,KEY_B_5678,KEY_C_9012';
   delete process.env.GEMINI_API_KEY;
   _internal.pool.clear();
+  _internal.globalModelCooldowns.clear();
   _internal.bootstrapFromEnv();
 }
 
@@ -189,6 +190,25 @@ describe('execute()', () => {
     const selected = geminiPool.selectKey([]);
     expect(selected.id).not.toBe(entry.id);
     delete process.env.GEMINI_PER_KEY_CONCURRENCY;
+  });
+
+  test('global model capacity cooldown prevents repeating an overloaded model across keys', async () => {
+    const calls = [];
+    const models = ['MODEL_A', 'MODEL_B'];
+    const requestFn = jest.fn((rawKey, model) => {
+      calls.push([rawKey, model]);
+      if (model === 'MODEL_A') return Promise.reject(httpError(503, 'model is overloaded'));
+      return Promise.resolve('ok');
+    });
+
+    await geminiPool.executeModels(models, requestFn);
+    const firstRunLength = calls.length;
+
+    await geminiPool.executeModels(models, requestFn);
+    const secondRun = calls.slice(firstRunLength);
+
+    expect(secondRun).toHaveLength(1);
+    expect(secondRun[0][1]).toBe('MODEL_B');
   });
 
   test('executeModels is key-first: one key tries every model before the next key', async () => {

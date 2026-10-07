@@ -3,6 +3,7 @@ import { Loader2, KeyRound, Plus, RefreshCcw, Power, Trash2, Zap, Activity } fro
 import { toast } from 'sonner';
 
 import { adminAPI } from '../../../api/admin';
+import { subscribeToAdminPoolStatus } from '../../../api/adminSocket';
 
 /**
  * Admin view of the Groq key pool that powers Kashi (the assistant and the
@@ -42,12 +43,8 @@ export default function GroqPoolSection() {
   const load = useCallback(async (silent = false) => {
     try {
       if (!silent) setLoading(true);
-      const [list, status] = await Promise.all([
-        adminAPI.getGroqKeys({ limit: 100 }),
-        adminAPI.getGroqPoolStatus().catch(() => null),
-      ]);
+      const list = await adminAPI.getGroqKeys({ limit: 100 });
       setKeys(list.data?.data?.keys || []);
-      setLive(status?.data?.data || null);
     } catch (err) {
       if (!silent) toast.error(err.response?.data?.message || 'Failed to load the Groq pool');
     } finally {
@@ -57,8 +54,9 @@ export default function GroqPoolSection() {
 
   useEffect(() => {
     load();
-    const t = setInterval(() => load(true), 10000);
-    return () => clearInterval(t);
+    return subscribeToAdminPoolStatus('groq', (liveStatus) => {
+      setLive(liveStatus);
+    });
   }, [load]);
 
   const liveById = useMemo(() => new Map((live?.keys || []).map((k) => [k.id, k])), [live]);
@@ -171,7 +169,7 @@ export default function GroqPoolSection() {
           </table>
         )}
       </div>
-      <p className="text-white/25 text-[11px] flex items-center gap-1.5"><Activity size={12} /> Live health refreshes every 10 seconds.</p>
+      <p className="text-white/25 text-[11px] flex items-center gap-1.5"><Activity size={12} /> Live health is pushed over the admin socket while this panel is open.</p>
     </div>
   );
 }

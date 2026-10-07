@@ -52,6 +52,11 @@ const AI_GENERATION_RATE_LIMIT_MAX_REQUESTS = readEnvNumber('AI_GENERATION_RATE_
 const AI_JOB_POLL_RATE_LIMIT_WINDOW_MS = readEnvNumber('AI_JOB_POLL_RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000);
 const AI_JOB_POLL_RATE_LIMIT_MAX_REQUESTS = readEnvNumber('AI_JOB_POLL_RATE_LIMIT_MAX_REQUESTS', 600);
 
+// AI Studio heartbeat is only a session liveness signal. Keep it out of the
+// global IP bucket and give it a small authenticated per-user budget instead.
+const AI_STUDIO_HEARTBEAT_RATE_LIMIT_WINDOW_MS = readEnvNumber('AI_STUDIO_HEARTBEAT_RATE_LIMIT_WINDOW_MS', 60 * 1000);
+const AI_STUDIO_HEARTBEAT_RATE_LIMIT_MAX_REQUESTS = readEnvNumber('AI_STUDIO_HEARTBEAT_RATE_LIMIT_MAX_REQUESTS', 30);
+
 // General API rate limiter
 const generalLimiter = rateLimit({
   windowMs: GENERAL_RATE_LIMIT_WINDOW_MS,
@@ -65,7 +70,10 @@ const generalLimiter = rateLimit({
   // AI job polling has its own limiter below; otherwise a 2-5 second polling
   // loop can exhaust the general 100-request/15-minute IP budget before a
   // legitimate long-running generation finishes.
-  skip: (req) => req.path.startsWith('/ai-generate/jobs/'),
+  skip: (req) =>
+    req.path.startsWith('/ai-generate/jobs/') ||
+    req.path === '/ai-generate/webhook' ||
+    /^\/ai-studio\/[^/]+\/heartbeat$/.test(req.path),
 });
 
 // Stricter limiter for authentication routes
@@ -149,6 +157,20 @@ const aiGenerationLimiter = rateLimit({
 // AI Studio job status polling limiter (per authenticated user). This is
 // intentionally much higher than the generation limiter because one job may
 // take several minutes and the frontend polls periodically until completion.
+// AI Studio heartbeat limiter. This middleware runs after auth, so req.userId
+// is available and multiple tabs from the same user share one small budget.
+const aiStudioHeartbeatLimiter = rateLimit({
+  windowMs: AI_STUDIO_HEARTBEAT_RATE_LIMIT_WINDOW_MS,
+  max: AI_STUDIO_HEARTBEAT_RATE_LIMIT_MAX_REQUESTS,
+  keyGenerator: (req) => (req.userId ? req.userId.toString() : req.ip),
+  message: {
+    success: false,
+    message: 'AI Studio heartbeat rate limit reached. Please wait a moment.',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 const aiJobPollingLimiter = rateLimit({
   windowMs: AI_JOB_POLL_RATE_LIMIT_WINDOW_MS,
   max: AI_JOB_POLL_RATE_LIMIT_MAX_REQUESTS,
@@ -182,5 +204,6 @@ module.exports = {
   exportLimiter,
   deployLimiter,
   aiGenerationLimiter,
+  aiStudioHeartbeatLimiter,
   aiJobPollingLimiter,
 };

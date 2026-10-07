@@ -39,6 +39,19 @@ function getPerKeyConcurrency() {
 
 /** @type {Map<string, object>} keyId -> runtime+config state */
 const pool = new Map();
+
+// Provider-side capacity failures (typically HTTP 503) are not credential
+// failures. When a model is overloaded, trying the same model on dozens of
+// other credentials only adds latency and can amplify provider pressure.
+// Keep a small process-local model cooldown so a capacity failure temporarily
+// removes that model from every key's traversal. A successful request clears
+// the cooldown immediately.
+const MODEL_CAPACITY_COOLDOWN_MS = Math.max(
+  5_000,
+  Number.parseInt(process.env.GEMINI_MODEL_CAPACITY_COOLDOWN_MS || '30000', 10) || 30000
+);
+const globalModelCooldowns = new Map();
+
 let lastLoadedAt = 0;
 let loadingPromise = null;
 
@@ -288,6 +301,28 @@ function selectKey(excludeIds = []) {
   return candidates[0];
 }
 
+function globalModelCooldownRemaining(model) {
+  const until = Number(globalModelCooldowns.get(model) || 0);
+  return until > Date.now() ? until - Date.now() : 0;
+}
+
+function markGlobalModelCapacity(model) {
+  if (!model) return;
+  globalModelCooldowns.set(model, Date.now() + MODEL_CAPACITY_COOLDOWN_MS);
+}
+
+function clearGlobalModelCapacity(model) {
+  if (!model) return;
+  globalModelCooldowns.delete(model);
+}
+
+function shortestGlobalModelCooldown(models = []) {
+  const remaining = models
+    .map((model) => globalModelCooldownRemaining(model))
+    .filter((ms) => ms > 0);
+  return remaining.length ? Math.min(...remaining) : null;
+}
+
 function shortestCooldownRemaining(excludeIds = [], models = []) {
   const now = Date.now();
   const relevant = Array.from(pool.values()).filter(
@@ -305,6 +340,9 @@ function shortestCooldownRemaining(excludeIds = [], models = []) {
       if (ms > 0) cooldowns.push(ms);
     }
   }
+
+  const globalCooldown = shortestGlobalModelCooldown(models);
+  if (globalCooldown) cooldowns.push(globalCooldown);
 
   return cooldowns.length ? Math.min(...cooldowns) : null;
 }
@@ -557,6 +595,22 @@ async function executeModels(models, requestFn) {
   let lastError = null;
   let lastInfo = null;
 
+  const globalRetryAfterAtStart = shortestGlobalModelCooldown(modelList);
+  if (globalRetryAfterAtStart && globalRetryAfterAtStart > 0) {
+    const anyModelAvailable = modelList.some((model) => globalModelCooldownRemaining(model) <= 0);
+    if (!anyModelAvailable) {
+      const exhaustedByCapacity = new PoolExhaustedError(
+        `Gemini models are temporarily at capacity; retrying after ${Math.ceil(globalRetryAfterAtStart / 1000)}s.`,
+        globalRetryAfterAtStart
+      );
+      exhaustedByCapacity.code = 'GEMINI_POOL_EXHAUSTED';
+      exhaustedByCapacity.classification = 'capacity';
+      exhaustedByCapacity.retryAfterMs = globalRetryAfterAtStart;
+      exhaustedByCapacity.attemptedKeyIds = [];
+      throw exhaustedByCapacity;
+    }
+  }
+
   for (let keyAttempt = 0; keyAttempt < maxKeyAttempts; keyAttempt += 1) {
     const entry = selectKey(excludeIds);
     if (!entry) {
@@ -579,6 +633,16 @@ async function executeModels(models, requestFn) {
 
     for (let modelAttempt = 0; modelAttempt < modelList.length; modelAttempt += 1) {
       const model = modelList[modelAttempt];
+      const globalCapacityCooldownMs = globalModelCooldownRemaining(model);
+      if (globalCapacityCooldownMs > 0) {
+        console.log('[Gemini Pool] SKIP GLOBAL MODEL CAPACITY COOLDOWN', {
+          model,
+          remainingMs: globalCapacityCooldownMs,
+          remaining: `${Math.ceil(globalCapacityCooldownMs / 1000)}s`,
+        });
+        continue;
+      }
+
       const modelCooldownMs = modelCooldownRemaining(entry, model);
       if (modelCooldownMs > 0) {
         console.log('[Gemini Pool] SKIP COOLDOWN', {
@@ -606,6 +670,7 @@ async function executeModels(models, requestFn) {
         // and ensures malformed generated JSON is still accounted for.
         recordTokenUsageFromResult(entry, result, model);
         markSuccess(entry, model);
+        clearGlobalModelCapacity(model);
         delete entry._currentSequenceFailures;
         logModelResult(entry, model, 'SUCCESS', {
           keyAttempt: keyAttempt + 1,
@@ -616,6 +681,9 @@ async function executeModels(models, requestFn) {
       } catch (error) {
         const info = markFailure(entry, error, { model, deferTemporaryCooldown: modelAttempt < modelList.length - 1 });
         entry._currentSequenceFailures.push(info);
+        if (info.classification === 'capacity') {
+          markGlobalModelCapacity(model);
+        }
         lastError = error;
         lastInfo = info;
 
@@ -652,13 +720,30 @@ async function executeModels(models, requestFn) {
           continue;
         }
 
-        // Every configured model failed on this credential. Only NOW do we
-        // put the entire API key into cooldown. Any exact quota reset returned
-        // by Gemini wins over the generic exponential cooldown.
+        // Every configured model failed on this credential. Do not punish a
+        // credential when the entire sequence failed only because the provider
+        // reported model capacity. The global model cooldown already prevents
+        // the same overloaded models from being retried across other keys.
         const keyFailureStreak = Math.max(1, entry.consecutiveFailures + 1);
         const sequenceInfos = Array.isArray(entry._currentSequenceFailures)
           ? entry._currentSequenceFailures
           : [];
+        const allCapacityFailures = sequenceInfos.length === modelList.length &&
+          sequenceInfos.every((failureInfo) => failureInfo?.classification === 'capacity');
+
+        if (allCapacityFailures) {
+          entry.status = 'healthy';
+          entry.cooldownUntil = null;
+          entry.consecutiveFailures = Math.max(0, entry.consecutiveFailures);
+          persistAsync(entry.id, { status: 'healthy', cooldownUntil: null });
+          excludeIds.push(entry.id);
+          delete entry._currentSequenceFailures;
+          console.warn('[Gemini Pool] MODEL CAPACITY ONLY - KEY REMAINS HEALTHY', {
+            keyId: entry.id,
+            failedModels: modelList,
+          });
+          continue;
+        }
         const resetTimes = sequenceInfos
           .map((failureInfo) => Number(failureInfo?.quotaResetAt) || 0)
           .filter((resetAt) => resetAt > Date.now());
@@ -726,6 +811,20 @@ async function executeModels(models, requestFn) {
   }
 
   if (lastInfo?.classification === 'invalid') throw lastError;
+
+  const globalRetryAfterMs = shortestGlobalModelCooldown(modelList);
+  if (!lastInfo && globalRetryAfterMs) {
+    const exhaustedByCapacity = new PoolExhaustedError(
+      `Gemini models are temporarily at capacity; retrying after ${Math.ceil(globalRetryAfterMs / 1000)}s.`,
+      globalRetryAfterMs
+    );
+    exhaustedByCapacity.code = 'GEMINI_POOL_EXHAUSTED';
+    exhaustedByCapacity.classification = 'capacity';
+    exhaustedByCapacity.retryAfterMs = globalRetryAfterMs;
+    exhaustedByCapacity.attemptedKeyIds = [];
+    throw exhaustedByCapacity;
+  }
+
   const exhausted = new PoolExhaustedError(
     lastInfo?.quotaResetAt && lastInfo.quotaResetAt > Date.now()
       ? `Gemini pool exhausted; quota refreshes at ${new Date(lastInfo.quotaResetAt).toISOString()}.`
@@ -886,12 +985,23 @@ function getSnapshot() {
     if (!k.enabled || k.status === 'invalid' || k.status === 'disabled') return false;
     if (k.cooldownRemainingMs > 0) return false;
     return snapshotModels.some((model) => {
+      if (globalModelCooldownRemaining(model) > 0) return false;
       const until = k.modelCooldowns?.[model];
       return !until || new Date(until).getTime() <= now;
     });
   });
   const totalDailyTokens = keys.reduce((sum, k) => sum + k.dailyTokensUsed, 0);
   const outOfTokensKeys = keys.filter((k) => k.isOutOfTokens).length;
+  const globalModelCapacityCooldowns = Object.fromEntries(
+    snapshotModels
+      .map((model) => {
+        const remainingMs = globalModelCooldownRemaining(model);
+        return remainingMs > 0
+          ? [model, { remainingMs, until: new Date(Date.now() + remainingMs).toISOString() }]
+          : null;
+      })
+      .filter(Boolean)
+  );
 
   return {
     totalKeys: keys.length,
@@ -906,6 +1016,7 @@ function getSnapshot() {
     dailyTokenLimit: DAILY_TOKEN_LIMIT,
     globalConcurrency: Number.parseInt(process.env.AI_CONCURRENCY || '1', 10),
     perKeyConcurrency: Number.isFinite(getPerKeyConcurrency()) ? getPerKeyConcurrency() : null,
+    globalModelCapacityCooldowns,
     hasAvailableKey: availableNow,
     keys,
   };
@@ -922,5 +1033,13 @@ module.exports = {
   markTokenUsage,
   PoolExhaustedError,
   // exported for tests only
-  _internal: { pool, bootstrapFromEnv, markSuccess, markFailure, markAcquired, markTokenUsage },
+  _internal: {
+    pool,
+    globalModelCooldowns,
+    bootstrapFromEnv,
+    markSuccess,
+    markFailure,
+    markAcquired,
+    markTokenUsage,
+  },
 };

@@ -4,6 +4,7 @@ const architectureAgent=require('../agents/architecture.agent');
 const codeGenerationAgent=require('../agents/codeGeneration.agent');
 const integrationAgent=require('../agents/integration.agent');
 const debugAgent=require('../agents/debug.agent');
+function normalizeGeneratedPath(path){if(typeof path!=='string')return path;const value=path.trim();return value&&value.startsWith('/')?value:`/${value}`;}
 const {validateRequirements,validateDesign,validateArchitecture}=require('../validators/contracts.validator');
 const {validateGeneratedFiles}=require('../validators/generatedFiles.validator');
 const buildValidator=require('../validators/build.validator');
@@ -95,7 +96,7 @@ async function debugWebsite(input = {}, { onStage } = {}) {
        mediaManifest: modelManifest,
      }), meta, onStage);
      for (const change of debug.value?.changes || []) {
-       if (change.path && typeof change.code === 'string') files[change.path] = { code: change.code };
+       if (change.path && typeof change.code === 'string') { const changePath = normalizeGeneratedPath(change.path); files[changePath] = { code: change.code }; }
      }
      continue;
    }
@@ -123,7 +124,7 @@ async function debugWebsite(input = {}, { onStage } = {}) {
      mediaManifest: modelManifest,
    }), meta, onStage);
    for (const change of debug.value?.changes || []) {
-     if (change.path && typeof change.code === 'string') files[change.path] = { code: change.code };
+     if (change.path && typeof change.code === 'string') { const changePath = normalizeGeneratedPath(change.path); files[changePath] = { code: change.code }; }
    }
  }
 
@@ -174,9 +175,9 @@ async function runGeneration(input,{onStage}={}){
  for(let attempt=0;attempt<=MAX_BUILD_FIX_RETRIES;attempt+=1){
   files=resolveAssetUrls(files,mediaManifest);
   const staticErrors=validateGeneratedFiles(files);
-  if(staticErrors.length){console.warn('[VALIDATOR] static validation failed',{attempt,errors:staticErrors});if(attempt===MAX_BUILD_FIX_RETRIES)throw Object.assign(new Error(staticErrors.join(' | ')),{userMessage:`Generated code failed validation after the maximum repair attempts: ${staticErrors.join(' | ').slice(0,1200)}`,debugContext:buildDebugContext({files,dependencies,architecture,requirements,design,errors:staticErrors,mediaManifest,mediaPlan})});const debug=await stage(`debug:${attempt+1}`,()=>debugAgent.run({errors:staticErrors,affectedFiles:Object.keys(files),files,architecture,requirements,design,dependencies,mediaManifest:modelManifest}),meta,onStage);for(const change of debug.value?.changes||[])if(change.path&&change.code)files[change.path]={code:change.code};continue;}
+  if(staticErrors.length){console.warn('[VALIDATOR] static validation failed',{attempt,errors:staticErrors});if(attempt===MAX_BUILD_FIX_RETRIES)throw Object.assign(new Error(staticErrors.join(' | ')),{userMessage:`Generated code failed validation after the maximum repair attempts: ${staticErrors.join(' | ').slice(0,1200)}`,debugContext:buildDebugContext({files,dependencies,architecture,requirements,design,errors:staticErrors,mediaManifest,mediaPlan})});const debug=await stage(`debug:${attempt+1}`,()=>debugAgent.run({errors:staticErrors,affectedFiles:Object.keys(files),files,architecture,requirements,design,dependencies,mediaManifest:modelManifest}),meta,onStage);for(const change of debug.value?.changes||[])if(change.path&&change.code){const changePath=normalizeGeneratedPath(change.path);files[changePath]={code:change.code};}continue;}
   console.log('[VALIDATOR] static validation passed');const build=await stage('build-validator',()=>buildValidator.run({files,dependencies}),meta,onStage);if(build.success){console.log('[VALIDATOR] build passed');warnUnusedAssets(files,mediaManifest);console.log('[ORCHESTRATOR] generation completed');return {assistantMessage:`Generated a ${requirements.websiteType} website through the multi-agent pipeline.`,title:buildGeneratedTitle(requirements),files,dependencies,generationMeta:{agents:meta}};}
-  console.warn('[VALIDATOR] build failed',{attempt,errors:build.errors});if(attempt===MAX_BUILD_FIX_RETRIES)throw Object.assign(new Error('Build failed after maximum repair attempts'),{userMessage:`DevDrop could not produce a buildable website after the maximum repair attempts: ${(build.errors||[]).join(' | ').slice(0,1200)}`,debugContext:buildDebugContext({files,dependencies,architecture,requirements,design,errors:build.errors||[],buildOutput:build.errors||[],mediaManifest,mediaPlan})});const debug=await stage(`debug:${attempt+1}`,()=>debugAgent.run({errors:build.errors,affectedFiles:Object.keys(files),files,architecture,requirements,design,dependencies,buildOutput:build.errors,mediaManifest:modelManifest}),meta,onStage);for(const change of debug.value?.changes||[])if(change.path&&change.code)files[change.path]={code:change.code};
+  console.warn('[VALIDATOR] build failed',{attempt,errors:build.errors});if(attempt===MAX_BUILD_FIX_RETRIES)throw Object.assign(new Error('Build failed after maximum repair attempts'),{userMessage:`DevDrop could not produce a buildable website after the maximum repair attempts: ${(build.errors||[]).join(' | ').slice(0,1200)}`,debugContext:buildDebugContext({files,dependencies,architecture,requirements,design,errors:build.errors||[],buildOutput:build.errors||[],mediaManifest,mediaPlan})});const debug=await stage(`debug:${attempt+1}`,()=>debugAgent.run({errors:build.errors,affectedFiles:Object.keys(files),files,architecture,requirements,design,dependencies,buildOutput:build.errors,mediaManifest:modelManifest}),meta,onStage);for(const change of debug.value?.changes||[])if(change.path&&change.code){const changePath=normalizeGeneratedPath(change.path);files[changePath]={code:change.code};}
  }
  throw new Error('Generation failed after maximum repair attempts');
 }

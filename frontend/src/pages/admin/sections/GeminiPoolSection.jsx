@@ -7,6 +7,7 @@ import {
 import { toast } from 'sonner';
 
 import { adminAPI } from '../../../api/admin';
+import { subscribeToAdminPoolStatus } from '../../../api/adminSocket';
 
 const initialForm = { label: '', apiKey: '' };
 
@@ -173,10 +174,7 @@ export default function GeminiPoolSection() {
         status: statusFilter,
       };
 
-      const [keysRes, statusRes] = await Promise.all([
-        adminAPI.getGeminiKeys(params),
-        adminAPI.getGeminiPoolStatus(params),
-      ]);
+      const keysRes = await adminAPI.getGeminiKeys(params);
 
       setKeys(keysRes.data?.data?.keys || []);
       setPagination(keysRes.data?.pagination || {
@@ -187,7 +185,6 @@ export default function GeminiPoolSection() {
         hasNextPage: false,
         hasPreviousPage: false,
       });
-      setPoolStatus(statusRes.data?.data || null);
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to load the Gemini API pool');
     } finally {
@@ -198,9 +195,13 @@ export default function GeminiPoolSection() {
 
   useEffect(() => {
     load();
-    const interval = setInterval(() => load({ silent: true }), 15000);
-    return () => clearInterval(interval);
   }, [load]);
+
+  useEffect(() => {
+    return subscribeToAdminPoolStatus('gemini', (liveStatus) => {
+      setPoolStatus(liveStatus);
+    });
+  }, []);
 
   const handleAddKey = async (event) => {
     event.preventDefault();

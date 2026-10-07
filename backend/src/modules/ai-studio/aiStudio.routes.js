@@ -2,6 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const router = express.Router();
 const { auth } = require('../../shared/middleware/auth');
+const { aiStudioHeartbeatLimiter } = require('../../shared/middleware/rateLimit');
 const { handleMulterError } = require('../../shared/middleware/uploadValidation');
 const controller = require('./aiStudio.controller');
 
@@ -14,7 +15,7 @@ const uploadAsset = multer({
 // specific :projectId is additionally enforced inside the controller/
 // lifecycle service (a user may only ever touch req.userId's own projects).
 router.post('/session', auth, controller.openSession);
-router.post('/:projectId/heartbeat', auth, controller.heartbeat);
+router.post('/:projectId/heartbeat', auth, aiStudioHeartbeatLimiter, controller.heartbeat);
 router.post('/:projectId/activity', auth, controller.recordActivity);
 router.post('/:projectId/sync', auth, controller.syncFiles);
 router.get('/:projectId/download', auth, controller.downloadProject);

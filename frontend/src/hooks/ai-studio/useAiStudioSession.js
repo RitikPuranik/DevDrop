@@ -76,10 +76,22 @@ export function useAiStudioSession() {
     const onPageHide = () => {
       if (!projectId) return;
       try {
-        navigator.sendBeacon?.(
-          `${import.meta.env.VITE_API_URL}/api/ai-studio/${projectId}/close`,
-          new Blob([JSON.stringify({ sessionId: sessionIdRef.current })], { type: 'application/json' })
-        );
+        const token = localStorage.getItem('token');
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers.Authorization = `Bearer ${token}`;
+
+        // sendBeacon cannot attach the Authorization header used by DevDrop.
+        // fetch(..., keepalive:true) is the unload-safe equivalent for this
+        // tiny authenticated payload, while inactivity cleanup remains the
+        // ultimate fallback if the browser/network drops the request.
+        const apiBase = import.meta.env.VITE_API_URL || window.location.origin;
+        fetch(`${apiBase}/api/ai-studio/${projectId}/close`, {
+          method: 'POST',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify({ sessionId: sessionIdRef.current }),
+          keepalive: true,
+        }).catch(() => {});
       } catch {
         // ignore -- inactivity cleanup remains the real safety net
       }

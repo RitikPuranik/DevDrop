@@ -20,9 +20,41 @@ function validateRequirements(value) {
     if (!(key in value)) throw new Error(`requirements.${key} is missing`);
   }
   const supportedTypes = new Set(['portfolio', 'ecommerce', 'blog', 'landing', 'cafe', 'hotel', 'studio', 'saas', 'event', 'education', 'custom']);
-  if (!supportedTypes.has(value.websiteType)) {
+  const aliases = new Map([
+    ['blog / magazine', 'blog'],
+    ['blog/magazine', 'blog'],
+    ['blog magazine', 'blog'],
+    ['e-commerce', 'ecommerce'],
+    ['e-commerce store', 'ecommerce'],
+    ['ecommerce store', 'ecommerce'],
+    ['landing page', 'landing'],
+    ['cafe / restaurant', 'cafe'],
+    ['cafe / restaurant website', 'cafe'],
+    ['hotel / stay', 'hotel'],
+    ['hotel / stay website', 'hotel'],
+    ['freelancing studio / agency', 'studio'],
+    ['freelancing studio / agency website', 'studio'],
+    ['saas / web app', 'saas'],
+    ['saas / web app website', 'saas'],
+    ['event / conference', 'event'],
+    ['event / conference website', 'event'],
+    ['education / course', 'education'],
+    ['education / course website', 'education'],
+    ['custom website', 'custom'],
+  ]);
+  const rawType = typeof value.websiteType === 'string' ? value.websiteType.trim() : value.websiteType;
+  const canonicalType = typeof rawType === 'string'
+    ? (aliases.get(rawType.toLowerCase()) || rawType.toLowerCase())
+    : rawType;
+
+  if (!supportedTypes.has(canonicalType)) {
     throw new Error(`Unsupported website type: ${value.websiteType}`);
   }
+
+  // Downstream agents and preview rendering use the canonical ID. The model
+  // may describe a type using the friendly UI label, but the pipeline should
+  // never fail solely because it returned that label instead of the ID.
+  value.websiteType = canonicalType;
   return value;
 }
 
