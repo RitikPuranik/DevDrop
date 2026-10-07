@@ -7,7 +7,7 @@ import {
   SandpackFileExplorer,
   useSandpack,
 } from '@codesandbox/sandpack-react';
-import { Eye, Code2, AlertTriangle, Bot, Download, Check, Circle, Loader2, RefreshCw } from 'lucide-react';
+import { Eye, Code2, AlertTriangle, Bot, Download, Check, Circle, Loader2, RefreshCw, Monitor, Tablet, Smartphone, History } from 'lucide-react';
 import JSZip from 'jszip';
 
 const PLACEHOLDER_FILES = {
@@ -218,10 +218,11 @@ function PipelineProgress({ pipeline = {}, currentStage, isGenerating }) {
   );
 }
 
-function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiveTab, pipeline, currentStage, onHardReload, onDownload }) {
+function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiveTab, pipeline, currentStage, onHardReload, onDownload, device, setDevice, history = [] }) {
   const { sandpack, listen } = useSandpack();
   const [previewError, setPreviewError] = useState(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const prevFilesRef = useRef({});
 
   useEffect(() => {
@@ -289,38 +290,60 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-neutral-800 px-3 py-2">
-        <div className="flex gap-1">
-          <button onClick={() => setActiveTab('preview')} className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs ${activeTab === 'preview' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:text-white'}`}>
-            <Eye className="h-3.5 w-3.5" /> Preview
-          </button>
-          <button onClick={() => setActiveTab('code')} className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs ${activeTab === 'code' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:text-white'}`}>
-            <Code2 className="h-3.5 w-3.5" /> Code
-          </button>
+      <div className="flex items-center justify-between gap-3 pb-2.5">
+        <div className="flex items-center gap-3">
+          <div className="flex rounded-lg border border-white/[0.12] bg-[#0b0b0c] p-0.5">
+            <button onClick={() => setActiveTab('preview')} className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] ${activeTab === 'preview' ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white'}`}>
+              <Eye className="h-3.5 w-3.5" /> Preview
+            </button>
+            <button onClick={() => setActiveTab('code')} className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] ${activeTab === 'code' ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white'}`}>
+              <Code2 className="h-3.5 w-3.5" /> Code
+            </button>
+          </div>
+          <div className="flex rounded-lg border border-white/[0.12] bg-[#0b0b0c] p-0.5">
+            {[['desktop', Monitor], ['tablet', Tablet], ['mobile', Smartphone]].map(([id, Icon]) => (
+              <button key={id} onClick={() => setDevice(id)} aria-label={`${id} preview`} className={`rounded-md px-2 py-1 ${device === id ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white'}`}>
+                <Icon className="h-3.5 w-3.5" />
+              </button>
+            ))}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {activeTab === 'preview' && (
-            <button
-              onClick={onHardReload}
-              title="Restart the preview session (fixes a stuck/blank preview)"
-              className="flex items-center gap-1.5 rounded-md border border-neutral-700 px-2.5 py-1 text-xs text-neutral-300 hover:bg-neutral-800"
-            >
-              <RefreshCw className="h-3.5 w-3.5" /> Reload preview
+            <button onClick={onHardReload} title="Restart the preview session (fixes a stuck/blank preview)" aria-label="Reload preview" className="rounded-lg border border-white/[0.12] bg-[#0b0b0c] p-1.5 text-white/55 hover:text-white">
+              <RefreshCw className="h-3.5 w-3.5" />
             </button>
           )}
-          <button onClick={handleExportZip} disabled={isExporting || !fileData} className="flex items-center gap-1.5 rounded-md border border-neutral-700 px-2.5 py-1 text-xs text-neutral-300 hover:bg-neutral-800 disabled:opacity-40">
-            <Download className="h-3.5 w-3.5" /> Download
+          <button onClick={handleExportZip} disabled={isExporting || !fileData} className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-violet-500 to-fuchsia-500 px-3.5 py-1.5 text-[12px] font-medium text-white hover:brightness-110 disabled:opacity-40">
+            {isExporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} {fileData && !isGenerating ? 'Download ZIP (Complete)' : 'Download ZIP'}
           </button>
+          <div className="relative">
+            <button onClick={() => setShowHistory((v) => !v)} className="flex items-center gap-2 rounded-lg border border-white/[0.12] bg-[#0b0b0c] px-3 py-1.5 text-[12px] text-white/80 hover:text-white">
+              <History className="h-3.5 w-3.5" /> History
+            </button>
+            {showHistory && (
+              <div className="absolute right-0 z-30 mt-2 max-h-72 w-72 overflow-y-auto rounded-xl border border-white/[0.12] bg-[#0b0b0c] p-2 shadow-2xl">
+                {history.length === 0 ? (
+                  <p className="px-2 py-1.5 text-xs text-white/40">No requests yet.</p>
+                ) : history.map((h, i) => (
+                  <p key={i} className="line-clamp-3 border-b border-white/[0.06] px-2 py-1.5 text-xs text-white/70 last:border-0">{i + 1}. {h}</p>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
+      <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-white/[0.12] bg-[#0b0b0c] p-3">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/[0.12]">
+      <div className="border-b border-white/[0.12] px-3 py-1.5 text-[11px] text-white/70">{activeTab === 'preview' ? 'Live Preview' : 'Source Code'}</div>
       <div className="relative flex-1 overflow-hidden">
         <SandpackLayout style={{ height: '100%', border: 'none', borderRadius: 0, background: 'transparent' }}>
           {/* Keep the preview iframe mounted at all times — unmounting/remounting
               SandpackPreviewPane on tab switch kills its bundler/iframe handshake
               and the remount comes back as a blank white screen. Hide with CSS instead. */}
-          <div style={{ display: activeTab === 'preview' ? 'block' : 'none', height: '100%', width: '100%' }}>
-            <SandpackPreviewPane style={{ height: '100%', width: '100%' }} showOpenInCodeSandbox={false} />
+          <div style={{ display: activeTab === 'preview' ? 'block' : 'none', height: '100%', width: device === 'desktop' ? '100%' : device === 'tablet' ? 768 : 390, maxWidth: '100%', margin: '0 auto' }}>
+            <SandpackPreviewPane style={{ height: '100%', width: '100%' }} showOpenInCodeSandbox={false} showOpenNewtab />
           </div>
           {activeTab === 'code' && (
             <>
@@ -332,6 +355,8 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
         {isGenerating && activeTab === 'preview' && (
           <PipelineProgress pipeline={pipeline} currentStage={currentStage} isGenerating={isGenerating} />
         )}
+      </div>
+      </div>
       </div>
 
       {previewError && activeTab === 'preview' && !isGenerating && (
@@ -360,9 +385,10 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
   );
 }
 
-export default function AppPreview({ fileData, isGenerating, onFixError, pipeline = {}, currentStage, onDownload }) {
+export default function AppPreview({ fileData, isGenerating, onFixError, pipeline = {}, currentStage, onDownload, history = [] }) {
   const [activeTab, setActiveTab] = useState('preview');
   const [sessionNonce, setSessionNonce] = useState(0);
+  const [device, setDevice] = useState('desktop');
 
   useEffect(() => {
     if (fileData) setActiveTab('preview');
@@ -398,6 +424,9 @@ export default function AppPreview({ fileData, isGenerating, onFixError, pipelin
           currentStage={currentStage}
           onHardReload={handleHardReload}
           onDownload={onDownload}
+          device={device}
+          setDevice={setDevice}
+          history={history}
         />
       </SandpackProvider>
     </div>

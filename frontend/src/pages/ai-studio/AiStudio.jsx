@@ -1,7 +1,7 @@
 import {buildAssetContract} from '../../components/ai-studio/assetContract';
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowUp, Loader2, Bot, User, Check, Circle } from 'lucide-react';
+import { ArrowLeft, ArrowUp, Loader2, Bot, User, Check, Circle, CheckSquare, ChevronDown, Paperclip, Mic, Sparkles, Send } from 'lucide-react';
 import { usePostHog } from '../../analytics/PostHogProvider';
 import { aiGenerateAPI } from '../../api/aiGenerate';
 import { subscribeToJob } from '../../api/socket';
@@ -30,7 +30,7 @@ const DEBUG_PIPELINE_STAGES = [
 
 export default function AiStudio() {
   const navigate = useNavigate(); const posthog = usePostHog();
-  const [studioMode,setStudioMode]=useState('types'); const [failedJobId,setFailedJobId]=useState(null); const [debugRetryAvailable,setDebugRetryAvailable]=useState(false); const [messages,setMessages]=useState([]); const [fileData,setFileData]=useState(null); const [appTitle,setAppTitle]=useState(null); const [input,setInput]=useState(''); const [isGenerating,setIsGenerating]=useState(false); const [genStatusLabel,setGenStatusLabel]=useState('Generating…'); const [pipeline,setPipeline]=useState({}); const [genMode,setGenMode]=useState('generate'); const [currentStage,setCurrentStage]=useState(null); const [error,setError]=useState(null); const scrollRef=useRef(null); const pollTimeoutRef=useRef(null);
+  const [studioMode,setStudioMode]=useState('types'); const [failedJobId,setFailedJobId]=useState(null); const [debugRetryAvailable,setDebugRetryAvailable]=useState(false); const [messages,setMessages]=useState([]); const [fileData,setFileData]=useState(null); const [appTitle,setAppTitle]=useState(null); const [input,setInput]=useState(''); const [isGenerating,setIsGenerating]=useState(false); const [genStatusLabel,setGenStatusLabel]=useState('Generating…'); const [pipeline,setPipeline]=useState({}); const [genMode,setGenMode]=useState('generate'); const [currentStage,setCurrentStage]=useState(null); const [error,setError]=useState(null); const [showContract,setShowContract]=useState(false); const scrollRef=useRef(null); const pollTimeoutRef=useRef(null);
   // Persists the generated project (zip + files) to the backend for as long
   // as this AI Studio tab stays open/active. Refresh or close naturally lets
   // this session's heartbeat stop -- see useAiStudioSession -- rather than
@@ -170,11 +170,7 @@ export default function AiStudio() {
     }finally{setIsGenerating(false);}
   };
   const handleDownload=()=>{aiStudioSession.recordActivity();};
-  const stageView=(key,label)=>{const grouped=key==='code-generation'||key==='edit-debug';const prefix=key==='code-generation'?'code:':'edit-debug';const exact=pipeline[key];const groupDone=grouped&&Object.keys(pipeline).some(k=>k.startsWith(prefix)&&pipeline[k]==='completed');const active=grouped?Object.keys(pipeline).some(k=>k.startsWith(prefix)&&(pipeline[k]==='processing'||pipeline[k]==='started')):exact==='processing'||exact==='started';const done=grouped?groupDone:exact==='completed';
-    // The optional repair pass (edit-debug) only shows up at all if a repair
-    // was actually needed -- most edits never touch it.
-    if(key==='edit-debug'&&!active&&!done)return null;
-    return <div key={key} className="flex items-center gap-2 text-xs"><span className="flex h-4 w-4 items-center justify-center">{done?<Check className="h-3.5 w-3.5 text-emerald-400"/>:active?<Loader2 className="h-3.5 w-3.5 animate-spin text-violet-400"/>:<Circle className="h-3 w-3 text-white/20"/>}</span><span className={done?'text-white/70':active?'text-white':'text-white/30'}>{label}</span></div>;};
+  const stageState=(key)=>{const grouped=key==='code-generation'||key==='edit-debug';const prefix=key==='code-generation'?'code:':'edit-debug';const exact=pipeline[key];const done=grouped?Object.keys(pipeline).some(k=>k.startsWith(prefix)&&pipeline[k]==='completed'):exact==='completed';const active=grouped?Object.keys(pipeline).some(k=>k.startsWith(prefix)&&(pipeline[k]==='processing'||pipeline[k]==='started')):exact==='processing'||exact==='started';return {done,active};};
   const activeStageList=genMode==='debug'?DEBUG_PIPELINE_STAGES:(genMode==='edit'?EDIT_PIPELINE_STAGES:PIPELINE_STAGES);
   if(studioMode==='types')return <div className="fixed inset-0 z-40 overflow-y-auto bg-neutral-950 text-white"><div className="mx-auto max-w-6xl px-5 pb-16 pt-24 md:px-8 md:pt-28"><div className="mb-8 flex flex-wrap items-end justify-between gap-5"><div><p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-violet-400">AI Studio</p><h1 className="text-3xl font-bold tracking-tight md:text-4xl">What do you want to build?</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-white/40">Choose a website type first. DevDrop will then collect the information that matters for that kind of site and turn it into a detailed build specification for the AI.</p></div><div className="hidden items-center gap-2 text-[10px] uppercase tracking-[0.18em] text-white/25 sm:flex"><span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-white/60">01 Choose type</span><span>→</span><span>02 Details</span><span>→</span><span>03 Design</span><span>→</span><span>04 Review</span></div></div><div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-4">{WEBSITE_TYPES.map(type=>{const Icon=type.icon;return <button key={type.id} type="button" disabled={!type.enabled} onClick={()=>type.enabled&&setStudioMode(type.id)} className={`group relative flex min-h-[176px] flex-col overflow-hidden rounded-[18px] border p-4 text-left transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/70 ${type.enabled?'border-white/[0.09] bg-[linear-gradient(145deg,rgba(255,255,255,.05),rgba(10,10,14,.9))] shadow-[inset_0_1px_0_rgba(255,255,255,.04)] hover:-translate-y-0.5 hover:border-violet-400/60 hover:shadow-[0_0_28px_rgba(139,92,246,.16),inset_0_1px_0_rgba(255,255,255,.06)]':'cursor-not-allowed border-white/5 bg-white/[0.015] opacity-45'}`}>
 <span className="relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] border border-white/10 bg-white/[0.04]"><Icon size={16} strokeWidth={1.35} className="text-white/60"/></span>
@@ -188,5 +184,50 @@ export default function AiStudio() {
 </button>;})}</div></div></div>;
   if(studioMode==='portfolio')return <div className="fixed inset-0 z-40 overflow-y-auto bg-neutral-950"><PortfolioBuilder onBack={()=>setStudioMode('types')} onGenerate={handlePortfolioGenerate}/></div>;
   if(['ecommerce','blog','landing','cafe','hotel','studio','saas','event','education','custom'].includes(studioMode))return <div className="fixed inset-0 z-40 overflow-y-auto bg-neutral-950"><WebsiteBuilder type={studioMode} onBack={()=>setStudioMode('types')} onGenerate={handleWebsiteGenerate}/></div>;
-  return <div className="fixed inset-0 z-40 flex flex-col bg-neutral-950 text-white"><div className="flex items-center justify-between border-b border-neutral-800 bg-neutral-950 px-4 py-2"><button type="button" onClick={()=>setStudioMode('types')} className="inline-flex items-center gap-2 text-sm text-neutral-300 hover:text-white"><ArrowLeft className="h-4 w-4"/> Website types</button><span className="text-sm font-medium text-neutral-300">{appTitle||'AI Studio'}</span><span className="w-24"/></div><div className="flex min-h-0 flex-1"><div className="flex w-[380px] shrink-0 flex-col border-r border-neutral-800"><div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto p-4">{messages.map((m,i)=><div key={i} className={`flex gap-2 ${m.role==='user'?'justify-end':'justify-start'}`}>{m.role==='assistant'&&<Bot className="mt-1 h-4 w-4 shrink-0 text-violet-400"/>}<div className={`max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm ${m.role==='user'?'bg-violet-600 text-white':'bg-neutral-900 text-neutral-200'}`}>{m.content}</div>{m.role==='user'&&<User className="mt-1 h-4 w-4 shrink-0 text-neutral-500"/>}</div>)}{isGenerating&&<div className="space-y-2 rounded-lg border border-white/5 bg-white/[0.02] p-3"><div className="flex items-center gap-2 text-sm text-neutral-300"><Loader2 className="h-4 w-4 animate-spin text-violet-400"/>{genStatusLabel}</div><div className="space-y-1.5">{activeStageList.map(([key,label])=>stageView(key,label))}</div></div>}</div><div className="border-t border-neutral-800 p-3">{error&&debugRetryAvailable&&!isGenerating&&<button type="button" onClick={handleDebugRetry} className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-300 hover:bg-amber-500/15">Retry Debug Only</button>}<div className="flex items-end gap-2 rounded-lg border border-neutral-700 bg-neutral-900 p-2"><textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSend();}}} placeholder="Describe a change to your generated website…" rows={2} className="flex-1 resize-none bg-transparent text-sm text-white placeholder:text-neutral-500 focus:outline-none"/><button type="button" onClick={handleSend} disabled={!input.trim()||isGenerating} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-violet-600 text-white disabled:cursor-not-allowed disabled:opacity-40">{isGenerating?<Loader2 className="h-4 w-4 animate-spin"/>:<ArrowUp className="h-4 w-4"/>}</button></div></div></div><div className="h-full min-h-0 flex-1"><AppPreview fileData={fileData} appTitle={appTitle} onFixError={handleFixError} isGenerating={isGenerating} pipeline={pipeline} currentStage={currentStage} onDownload={handleDownload}/></div></div></div>;
+  const visibleKeys=activeStageList.filter(([k])=>!(k==='edit-debug'&&!stageState(k).active&&!stageState(k).done));
+  const STUDIO_STEPS=[['Analyzing Prompt & Requirements',['requirements']],['Wireframing & Responsive Grid',['design','architecture']],['Generating Code (Tailwind UI)',['code-generation','integration']],['Asset Loading & Validation',['build-validator']]];
+  const stepList=genMode==='generate'?STUDIO_STEPS:visibleKeys.map(([k,l])=>[l,[k]]);
+  const stepView=([label,keys])=>{const st=keys.map(stageState);const done=!isGenerating&&fileData?true:st.every(x=>x.done);const active=!done&&isGenerating&&(st.some(x=>x.active)||st.some(x=>x.done));return <div key={label} className="flex items-center gap-2.5 text-[12.5px]"><span className="flex h-5 w-5 items-center justify-center">{done?<Check className="h-4 w-4 text-emerald-400"/>:active?<Loader2 className="h-4 w-4 animate-spin text-violet-400"/>:<Circle className="h-3.5 w-3.5 text-white/25"/>}</span><span className={done?'text-white/85':active?'text-white':'text-white/35'}>{label}</span></div>;};
+  const doneCount=visibleKeys.filter(([k])=>stageState(k).done).length;
+  const percent=isGenerating?Math.min(99,Math.round(doneCount/Math.max(visibleKeys.length,1)*100)):(fileData?100:0);
+  const statusText=isGenerating?`Generating (${percent}%)`:(error&&!fileData?'Failed':fileData?'Generation Complete (100%)':'Ready');
+  const statusTone=isGenerating?'border-violet-500/30 bg-violet-500/10 text-violet-300':(error&&!fileData?'border-red-500/30 bg-red-500/10 text-red-300':'border-emerald-500/30 bg-emerald-500/10 text-emerald-300');
+  const dotTone=isGenerating?'bg-violet-400 animate-pulse':(error&&!fileData?'bg-red-400':'bg-emerald-400');
+  const firstPrompt=messages[0]?.role==='user'?messages[0].content:'';
+  const chatMessages=firstPrompt?messages.slice(1):messages;
+  const ruleLines=firstPrompt.split('\n').map(l=>l.replace(/^\s*[-*•]\s*/,'').trim()).filter(Boolean);
+  const shownRules=showContract?ruleLines:ruleLines.slice(0,3);
+  const history=messages.filter(m=>m.role==='user').map(m=>m.content);
+  const card='rounded-2xl border border-white/[0.12] bg-[#0b0b0c]';
+  return <div className="fixed inset-0 z-40 flex flex-col bg-[#070708] pt-[3.75rem] text-white">
+    <div className="flex min-h-0 flex-1">
+      <div className="flex w-[360px] shrink-0 flex-col border-r border-white/[0.08]">
+        <div ref={scrollRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+          {firstPrompt&&<div className={`${card} p-4`}>
+            <div className="mb-3 flex items-center gap-3 text-[14px] font-medium text-white"><CheckSquare className="h-5 w-5 text-white/60"/>Instructions &amp; Rules</div>
+            <ul className={`space-y-1.5 text-[12px] leading-5 text-white/80 ${showContract?'max-h-72 overflow-y-auto pr-1':''}`}>{shownRules.map((r,i)=><li key={i} className="flex gap-2"><span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-white/70"/><span className={showContract?'':'line-clamp-2'}>{r}</span></li>)}</ul>
+            <button type="button" onClick={()=>setShowContract(v=>!v)} className="mt-3 flex w-full items-center justify-center gap-1.5 border-t border-white/[0.1] pt-2.5 text-[12px] text-white/60 hover:text-white">[ <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showContract?'rotate-180':''}`}/> {showContract?'Hide':'View'} Contract ]</button>
+          </div>}
+          <div className="px-1 pt-2">
+            <div className="mb-2.5 text-[14px] font-semibold text-white">Build Status: <span className={isGenerating?'text-violet-300':(error&&!fileData?'text-red-300':'text-emerald-400')}>{isGenerating?'In progress':(error&&!fileData?'Failed':fileData?'Completed':'Idle')} ({percent}%)</span></div>
+            <div className="space-y-2">{stepList.map(stepView)}</div>
+          </div>
+          {chatMessages.length>0&&<div className="space-y-3">{chatMessages.map((m,i)=><div key={i} className={`flex gap-2 ${m.role==='user'?'justify-end':'justify-start'}`}>{m.role==='assistant'&&<Bot className="mt-1 h-4 w-4 shrink-0 text-violet-400"/>}<div className={`max-w-[88%] whitespace-pre-wrap rounded-lg px-3 py-2 text-[12px] ${m.role==='user'?'bg-violet-600 text-white':'bg-white/[0.04] text-white/80'}`}>{m.content}</div>{m.role==='user'&&<User className="mt-1 h-4 w-4 shrink-0 text-white/40"/>}</div>)}</div>}
+        </div>
+        <div className="shrink-0 p-5 pt-0">
+          {error&&debugRetryAvailable&&!isGenerating&&<button type="button" onClick={handleDebugRetry} className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-300 hover:bg-amber-500/15">Retry Debug Only</button>}
+          <div className={`${card} p-3`}>
+            <div className="rounded-xl border border-white/[0.12] p-3">
+              <div className="flex items-start gap-2"><textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSend();}}} placeholder="Describe a change to your website..." rows={2} className="flex-1 resize-none bg-transparent text-[13px] text-white placeholder:text-white/40 focus:outline-none"/><Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-white"/></div>
+              <div className="mt-2 flex items-center justify-between">
+                <div className="flex items-center gap-3 text-white/45"><button type="button" disabled title="Coming soon" className="cursor-not-allowed"><Paperclip className="h-5 w-5"/></button><button type="button" disabled title="Coming soon" className="cursor-not-allowed"><Mic className="h-5 w-5"/></button></div>
+                <button type="button" onClick={handleSend} disabled={!input.trim()||isGenerating} aria-label="Send" className="text-white/60 hover:text-white disabled:cursor-not-allowed disabled:opacity-40">{isGenerating?<Loader2 className="h-5 w-5 animate-spin"/>:<Send className="h-5 w-5"/>}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="h-full min-h-0 min-w-0 flex-1 p-4"><AppPreview fileData={fileData} appTitle={appTitle} onFixError={handleFixError} isGenerating={isGenerating} pipeline={pipeline} currentStage={currentStage} onDownload={handleDownload} history={history}/></div>
+    </div>
+  </div>;
 }
