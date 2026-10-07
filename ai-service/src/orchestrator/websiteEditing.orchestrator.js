@@ -1,6 +1,7 @@
 const editAgent = require('../agents/edit.agent');
 const debugAgent = require('../agents/debug.agent');
 const { validateGeneratedFiles } = require('../validators/generatedFiles.validator');
+const buildValidator = require('../validators/build.validator');
 const { identifyRelevantFiles } = require('./relevantFiles');
 const { withTimeout, stage: runStage } = require('./stageRunner');
 const { buildMediaManifest, toModelManifest, resolveAssetUrls } = require('../utils/assetContract');
@@ -123,31 +124,43 @@ async function runEdit(input, { onStage } = {}) {
     };
   }
 
-  // Step 3: fast, local (no-LLM, no npm-install) static validation. Only if
-  // that fails do we spend an extra Gemini call -- scoped to just the
-  // affected files, never the whole project -- to repair it.
+  // Step 3: validation loop -- static check, then a real runtime build
+  // (npm install -> npm run build). Any failure is sent to the debug agent,
+  // scoped to the affected files, and the loop re-validates, up to
+  // MAX_EDIT_REPAIR_RETRIES repair attempts.
   for (let attempt = 0; attempt <= MAX_EDIT_REPAIR_RETRIES; attempt += 1) {
     files = resolveAssetUrls(files, normalized.mediaManifest);
-    const staticErrors = validateGeneratedFiles(files);
-    if (staticErrors.length === 0) break;
+    const currentDependencies = dependenciesFromPackageJson(files, normalized.dependencies);
 
-    console.warn('[EDIT-VALIDATOR] static validation failed', { attempt, errors: staticErrors });
+    let errors = validateGeneratedFiles(files);
+    let buildOutput = [];
+    if (errors.length === 0) {
+      const build = await stage('build-validator', () => buildValidator.run({ files, dependencies: currentDependencies }), meta, onStage);
+      if (build.success) break;
+      errors = build.errors || ['Build failed'];
+      buildOutput = errors;
+      console.warn('[EDIT-VALIDATOR] build failed', { attempt, errors });
+    } else {
+      console.warn('[EDIT-VALIDATOR] static validation failed', { attempt, errors });
+    }
+
     if (attempt === MAX_EDIT_REPAIR_RETRIES) {
-      throw Object.assign(new Error(staticErrors.join(' | ')), {
-        userMessage: `That edit produced invalid code and could not be automatically repaired: ${staticErrors.join(' | ').slice(0, 1200)}`,
+      throw Object.assign(new Error(errors.join(' | ')), {
+        userMessage: `That edit produced invalid code and could not be automatically repaired: ${errors.join(' | ').slice(0, 1200)}`,
       });
     }
 
     const debug = await stage(
       `edit-debug:${attempt + 1}`,
       () => debugAgent.run({
-        errors: staticErrors,
+        errors,
         affectedFiles: [...changedPaths],
         files,
         architecture: { files: existingPaths.map((path) => ({ path })) },
         requirements: {},
         design: {},
-        dependencies: normalized.dependencies,
+        dependencies: currentDependencies,
+        buildOutput,
         mediaManifest: toModelManifest(normalized.mediaManifest),
       }),
       meta,

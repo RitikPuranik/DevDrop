@@ -1,15 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { X, Rocket, Loader2, CheckCircle2, Circle, ExternalLink, Lock, Globe, AlertCircle, ArrowRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { githubAPI } from '../../api/github';
 import { deploymentAPI } from '../../api/deployment';
-import ProviderConnectCard from '../deployment/ProviderConnectCard';
 import Github from './GithubIcon';
 
 const POLL_MS = 2500;
 const PUSH_TIMEOUT_MS = 3 * 60 * 1000;
-const DEPLOY_TIMEOUT_MS = 10 * 60 * 1000;
-const DEPLOY_DONE = ['SUCCESS', 'FAILED', 'CANCELLED'];
 
 const sanitizeRepoName = (raw) =>
   String(raw || '').trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^[-.]+/, '').replace(/[-.]+$/, '').replace(/-{2,}/g, '-').slice(0, 100) || 'devdrop-site';
@@ -45,6 +43,7 @@ function Step({ state, label, children }) {
  * step inline (same OAuth popups the rest of DevDrop already uses).
  */
 export default function ShipProjectModal({ open, mode, onClose, onModeChange, projectId, title }) {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [providers, setProviders] = useState(null);
   const [previousExport, setPreviousExport] = useState(null);
@@ -56,7 +55,6 @@ export default function ShipProjectModal({ open, mode, onClose, onModeChange, pr
 
   const [phase, setPhase] = useState('idle'); // idle | pushing | deploying | done | error
   const [repo, setRepo] = useState(null); // { owner, name, url, defaultBranch }
-  const [deployment, setDeployment] = useState(null);
   const [error, setError] = useState('');
 
   const aliveRef = useRef(false);
@@ -83,7 +81,7 @@ export default function ShipProjectModal({ open, mode, onClose, onModeChange, pr
   useEffect(() => {
     if (!open) return undefined;
     aliveRef.current = true;
-    setPhase('idle'); setError(''); setRepo(null); setDeployment(null); setPushFresh(false);
+    setPhase('idle'); setError(''); setRepo(null); setPushFresh(false);
     setRepoName(sanitizeRepoName(title));
     refresh();
     return () => {
@@ -164,9 +162,13 @@ export default function ShipProjectModal({ open, mode, onClose, onModeChange, pr
     }
   };
 
+  // "Publish Live" no longer deploys from here. It makes sure the project is on
+  // GitHub (reusing the earlier push unless a fresh copy is requested) and then
+  // opens the workspace deploy flow with that repo preselected -- the same
+  // place purchased/own projects are deployed, configured and redeployed.
   const handlePublish = async () => {
-    if (!providers?.github?.connected || !providers?.vercel?.connected) return;
-    setError(''); setDeployment(null);
+    if (!providers?.github?.connected) return;
+    setError('');
     try {
       let target = null;
       const reuse = previousExport?.status === 'success' && previousExport.repositoryOwner && !pushFresh;
@@ -177,29 +179,12 @@ export default function ShipProjectModal({ open, mode, onClose, onModeChange, pr
         target = await pushToGithub();
       }
       if (!aliveRef.current) return;
-      setRepo(target); setPhase('deploying');
-
-      const created = await deploymentAPI.createPersonal({ owner: target.owner, name: target.name, defaultBranch: target.defaultBranch }, {});
-      const deploymentId = created.data?.data?.deploymentId;
-      if (!deploymentId) throw new Error('Deployment could not be started.');
-
-      const startedAt = Date.now();
-      while (aliveRef.current) {
-        const { data } = await deploymentAPI.getById(deploymentId);
-        const d = data?.data;
-        if (d) setDeployment(d);
-        if (d && DEPLOY_DONE.includes(d.status)) {
-          if (d.status === 'SUCCESS') { setPhase('done'); return; }
-          throw new Error(d.errorMessage || `Deployment ${d.status.toLowerCase()}.`);
-        }
-        if (Date.now() - startedAt > DEPLOY_TIMEOUT_MS) throw new Error('Deployment is taking longer than expected. Check your Vercel dashboard.');
-        await sleep(3000);
-      }
+      setRepo(target); setPhase('done');
+      onClose();
+      navigate('/deploy-own', { state: { repository: target } });
     } catch (err) {
       if (!aliveRef.current || err.message === 'cancelled') return;
-      const data = err?.response?.data;
-      const missing = data?.missingProviders?.length ? ` (connect: ${data.missingProviders.join(', ')})` : '';
-      setError(apiError(err, 'Publishing failed.') + missing);
+      setError(apiError(err, 'Could not prepare the repository.'));
       setPhase('error');
       refresh();
     }
@@ -208,12 +193,9 @@ export default function ShipProjectModal({ open, mode, onClose, onModeChange, pr
   if (!open) return null;
 
   const githubOk = Boolean(providers?.github?.connected);
-  const vercelOk = Boolean(providers?.vercel?.connected);
-  const busy = phase === 'pushing' || phase === 'deploying';
+  const busy = phase === 'pushing';
   const hasPrevious = previousExport?.status === 'success' && previousExport.repositoryOwner;
   const reusing = mode === 'live' && hasPrevious && !pushFresh;
-  const liveUrl = deployment?.vercel?.url;
-  const liveHref = liveUrl ? (/^https?:\/\//.test(liveUrl) ? liveUrl : `https://${liveUrl}`) : null;
 
   const field = 'w-full rounded-lg border border-white/[0.12] bg-black/40 px-3 py-2 text-[13px] text-white placeholder:text-white/30 focus:border-violet-400/60 focus:outline-none disabled:opacity-50';
   const primary = 'flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-violet-500 to-fuchsia-500 px-4 py-2.5 text-[13px] font-semibold text-white hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40';
@@ -253,7 +235,7 @@ export default function ShipProjectModal({ open, mode, onClose, onModeChange, pr
             </span>
             <div>
               <h2 className="text-[15px] font-semibold">{mode === 'live' ? 'Publish Live' : 'Push to GitHub'}</h2>
-              <p className="text-[11px] text-white/40">{mode === 'live' ? 'Deploys to your own Vercel account' : 'Creates a new repo in your GitHub account'}</p>
+              <p className="text-[11px] text-white/40">{mode === 'live' ? 'Opens the Workspace deploy flow for this site' : 'Creates a new repo in your GitHub account'}</p>
             </div>
           </div>
           <button type="button" onClick={onClose} disabled={busy} aria-label="Close" className="rounded-md p-1 text-white/50 hover:text-white disabled:opacity-30"><X className="h-4 w-4" /></button>
@@ -285,23 +267,13 @@ export default function ShipProjectModal({ open, mode, onClose, onModeChange, pr
             <div className="space-y-3">
               <Step state={githubOk ? 'done' : 'pending'} label={githubOk ? `GitHub connected (@${providers.github.username})` : 'Connect GitHub'} />
               <Step state={phase === 'pushing' ? 'active' : repo || reusing ? 'done' : 'pending'} label={reusing ? `Using ${previousExport.repositoryOwner}/${previousExport.repositoryName}` : repo ? `Repository ${repo.owner}/${repo.name}` : 'Push code to a new repository'} />
-              <Step state={vercelOk ? 'done' : 'pending'} label={vercelOk ? `Vercel connected${providers.vercel.accountLabel ? ` (${providers.vercel.accountLabel})` : ''}` : 'Connect Vercel'} />
-              <Step state={phase === 'deploying' ? 'active' : phase === 'done' ? 'done' : phase === 'error' && repo ? 'error' : 'pending'} label={phase === 'deploying' ? `Deploying${deployment?.status ? ` · ${deployment.status.replace(/_/g, ' ').toLowerCase()}` : '…'}` : 'Deploy to Vercel'} />
+              <Step state="pending" label="Deploy from your Workspace" />
             </div>
-
-            {phase === 'done' && (
-              <div className="space-y-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4">
-                <div className="flex items-center gap-2 text-[13px] font-medium text-emerald-300"><CheckCircle2 className="h-4 w-4" /> Your website is live</div>
-                {liveHref && <a href={liveHref} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 break-all text-[12.5px] text-white underline underline-offset-2">{liveUrl} <ExternalLink className="h-3 w-3 shrink-0" /></a>}
-                {repo?.url && <a href={repo.url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 break-all text-[11.5px] text-white/60 underline underline-offset-2"><Github className="h-3 w-3" /> {repo.owner}/{repo.name}</a>}
-              </div>
-            )}
 
             {phase !== 'done' && (
               <>
                 {githubConnectRow}
-                {githubOk && !vercelOk && <ProviderConnectCard provider="vercel" status={providers?.vercel} onChange={refresh} />}
-                {githubOk && vercelOk && (
+                {githubOk && (
                   <>
                     {hasPrevious && (
                       <label className="flex cursor-pointer items-start gap-2 text-[11.5px] text-white/50">
@@ -313,8 +285,8 @@ export default function ShipProjectModal({ open, mode, onClose, onModeChange, pr
                   </>
                 )}
                 {error && <p className="flex gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-[12px] text-red-300"><AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />{error}</p>}
-                <button type="button" onClick={handlePublish} disabled={!githubOk || !vercelOk || busy || (!reusing && !repoName.trim())} className={primary}>
-                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />} {phase === 'pushing' ? 'Pushing code…' : phase === 'deploying' ? 'Deploying…' : 'Publish Live'}
+                <button type="button" onClick={handlePublish} disabled={!githubOk || busy || (!reusing && !repoName.trim())} className={primary}>
+                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />} {phase === 'pushing' ? 'Pushing code…' : 'Continue to Deployments'}
                 </button>
               </>
             )}

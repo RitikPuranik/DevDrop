@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
   ArrowLeft,
@@ -32,6 +32,7 @@ const ARCHITECTURE_LABEL = {
 // involved anywhere in the flow.
 export default function DeployOwnProject() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [loading, setLoading] = useState(true);
   const [providers, setProviders] = useState(null);
@@ -59,7 +60,21 @@ export default function DeployOwnProject() {
       const providerData = providersRes.data?.data || null;
       setProviders(providerData);
       if (providerData?.github?.connected) {
-        await loadRepositories();
+        let repos = await loadRepositories();
+        // Arriving from AI Studio's "Publish Live": preselect the repo it just
+        // pushed (or reused) and analyze it, so the user only reviews + deploys.
+        const incoming = location.state?.repository;
+        if (incoming?.owner && incoming?.name) {
+          const fullName = `${incoming.owner}/${incoming.name}`.toLowerCase();
+          const match = (list) => list.find((r) => String(r.fullName || '').toLowerCase() === fullName);
+          let repo = match(repos);
+          if (!repo) repo = match(await loadRepositories(incoming.name));
+          if (repo) {
+            setSelectedRepository(repo);
+            setEnvValues({});
+            await runAnalysis(repo);
+          }
+        }
       }
     } finally {
       setLoading(false);
