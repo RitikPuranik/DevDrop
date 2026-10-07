@@ -36,6 +36,25 @@ router.post(
   githubController.createExport
 );
 
+// AI Studio: push the user's own generated project (no purchase involved).
+router.post(
+  '/ai-studio/:projectId/export',
+  verifyEmail,
+  exportLimiter,
+  [
+    validators.mongoId('projectId'),
+    body('repositoryName')
+      .trim()
+      .isLength({ min: 1, max: 100 })
+      .withMessage('Repository name is required (max 100 characters)'),
+    body('description').optional({ checkFalsy: true }).trim().isLength({ max: 350 }).withMessage('Description must be under 350 characters'),
+    body('visibility').isIn(['public', 'private']).withMessage('Visibility must be public or private'),
+    handleValidationErrors,
+  ],
+  githubController.createAiStudioExport
+);
+router.get('/ai-studio/:projectId/export', validators.mongoId('projectId'), handleValidationErrors, githubController.getExportForAiStudioProject);
+
 // Must come before '/exports/:exportId' or Express will treat "website" as an exportId.
 router.get('/exports/website/:websiteId', validators.mongoId('websiteId'), handleValidationErrors, githubController.getExportForWebsite);
 router.get('/exports/:exportId', validators.mongoId('exportId'), handleValidationErrors, githubController.getExportStatus);

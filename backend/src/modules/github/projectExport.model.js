@@ -9,17 +9,23 @@ const projectExportSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    // Marketplace exports reference a purchased Website + Purchase. AI Studio
+    // exports have neither -- they reference aiStudioProjectId instead.
     websiteId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Website',
-      required: true,
       index: true,
     },
     purchaseId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Purchase',
-      required: true,
     },
+    aiStudioProjectId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'AIStudioProject',
+      index: true,
+    },
+    source: { type: String, enum: ['marketplace', 'ai-studio'], default: 'marketplace' },
 
     provider: { type: String, enum: ['github'], default: 'github' },
 
@@ -50,5 +56,6 @@ const projectExportSchema = new mongoose.Schema(
 
 projectExportSchema.index({ userId: 1, createdAt: -1 });
 projectExportSchema.index({ userId: 1, websiteId: 1, createdAt: -1 });
+projectExportSchema.index({ userId: 1, aiStudioProjectId: 1, createdAt: -1 });
 
 module.exports = mongoose.model('ProjectExport', projectExportSchema);

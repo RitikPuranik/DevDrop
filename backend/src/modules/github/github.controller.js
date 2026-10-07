@@ -5,6 +5,7 @@ const Website = require('../website/website.model');
 const Purchase = require('../payment/purchase.model');
 const GithubConnection = require('./githubConnection.model');
 const ProjectExport = require('./projectExport.model');
+const AIStudioProject = require('../ai-studio/aiStudioProject.model');
 const githubService = require('../../services/github.service');
 const projectExportService = require('../../services/projectExport.service');
 const cryptoUtil = require('../../shared/utils/crypto');
@@ -233,6 +234,9 @@ const createExport = async (req, res) => {
 const serializeExport = (exportDoc) => ({
   id: exportDoc._id,
   websiteId: exportDoc.websiteId,
+  aiStudioProjectId: exportDoc.aiStudioProjectId || null,
+  source: exportDoc.source || 'marketplace',
+  repositoryOwner: exportDoc.repositoryOwner || null,
   repositoryName: exportDoc.repositoryName,
   visibility: exportDoc.visibility,
   status: exportDoc.status,
@@ -294,6 +298,75 @@ const listExports = async (req, res) => {
   }
 };
 
+/**
+ * POST /api/github/ai-studio/:projectId/export
+ * Pushes the user's own AI Studio project to a NEW repo in their GitHub.
+ * No purchase involved -- ownership is the AIStudioProject.userId check.
+ */
+const createAiStudioExport = async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const userId = req.userId;
+    const { repositoryName, description, visibility } = req.body;
+
+    const project = await AIStudioProject.findOne({ _id: projectId, userId });
+    if (!project) return res.status(404).json({ success: false, message: 'AI Studio project not found.' });
+    if (!project.files || Object.keys(project.files).length === 0) {
+      return res.status(400).json({ success: false, message: 'Generate your website first, then push it to GitHub.' });
+    }
+
+    const connection = await GithubConnection.findOne({ userId });
+    if (!connection) {
+      return res.status(400).json({ success: false, message: 'Connect your GitHub account before pushing.', requiresGithubConnection: true });
+    }
+
+    const sanitizedName = projectExportService.sanitizeRepoName(repositoryName);
+    if (!projectExportService.isValidRepoName(sanitizedName)) {
+      return res.status(400).json({ success: false, message: 'Please provide a valid repository name.' });
+    }
+
+    // Idempotency: don't start a second export while one is already running.
+    const inFlight = await ProjectExport.findOne({
+      userId,
+      aiStudioProjectId: project._id,
+      status: { $in: [EXPORT_STATUS.PENDING, EXPORT_STATUS.PROCESSING] },
+    });
+    if (inFlight) {
+      return res.status(202).json({ success: true, data: { exportId: inFlight._id, status: inFlight.status, resumed: true } });
+    }
+
+    const exportDoc = await ProjectExport.create({
+      userId,
+      source: 'ai-studio',
+      aiStudioProjectId: project._id,
+      repositoryName: sanitizedName,
+      description: description?.trim() || `${project.title || 'Website'} — generated with DevDrop AI Studio`,
+      visibility,
+      status: EXPORT_STATUS.PENDING,
+    });
+
+    setImmediate(() => {
+      projectExportService.runAiStudioExport(exportDoc._id).catch((err) => {
+        console.error(`Unhandled error running AI Studio export ${exportDoc._id}:`, err);
+      });
+    });
+
+    res.status(202).json({ success: true, data: { exportId: exportDoc._id, status: exportDoc.status } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error starting GitHub push', error: error.message });
+  }
+};
+
+/** GET /api/github/ai-studio/:projectId/export — latest export for this AI Studio project. */
+const getExportForAiStudioProject = async (req, res) => {
+  try {
+    const exportDoc = await ProjectExport.findOne({ aiStudioProjectId: req.params.projectId, userId: req.userId }).sort({ createdAt: -1 });
+    res.json({ success: true, data: exportDoc ? serializeExport(exportDoc) : null });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error fetching export', error: error.message });
+  }
+};
+
 module.exports = {
   connect,
   callback,
@@ -303,5 +376,7 @@ module.exports = {
   createExport,
   getExportStatus,
   getExportForWebsite,
+  createAiStudioExport,
+  getExportForAiStudioProject,
   listExports,
 };

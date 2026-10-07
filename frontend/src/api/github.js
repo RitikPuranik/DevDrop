@@ -8,4 +8,7 @@ export const githubAPI = {
   createExport: (websiteId, payload) => api.post(`/github/export/${websiteId}`, payload),
   getExportStatus: (exportId) => api.get(`/github/exports/${exportId}`),
   getExportForWebsite: (websiteId) => api.get(`/github/exports/website/${websiteId}`),
+  // AI Studio: push the user's own generated project (no purchase involved)
+  createAiStudioExport: (projectId, payload) => api.post(`/github/ai-studio/${projectId}/export`, payload),
+  getAiStudioExport: (projectId) => api.get(`/github/ai-studio/${projectId}/export`),
 };

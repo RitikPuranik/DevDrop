@@ -4,6 +4,8 @@ const ignore = require('ignore');
 const axios = require('axios');
 
 const Website = require('../modules/website/website.model');
+const AIStudioProject = require('../modules/ai-studio/aiStudioProject.model');
+const { normalizeProjectFiles } = require('./ai-studio/aiStudioZip.service');
 const Purchase = require('../modules/payment/purchase.model');
 const ProjectExport = require('../modules/github/projectExport.model');
 const GithubConnection = require('../modules/github/githubConnection.model');
@@ -317,10 +319,164 @@ const runExport = async (exportId) => {
   }
 };
 
+// ─────────────────────────────────────────
+// AI STUDIO EXPORT
+// ─────────────────────────────────────────
+// Same GitHub pipeline as runExport, but the source is the persisted
+// AIStudioProject.files map (the source of truth the project.zip is derived
+// from) instead of a purchased ZIP -- so no Purchase/Website is involved.
+
+const AI_STUDIO_DEFAULT_VITE_CONFIG = `import { defineConfig, transformWithEsbuild } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [
+    {
+      name: 'treat-js-files-as-jsx',
+      async transform(code, id) {
+        if (!id.match(/\\.js$/)) return null;
+        return transformWithEsbuild(code, id, { loader: 'jsx', jsx: 'automatic' });
+      },
+    },
+    react(),
+  ],
+  optimizeDeps: { esbuildOptions: { loader: { '.js': 'jsx' } } },
+});
+`;
+const AI_STUDIO_DEFAULT_INDEX_HTML = '<!doctype html>\n<html lang="en">\n  <head>\n    <meta charset="UTF-8" />\n    <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n    <title>__TITLE__</title>\n    <script src="https://cdn.tailwindcss.com"></script>\n  </head>\n  <body>\n    <div id="root"></div>\n    <script type="module" src="/main.jsx"></script>\n  </body>\n</html>\n';
+const AI_STUDIO_DEFAULT_MAIN_JSX = 'import React from "react";\nimport { createRoot } from "react-dom/client";\nimport App from "./App.js";\n\ncreateRoot(document.getElementById("root")).render(<React.StrictMode><App /></React.StrictMode>);\n';
+
+const fileToText = (value) => {
+  if (typeof value === 'string') return value;
+  if (value && typeof value.code === 'string') return value.code;
+  if (value === null || value === undefined) return '';
+  return JSON.stringify(value, null, 2);
+};
+
+const escapeHtml = (v) => String(v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+/**
+ * Turns an AIStudioProject into a deployable Vite + React repo file list:
+ * generated files + any missing scaffold (package.json, index.html, main.jsx,
+ * vite.config.js), .gitignore and README. Never overrides a scaffold file the
+ * pipeline already produced.
+ */
+const buildAiStudioRepoFiles = (project) => {
+  const flat = {};
+  for (const [filePath, value] of Object.entries(project.files || {})) {
+    const safe = toSafeRelativePath(String(filePath).replace(/^\/+/, ''));
+    if (!safe || isAlwaysExcluded(safe)) continue;
+    flat[`/${safe}`] = fileToText(value);
+  }
+  const out = normalizeProjectFiles(flat);
+  const title = project.title || 'DevDrop Site';
+  const slug = sanitizeRepoName(title);
+
+  let pkg = null;
+  try { pkg = out['/package.json'] ? JSON.parse(out['/package.json']) : null; } catch { pkg = null; }
+  pkg = pkg || {};
+  pkg.name = pkg.name || slug;
+  pkg.private = true;
+  pkg.version = pkg.version || '1.0.0';
+  pkg.type = pkg.type || 'module';
+  pkg.scripts = { dev: 'vite', build: 'vite build', preview: 'vite preview', ...(pkg.scripts || {}) };
+  pkg.dependencies = { react: '^19.0.0', 'react-dom': '^19.0.0', ...(pkg.dependencies || {}), ...(project.dependencies || {}) };
+  pkg.devDependencies = { vite: '^7.0.0', '@vitejs/plugin-react': '^5.0.0', ...(pkg.devDependencies || {}) };
+  out['/package.json'] = JSON.stringify(pkg, null, 2);
+
+  if (!out['/index.html']) out['/index.html'] = AI_STUDIO_DEFAULT_INDEX_HTML.replace('__TITLE__', escapeHtml(title));
+  if (!out['/main.jsx'] && !out['/main.js'] && !out['/src/main.jsx']) out['/main.jsx'] = AI_STUDIO_DEFAULT_MAIN_JSX;
+  if (!out['/vite.config.js'] && !out['/vite.config.mjs']) out['/vite.config.js'] = AI_STUDIO_DEFAULT_VITE_CONFIG;
+  if (!out['/.gitignore']) out['/.gitignore'] = 'node_modules\ndist\n.env\n.env.*\n!.env.example\n.DS_Store\n';
+  if (!Object.keys(out).some((k) => README_PATTERN.test(k.slice(1)))) {
+    out['/README.md'] = `# ${title}\n\nGenerated with [DevDrop AI Studio](https://dev-drop-gamma.vercel.app).\n\n## Getting Started\n\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n\nBuild for production with \`npm run build\`.\n`;
+  }
+
+  return Object.entries(out).map(([filePath, content]) => ({
+    relativePath: filePath.replace(/^\/+/, ''),
+    buffer: Buffer.from(content, 'utf8'),
+  }));
+};
+
+const runAiStudioExport = async (exportId) => {
+  const exportDoc = await ProjectExport.findById(exportId);
+  if (!exportDoc) return;
+
+  try {
+    exportDoc.status = EXPORT_STATUS.PROCESSING;
+    await exportDoc.save();
+
+    const [project, connection] = await Promise.all([
+      AIStudioProject.findOne({ _id: exportDoc.aiStudioProjectId, userId: exportDoc.userId }),
+      GithubConnection.findOne({ userId: exportDoc.userId }).select('+accessTokenEncrypted'),
+    ]);
+    if (!project) throw new Error('PROJECT_MISSING');
+    if (!connection) throw new Error('NOT_CONNECTED');
+    if (!project.files || Object.keys(project.files).length === 0) throw new Error('NO_FILES');
+
+    const accessToken = cryptoUtil.decrypt(connection.accessTokenEncrypted);
+    const files = buildAiStudioRepoFiles(project);
+    if (files.length > MAX_EXPORT_FILES) throw new Error('NO_FILES');
+
+    let repo;
+    try {
+      repo = await githubService.createRepository(accessToken, {
+        name: exportDoc.repositoryName,
+        description: exportDoc.description,
+        isPrivate: exportDoc.visibility === 'private',
+      });
+    } catch (err) {
+      if (githubService.isRepoNameTakenError(err)) throw new Error('NAME_TAKEN');
+      if (githubService.isAuthError(err)) throw new Error('AUTH_EXPIRED');
+      throw err;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
+    const blobEntries = await mapWithConcurrency(files, BLOB_UPLOAD_CONCURRENCY, async (file) => {
+      const sha = await githubService.createBlob(accessToken, repo.owner, repo.name, file.buffer.toString('base64'));
+      return { path: file.relativePath, mode: '100644', type: 'blob', sha };
+    });
+
+    const treeSha = await githubService.createTree(accessToken, repo.owner, repo.name, blobEntries);
+    const commitSha = await githubService.createCommit(accessToken, repo.owner, repo.name, {
+      message: `Initial commit — generated with DevDrop AI Studio (${project.title || 'site'})`,
+      treeSha,
+      parents: [],
+    });
+    await githubService.updateRef(accessToken, repo.owner, repo.name, repo.defaultBranch, commitSha);
+
+    exportDoc.status = EXPORT_STATUS.SUCCESS;
+    exportDoc.repositoryUrl = repo.htmlUrl;
+    exportDoc.repositoryOwner = repo.owner;
+    exportDoc.repositoryName = repo.name;
+    exportDoc.defaultBranch = repo.defaultBranch;
+    exportDoc.fileCount = files.length;
+    exportDoc.errorMessage = undefined;
+    await exportDoc.save();
+  } catch (error) {
+    console.error(`AI Studio GitHub export ${exportId} failed:`, error.message);
+    const friendly = {
+      PROJECT_MISSING: 'This AI Studio project is no longer available. Regenerate it and try again.',
+      NOT_CONNECTED: 'Your GitHub connection is missing. Please reconnect and try again.',
+      NO_FILES: 'This project has no generated files to push yet.',
+      NAME_TAKEN: 'A repository with this name already exists in your GitHub account. Please choose another name.',
+      AUTH_EXPIRED: 'Your GitHub authorization has expired. Please reconnect GitHub and try again.',
+    };
+    let safeMessage = friendly[error.message];
+    if (!safeMessage && error?.response?.status === 409) {
+      safeMessage = 'GitHub was still setting up the new repository and kept rejecting the upload. Please try again in a minute.';
+    }
+    await markFailed(exportDoc, safeMessage || 'We hit an unexpected error while pushing this project to GitHub. Please try again.');
+  }
+};
+
 module.exports = {
   sanitizeRepoName,
   isValidRepoName,
   extractExportableFiles,
   generateReadmeContent,
   runExport,
+  runAiStudioExport,
+  buildAiStudioRepoFiles,
 };

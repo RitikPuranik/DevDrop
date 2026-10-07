@@ -7,7 +7,10 @@ import {
   SandpackFileExplorer,
   useSandpack,
 } from '@codesandbox/sandpack-react';
-import { Eye, Code2, AlertTriangle, Bot, Download, Check, Circle, Loader2, RefreshCw, Monitor, Tablet, Smartphone, History } from 'lucide-react';
+import { Eye, Code2, AlertTriangle, Bot, Download, Loader2, RefreshCw, Monitor, Tablet, Smartphone, History, Rocket } from 'lucide-react';
+import ShipProjectModal from './ShipProjectModal';
+import Github from './GithubIcon';
+import { PipelineSteps, PIPELINE_TITLES } from './pipelineSteps';
 import JSZip from 'jszip';
 
 const PLACEHOLDER_FILES = {
@@ -154,72 +157,33 @@ const BASE_DEPENDENCIES = {
   'lucide-react': 'latest',
 };
 
-const PIPELINE_STAGES = [
-  ['requirements', 'Requirements', 'Understanding your website requirements'],
-  ['design', 'Design', 'Creating the visual design system'],
-  ['architecture', 'Architecture', 'Planning pages, components and dependencies'],
-  ['code-generation', 'Code Generation', 'Writing the React application files'],
-  ['integration', 'Integration', 'Connecting and checking generated files'],
-  ['build-validator', 'Validation', 'Running final syntax and build checks'],
-];
-
-function PipelineProgress({ pipeline = {}, currentStage, isGenerating }) {
-  const getStatus = (key) => {
-    if (key === 'code-generation') {
-      const entries = Object.entries(pipeline).filter(([name]) => name.startsWith('code:'));
-      if (entries.some(([, status]) => status === 'processing' || status === 'started')) return 'processing';
-      if (entries.length > 0 && entries.every(([, status]) => status === 'completed')) return 'completed';
-      return pipeline[key] || 'pending';
-    }
-    return pipeline[key] || 'pending';
-  };
-
-  return (
-    <div className="absolute inset-0 z-20 flex items-center justify-center bg-neutral-950/95 px-6 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-neutral-900/95 p-5 shadow-2xl">
-        <div className="mb-5">
-          <div className="mb-1 flex items-center gap-2">
-            <Bot className="h-4 w-4 text-violet-400" />
-            <span className="text-sm font-semibold text-white">AI is building your website</span>
-          </div>
-          <p className="text-xs text-white/35">Each stage is updated from the real generation pipeline.</p>
+function PipelineProgress({ steps, mode = 'generate', percent = 0 }) {
+  const title = PIPELINE_TITLES[mode] || PIPELINE_TITLES.generate;
+  const card = (
+    <div className="w-full max-w-md rounded-2xl border border-white/10 bg-neutral-900/95 p-5 shadow-2xl">
+      <div className="mb-4">
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <span className="flex items-center gap-2 text-sm font-semibold text-white"><Bot className="h-4 w-4 text-violet-400" /> {title}</span>
+          <span className="text-[11px] text-white/40">{percent}%</span>
         </div>
-
-        <div className="space-y-3">
-          {PIPELINE_STAGES.map(([key, label, description]) => {
-            const status = getStatus(key);
-            const active = status === 'processing' || status === 'started' || currentStage === key;
-            const completed = status === 'completed';
-            return (
-              <div key={key} className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.03]">
-                  {completed ? (
-                    <Check className="h-3.5 w-3.5 text-emerald-400" />
-                  ) : active ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-400" />
-                  ) : (
-                    <Circle className="h-2.5 w-2.5 text-white/20" />
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className={`text-xs font-medium ${completed ? 'text-white/70' : active ? 'text-white' : 'text-white/30'}`}>
-                    {label}
-                    {active && !completed ? <span className="ml-1 text-violet-400">in progress</span> : null}
-                    {completed ? <span className="ml-1 text-emerald-400/80">done</span> : null}
-                  </div>
-                  <p className="mt-0.5 text-[10px] text-white/20">{description}</p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <p className="text-xs text-white/35">Each stage is updated from the real {mode === 'generate' ? 'generation' : mode === 'edit' ? 'editing' : 'debug'} pipeline.</p>
       </div>
+      <PipelineSteps steps={steps} variant="detailed" />
     </div>
   );
+  // A full generation has nothing to show yet, so it covers the preview. An
+  // edit/debug run already has a working site on screen -- keep it visible and
+  // show progress as a floating card instead of blanking it out.
+  if (mode === 'generate') {
+    return <div className="absolute inset-0 z-20 flex items-center justify-center bg-neutral-950/95 px-6 backdrop-blur-sm">{card}</div>;
+  }
+  return <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center px-4">{card}</div>;
 }
 
-function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiveTab, pipeline, currentStage, onHardReload, onDownload, device, setDevice, history = [] }) {
+function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiveTab, pipelineSteps, pipelineMode, percent, onHardReload, onDownload, device, setDevice, history = [], projectId, appTitle }) {
   const { sandpack, listen } = useSandpack();
+  const [shipMode, setShipMode] = useState(null); // 'github' | 'live' | null
+  const canShip = Boolean(fileData && projectId && !isGenerating);
   const [previewError, setPreviewError] = useState(null);
   const [isExporting, setIsExporting] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -317,6 +281,12 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
           <button onClick={handleExportZip} disabled={isExporting || !fileData} className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-violet-500 to-fuchsia-500 px-3.5 py-1.5 text-[12px] font-medium text-white hover:brightness-110 disabled:opacity-40">
             {isExporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} {fileData && !isGenerating ? 'Download ZIP (Complete)' : 'Download ZIP'}
           </button>
+          <button onClick={() => setShipMode('github')} disabled={!canShip} title={canShip ? 'Push this website to a new GitHub repository' : 'Available once generation is complete'} className="flex items-center gap-2 rounded-lg border border-white/[0.12] bg-[#0b0b0c] px-3 py-1.5 text-[12px] text-white/80 hover:text-white disabled:cursor-not-allowed disabled:opacity-40">
+            <Github className="h-3.5 w-3.5" /> Push to GitHub
+          </button>
+          <button onClick={() => setShipMode('live')} disabled={!canShip} title={canShip ? 'Deploy this website live on your Vercel account' : 'Available once generation is complete'} className="flex items-center gap-2 rounded-lg border border-white/[0.12] bg-[#0b0b0c] px-3 py-1.5 text-[12px] text-white/80 hover:text-white disabled:cursor-not-allowed disabled:opacity-40">
+            <Rocket className="h-3.5 w-3.5" /> Publish Live
+          </button>
           <div className="relative">
             <button onClick={() => setShowHistory((v) => !v)} className="flex items-center gap-2 rounded-lg border border-white/[0.12] bg-[#0b0b0c] px-3 py-1.5 text-[12px] text-white/80 hover:text-white">
               <History className="h-3.5 w-3.5" /> History
@@ -333,6 +303,8 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
           </div>
         </div>
       </div>
+
+      <ShipProjectModal open={Boolean(shipMode)} mode={shipMode} onClose={() => setShipMode(null)} onModeChange={setShipMode} projectId={projectId} title={appTitle} />
 
       <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-white/[0.12] bg-[#0b0b0c] p-3">
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/[0.12]">
@@ -353,7 +325,7 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
           )}
         </SandpackLayout>
         {isGenerating && activeTab === 'preview' && (
-          <PipelineProgress pipeline={pipeline} currentStage={currentStage} isGenerating={isGenerating} />
+          <PipelineProgress steps={pipelineSteps} mode={pipelineMode} percent={percent} />
         )}
       </div>
       </div>
@@ -385,7 +357,7 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
   );
 }
 
-export default function AppPreview({ fileData, isGenerating, onFixError, pipeline = {}, currentStage, onDownload, history = [] }) {
+export default function AppPreview({ fileData, isGenerating, onFixError, pipelineSteps = [], pipelineMode = 'generate', percent = 0, onDownload, history = [], projectId = null, appTitle = null }) {
   const [activeTab, setActiveTab] = useState('preview');
   const [sessionNonce, setSessionNonce] = useState(0);
   const [device, setDevice] = useState('desktop');
@@ -420,13 +392,16 @@ export default function AppPreview({ fileData, isGenerating, onFixError, pipelin
           onFixError={onFixError}
           activeTab={activeTab}
           setActiveTab={setActiveTab}
-          pipeline={pipeline}
-          currentStage={currentStage}
+          pipelineSteps={pipelineSteps}
+          pipelineMode={pipelineMode}
+          percent={percent}
           onHardReload={handleHardReload}
           onDownload={onDownload}
           device={device}
           setDevice={setDevice}
           history={history}
+          projectId={projectId}
+          appTitle={appTitle}
         />
       </SandpackProvider>
     </div>
