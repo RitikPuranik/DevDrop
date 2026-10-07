@@ -2,8 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, CircleAlert, Loader2, Sparkles, Square, Wrench } from 'lucide-react';
 import { toast } from 'sonner';
 import { kashiAPI } from '../../api/kashi';
+import { subscribeToKashiRun } from '../../api/socket';
 
-const POLL_MS = 3000;
 const ACTIVE = ['queued', 'running'];
 
 /**
@@ -16,26 +16,31 @@ export default function KashiFixPanel({ deployment, onChanged }) {
   const canFix = Boolean(deployment?.vercel?.projectId && deployment?.repository?.name);
   const [run, setRun] = useState(null);
   const [starting, setStarting] = useState(false);
-  const timer = useRef(null);
-  const lastStatus = useRef(null);
+  const socketCleanup = useRef(null);
 
-  const poll = useCallback(async (runId) => {
-    try {
-      const res = await kashiAPI.getRun(runId);
-      const next = res.data?.data?.run;
-      setRun(next);
-      if (next && ACTIVE.includes(next.status)) {
-        timer.current = setTimeout(() => poll(runId), POLL_MS);
-      } else if (next && lastStatus.current !== next.status) {
-        lastStatus.current = next.status;
-        onChanged?.();
-      }
-    } catch {
-      timer.current = setTimeout(() => poll(runId), POLL_MS * 2);
-    }
+  const subscribe = useCallback((runId) => {
+    socketCleanup.current?.();
+    socketCleanup.current = subscribeToKashiRun(runId, {
+      onStep: ({ step }) => {
+        setRun((current) => {
+          if (!current || current.id !== runId || !step) return current;
+          const existing = current.steps || [];
+          if (existing.some((item) => String(item.at) === String(step.at) && item.message === step.message)) return current;
+          return { ...current, steps: [...existing, step].slice(-120) };
+        });
+      },
+      onStatus: (payload) => {
+        setRun((current) => current && current.id === runId ? { ...current, ...payload } : current);
+        if (payload.status && !ACTIVE.includes(payload.status)) {
+          socketCleanup.current?.();
+          socketCleanup.current = null;
+          onChanged?.();
+        }
+      },
+    });
   }, [onChanged]);
 
-  // Pick up a run already in progress / most recent when the page opens.
+  // Pick up a run already in progress / most recent when the page opens; after that, Socket.IO owns live updates.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -45,12 +50,15 @@ export default function KashiFixPanel({ deployment, onChanged }) {
         const latest = res.data?.data?.run;
         if (cancelled || !latest) return;
         setRun(latest);
-        lastStatus.current = latest.status;
-        if (ACTIVE.includes(latest.status)) poll(latest.id);
+        if (ACTIVE.includes(latest.status)) subscribe(latest.id);
       } catch { /* no previous run */ }
     })();
-    return () => { cancelled = true; clearTimeout(timer.current); };
-  }, [deploymentId, canFix, poll]);
+    return () => {
+      cancelled = true;
+      socketCleanup.current?.();
+      socketCleanup.current = null;
+    };
+  }, [deploymentId, canFix, subscribe]);
 
   // Started from the Kashi chat ("fix this deployment").
   useEffect(() => {
@@ -63,13 +71,11 @@ export default function KashiFixPanel({ deployment, onChanged }) {
   const start = async (alreadyStarted = false) => {
     try {
       setStarting(true);
-      clearTimeout(timer.current);
       const res = await kashiAPI.startFix(deploymentId); // idempotent: returns the active run if one exists
       const next = res.data?.data?.run;
       setRun(next);
-      lastStatus.current = null;
+      subscribe(next.id);
       if (!alreadyStarted) toast.success('Kashi is on it');
-      poll(next.id);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Could not start Kashi');
     } finally {
@@ -79,9 +85,9 @@ export default function KashiFixPanel({ deployment, onChanged }) {
 
   const stop = async () => {
     try {
-      await kashiAPI.cancelRun(run.id);
-      clearTimeout(timer.current);
-      poll(run.id);
+      const res = await kashiAPI.cancelRun(run.id);
+      const next = res.data?.data?.run;
+      if (next) setRun(next);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Could not stop the run');
     }

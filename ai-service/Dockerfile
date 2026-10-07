@@ -1,7 +1,7 @@
 # The runtime smoke test needs Chromium and its system libraries. This image
 # already contains them (Playwright's official base, pinned to the same minor
 # version as the "playwright" dependency in package.json).
-FROM mcr.microsoft.com/playwright:v1.56.0-noble
+FROM mcr.microsoft.com/playwright:v1.56.1-noble
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev

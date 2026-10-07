@@ -7,6 +7,7 @@ const vercel = require('../../services/deployment/providers/vercel.provider');
 const cryptoUtil = require('../../shared/utils/crypto');
 const aiClient = require('./kashiAiClient');
 const { DEPLOYMENT_STATUS, DEPLOYMENT_ACTIVE_STATUSES, DEPLOYMENT_PROVIDERS } = require('../../shared/utils/constants');
+const { dispatchTask } = require('../../services/worker.client');
 
 /**
  * Kashi's deployment doctor.
@@ -47,13 +48,29 @@ class RunCancelled extends Error {}
 
 // ---------------------------------------------------------------- run log
 
-async function addStep(runId, step) {
-  await KashiFixRun.updateOne({ _id: runId }, { $push: { steps: { $each: [{ at: new Date(), ...step }], $slice: -120 } } });
+async function addStep(runId, step, onProgress = null) {
+  const record = { at: new Date(), ...step };
+  await KashiFixRun.updateOne({ _id: runId }, { $push: { steps: { $each: [record], $slice: -120 } } });
+  if (typeof onProgress === 'function') {
+    await onProgress({ type: 'step', runId: String(runId), step: record });
+  }
 }
 
-async function finish(runId, status, resultMessage, extra = {}) {
-  await KashiFixRun.updateOne({ _id: runId }, { status, resultMessage, finishedAt: new Date(), ...extra });
-  await addStep(runId, { kind: status === 'succeeded' ? 'success' : 'error', message: resultMessage });
+async function finish(runId, status, resultMessage, extra = {}, onProgress = null) {
+  const finishedAt = new Date();
+  await KashiFixRun.updateOne({ _id: runId }, { status, resultMessage, finishedAt, ...extra });
+  await addStep(runId, { kind: status === 'succeeded' ? 'success' : 'error', message: resultMessage }, onProgress);
+  if (typeof onProgress === 'function') {
+    await onProgress({
+      type: 'status',
+      runId: String(runId),
+      status,
+      resultMessage,
+      finalUrl: extra.finalUrl || null,
+      needsRedeploy: Boolean(extra.needsRedeploy),
+      finishedAt,
+    });
+  }
 }
 
 async function assertNotCancelled(runId) {
@@ -211,11 +228,11 @@ function pickCheckUrl(status) {
 }
 
 /** Opens the deployed site in a real browser. Never blocks the run if the checker itself is unavailable. */
-async function verifyRuntime(status, runId) {
+async function verifyRuntime(status, runId, onProgress = null) {
   if (String(process.env.KASHI_RUNTIME_CHECK || 'on').toLowerCase() === 'off') return { ok: true, skipped: true, reason: 'disabled' };
   const url = pickCheckUrl(status);
   if (!url) return { ok: true, skipped: true, reason: 'no URL' };
-  await addStep(runId, { kind: 'info', message: 'Build is READY. Opening the live site in a browser to make sure it actually renders…' });
+  await addStep(runId, { kind: 'info', message: 'Build is READY. Opening the live site in a browser to make sure it actually renders…' }, onProgress);
   const settleMs = Number.parseInt(process.env.KASHI_RUNTIME_SETTLE_MS ?? '3000', 10);
   if (settleMs > 0) await sleep(settleMs); // let the new deployment's alias/CDN settle
   try {
@@ -229,7 +246,7 @@ const formatRuntimeReport = (rt) => `BROWSER REPORT (the live site was opened in
 
 // ----------------------------------------------------------- main loop
 
-async function runLoop(runId) {
+async function runLoop(runId, { onProgress = null } = {}) {
   const run = await KashiFixRun.findById(runId);
   if (!run) return;
   const deployment = await Deployment.findById(run.deploymentId);
@@ -245,7 +262,7 @@ async function runLoop(runId) {
 
     for (let round = 1; round <= run.maxRounds; round += 1) {
       await KashiFixRun.updateOne({ _id: runId }, { round });
-      await addStep(runId, { round, kind: 'info', message: round === 1 ? 'Checking the Vercel build…' : `Rebuilding after fix #${round - 1}…` });
+      await addStep(runId, { round, kind: 'info', message: round === 1 ? 'Checking the Vercel build…' : `Rebuilding after fix #${round - 1}…` }, onProgress);
 
       const status = await waitForTerminal(ctx, deployId, runId);
 
@@ -255,21 +272,21 @@ async function runLoop(runId) {
 
       if (status.isSuccess) {
         // READY only means the bundle compiled. Load the page: a black screen with console errors is still a failure.
-        const rt = await verifyRuntime(status, runId);
+        const rt = await verifyRuntime(status, runId, onProgress);
         if (rt.ok) {
-          if (rt.skipped) await addStep(runId, { round, kind: 'info', message: `Could not verify the page in a browser (${rt.reason || 'skipped'}).` });
-          await onSuccess(run, deployment, deployId, status.url, attempts.length, { verified: !rt.skipped });
+          if (rt.skipped) await addStep(runId, { round, kind: 'info', message: `Could not verify the page in a browser (${rt.reason || 'skipped'}).` }, onProgress);
+          await onSuccess(run, deployment, deployId, status.url, attempts.length, { verified: !rt.skipped, onProgress });
           return;
         }
         if (rt.kind === 'env') {
-          await finish(runId, 'cannot_fix', rt.hint || 'The site crashes in the browser because an environment variable is missing.');
+          await finish(runId, 'cannot_fix', rt.hint || 'The site crashes in the browser because an environment variable is missing.', {}, onProgress);
           return;
         }
         mode = 'runtime';
         log = formatRuntimeReport(rt);
-        await addStep(runId, { round, kind: 'info', message: `The build is READY but the page is broken in the browser: ${(rt.errors || [])[0] || 'unknown error'}` });
+        await addStep(runId, { round, kind: 'info', message: `The build is READY but the page is broken in the browser: ${(rt.errors || [])[0] || 'unknown error'}` }, onProgress);
       } else if (status.state === 'CANCELED') {
-        await finish(runId, 'failed', 'The Vercel deployment was cancelled, so there is nothing to fix.');
+        await finish(runId, 'failed', 'The Vercel deployment was cancelled, so there is nothing to fix.', {}, onProgress);
         return;
       } else {
         // ERROR -> diagnose
@@ -287,10 +304,10 @@ async function runLoop(runId) {
           }
         }
         if (!log.trim()) {
-          await finish(runId, 'failed', 'Vercel did not return a build log for the failed deployment.');
+          await finish(runId, 'failed', 'Vercel did not return a build log for the failed deployment.', {}, onProgress);
           return;
         }
-        await addStep(runId, { round, kind: 'info', message: 'Build failed. Reading the error and the files it points to…' });
+        await addStep(runId, { round, kind: 'info', message: 'Build failed. Reading the error and the files it points to…' }, onProgress);
       }
 
       ctx.tree = await githubService.getRepoTree(ctx.githubToken, ctx.owner, ctx.repo, ctx.branch);
@@ -308,16 +325,16 @@ async function runLoop(runId) {
       }
 
       if (!result || result.status === 'need_files' || result.status === 'invalid') {
-        await finish(runId, 'failed', `Kashi could not produce a safe, minimal fix: ${result?.reason || 'no usable answer'}.`);
+        await finish(runId, 'failed', `Kashi could not produce a safe, minimal fix: ${result?.reason || 'no usable answer'}.`, {}, onProgress);
         return;
       }
       if (result.status === 'cannot_fix') {
-        await finish(runId, 'cannot_fix', `This one isn't fixable by changing code: ${result.reason}`);
+        await finish(runId, 'cannot_fix', `This one isn't fixable by changing code: ${result.reason}`, {}, onProgress);
         return;
       }
 
       const changed = result.files.map((f) => f.path);
-      await addStep(runId, { round, kind: 'fix', message: `Fix: ${result.summary} (${result.changedLines} line${result.changedLines === 1 ? '' : 's'} in ${changed.join(', ')})`, files: changed });
+      await addStep(runId, { round, kind: 'fix', message: `Fix: ${result.summary} (${result.changedLines} line${result.changedLines === 1 ? '' : 's'} in ${changed.join(', ')})`, files: changed }, onProgress);
 
       const pushedAt = Date.now();
       let sha;
@@ -328,11 +345,11 @@ async function runLoop(runId) {
         });
       } catch (error) {
         const reason = error?.response?.status === 422 ? 'the branch changed while Kashi was working' : error?.response?.data?.message || error.message;
-        await finish(runId, 'failed', `Could not push the fix to GitHub: ${reason}.`);
+        await finish(runId, 'failed', `Could not push the fix to GitHub: ${reason}.`, {}, onProgress);
         return;
       }
       await KashiFixRun.updateOne({ _id: runId }, { $push: { commits: sha } });
-      await addStep(runId, { round, kind: 'fix', message: `Pushed commit ${sha.slice(0, 7)} to ${ctx.branch}. Waiting for Vercel…`, commitSha: sha });
+      await addStep(runId, { round, kind: 'fix', message: `Pushed commit ${sha.slice(0, 7)} to ${ctx.branch}. Waiting for Vercel…`, commitSha: sha }, onProgress);
       attempts.push({ summary: result.summary, paths: changed });
 
       deployId = await nextDeploymentAfterPush(ctx, sha, pushedAt, runId);
@@ -341,27 +358,28 @@ async function runLoop(runId) {
     // Out of rounds: the last pushed fix may still have worked, so check once more.
     const last = await waitForTerminal(ctx, deployId, runId);
     if (last.isSuccess) {
-      const rt = await verifyRuntime(last, runId);
+      const rt = await verifyRuntime(last, runId, onProgress);
       if (rt.ok) {
-        await onSuccess(run, deployment, deployId, last.url, attempts.length, { verified: !rt.skipped });
+        await onSuccess(run, deployment, deployId, last.url, attempts.length, { verified: !rt.skipped, onProgress });
         return;
       }
-      await finish(runId, 'failed', `The build is READY but the page still errors in the browser after ${run.maxRounds} fix attempts: ${(rt.errors || [])[0] || 'unknown error'}`);
+      await finish(runId, 'failed', `The build is READY but the page still errors in the browser after ${run.maxRounds} fix attempts: ${(rt.errors || [])[0] || 'unknown error'}`, {}, onProgress);
       return;
     }
-    await finish(runId, 'failed', `Still failing after ${run.maxRounds} fix attempts. The commits Kashi pushed are in your repository history; check the latest build log.`);
+    await finish(runId, 'failed', `Still failing after ${run.maxRounds} fix attempts. The commits Kashi pushed are in your repository history; check the latest build log.`, {}, onProgress);
   } catch (error) {
     if (error instanceof RunCancelled) {
       await KashiFixRun.updateOne({ _id: runId }, { status: 'cancelled', finishedAt: new Date() });
-      await addStep(runId, { kind: 'info', message: 'Stopped.' });
+      await addStep(runId, { kind: 'info', message: 'Stopped.' }, onProgress);
+      if (typeof onProgress === 'function') await onProgress({ type: 'status', runId: String(runId), status: 'cancelled', resultMessage: 'Stopped.', finishedAt: new Date() });
       return;
     }
     console.error(`[Kashi] fix run ${runId} crashed:`, error?.message);
-    await finish(runId, 'failed', error?.userMessage || error?.message || 'Kashi hit an unexpected error.').catch(() => {});
+    await finish(runId, 'failed', error?.userMessage || error?.message || 'Kashi hit an unexpected error.', {}, onProgress).catch(() => {});
   }
 }
 
-async function onSuccess(run, deployment, deployId, url, fixCount, { verified = false } = {}) {
+async function onSuccess(run, deployment, deployId, url, fixCount, { verified = false, onProgress = null } = {}) {
   const frontendOnly = !deployment.backendProvider;
   const update = { 'vercel.deploymentId': deployId, lastDeployedAt: new Date() };
   if (url) update['vercel.url'] = url;
@@ -370,7 +388,7 @@ async function onSuccess(run, deployment, deployId, url, fixCount, { verified = 
 
   const check = verified ? ' It was opened in a browser and renders without errors.' : '';
   const msg = fixCount === 0 ? `The latest Vercel build is READY — nothing to fix.${check}` : `Fixed in ${fixCount} attempt${fixCount === 1 ? '' : 's'}. Your site is live.${check}`;
-  await finish(run._id, 'succeeded', msg, { finalUrl: url || undefined, needsRedeploy: !frontendOnly && deployment.status !== DEPLOYMENT_STATUS.SUCCESS });
+  await finish(run._id, 'succeeded', msg, { finalUrl: url || undefined, needsRedeploy: !frontendOnly && deployment.status !== DEPLOYMENT_STATUS.SUCCESS }, onProgress);
 }
 
 // ------------------------------------------------------------ public API
@@ -389,7 +407,20 @@ async function startFixRun({ userId, deploymentId }) {
   if (active) return { run: active, alreadyRunning: true };
 
   const run = await KashiFixRun.create({ userId, deploymentId, maxRounds: MAX_ROUNDS(), steps: [{ kind: 'info', message: 'Kashi is on it.' }] });
-  setImmediate(() => runLoop(run._id).catch((e) => console.error('[Kashi] unhandled:', e)));
+  const workerEnabled = String(process.env.KASHI_USE_WORKER ?? 'true').toLowerCase() !== 'false';
+  const workerConfigured = Boolean(process.env.WORKER_URL && process.env.INTERNAL_WEBHOOK_SECRET);
+
+  if (workerEnabled && workerConfigured) {
+    try {
+      await dispatchTask('KASHI_FIX', { runId: String(run._id) });
+    } catch (error) {
+      await finish(run._id, 'failed', `Could not start the Kashi Worker: ${error.message}`).catch(() => {});
+      throw Object.assign(new Error('Kashi Worker unavailable.'), { userMessage: 'Kashi Worker is unavailable. Start the Worker and try again.', statusCode: 503 });
+    }
+  } else {
+    // Development fallback when no Worker is configured. Production should use the Worker.
+    setImmediate(() => runLoop(run._id).catch((e) => console.error('[Kashi] unhandled:', e)));
+  }
   return { run, alreadyRunning: false };
 }
 

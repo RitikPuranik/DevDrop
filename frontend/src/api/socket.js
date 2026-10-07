@@ -35,3 +35,30 @@ export function subscribeToJob(jobId, { onStage, onCompleted, onFailed }) {
     s.emit('ai-job:unsubscribe', jobId);
   };
 }
+
+
+// Subscribes to one Kashi fix run. Status and step events are pushed by the
+// Backend after the Worker reports progress, so the UI does not poll.
+export function subscribeToKashiRun(runId, { onStep, onStatus }) {
+  const s = getSocket();
+  const join = () => s.emit('kashi-fix:subscribe', runId);
+  join();
+
+  const handleStep = (payload) => {
+    if (payload?.runId === runId) onStep?.(payload);
+  };
+  const handleStatus = (payload) => {
+    if (payload?.runId === runId) onStatus?.(payload);
+  };
+
+  s.on('kashi-fix:step', handleStep);
+  s.on('kashi-fix:status', handleStatus);
+  s.on('connect', join);
+
+  return () => {
+    s.off('kashi-fix:step', handleStep);
+    s.off('kashi-fix:status', handleStatus);
+    s.off('connect', join);
+    s.emit('kashi-fix:unsubscribe', runId);
+  };
+}

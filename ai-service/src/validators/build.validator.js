@@ -51,7 +51,8 @@ export default defineConfig({
 // validator and Vercel resolve dependencies identically.
 const DEFAULT_NPMRC = 'legacy-peer-deps=true\n';
 
-const DEFAULT_INDEX_HTML = '<!doctype html><html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/><title>DevDrop</title></head><body><div id="root"></div><script type="module" src="/main.jsx"></script></body></html>';
+const DEFAULT_FAVICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#111827"/><path d="M18 16h20l8 8v24H18z" fill="none" stroke="#fff" stroke-width="4"/><path d="M38 16v10h10" fill="none" stroke="#fff" stroke-width="4"/></svg>';
+const DEFAULT_INDEX_HTML = '<!doctype html><html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/><link rel="icon" href="/favicon.svg"/><title>DevDrop</title></head><body><div id="root"></div><script type="module" src="/main.jsx"></script></body></html>';
 const DEFAULT_MAIN_JSX = 'import React from "react"; import { createRoot } from "react-dom/client"; import App from "./App.js"; createRoot(document.getElementById("root")).render(<React.StrictMode><App /></React.StrictMode>);';
 
 // Pure helper: fills in the scaffold files a generated site needs to build
@@ -84,8 +85,37 @@ function withScaffold(files, dependencies) {
   if (!out['/index.html']) out['/index.html'] = { code: DEFAULT_INDEX_HTML };
   if (!out['/main.jsx']) out['/main.jsx'] = { code: DEFAULT_MAIN_JSX };
   if (!out['/vite.config.js']) out['/vite.config.js'] = { code: DEFAULT_VITE_CONFIG };
+  if (!out['/favicon.svg']) out['/favicon.svg'] = { code: DEFAULT_FAVICON_SVG };
   if (!out['/.npmrc']) out['/.npmrc'] = { code: DEFAULT_NPMRC };
   return out;
+}
+
+function auditProductionBundle(distDir) {
+  const errors = [];
+  const indexPath = path.join(distDir, 'index.html');
+  if (!fs.existsSync(indexPath)) return { ok: false, errors: ['dist/index.html was not produced by the build.'] };
+  const html = fs.readFileSync(indexPath, 'utf8');
+  const scripts = [...html.matchAll(/<script[^>]*\btype=[\"']module[\"'][^>]*\bsrc=[\"']([^\"']+)[\"'][^>]*>/gi), ...html.matchAll(/<script[^>]*\bsrc=[\"']([^\"']+)[\"'][^>]*\btype=[\"']module[\"'][^>]*>/gi)].map((m) => m[1]);
+  for (const src of scripts) {
+    if (/\.(?:jsx|tsx|ts)$/i.test(src.split('?')[0])) errors.push(`dist/index.html still references a source module (${src}). Vercel must serve the Vite-built JavaScript instead.`);
+    if (/^https?:\/\//i.test(src) || src.startsWith('data:') || src.startsWith('blob:')) continue;
+    const rel = src.split('?')[0].replace(/^\/+/, '');
+    const target = path.join(distDir, rel);
+    if (!target.startsWith(path.resolve(distDir))) { errors.push(`dist/index.html has an unsafe module path (${src}).`); continue; }
+    if (!fs.existsSync(target)) errors.push(`dist/index.html references a missing module (${src}).`);
+    else if (!/\.(?:m?js)$/i.test(target)) errors.push(`dist/index.html references a non-JavaScript module (${src}).`);
+  }
+  const leakedSources = [];
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (/\.(?:jsx|tsx|ts)$/i.test(entry.name)) leakedSources.push(path.relative(distDir, full).replace(/\\/g, '/'));
+    }
+  };
+  walk(distDir);
+  if (leakedSources.length) errors.push(`The production output contains source modules instead of compiled assets: ${leakedSources.slice(0, 8).join(', ')}`);
+  return { ok: errors.length === 0, errors };
 }
 
 async function run({ files, dependencies = {} }) {
@@ -122,6 +152,18 @@ async function run({ files, dependencies = {} }) {
     const result = await execFileAsync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'build'], spawnOpts);
     const warnings = result.stderr ? result.stderr.split('\n').filter(Boolean).slice(0, 20) : [];
 
+    const productionAudit = auditProductionBundle(path.join(dir, 'dist'));
+    if (!productionAudit.ok) {
+      return {
+        success: false,
+        phase: 'production-bundle',
+        errors: productionAudit.errors.map((e) => `PRODUCTION BUNDLE ERROR: ${e}`),
+        warnings,
+        runtime: null,
+        durationMs: Date.now() - started,
+      };
+    }
+
     // A bundle that compiles can still render a black/white screen. Execute the
     // built site in a real browser and fail on uncaught exceptions, console
     // errors or an empty #root. The errors go to the debug agent like any
@@ -145,4 +187,4 @@ async function run({ files, dependencies = {} }) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 }
-module.exports = { run, withScaffold };
+module.exports = { run, withScaffold, auditProductionBundle };

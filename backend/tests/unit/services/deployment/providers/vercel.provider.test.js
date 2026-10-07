@@ -186,12 +186,33 @@ describe('vercel.provider', () => {
   describe('ensureProject', () => {
     it('adopts an existing project when existing.projectId still resolves', async () => {
       const get = jest.fn().mockResolvedValue({ data: { id: 'prj_1', name: 'my-app', link: { repoId: 55 } } });
-      axios.create = jest.fn(() => ({ get, post: jest.fn() }));
+      axios.create = jest.fn(() => ({ get, post: jest.fn(), patch: jest.fn().mockResolvedValue({ data: {} }) }));
 
       const result = await provider.ensureProject('token', {}, { projectName: 'my-app' }, { projectId: 'prj_1' });
 
       expect(result).toEqual({ projectId: 'prj_1', projectName: 'my-app', repoId: 55 });
       expect(get).toHaveBeenCalledWith('/v9/projects/prj_1');
+    });
+
+    it('reconfigures an existing project root/build settings on redeploy', async () => {
+      const get = jest.fn().mockResolvedValue({ data: { id: 'prj_1', name: 'my-app', link: { repoId: 55 } } });
+      const patch = jest.fn().mockResolvedValue({ data: {} });
+      axios.create = jest.fn(() => ({ get, post: jest.fn(), patch }));
+
+      await provider.ensureProject(
+        'token',
+        {},
+        { projectName: 'my-app', framework: 'React', rootDirectory: 'app', buildCommand: 'npm run build', outputDirectory: 'dist', installCommand: 'npm install' },
+        { projectId: 'prj_1' }
+      );
+
+      expect(patch).toHaveBeenCalledWith('/v9/projects/prj_1', expect.objectContaining({
+        framework: 'vite',
+        rootDirectory: 'app',
+        buildCommand: 'npm run build',
+        outputDirectory: 'dist',
+        installCommand: 'npm install',
+      }));
     });
 
     it('recreates the project when the existing projectId 404s on Vercel', async () => {

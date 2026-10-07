@@ -175,15 +175,39 @@ const validateConnection = async (credential, metadata) => {
 
 /** Creates the Vercel project for this deployment, or adopts the existing
  * one if we already have a projectId on record (redeploy / retry path). */
+const buildProjectSettings = (config = {}) => {
+  const settings = {};
+  const framework = mapFrameworkToVercelPreset(config.framework);
+  if (framework) settings.framework = framework;
+  // Root Directory is a project-level setting on Vercel. Explicitly send null
+  // when the deployment belongs at repository root so an older nested setting
+  // cannot survive a redeploy.
+  settings.rootDirectory = config.rootDirectory || null;
+  if (Object.prototype.hasOwnProperty.call(config, 'buildCommand')) settings.buildCommand = config.buildCommand || null;
+  if (Object.prototype.hasOwnProperty.call(config, 'outputDirectory')) settings.outputDirectory = config.outputDirectory || null;
+  if (Object.prototype.hasOwnProperty.call(config, 'installCommand')) settings.installCommand = config.installCommand || null;
+  return settings;
+};
+
+const syncProjectSettings = async (api, projectId, config) => {
+  const settings = buildProjectSettings(config);
+  if (!Object.keys(settings).length) return;
+  await api.patch(`/v9/projects/${projectId}`, settings);
+};
+
+/** Creates the Vercel project for this deployment, or adopts and reconfigures
+ * the existing one on every redeploy/retry so stale Root Directory/build
+ * settings can never make Vercel serve source files directly. */
 const ensureProject = async (credential, metadata, config, existing) => {
   const api = vercelApi(credential, metadata?.teamId);
 
   if (existing?.projectId) {
     try {
       const { data } = await api.get(`/v9/projects/${existing.projectId}`);
+      await syncProjectSettings(api, data.id, config);
       return { projectId: data.id, projectName: data.name, repoId: data.link?.repoId || null };
     } catch (error) {
-      if (error?.response?.status !== 404) throw wrapError(error, 'looking up existing project');
+      if (error?.response?.status !== 404) throw wrapError(error, 'looking up/configuring existing project');
       // Project was deleted on Vercel's side since we last saw it — recreate below.
     }
   }
@@ -202,9 +226,8 @@ const ensureProject = async (credential, metadata, config, existing) => {
   } catch (error) {
     const alreadyExists = error?.response?.status === 409 || /already exists/i.test(error?.response?.data?.error?.message || '');
     if (alreadyExists) {
-      // A project with this name is already in the account (e.g. a retried
-      // request after a timed-out response) — adopt it instead of failing.
       const { data } = await api.get(`/v9/projects/${config.projectName}`);
+      await syncProjectSettings(api, data.id, config);
       return { projectId: data.id, projectName: data.name, repoId: data.link?.repoId || null };
     }
     throw wrapError(error, 'creating project');

@@ -3,6 +3,9 @@ const fs = require('fs');
 const path = require('path');
 const net = require('net');
 const dns = require('dns').promises;
+const { execFile } = require('child_process');
+const { promisify } = require('util');
+const execFileAsync = promisify(execFile);
 
 /**
  * Runtime smoke test: loads a page in a real (headless) browser and reports
@@ -14,14 +17,17 @@ const dns = require('dns').promises;
  * that is incompatible with the installed React) and show an empty #root with
  * errors in the console. Nothing before this check ever executed the bundle.
  *
- * AI_RUNTIME_CHECK = auto (default: run if a browser is available, otherwise
- *                    skip with a warning) | required (fail if no browser) | off
+ * AI_RUNTIME_CHECK = required (default: fail if no browser) | auto (run when a browser
+ *                    is available, otherwise skip) | off
  */
 
-const MODE = () => String(process.env.AI_RUNTIME_CHECK || 'auto').toLowerCase();
+const MODE = () => String(process.env.AI_RUNTIME_CHECK || 'required').toLowerCase();
 const NAV_TIMEOUT_MS = () => Number.parseInt(process.env.AI_RUNTIME_CHECK_TIMEOUT_MS || '25000', 10) || 25000;
 const SETTLE_MS = () => Number.parseInt(process.env.AI_RUNTIME_CHECK_SETTLE_MS || '1500', 10) || 1500;
 const MAX_ERRORS = 8;
+const AUTO_INSTALL_BROWSER = () => String(process.env.AI_RUNTIME_AUTO_INSTALL_BROWSER || 'true').toLowerCase() !== 'false';
+const BROWSER_INSTALL_TIMEOUT_MS = () => Number.parseInt(process.env.AI_RUNTIME_BROWSER_INSTALL_TIMEOUT_MS || '180000', 10) || 180000;
+let browserInstallPromise = null;
 
 // Console noise that says nothing about whether the app itself is broken.
 const NOISE_RE = [
@@ -38,6 +44,34 @@ const isNoise = (text) => NOISE_RE.some((re) => re.test(text));
 function loadPlaywright() {
   try { return require('playwright'); } catch { /* fall through */ }
   try { return require('playwright-core'); } catch { return null; }
+}
+
+async function ensurePlaywrightBrowser(pw) {
+  if (!AUTO_INSTALL_BROWSER()) return;
+  if (browserInstallPromise) return browserInstallPromise;
+  browserInstallPromise = (async () => {
+    try {
+      // Do not spawn npx/npx.cmd directly. On Windows that can fail with
+      // `spawn EINVAL`, and it is also unnecessary when Playwright itself
+      // is already installed. Invoke Playwright's CLI through the current
+      // Node executable instead.
+      const playwrightEntry = require.resolve('playwright');
+      const cliPath = path.join(path.dirname(playwrightEntry), 'cli.js');
+      if (!fs.existsSync(cliPath)) throw new Error(`Playwright CLI not found at ${cliPath}`);
+      console.warn('[RUNTIME CHECK] Chromium is missing. Installing it once for the runtime smoke test…');
+      await execFileAsync(process.execPath, [cliPath, 'install', 'chromium'], {
+        timeout: BROWSER_INSTALL_TIMEOUT_MS(),
+        maxBuffer: 2 * 1024 * 1024,
+        env: { ...process.env, PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '0' },
+      });
+      console.log('[RUNTIME CHECK] Chromium installation completed.');
+    } catch (error) {
+      const reason = String(error?.stderr || error?.stdout || error?.message || 'unknown install error').split('\n').filter(Boolean).slice(-3).join(' | ');
+      console.warn('[RUNTIME CHECK] Chromium auto-install failed:', reason);
+      throw error;
+    }
+  })().finally(() => { browserInstallPromise = null; });
+  return browserInstallPromise;
 }
 
 const MIME = {
@@ -122,9 +156,22 @@ async function checkUrl(url, { isolate = false, allowProtected = true } = {}) {
   try {
     browser = await pw.chromium.launch({ args: ['--no-sandbox', '--disable-dev-shm-usage'] });
   } catch (error) {
-    if (MODE() === 'required') return { ok: false, errors: [`Runtime check is required but no browser could be started: ${String(error.message).split('\n')[0]}`] };
-    console.warn('[RUNTIME CHECK] skipped: browser unavailable:', String(error.message).split('\n')[0]);
-    return { ok: true, skipped: true, reason: 'browser unavailable', errors: [] };
+    const firstError = String(error?.message || error).split('\n')[0];
+    if (AUTO_INSTALL_BROWSER() && /Executable doesn't exist|executable.*does not exist|browser.*not.*installed/i.test(String(error?.message || error))) {
+      try {
+        await ensurePlaywrightBrowser(pw);
+        browser = await pw.chromium.launch({ args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+      } catch (installError) {
+        const reason = String(installError?.message || installError).split('\n')[0];
+        if (MODE() === 'required') return { ok: false, errors: [`Runtime check is required but Chromium could not be started: ${reason}`] };
+        console.warn('[RUNTIME CHECK] skipped: browser unavailable:', reason);
+        return { ok: true, skipped: true, reason: 'browser unavailable', errors: [] };
+      }
+    } else {
+      if (MODE() === 'required') return { ok: false, errors: [`Runtime check is required but no browser could be started: ${firstError}`] };
+      console.warn('[RUNTIME CHECK] skipped: browser unavailable:', firstError);
+      return { ok: true, skipped: true, reason: 'browser unavailable', errors: [] };
+    }
   }
   try {
     const origin = new URL(url).origin;
@@ -135,7 +182,11 @@ async function checkUrl(url, { isolate = false, allowProtected = true } = {}) {
     const failedLocal = [];
     let status = null;
 
-    page.on('pageerror', (e) => pageErrors.push(String(e && e.message ? e.message : e).slice(0, 400)));
+    page.on('pageerror', (e) => {
+      const message = String(e && e.message ? e.message : e);
+      const stack = String(e?.stack || '').split('\n').slice(1, 5).join('\n');
+      pageErrors.push(`${message}${stack ? `\n${stack}` : ''}`.slice(0, 900));
+    });
     page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text().slice(0, 400)); });
     page.on('requestfailed', (r) => { if (sameOrigin(r.url(), origin) && /\.(m?js|css)(\?|$)/i.test(r.url())) failedLocal.push(r.url().slice(0, 200)); });
     page.on('response', (r) => { if (sameOrigin(r.url(), origin) && /\.(m?js|css)(\?|$)/i.test(r.url()) && r.status() >= 400) failedLocal.push(`${r.url().slice(0, 200)} (HTTP ${r.status()})`); });

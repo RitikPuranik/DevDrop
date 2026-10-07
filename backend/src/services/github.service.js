@@ -306,6 +306,18 @@ const getRepoTree = async (accessToken, owner, repo, branch) => {
     .map((entry) => ({ path: entry.path, type: entry.type, size: entry.size }));
 };
 
+/** Search tracked source for a runtime identifier. Used by Kashi when a browser
+ * error names a symbol (for example `TestimonialsSection`) but the deployed
+ * bundle does not expose the original source filename in its stack. */
+const searchCode = async (accessToken, owner, repo, identifier, { max = 3 } = {}) => {
+  const needle = String(identifier || '').trim();
+  if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(needle)) return [];
+  const { data } = await githubApi(accessToken).get('/search/code', {
+    params: { q: `\"${needle}\" repo:${owner}/${repo}`, per_page: Math.min(10, Math.max(1, Number(max) || 3)) },
+  });
+  return (data?.items || []).map((item) => item.path).filter(Boolean);
+};
+
 /** Decoded UTF-8 text content of a single file at a given ref, or null if it
  * doesn't exist / isn't a regular file. */
 const getFileContent = async (accessToken, owner, repo, path, ref) => {
@@ -378,6 +390,7 @@ module.exports = {
   isAuthError,
   getRepository,
   getRepoTree,
+  searchCode,
   getFileContent,
   commitFilesToBranch,
 };

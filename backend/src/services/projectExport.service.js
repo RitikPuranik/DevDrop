@@ -387,6 +387,37 @@ const AI_STUDIO_VERCEL_JSON = JSON.stringify({
 // model happened to write into its package.json.
 const AI_STUDIO_PINNED_DEV_DEPS = { vite: '^7.0.0', '@vitejs/plugin-react': '^5.0.0' };
 
+// AI Studio generations sometimes arrive wrapped in a single top-level folder
+// such as `app/`. Preview can still render those files because it reads the
+// persisted source map directly, but a GitHub/Vercel deployment can then point
+// at the repository root and serve `/app/src/*.tsx` as raw source. Flatten only
+// when that wrapper contains a real application root (package.json or
+// index.html), so ordinary nested source layouts are left untouched.
+const flattenAiStudioRootWrapper = (files) => {
+  const entries = Object.entries(files || {});
+  if (!entries.length) return files;
+
+  const topLevel = new Set(entries.map(([key]) => key.replace(/^\/+/, '').split('/')[0]));
+  if (topLevel.size !== 1) return files;
+
+  const [wrapper] = topLevel;
+  const prefix = `/${wrapper}/`;
+  const hasAppRoot = Boolean(files[`${prefix}package.json`] || files[`${prefix}index.html`]);
+  if (!hasAppRoot) return files;
+
+  const flattened = {};
+  for (const [key, value] of entries) {
+    const clean = key.replace(/^\/+/, '');
+    if (clean === wrapper) continue;
+    if (!clean.startsWith(`${wrapper}/`)) {
+      flattened[`/${clean}`] = value;
+      continue;
+    }
+    flattened[`/${clean.slice(wrapper.length + 1)}`] = value;
+  }
+  return flattened;
+};
+
 /**
  * A generated index.html must contain the #root mount node and point at an entry
  * file that exists in the project; otherwise the build "succeeds" and the page is
@@ -423,7 +454,7 @@ const buildAiStudioRepoFiles = (project) => {
     if (!safe || isAlwaysExcluded(safe)) continue;
     flat[`/${safe}`] = fileToText(value);
   }
-  const out = normalizeProjectFiles(flat);
+  const out = normalizeProjectFiles(flattenAiStudioRootWrapper(flat));
   const title = project.title || 'DevDrop Site';
   const slug = sanitizeRepoName(title);
 

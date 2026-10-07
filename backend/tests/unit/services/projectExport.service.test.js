@@ -355,6 +355,18 @@ describe('buildAiStudioRepoFiles (Vercel-ready scaffold)', () => {
     expect(build(app)['.npmrc']).toMatch(/legacy-peer-deps=true/);
   });
 
+  it('flattens a single app/ wrapper so Vercel deploys the actual Vite project root', () => {
+    const files = build({
+      '/app/package.json': { code: JSON.stringify({}) },
+      '/app/index.html': { code: '<html><body><div id=\"root\"></div><script type=\"module\" src=\"/src/main.jsx\"></script></body></html>' },
+      '/app/src/main.jsx': { code: 'console.log(1)' },
+    });
+    expect(files['package.json']).toBeDefined();
+    expect(files['index.html']).toBeDefined();
+    expect(files['src/main.jsx']).toBe('console.log(1)');
+    expect(files['app/package.json']).toBeUndefined();
+  });
+
   it('adds a vercel.json with the Vite preset and SPA rewrite', () => {
     const v = JSON.parse(build(app)['vercel.json']);
     expect(v).toMatchObject({ framework: 'vite', buildCommand: 'npm run build', outputDirectory: 'dist' });

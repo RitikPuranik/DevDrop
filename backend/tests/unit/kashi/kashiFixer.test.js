@@ -29,6 +29,8 @@ jest.mock('../../../src/modules/deployment/deployment.model', () => ({ findOne: 
 jest.mock('../../../src/modules/deployment/deploymentProviderConnection.model', () => ({ findOne: () => ({ select: async () => ({ credentialEncrypted: 'x', metadata: {} }) }) }));
 jest.mock('../../../src/modules/github/githubConnection.model', () => ({ findOne: () => ({ select: async () => ({ accessTokenEncrypted: 'y' }) }) }));
 jest.mock('../../../src/shared/utils/crypto', () => ({ decrypt: (v) => `dec-${v}` }));
+const mockDispatchTask = jest.fn();
+jest.mock('../../../src/services/worker.client', () => ({ dispatchTask: (...args) => mockDispatchTask(...args) }));
 
 const mockGithub = {
   getRepoTree: jest.fn(async () => [{ path: 'package.json', type: 'blob', size: 100 }, { path: 'src/App.jsx', type: 'blob', size: 100 }, { path: 'src/components/Header.jsx', type: 'blob', size: 100 }]),
@@ -62,6 +64,7 @@ beforeEach(() => {
   mockAi.proposeFix.mockReset();
   mockAi.runtimeCheck.mockReset().mockResolvedValue({ ok: true, errors: [] });
   mockGithub.commitFilesToBranch.mockResolvedValue('abcdef1234567');
+  mockDispatchTask.mockReset();
 });
 
 describe('pickFilesFromLog', () => {
@@ -76,6 +79,18 @@ describe('pickFilesFromLog', () => {
   });
   test('falls back to package.json when the log names no file', () => {
     expect(pickFilesFromLog('Command "npm run build" exited with 1', tree)).toEqual(['package.json', 'frontend/package.json']);
+  });
+});
+
+describe('worker dispatch', () => {
+  test('queues Kashi on the Worker when worker configuration is present', async () => {
+    process.env.WORKER_URL = 'http://localhost:4000';
+    process.env.INTERNAL_WEBHOOK_SECRET = 'secret';
+    mockDispatchTask.mockResolvedValue({ taskId: 'task-1' });
+    const { run } = await startFixRun({ userId: 'u1', deploymentId: 'dep1' });
+    expect(mockDispatchTask).toHaveBeenCalledWith('KASHI_FIX', { runId: String(run._id) });
+    delete process.env.WORKER_URL;
+    delete process.env.INTERNAL_WEBHOOK_SECRET;
   });
 });
 

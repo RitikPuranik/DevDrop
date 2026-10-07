@@ -22,6 +22,12 @@ function init(httpServer, { allowedOrigins } = {}) {
     socket.on('ai-job:unsubscribe', (jobId) => {
       if (typeof jobId === 'string' && jobId) socket.leave(`ai-job:${jobId}`);
     });
+    socket.on('kashi-fix:subscribe', (runId) => {
+      if (typeof runId === 'string' && runId) socket.join(`kashi-fix:${runId}`);
+    });
+    socket.on('kashi-fix:unsubscribe', (runId) => {
+      if (typeof runId === 'string' && runId) socket.leave(`kashi-fix:${runId}`);
+    });
   });
 
   return io;
@@ -32,4 +38,9 @@ function emitToJob(jobId, event, payload) {
   io.to(`ai-job:${jobId}`).emit(event, payload);
 }
 
-module.exports = { init, emitToJob };
+function emitToKashiRun(runId, event, payload) {
+  if (!io) return;
+  io.to(`kashi-fix:${runId}`).emit(event, payload);
+}
+
+module.exports = { init, emitToJob, emitToKashiRun };

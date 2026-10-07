@@ -41,3 +41,14 @@ it('does not override an .npmrc the pipeline already produced', () => {
   const custom = { code: 'registry=https://example.invalid/\n' };
   expect(withScaffold({ '/.npmrc': custom }, {})['/.npmrc']).toBe(custom);
 });
+
+
+const { validateGeneratedFiles } = require('../src/validators/generatedFiles.validator');
+
+test('static validation rejects an undefined JSX component before deployment', () => {
+  const files = {
+    '/App.js': { code: `import Home from './src/pages/marketing/Home.jsx'; export default function App(){return <Home />}` },
+    '/src/pages/marketing/Home.jsx': { code: `export default function Home(){return <main><TestimonialsSection /></main>}` },
+  };
+  expect(validateGeneratedFiles(files)).toEqual(expect.arrayContaining([expect.stringContaining('TestimonialsSection') ]));
+});

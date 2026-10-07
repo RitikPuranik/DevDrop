@@ -39,6 +39,9 @@ describe('diagnoseRuntimeErrors', () => {
     expect(diagnoseRuntimeErrors(["Uncaught exception: Cannot read properties of undefined (reading 'map')"]).kind).toBe('code');
     expect(diagnoseRuntimeErrors(['Uncaught exception: Hero is not defined']).kind).toBe('code');
   });
+  test('runtime checker infrastructure failures are not sent to the code fixer', () => {
+    expect(diagnoseRuntimeErrors(['Runtime check is required but Chromium could not be started: executable missing']).kind).toBe('checker');
+  });
 });
 
 describe('assertPublicHttpsUrl (SSRF guard)', () => {
@@ -47,8 +50,15 @@ describe('assertPublicHttpsUrl (SSRF guard)', () => {
   });
 });
 
-// Real browser round-trip. Skipped automatically when no Chromium is available.
+// Real browser round-trip. Production defaults to required verification, but tests
+// deliberately use auto so CI can run without a preinstalled browser binary.
 describe('checkDist (real browser)', () => {
+  const previousRuntimeMode = process.env.AI_RUNTIME_CHECK;
+  beforeAll(() => { process.env.AI_RUNTIME_CHECK = 'auto'; });
+  afterAll(() => {
+    if (previousRuntimeMode === undefined) delete process.env.AI_RUNTIME_CHECK;
+    else process.env.AI_RUNTIME_CHECK = previousRuntimeMode;
+  });
   const make = (html, js) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rt-'));
     fs.mkdirSync(path.join(dir, 'assets'));

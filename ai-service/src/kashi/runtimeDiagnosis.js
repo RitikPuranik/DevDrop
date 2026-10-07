@@ -4,6 +4,13 @@
  * fix rounds rewriting code for a missing VITE_SUPABASE_URL only makes the
  * repo worse, so env problems are reported instead of "fixed".
  */
+const MIME_PATTERNS = [
+  /Expected a JavaScript(?:-or-Wasm)? module script but the server responded with a MIME type of \"(?:text\/jsx|application\/octet-stream)\"/i,
+  /Strict MIME type checking is enforced for module scripts/i,
+  /server responded with a MIME type of .*text\/jsx/i,
+  /server responded with a MIME type of .*application\/octet-stream/i,
+];
+
 const ENV_PATTERNS = [
   /supabase(Url|Key|Anon\w*)\s+is\s+required/i,
   /Invalid\s+supabase(Url|Key)/i,
@@ -16,6 +23,13 @@ const ENV_PATTERNS = [
 
 function diagnoseRuntimeErrors(errors = []) {
   const text = (errors || []).join('\n');
+  const mimeHit = MIME_PATTERNS.some((re) => re.test(text));
+  if (mimeHit) {
+    return {
+      kind: 'hosting-config',
+      hint: 'The Vercel build is serving a source module (.jsx/.tsx) or another file with the wrong MIME type. The repository deployment configuration needs to point Vercel at the Vite dist/ output; this is not a component-level code bug.',
+    };
+  }
   const envHit = ENV_PATTERNS.some((re) => re.test(text));
   const vars = [...new Set((text.match(/\b(?:VITE|NEXT_PUBLIC|REACT_APP)_[A-Z0-9_]+\b/g) || []))].slice(0, 6);
   if (envHit) {

@@ -11,12 +11,31 @@ function resolveFilePath(fromPath, importPath, files) {
 function hasDefaultExport(code) { return /\bexport\s+default\b/.test(code) || /export\s*\{[^}]*\bdefault\b/.test(code); }
 function hasNamedExport(code, name) { return new RegExp(`\\bexport\\s+(?:const|let|var|function|class)\\s+${name}\\b`).test(code) || new RegExp(`\\bexport\\s*\\{[^}]*\\b${name}\\b[^}]*\\}`).test(code); }
 function walk(node, fn) { if (!node || typeof node !== 'object') return; fn(node); for (const key of Object.keys(node)) { if (key === 'loc' || key === 'tokens' || key === 'comments') continue; const value = node[key]; if (Array.isArray(value)) value.forEach((v) => walk(v, fn)); else if (value && typeof value === 'object') walk(value, fn); } }
+function addPatternBindings(pattern, bindings) {
+  if (!pattern || typeof pattern !== 'object') return;
+  if (pattern.type === 'Identifier') { bindings.add(pattern.name); return; }
+  if (pattern.type === 'RestElement' || pattern.type === 'AssignmentPattern') { addPatternBindings(pattern.argument || pattern.left, bindings); return; }
+  if (pattern.type === 'ObjectPattern') {
+    for (const prop of pattern.properties || []) {
+      if (prop.type === 'RestElement') addPatternBindings(prop.argument, bindings);
+      else if (prop.type === 'ObjectProperty') addPatternBindings(prop.value, bindings);
+    }
+    return;
+  }
+  if (pattern.type === 'ArrayPattern') { for (const element of pattern.elements || []) addPatternBindings(element, bindings); }
+}
 function jsxBindings(ast, code) {
   const bindings = new Set(['React']);
   walk(ast, (n) => {
     if (n.type === 'ImportDeclaration') for (const s of n.specifiers || []) bindings.add(s.local.name);
-    if (['VariableDeclarator'].includes(n.type) && n.id?.type === 'Identifier') bindings.add(n.id.name);
-    if (['FunctionDeclaration','ClassDeclaration'].includes(n.type) && n.id) bindings.add(n.id.name);
+    if (n.type === 'VariableDeclarator') addPatternBindings(n.id, bindings);
+    if (n.type === 'FunctionDeclaration' || n.type === 'ClassDeclaration') {
+      if (n.id) bindings.add(n.id.name);
+      for (const param of n.params || []) addPatternBindings(param, bindings);
+    }
+    if (n.type === 'ArrowFunctionExpression' || n.type === 'FunctionExpression') {
+      for (const param of n.params || []) addPatternBindings(param, bindings);
+    }
     if (n.type === 'ExportNamedDeclaration' && n.declaration?.id) bindings.add(n.declaration.id.name);
   });
   walk(ast, (n) => {

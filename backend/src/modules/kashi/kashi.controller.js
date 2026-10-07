@@ -1,6 +1,7 @@
 const aiClient = require('./kashiAiClient');
 const fixer = require('./kashiFixer.service');
 const KashiFixRun = require('./kashiFixRun.model');
+const realtime = require('../../shared/realtime/socket');
 
 const fail = (res, error, fallback) => {
   if (!error.userMessage) console.error('Kashi controller error:', error.message);
@@ -65,7 +66,14 @@ exports.cancelRun = async (req, res) => {
   try {
     const run = await fixer.cancelRun({ userId: req.userId, runId: req.params.runId });
     if (!run) return res.status(404).json({ success: false, message: 'No active run to stop.' });
-    res.status(200).json({ success: true, data: { run: fixer.serializeRun(run) } });
+    const serialized = fixer.serializeRun(run);
+    realtime.emitToKashiRun(serialized.id, 'kashi-fix:status', {
+      runId: serialized.id,
+      status: serialized.status,
+      resultMessage: serialized.resultMessage,
+      finishedAt: serialized.finishedAt,
+    });
+    res.status(200).json({ success: true, data: { run: serialized } });
   } catch (error) {
     fail(res, error, 'Could not stop the run.');
   }
