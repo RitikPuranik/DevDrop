@@ -1,8 +1,20 @@
 const rateLimit = require('express-rate-limit');
 
+const MAX_TIMER_MS = 2147483647;
+
 const readEnvNumber = (key, fallback) => {
   const value = Number.parseInt(process.env[key], 10);
-  return Number.isFinite(value) ? value : fallback;
+  if (!Number.isFinite(value)) return fallback;
+
+  if (value > MAX_TIMER_MS) {
+    console.warn(
+      `⚠️  ${key}=${value}ms exceeds Node's timer limit. Capping it to ${MAX_TIMER_MS}ms (~24.8 days).`
+    );
+    return MAX_TIMER_MS;
+  }
+
+  if (value <= 0) return fallback;
+  return value;
 };
 
 const formatWindowLabel = (windowMs) => {
@@ -33,6 +45,13 @@ const DEPLOY_RATE_LIMIT_MAX_REQUESTS = readEnvNumber('DEPLOY_RATE_LIMIT_MAX_REQU
 const AI_GENERATION_RATE_LIMIT_WINDOW_MS = readEnvNumber('AI_GENERATION_RATE_LIMIT_WINDOW_MS', 60 * 60 * 1000);
 const AI_GENERATION_RATE_LIMIT_MAX_REQUESTS = readEnvNumber('AI_GENERATION_RATE_LIMIT_MAX_REQUESTS', 10);
 
+// Job-status polling is not a new AI generation and can legitimately make
+// many requests while a long-running Gemini job is processing. Keep it
+// separately rate-limited per authenticated user rather than consuming the
+// general IP-based API budget.
+const AI_JOB_POLL_RATE_LIMIT_WINDOW_MS = readEnvNumber('AI_JOB_POLL_RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000);
+const AI_JOB_POLL_RATE_LIMIT_MAX_REQUESTS = readEnvNumber('AI_JOB_POLL_RATE_LIMIT_MAX_REQUESTS', 600);
+
 // General API rate limiter
 const generalLimiter = rateLimit({
   windowMs: GENERAL_RATE_LIMIT_WINDOW_MS,
@@ -43,6 +62,10 @@ const generalLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  // AI job polling has its own limiter below; otherwise a 2-5 second polling
+  // loop can exhaust the general 100-request/15-minute IP budget before a
+  // legitimate long-running generation finishes.
+  skip: (req) => req.path.startsWith('/ai-generate/jobs/'),
 });
 
 // Stricter limiter for authentication routes
@@ -123,6 +146,23 @@ const aiGenerationLimiter = rateLimit({
   },
 });
 
+// AI Studio job status polling limiter (per authenticated user). This is
+// intentionally much higher than the generation limiter because one job may
+// take several minutes and the frontend polls periodically until completion.
+const aiJobPollingLimiter = rateLimit({
+  windowMs: AI_JOB_POLL_RATE_LIMIT_WINDOW_MS,
+  max: AI_JOB_POLL_RATE_LIMIT_MAX_REQUESTS,
+  keyGenerator: (req) => {
+    return req.userId ? req.userId.toString() : req.ip;
+  },
+  message: {
+    success: false,
+    message: `Too many AI job status checks, please try again after ${formatWindowLabel(AI_JOB_POLL_RATE_LIMIT_WINDOW_MS)}.`,
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 module.exports = {
   generalLimiter,
   authLimiter,
@@ -131,4 +171,5 @@ module.exports = {
   exportLimiter,
   deployLimiter,
   aiGenerationLimiter,
+  aiJobPollingLimiter,
 };

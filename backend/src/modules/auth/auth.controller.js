@@ -197,16 +197,37 @@ const googleAuth = async (req, res) => {
 // ─────────────────────────────────────────
 // GITHUB OAUTH ("Continue with GitHub")
 //
-// This is a SEPARATE OAuth flow from modules/github (repo export/
-// integrations): its own scope (identity-only, no `repo` access), its own
-// callback route/redirect URI, and its own signed `state.purpose` so a
-// state minted here can never be replayed against the export callback (or
-// vice versa). It reuses the popup + postMessage pattern and GITHUB_CLIENT_
-// ID/SECRET already set up for that flow — see backend/src/services/
-// github.service.js.
+// This login flow uses a short-lived, single-use handoff code. GitHub returns
+// to the backend, the backend completes the OAuth exchange and persists the
+// handoff code in the normal DevDrop MongoDB, and then redirects the popup to
+// the frontend. The frontend exchanges that opaque code for the normal
+// DevDrop JWT. This avoids relying on window.opener surviving a cross-origin
+// OAuth navigation.
 // ─────────────────────────────────────────
 
 const GITHUB_LOGIN_STATE_EXPIRY = '10m';
+const GITHUB_HANDOFF_TTL_MS = 60 * 1000;
+const GITHUB_LOGIN_COOKIE = 'devdrop_github_login_nonce';
+
+const parseCookies = (req) => {
+  const raw = req.headers.cookie || '';
+  return raw.split(';').reduce((cookies, pair) => {
+    const index = pair.indexOf('=');
+    if (index < 0) return cookies;
+    const key = pair.slice(0, index).trim();
+    const value = pair.slice(index + 1).trim();
+    if (key) cookies[key] = decodeURIComponent(value);
+    return cookies;
+  }, {});
+};
+
+const getCookieOptions = () => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+  path: '/api/auth',
+  maxAge: GITHUB_LOGIN_STATE_EXPIRY === '10m' ? 10 * 60 * 1000 : undefined,
+});
 
 const getFrontendOrigin = () => {
   try {
@@ -216,43 +237,43 @@ const getFrontendOrigin = () => {
   }
 };
 
-// Safely embeds a JS value inside an inline <script> block.
-const toScriptLiteral = (value) => JSON.stringify(value).replace(/</g, '\\u003c');
+const getFrontendGithubCallbackUrl = (handoffToken) => {
+  const origin = getFrontendOrigin();
+  if (!origin || origin === '*') throw new Error('FRONTEND_URL is not configured correctly.');
+  const url = new URL('/github-auth-callback.html', origin);
+  url.searchParams.set('handoff', handoffToken);
 
-const renderGithubAuthResultPage = (payload) => `<!DOCTYPE html>
-<html>
-  <head><meta charset="utf-8" /><title>GitHub sign-in</title></head>
-  <body style="font-family: sans-serif; background:#0b0b0b; color:#ece5d8; display:flex; align-items:center; justify-content:center; height:100vh; margin:0;">
-    <p>You can close this window now…</p>
-    <script>
-      (function () {
-        var result = ${toScriptLiteral(payload)};
-        var targetOrigin = ${toScriptLiteral(getFrontendOrigin())};
-        try {
-          if (window.opener) {
-            window.opener.postMessage(result, targetOrigin);
-          }
-        } catch (e) {}
-        window.close();
-      })();
-    </script>
-  </body>
-</html>`;
+  const backendOrigin = (() => {
+    try {
+      return new URL(
+        process.env.BACKEND_URL ||
+        process.env.API_URL ||
+        `${process.env.RENDER_EXTERNAL_URL || 'http://localhost:5000'}`
+      ).origin;
+    } catch {
+      return null;
+    }
+  })();
+
+  if (backendOrigin) url.searchParams.set('backend', backendOrigin);
+  return url.toString();
+};
 
 /**
  * GET /api/auth/github
  * Public — no session exists yet. Redirects straight to GitHub's authorize
- * screen; the frontend just opens this URL in a popup (no preceding API
- * call needed, unlike the repo-export /connect endpoint, since there's no
- * logged-in user id to embed until GitHub redirects back).
+ * screen; the frontend opens this URL in a popup.
  */
 const githubAuthRedirect = (req, res) => {
   if (!githubService.isGithubLoginConfigured()) {
     return res.status(503).json({ success: false, message: 'GitHub sign-in is not configured on this server yet.' });
   }
 
+  const nonce = crypto.randomBytes(24).toString('hex');
+  res.cookie(GITHUB_LOGIN_COOKIE, nonce, getCookieOptions());
+
   const state = jwt.sign(
-    { purpose: 'github_login', nonce: crypto.randomBytes(8).toString('hex') },
+    { purpose: 'github_login', nonce },
     process.env.JWT_SECRET,
     { expiresIn: GITHUB_LOGIN_STATE_EXPIRY }
   );
@@ -262,30 +283,39 @@ const githubAuthRedirect = (req, res) => {
 
 /**
  * GET /api/auth/github/callback
- * Public — GitHub redirects the user's browser here with no auth header.
- * Renders a page that postMessages the result (token + user, or an error)
- * back to the opener window and closes itself, mirroring the repo-export
- * callback in modules/github/github.controller.js.
+ * Public — GitHub redirects here after authorization. The callback completes
+ * OAuth, creates/links the DevDrop account, creates a single-use handoff code,
+ * and redirects the popup to the frontend callback page.
  */
 const githubAuthCallback = async (req, res) => {
   const { code, state, error: oauthError } = req.query;
 
+  const sendFrontendError = (message) => {
+    try {
+      const url = new URL('/github-auth-callback.html', getFrontendOrigin());
+      url.searchParams.set('error', message);
+      return res.redirect(url.toString());
+    } catch {
+      return res.status(500).send('GitHub sign-in could not be completed.');
+    }
+  };
+
   try {
     if (oauthError) {
-      return res.send(renderGithubAuthResultPage({ type: 'github-auth-error', message: 'GitHub sign-in was cancelled or denied.' }));
+      return sendFrontendError('GitHub sign-in was cancelled or denied.');
     }
     if (!code || !state) {
-      return res.send(renderGithubAuthResultPage({ type: 'github-auth-error', message: 'Missing authorization code.' }));
+      return sendFrontendError('Missing authorization code.');
     }
 
     let decoded;
     try {
       decoded = jwt.verify(state, process.env.JWT_SECRET);
     } catch {
-      return res.send(renderGithubAuthResultPage({ type: 'github-auth-error', message: 'This sign-in request expired. Please try again.' }));
+      return sendFrontendError('This sign-in request expired. Please try again.');
     }
     if (decoded.purpose !== 'github_login') {
-      return res.send(renderGithubAuthResultPage({ type: 'github-auth-error', message: 'Invalid sign-in request.' }));
+      return sendFrontendError('Invalid sign-in request.');
     }
 
     const { accessToken } = await githubService.exchangeCodeForToken(code, githubService.getLoginRedirectUri());
@@ -293,10 +323,9 @@ const githubAuthCallback = async (req, res) => {
     const primaryEmail = await githubService.getPrimaryVerifiedEmail(accessToken);
 
     if (!primaryEmail) {
-      return res.send(renderGithubAuthResultPage({
-        type: 'github-auth-error',
-        message: 'Your GitHub account has no verified email address we can use. Please verify an email on GitHub and try again, or sign up with email/password instead.',
-      }));
+      return sendFrontendError(
+        'Your GitHub account has no verified email address we can use. Please verify an email on GitHub and try again, or sign up with email/password instead.'
+      );
     }
 
     const githubId = String(githubProfile.id);
@@ -306,19 +335,12 @@ const githubAuthCallback = async (req, res) => {
       const existingByEmail = await User.findOne({ email: primaryEmail });
 
       if (existingByEmail) {
-        // Scenario 4 (email conflict): this verified GitHub email already
-        // belongs to a DevDrop account that's linked to a *different*
-        // GitHub identity. Don't guess which one is right — refuse instead
-        // of silently re-linking or merging.
         if (existingByEmail.githubId && existingByEmail.githubId !== githubId) {
-          return res.send(renderGithubAuthResultPage({
-            type: 'github-auth-error',
-            message: 'This email is already linked to a different GitHub account on DevDrop. Please sign in with that GitHub account instead.',
-          }));
+          return sendFrontendError(
+            'This email is already linked to a different GitHub account on DevDrop. Please sign in with that GitHub account instead.'
+          );
         }
 
-        // Scenario 3: existing local/Google account, verified email matches —
-        // safely link GitHub to it without touching password or other data.
         existingByEmail.githubId = githubId;
         existingByEmail.githubUsername = githubProfile.username;
         existingByEmail.authProvider = 'github';
@@ -327,7 +349,6 @@ const githubAuthCallback = async (req, res) => {
         await existingByEmail.save();
         user = existingByEmail;
       } else {
-        // Scenario 1: brand-new user.
         user = new User({
           name: githubProfile.name || githubProfile.username,
           email: primaryEmail,
@@ -335,25 +356,91 @@ const githubAuthCallback = async (req, res) => {
           githubUsername: githubProfile.username,
           avatar: githubProfile.avatarUrl,
           authProvider: 'github',
-          isVerified: true, // GitHub verified this email for us
+          isVerified: true,
           role: 'user',
         });
         await user.save();
       }
     }
-    // else Scenario 2: githubId already linked — just log them in as-is.
+
+    const cookies = parseCookies(req);
+    if (!decoded.nonce || cookies[GITHUB_LOGIN_COOKIE] !== decoded.nonce) {
+      return sendFrontendError('Your GitHub sign-in session could not be verified. Please try again.');
+    }
+
+    const handoffToken = jwt.sign(
+      {
+        purpose: 'github_login_handoff',
+        nonce: decoded.nonce,
+        userId: String(user._id),
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '60s', jwtid: crypto.randomBytes(16).toString('hex') }
+    );
+
+    return res.redirect(getFrontendGithubCallbackUrl(handoffToken));
+  } catch (error) {
+    console.error('GitHub auth callback error:', error.message);
+    return sendFrontendError('Could not complete GitHub sign-in. Please try again.');
+  }
+};
+
+/**
+ * POST /api/auth/github/exchange
+ * Public — exchanges a short-lived, single-use opaque handoff code for the
+ * normal DevDrop JWT. The code is deleted atomically on successful lookup.
+ */
+const githubAuthExchange = async (req, res) => {
+  try {
+    const handoffToken = String(req.body?.handoff || '').trim();
+    if (!handoffToken) {
+      return res.status(400).json({ success: false, message: 'Missing GitHub sign-in handoff.' });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(handoffToken, process.env.JWT_SECRET);
+    } catch {
+      return res.status(401).json({ success: false, message: 'This GitHub sign-in link is invalid or has expired.' });
+    }
+
+    if (decoded.purpose !== 'github_login_handoff' || !decoded.userId || !decoded.nonce) {
+      return res.status(401).json({ success: false, message: 'Invalid GitHub sign-in handoff.' });
+    }
+
+    const cookies = parseCookies(req);
+    if (cookies[GITHUB_LOGIN_COOKIE] !== decoded.nonce) {
+      return res.status(401).json({ success: false, message: 'GitHub sign-in session could not be verified.' });
+    }
+
+    const user = await User.findById(decoded.userId);
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'The DevDrop account for this GitHub sign-in no longer exists.' });
+    }
 
     const token = generateAccessToken(user._id);
     const avatarUrl = await getPublicAssetUrl(user.avatar);
 
-    return res.send(renderGithubAuthResultPage({
-      type: 'github-auth-success',
-      token,
-      user: { id: user._id, name: user.name, email: user.email, role: user.role, isVerified: user.isVerified, avatar: avatarUrl },
-    }));
+    res.clearCookie(GITHUB_LOGIN_COOKIE, { path: '/api/auth' });
+
+    return res.json({
+      success: true,
+      message: 'GitHub login successful',
+      data: {
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          isVerified: user.isVerified,
+          avatar: avatarUrl,
+        },
+        token,
+      },
+    });
   } catch (error) {
-    console.error('GitHub auth callback error:', error.message);
-    return res.send(renderGithubAuthResultPage({ type: 'github-auth-error', message: 'Could not complete GitHub sign-in. Please try again.' }));
+    console.error('GitHub auth exchange error:', error.message);
+    return res.status(500).json({ success: false, message: 'Could not complete GitHub sign-in.' });
   }
 };
 
@@ -470,6 +557,7 @@ module.exports = {
   googleAuth,
   githubAuthRedirect,
   githubAuthCallback,
+  githubAuthExchange,
   sendVerificationEmail,
   verifyEmail,
   resendVerification,

@@ -1,13 +1,8 @@
-const express = require('express');
-const cors = require('cors');
-const helmet = require('helmet');
-const morgan = require('morgan');
-const compression = require('compression');
-const { errorHandler, notFound } = require('./shared/middleware/errorHandler');
-const { generalLimiter } = require('./shared/middleware/rateLimit');
 const Sentry = require('@sentry/node');
 const { nodeProfilingIntegration } = require('@sentry/profiling-node');
 
+// Sentry must be initialized before Express is imported so its Express
+// instrumentation can patch the module correctly.
 if (process.env.SENTRY_DSN) {
   Sentry.init({
     dsn: process.env.SENTRY_DSN,
@@ -18,6 +13,14 @@ if (process.env.SENTRY_DSN) {
     profilesSampleRate: 1.0,
   });
 }
+
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const compression = require('compression');
+const { errorHandler, notFound } = require('./shared/middleware/errorHandler');
+const { generalLimiter } = require('./shared/middleware/rateLimit');
 
 const app = express();
 
@@ -62,6 +65,10 @@ app.use('/api/payment/webhook', express.raw({ type: 'application/json' }), (req,
   next();
 });
 
+// Internal Backend <-> Worker webhooks: registered before the global JSON parser
+// because they verify an HMAC over the raw request body.
+app.use('/internal/webhooks', require('./modules/internal'));
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(morgan(process.env.NODE_ENV === 'development' ? 'dev' : 'combined', {
@@ -89,7 +96,7 @@ app.use('/api/contact',   require('./modules/contact'));
 app.use('/api/github',    require('./modules/github'));
 app.use('/api/deployments', require('./modules/deployment'));
 app.use('/api/ai-generate', require('./modules/ai-generate'));
-
+app.use('/api/ai-studio', require('./modules/ai-studio'));
 
 app.get("/debug-sentry", function mainHandler(req, res) {
   throw new Error("My first Sentry error!");

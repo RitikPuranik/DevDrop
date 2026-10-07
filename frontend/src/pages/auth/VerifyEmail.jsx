@@ -5,7 +5,6 @@ import api from "../../api/axios";
 const REDIRECT_SECONDS = 5;
 
 const CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap');
   
   :root {
     --accent: #f97316;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { Toaster } from "sonner";
@@ -8,40 +8,38 @@ import Loader from './components/loaders/LoadingScreen';
 import Navbar from './components/layout/Navbar';
 import Footer from './components/layout/Footer';
 import Home from './pages/marketing/Home';
-import About from './pages/marketing/AboutUs';
-import TemplatesPage from './pages/marketplace/Templates';
-import ContactUs from './pages/marketing/ContactUs';
-import ReviewPage from './pages/marketing/Review';
-import Profile from './pages/account/Profile';
-import Workspace from './pages/account/Workspace';
-import PurchaseAccess from './pages/marketplace/PurchaseAccess';
-import DeployProject from './pages/deployment/DeployProject';
-import DeployOwnProject from './pages/deployment/DeployOwnProject';
-import AiStudio from './pages/ai-studio/AiStudio';
+const About = lazy(() => import('./pages/marketing/AboutUs'));
+const TemplatesPage = lazy(() => import('./pages/marketplace/Templates'));
+const ContactUs = lazy(() => import('./pages/marketing/ContactUs'));
+const ReviewPage = lazy(() => import('./pages/marketing/Review'));
+const Profile = lazy(() => import('./pages/account/Profile'));
+const Workspace = lazy(() => import('./pages/account/Workspace'));
+const PurchaseAccess = lazy(() => import('./pages/marketplace/PurchaseAccess'));
+const DeployProject = lazy(() => import('./pages/deployment/DeployProject'));
+const DeployOwnProject = lazy(() => import('./pages/deployment/DeployOwnProject'));
+const AiStudio = lazy(() => import('./pages/ai-studio/AiStudio'));
 // PreviewWorkspace (WebContainer-based Genie preview) and bolt.diy
 // (iframe-embedded WebContainer preview, which couldn't run nested in an
 // iframe) are both gone. AI Studio now generates via Gemini and renders
 // with Sandpack, natively inside this app — see pages/ai-studio/AiStudio.jsx.
-import DeploymentDetails from './pages/deployment/DeploymentDetails';
-import VercelOAuthCallback from './pages/deployment/VercelOAuthCallback';
-import AdminPanel from "./pages/admin/AdminPanelPage";
-import WebsiteDetail from './pages/marketplace/WebsiteDetail';
-import Checkout from './pages/marketplace/Checkout';
-import VerifyEmail from './pages/auth/VerifyEmail';
-import ResetPassword from './pages/auth/ResetPassword';
-import Documentation from './pages/marketing/Documentation';
-import Terms from './pages/marketing/Terms';
-import Privacy from './pages/marketing/Privacy';
+const DeploymentDetails = lazy(() => import('./pages/deployment/DeploymentDetails'));
+const VercelOAuthCallback = lazy(() => import('./pages/deployment/VercelOAuthCallback'));
+const AdminPanel = lazy(() => import('./pages/admin/AdminPanelPage'));
+const WebsiteDetail = lazy(() => import('./pages/marketplace/WebsiteDetail'));
+const Checkout = lazy(() => import('./pages/marketplace/Checkout'));
+const VerifyEmail = lazy(() => import('./pages/auth/VerifyEmail'));
+const ResetPassword = lazy(() => import('./pages/auth/ResetPassword'));
+const Documentation = lazy(() => import('./pages/marketing/Documentation'));
+const Terms = lazy(() => import('./pages/marketing/Terms'));
+const Privacy = lazy(() => import('./pages/marketing/Privacy'));
 
 const HERO_VIDEO_SRC = '/dewdrop.s3.mp4';
 
 function AppContent() {
   const location = useLocation();
   const isBuilder = location.pathname === "/website";
-  // AiStudio.jsx is a full-bleed native chat+preview page (its own header,
-  // own "back to DevDrop" affordance) — same chrome-less treatment as /website.
-  // Replaces the old isPreviewWorkspace flag now that /ai-studio/preview/:jobId
-  // no longer exists.
+  // AI Studio owns its full-bleed workspace content, but keeps the global
+  // DevDrop navbar so it feels like a first-class page rather than a separate app.
   const isAiStudio = location.pathname.startsWith("/ai-studio");
   const isWorkspace = location.pathname.startsWith("/workspace") || location.pathname.startsWith("/dashboard");
   const isVerifyEmail = location.pathname === "/verify-email";
@@ -77,14 +75,18 @@ function AppContent() {
 
     setAppReady(true);
 
-    // Preload the shared hero video once so every viewport uses the same asset.
-    const vid = document.createElement('video');
+    // Reuse the hero video declared in index.html so the browser can discover
+    // the LCP resource before React executes. This is the same element later
+    // moved into the hero wrapper, so there is no duplicate video request.
+    const vid = document.getElementById('hero-lcp-video');
+    if (!vid) return;
+
     vid.muted = true;
     vid.playsInline = true;
     vid.preload = 'auto';
+    vid.fetchPriority = 'high';
     vid.loop = false;
-    vid.src = HERO_VIDEO_SRC;
-    vid.load();
+    vid.play().catch(() => {});
 
     preloadedVideoRef.current = vid;
     videoReadyRef.current.element = vid;
@@ -120,9 +122,10 @@ function AppContent() {
       {appReady && (
         <>
           {!isStandaloneAuthPage && !isAiStudio && <Loader suppressOnce={suppressNextLoader} />}
-          {!isBuilder && !isAiStudio && !isStandaloneAuthPage && <Navbar />}
+          {!isBuilder && !isStandaloneAuthPage && <Navbar />}
           <main className="bg-black min-h-screen">
-            <Routes>
+            <Suspense fallback={null}>
+              <Routes>
               <Route
                 path="/"
                 element={
@@ -155,7 +158,8 @@ function AppContent() {
               <Route path="/checkout/:id" element={<Checkout />} />
               <Route path="/verify-email" element={<VerifyEmail />} />
               <Route path="/reset-password" element={<ResetPassword />} />
-            </Routes>
+              </Routes>
+            </Suspense>
 
             <Toaster
               position="top-right"

@@ -35,23 +35,20 @@ describe('crypto (token encryption)', () => {
   it('throws a clear error when TOKEN_ENCRYPTION_KEY is not configured', () => {
     const original = process.env.TOKEN_ENCRYPTION_KEY;
     delete process.env.TOKEN_ENCRYPTION_KEY;
-    delete process.env.GITHUB_TOKEN_ENCRYPTION_KEY;
     jest.resetModules();
     const freshCrypto = require('../../../src/shared/utils/crypto');
     expect(() => freshCrypto.encrypt('x')).toThrow(/TOKEN_ENCRYPTION_KEY/);
     process.env.TOKEN_ENCRYPTION_KEY = original;
   });
 
-  it('falls back to GITHUB_TOKEN_ENCRYPTION_KEY when TOKEN_ENCRYPTION_KEY is unset', () => {
+  it( () => {
     const original = process.env.TOKEN_ENCRYPTION_KEY;
     delete process.env.TOKEN_ENCRYPTION_KEY;
-    process.env.GITHUB_TOKEN_ENCRYPTION_KEY = 'b'.repeat(64);
     jest.resetModules();
     const freshCrypto = require('../../../src/shared/utils/crypto');
     const payload = freshCrypto.encrypt('legacy-key-path');
     expect(freshCrypto.decrypt(payload)).toBe('legacy-key-path');
     process.env.TOKEN_ENCRYPTION_KEY = original;
-    delete process.env.GITHUB_TOKEN_ENCRYPTION_KEY;
   });
 
   it('rejects a key that is not 32 bytes', () => {

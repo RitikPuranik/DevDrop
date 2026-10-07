@@ -1,9 +1,17 @@
 import api from "./axios";
 
 export const aiGenerateAPI = {
-  // messages: [{ role: 'user'|'assistant', content: string }]
-  // fileData: { files: {path:{code}}, dependencies } | null — the currently
-  // generated project, sent back so follow-up prompts can build on it.
-  generate: (messages, fileData) =>
-    api.post("/ai-generate", { messages, fileData }),
+  generate: (messages, fileData, spec = {}) =>
+    api.post("/ai-generate", {
+      messages,
+      fileData,
+      websiteType: spec.websiteType,
+      userData: spec.userData,
+      preferences: spec.preferences,
+      assets: spec.assets,
+      projectId: spec.projectId,
+      conversation: spec.conversation,
+    }),
+  getJob: (jobId) => api.get(`/ai-generate/jobs/${jobId}`),
+  debugRetry: (jobId) => api.post(`/ai-generate/jobs/${jobId}/debug-retry`),
 };

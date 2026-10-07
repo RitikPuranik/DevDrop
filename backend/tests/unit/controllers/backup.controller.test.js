@@ -1,9 +1,12 @@
 // Real controller logic under test; the orchestrator it calls into is
 // mocked so no real Mongo/Supabase operations occur.
 jest.mock('../../../src/services/backup/backup.orchestrator');
+jest.mock('../../../src/services/worker.client');
 
 const orchestrator = require('../../../src/services/backup/backup.orchestrator');
-const { getStatus, getHistory, backupMongo, backupSupabase, backupFull } = require('../../../src/modules/backup/backup.controller');
+const workerClient = require('../../../src/services/worker.client');
+const taskRegistry = require('../../../src/services/taskRegistry.service');
+const { getStatus, getHistory, backupMongo, backupSupabase, backupFull, getTaskStatus } = require('../../../src/modules/backup/backup.controller');
 const { mockReq, mockRes } = require('../../helpers/mockQuery');
 
 describe('backup.controller', () => {
@@ -94,147 +97,87 @@ describe('backup.controller', () => {
     });
   });
 
-  describe('backupMongo', () => {
-    it('defaults direction to main_to_backup and mode to replace', async () => {
-      orchestrator.runMongoBackup.mockResolvedValue({ success: true });
+  // Backups are no longer run by the Backend: the controller validates, then
+  // dispatches a RUN_BACKUP task to the Worker and answers 202 immediately.
+  describe('dispatching to the worker', () => {
+    beforeEach(() => {
+      workerClient.dispatchTask.mockResolvedValue({ taskId: 'task-1' });
+    });
 
-      const req = mockReq({ body: {} });
+    it('backupMongo dispatches a mongo task with defaults and returns 202 with the taskId', async () => {
+      const req = mockReq({ body: {}, userId: 'admin1' });
       const res = mockRes();
       await backupMongo(req, res);
 
-      expect(orchestrator.runMongoBackup).toHaveBeenCalledWith({
-        direction: 'main_to_backup', trigger: 'manual', triggeredBy: 'user-1', mode: 'replace',
+      expect(workerClient.dispatchTask).toHaveBeenCalledWith('RUN_BACKUP', {
+        kind: 'mongo', direction: 'main_to_backup', mode: 'replace', triggeredBy: 'admin1',
       });
-      expect(res.json).toHaveBeenCalledWith({ success: true, message: 'MongoDB sync completed', data: { success: true } });
+      expect(res.status).toHaveBeenCalledWith(202);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        success: true,
+        data: { taskId: 'task-1', status: 'queued' },
+      }));
     });
 
-    it('accepts an explicit merge mode and backup_to_main direction', async () => {
-      orchestrator.runMongoBackup.mockResolvedValue({ success: true });
-
-      const req = mockReq({ body: { direction: 'backup_to_main', mode: 'merge' } });
-      const res = mockRes();
-      await backupMongo(req, res);
-
-      expect(orchestrator.runMongoBackup).toHaveBeenCalledWith(expect.objectContaining({ direction: 'backup_to_main', mode: 'merge' }));
+    it('backupMongo passes an explicit merge mode and backup_to_main direction', async () => {
+      const req = mockReq({ body: { direction: 'backup_to_main', mode: 'merge' }, userId: 'admin1' });
+      await backupMongo(req, mockRes());
+      expect(workerClient.dispatchTask).toHaveBeenCalledWith('RUN_BACKUP', expect.objectContaining({ kind: 'mongo', direction: 'backup_to_main', mode: 'merge' }));
     });
 
-    it('rejects an invalid direction with a 400 before calling the orchestrator', async () => {
-      const req = mockReq({ body: { direction: 'sideways' } });
+    it('backupSupabase dispatches a supabase task defaulting to mirror', async () => {
+      const req = mockReq({ body: {}, userId: 'admin1' });
       const res = mockRes();
-      await backupMongo(req, res);
-
-      expect(orchestrator.runMongoBackup).not.toHaveBeenCalled();
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({ success: false, message: "Invalid direction. Use 'main_to_backup' or 'backup_to_main'." });
+      await backupSupabase(req, res);
+      expect(workerClient.dispatchTask).toHaveBeenCalledWith('RUN_BACKUP', {
+        kind: 'supabase', direction: 'main_to_backup', supabaseMode: 'mirror', triggeredBy: 'admin1',
+      });
+      expect(res.status).toHaveBeenCalledWith(202);
     });
 
-    it('returns 400 when the orchestrator run itself fails', async () => {
-      orchestrator.runMongoBackup.mockRejectedValue(new Error('replica set unreachable'));
-
-      const req = mockReq({ body: {} });
+    it('backupFull dispatches a full task; restore direction uses restore wording', async () => {
+      const req = mockReq({ body: { direction: 'backup_to_main' }, userId: 'admin1' });
       const res = mockRes();
-      await backupMongo(req, res);
+      await backupFull(req, res);
+      expect(workerClient.dispatchTask).toHaveBeenCalledWith('RUN_BACKUP', {
+        kind: 'full', direction: 'backup_to_main', mode: 'replace', supabaseMode: 'mirror', triggeredBy: 'admin1',
+      });
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining('Restore from backup started') }));
+    });
 
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({ success: false, message: 'replica set unreachable' });
+    it('rejects an invalid direction / supabaseMode with 400 and never dispatches', async () => {
+      for (const [fn, body] of [[backupMongo, { direction: 'sideways' }], [backupSupabase, { supabaseMode: 'nope' }], [backupFull, { direction: 'x' }]]) {
+        const res = mockRes();
+        await fn(mockReq({ body }), res);
+        expect(res.status).toHaveBeenCalledWith(400);
+      }
+      expect(workerClient.dispatchTask).not.toHaveBeenCalled();
+    });
+
+    it('returns 503 when the worker cannot be reached', async () => {
+      workerClient.dispatchTask.mockRejectedValue(new Error('Worker dispatch failed: ECONNREFUSED'));
+      const res = mockRes();
+      await backupFull(mockReq({ body: {} }), res);
+      expect(res.status).toHaveBeenCalledWith(503);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: false, message: expect.stringContaining('Worker unavailable') }));
     });
   });
 
-  describe('backupSupabase', () => {
-    it('defaults supabaseMode to mirror', async () => {
-      orchestrator.runSupabaseBackup.mockResolvedValue({ success: true });
+  describe('getTaskStatus', () => {
+    beforeEach(() => taskRegistry.clear());
 
-      const req = mockReq({ body: {} });
+    it('returns the current task state', () => {
+      taskRegistry.create('t1', 'RUN_BACKUP');
+      taskRegistry.update('t1', { status: 'running' });
       const res = mockRes();
-      await backupSupabase(req, res);
-
-      expect(orchestrator.runSupabaseBackup).toHaveBeenCalledWith(expect.objectContaining({ supabaseMode: 'mirror' }));
-      expect(res.json).toHaveBeenCalledWith({ success: true, message: 'Supabase storage sync completed', data: { success: true } });
+      getTaskStatus(mockReq({ params: { taskId: 't1' } }), res);
+      expect(res.json).toHaveBeenCalledWith({ success: true, data: expect.objectContaining({ taskId: 't1', status: 'running' }) });
     });
 
-    it('rejects an invalid supabaseMode with a 400', async () => {
-      const req = mockReq({ body: { supabaseMode: 'nonsense' } });
+    it('returns 404 for an unknown task', () => {
       const res = mockRes();
-      await backupSupabase(req, res);
-
-      expect(orchestrator.runSupabaseBackup).not.toHaveBeenCalled();
-      expect(res.status).toHaveBeenCalledWith(400);
-    });
-
-    it('returns 400 when the sync fails', async () => {
-      orchestrator.runSupabaseBackup.mockRejectedValue(new Error('bucket missing'));
-
-      const req = mockReq({ body: {} });
-      const res = mockRes();
-      await backupSupabase(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({ success: false, message: 'bucket missing' });
-    });
-  });
-
-  describe('backupFull', () => {
-    it('returns 200 with a "completed" message for a successful main_to_backup run', async () => {
-      orchestrator.runFullBackup.mockResolvedValue({ status: 'success' });
-
-      const req = mockReq({ body: {} });
-      const res = mockRes();
-      await backupFull(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({ success: true, message: 'Backup completed', data: { status: 'success' } });
-    });
-
-    it('uses restore wording for a successful backup_to_main run', async () => {
-      orchestrator.runFullBackup.mockResolvedValue({ status: 'success' });
-
-      const req = mockReq({ body: { direction: 'backup_to_main' } });
-      const res = mockRes();
-      await backupFull(req, res);
-
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ message: 'Restore from backup completed' }));
-    });
-
-    it('returns 200 but success:true=false is not set for a "partial" outcome', async () => {
-      orchestrator.runFullBackup.mockResolvedValue({ status: 'partial' });
-
-      const req = mockReq({ body: {} });
-      const res = mockRes();
-      await backupFull(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true, message: 'Backup partial' }));
-    });
-
-    it('returns 500 with success:false for a "failed" outcome', async () => {
-      orchestrator.runFullBackup.mockResolvedValue({ status: 'failed' });
-
-      const req = mockReq({ body: {} });
-      const res = mockRes();
-      await backupFull(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: false, message: 'Backup failed' }));
-    });
-
-    it('returns 400 when direction/supabaseMode validation fails before the run', async () => {
-      const req = mockReq({ body: { supabaseMode: 'nonsense' } });
-      const res = mockRes();
-      await backupFull(req, res);
-
-      expect(orchestrator.runFullBackup).not.toHaveBeenCalled();
-      expect(res.status).toHaveBeenCalledWith(400);
-    });
-
-    it('returns 400 when the orchestrator throws unexpectedly', async () => {
-      orchestrator.runFullBackup.mockRejectedValue(new Error('unexpected crash'));
-
-      const req = mockReq({ body: {} });
-      const res = mockRes();
-      await backupFull(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({ success: false, message: 'unexpected crash' });
+      getTaskStatus(mockReq({ params: { taskId: 'missing' } }), res);
+      expect(res.status).toHaveBeenCalledWith(404);
     });
   });
 });

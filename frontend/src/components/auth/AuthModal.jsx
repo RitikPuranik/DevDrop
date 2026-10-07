@@ -137,11 +137,13 @@ export default function AuthModal({ isOpen, onClose }) {
     }
   }, [navigate, onClose]);
 
-  // Render Google buttons into every visible auth container.
+  // Google GSI mounts asynchronously. Keep retrying briefly while the modal
+  // finishes its transition instead of relying on one arbitrary timeout.
   const initGoogleButtons = useCallback(async () => {
-    if (!GOOGLE_CLIENT_ID) return;
+    if (!GOOGLE_CLIENT_ID || !isOpen || !shouldRender || isForgotPassword) return;
+
     await loadGSI();
-    if (!window.google?.accounts) return;
+    if (!window.google?.accounts?.id) return;
 
     if (!googleInitializedRef.current) {
       window.google.accounts.id.initialize({
@@ -152,31 +154,64 @@ export default function AuthModal({ isOpen, onClose }) {
       googleInitializedRef.current = true;
     }
 
-    const containers = document.querySelectorAll("[data-google-button]");
-    containers.forEach((container) => {
-      if (container.getClientRects().length === 0) return;
-      container.innerHTML = "";
-      window.google.accounts.id.renderButton(container, {
-        type: "standard",
-        shape: "pill",
-        theme: "outline",
-        size: "large",
-        text: "continue_with",
-        width: container.offsetWidth || 280,
-      });
+    const activeMode = isSignUp ? "signup" : "login";
+    const containers = Array.from(
+      document.querySelectorAll(`[data-google-button="${activeMode}"]`)
+    );
+
+    const visibleContainer = containers.find((container) => {
+      const style = window.getComputedStyle(container);
+      let node = container.parentElement;
+      while (node) {
+        const nodeStyle = window.getComputedStyle(node);
+        if (nodeStyle.display === "none" || nodeStyle.visibility === "hidden") return false;
+        node = node.parentElement;
+      }
+      return style.display !== "none" && style.visibility !== "hidden";
     });
-  }, [handleGoogleCredential]);
+
+    if (!visibleContainer) return false;
+
+    visibleContainer.innerHTML = "";
+    window.google.accounts.id.renderButton(visibleContainer, {
+      type: "standard",
+      shape: "rectangular",
+      theme: "outline",
+      size: "large",
+      text: "continue_with",
+      width: Math.min(400, Math.max(280, visibleContainer.clientWidth || 400)),
+    });
+    return true;
+  }, [handleGoogleCredential, isSignUp, isForgotPassword, isOpen, shouldRender]);
 
   useEffect(() => {
-    if (!isOpen || !shouldRender) return;
+    if (!isOpen || !shouldRender || isForgotPassword) return;
 
-    // Slight delay so the modal layout is ready before Google measures button width.
-    const timer = window.setTimeout(() => {
-      initGoogleButtons();
-    }, 100);
+    let cancelled = false;
+    let attempts = 0;
+    let timer;
 
-    return () => window.clearTimeout(timer);
-  }, [isOpen, shouldRender, initGoogleButtons]);
+    const attempt = async () => {
+      if (cancelled) return;
+      attempts += 1;
+      try {
+        const mounted = await initGoogleButtons();
+        if (!mounted && attempts < 20) {
+          timer = window.setTimeout(attempt, 150);
+        }
+      } catch (error) {
+        console.error("Google Sign-In initialization failed:", error);
+        if (attempts < 20) timer = window.setTimeout(attempt, 150);
+      }
+    };
+
+    attempt();
+
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [isOpen, shouldRender, isForgotPassword, isSignUp, initGoogleButtons]);
 
   // ── GitHub OAuth (popup + postMessage) ───────────────────────────────────────
   // Mirrors the popup pattern used for the GitHub *integration* connect flow
@@ -196,11 +231,54 @@ export default function AuthModal({ isOpen, onClose }) {
   useEffect(() => {
     const backendOrigin = getBackendOrigin();
 
+    const completeFromStorage = () => {
+      const token = localStorage.getItem("token");
+      const storedUser = localStorage.getItem("user");
+      if (!token || !storedUser) return false;
+
+      try {
+        const user = JSON.parse(storedUser);
+        if (!user?.id && !user?._id) return false;
+        localStorage.removeItem("devdrop_github_auth_complete");
+        finishGithubSignIn(token, user);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    const handleStorage = (event) => {
+      if (event.key === "devdrop_github_auth_complete" && event.newValue) {
+        completeFromStorage();
+        return;
+      }
+
+      // The callback page is on the frontend origin, so its token/user writes
+      // also generate storage events in this tab. Treat them as a fallback
+      // completion signal in case the dedicated marker was missed.
+      if ((event.key === "token" || event.key === "user") && event.newValue) {
+        completeFromStorage();
+        return;
+      }
+
+      if (event.key === "devdrop_github_auth_error" && event.newValue) {
+        try {
+          const payload = JSON.parse(event.newValue);
+          toast.error(payload?.message || "GitHub sign-in failed");
+        } catch {
+          toast.error("GitHub sign-in failed");
+        }
+        setGithubLoading(false);
+        clearInterval(githubPopupWatcherRef.current);
+      }
+    };
+
     const handleMessage = (event) => {
-      if (backendOrigin && event.origin !== backendOrigin) return;
+      if (event.origin !== window.location.origin) return;
+      if (githubPopupRef.current && event.source !== githubPopupRef.current) return;
       const { type, token, user, message } = event.data || {};
 
-      if (type === "github-auth-success") {
+      if (type === "github-auth-success" && token && user) {
         finishGithubSignIn(token, user);
       } else if (type === "github-auth-error") {
         toast.error(message || "GitHub sign-in failed");
@@ -216,10 +294,19 @@ export default function AuthModal({ isOpen, onClose }) {
     };
 
     window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, [finishGithubSignIn]);
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      window.removeEventListener("message", handleMessage);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, [finishGithubSignIn, isOpen]);
 
   const handleGithubAuth = () => {
+    try {
+      localStorage.removeItem("devdrop_github_auth_complete");
+      localStorage.removeItem("devdrop_github_auth_error");
+    } catch {}
     setGithubLoading(true);
     const popup = window.open(authAPI.githubAuthUrl(), "github-login-oauth", "width=600,height=720");
     githubPopupRef.current = popup;
@@ -376,7 +463,7 @@ export default function AuthModal({ isOpen, onClose }) {
                 <p className="text-[#8b7355] text-sm mb-5">Join DevDrop today</p>
 
                 <div className="w-full flex flex-col gap-2.5 mb-4">
-                  <div data-google-button className="w-full flex justify-center" />
+                  <div data-google-button="signup" className="w-full flex justify-center" />
                   <GithubAuthButton loading={githubLoading} disabled={githubLoading || googleLoading} onClick={handleGithubAuth} />
                 </div>
                 <Divider />
@@ -409,7 +496,7 @@ export default function AuthModal({ isOpen, onClose }) {
                 <p className="text-[#8b7355] text-sm mb-5">Please enter your credentials</p>
 
                 <div className="w-full flex flex-col gap-2.5 mb-4">
-                  <div data-google-button className="w-full flex justify-center" />
+                  <div data-google-button="login" className="w-full flex justify-center" />
                   <GithubAuthButton loading={githubLoading} disabled={githubLoading || googleLoading} onClick={handleGithubAuth} />
                 </div>
                 <Divider />
@@ -445,7 +532,7 @@ export default function AuthModal({ isOpen, onClose }) {
 
               {/* Google + GitHub buttons */}
               <div className="w-full flex flex-col gap-2.5 mb-3">
-                <div data-google-button className="w-full flex justify-center" />
+                <div data-google-button="signup" className="w-full flex justify-center" />
                 <GithubAuthButton loading={githubLoading} disabled={githubLoading || googleLoading} onClick={handleGithubAuth} />
               </div>
               <Divider />
@@ -482,7 +569,7 @@ export default function AuthModal({ isOpen, onClose }) {
 
                 {/* Google + GitHub buttons */}
                 <div className="w-full flex flex-col gap-2.5 mb-3">
-                  <div data-google-button className="w-full flex justify-center" />
+                  <div data-google-button="login" className="w-full flex justify-center" />
                   <GithubAuthButton loading={githubLoading} disabled={githubLoading || googleLoading} onClick={handleGithubAuth} />
                 </div>
                 <Divider />

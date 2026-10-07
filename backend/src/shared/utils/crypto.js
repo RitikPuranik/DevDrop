@@ -19,11 +19,10 @@ const IV_LENGTH = 12; // recommended IV length for GCM
 
 const getKey = () => {
   // TOKEN_ENCRYPTION_KEY is the preferred name now that this key protects
-  // more than just GitHub tokens. GITHUB_TOKEN_ENCRYPTION_KEY is still read
   // as a fallback so existing deployments don't need to rotate anything.
-  const hex = process.env.TOKEN_ENCRYPTION_KEY || process.env.GITHUB_TOKEN_ENCRYPTION_KEY;
+  const hex = process.env.TOKEN_ENCRYPTION_KEY;
   if (!hex) {
-    throw new Error('TOKEN_ENCRYPTION_KEY (or legacy GITHUB_TOKEN_ENCRYPTION_KEY) is not configured.');
+    throw new Error('TOKEN_ENCRYPTION_KEY is not configured.');
   }
   const key = Buffer.from(hex, 'hex');
   if (key.length !== 32) {

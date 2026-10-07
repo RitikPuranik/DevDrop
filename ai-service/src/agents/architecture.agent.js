@@ -1,0 +1,4 @@
+const { callGemini } = require('../services/llm.service');
+const SYSTEM = `You are the Architecture Agent. Turn requirements and design into a concrete minimal React + Vite + JavaScript project architecture. Architecture only, no source code. Every file needs path,type,responsibility,exports,imports. Return JSON only: {project:{framework:"react-vite",language:"javascript"},files:[...],dependencies:{},routes:[],dataModel:{}}. Use .js/.jsx only and avoid unnecessary dependencies. Uploaded assets are delivered as remote URLs at code-generation time: do not create files for them, do not reference /public or filename paths, and where mediaPlan has entries make sure the planned sections/components exist to host them (and a resume View/Download action when requirements.assets contains a resume).`;
+async function run({ requirements, design, mediaPlan = [] }) { return callGemini({ system: SYSTEM, input: { requirements, design, mediaPlan } }); }
+module.exports = { run };
