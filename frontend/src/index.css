@@ -1,7 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&display=swap');
 @import "tailwindcss";
 
 :root {
@@ -21,6 +17,13 @@
 }
 .font-napkin-display {
   font-family: var(--font-napkin-display);
+}
+
+/* Editorial display face for the home page's refined sections. */
+.font-display {
+  font-family: 'Cormorant Garamond', 'Playfair Display', Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.015em;
 }
 
 /* Product-UI surfaces (Workspace, Profile, Deploy flows) use a plain,
@@ -178,4 +181,17 @@ h1, h2, h3 {
   .skeleton-shimmer::after {
     animation: none;
   }
+}
+
+/* ── Sandpack height overrides ──
+   Force the Sandpack provider's internal wrapper to fill all available
+   height so the preview iframe stretches to the bottom of the panel. */
+.sp-wrapper {
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+.sp-wrapper > .sp-layout {
+  flex: 1 !important;
+  min-height: 0 !important;
 }
