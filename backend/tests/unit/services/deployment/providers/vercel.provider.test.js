@@ -328,7 +328,16 @@ describe('vercel.provider', () => {
 
       const result = await provider.getDeploymentStatus('token', {}, 'dpl_1');
 
-      expect(result).toEqual({ state, isTerminal, isSuccess, url: 'https://my-app.vercel.app' });
+      expect(result).toEqual({ state, isTerminal, isSuccess, url: 'https://my-app.vercel.app', aliases: [] });
+    });
+
+    it('exposes production aliases (public even when the unique deployment URL is protected)', async () => {
+      const get = jest.fn().mockResolvedValue({ data: { readyState: 'READY', url: 'my-app-abc-team.vercel.app', alias: ['my-app.vercel.app'] } });
+      axios.create = jest.fn(() => ({ get }));
+
+      const result = await provider.getDeploymentStatus('token', {}, 'dpl_1');
+
+      expect(result.aliases).toEqual(['my-app.vercel.app']);
     });
   });
 

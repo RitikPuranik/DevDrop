@@ -7,6 +7,7 @@ import IntroLoader from './components/loaders/IntroLoader';
 import Loader from './components/loaders/LoadingScreen';
 import Navbar from './components/layout/Navbar';
 import Footer from './components/layout/Footer';
+import KashiAssistant from './components/kashi/KashiAssistant';
 import Home from './pages/marketing/Home';
 const About = lazy(() => import('./pages/marketing/AboutUs'));
 const TemplatesPage = lazy(() => import('./pages/marketplace/Templates'));
@@ -176,6 +177,7 @@ function AppContent() {
           </main>
 
           {!isBuilder && !isWorkspace && !isAiStudio && !isStandaloneAuthPage && <Footer />}
+          {!isBuilder && !isStandaloneAuthPage && !showIntro && <KashiAssistant side={isAiStudio ? 'left' : 'right'} />}
         </>
       )}
     </>

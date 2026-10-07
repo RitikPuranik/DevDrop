@@ -9,6 +9,7 @@ const navTabs = [
     { id: "payouts", name: "Payouts", icon: <DollarSign size={16} /> },
     { id: "backup", name: "Backup", icon: <DatabaseBackup size={16} /> },
     { id: "gemini-pool", name: "Gemini Pool", icon: <KeyRound size={16} /> },
+    { id: "groq-pool", name: "Groq Pool", icon: <KeyRound size={16} /> },
 ];
 
 export default function AdminNav({ activeTab, onTabChange }) {

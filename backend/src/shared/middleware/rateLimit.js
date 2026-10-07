@@ -163,7 +163,18 @@ const aiJobPollingLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Kashi chat limiter — it calls an LLM, so cap per user (or IP when logged out).
+const kashiChatLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: readEnvNumber('KASHI_CHAT_RATE_LIMIT_MAX', 30),
+  keyGenerator: (req) => (req.userId ? req.userId.toString() : req.ip),
+  message: { success: false, message: 'Kashi needs a breather — please wait a minute and try again.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 module.exports = {
+  kashiChatLimiter,
   generalLimiter,
   authLimiter,
   downloadLimiter,

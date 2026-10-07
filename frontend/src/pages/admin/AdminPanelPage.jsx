@@ -11,6 +11,7 @@ import PayoutsSection from './sections/PayoutsSection';
 import BackupSection from './sections/BackupSection';
 import CouponsSection from './sections/CouponsSection';
 import GeminiPoolSection from './sections/GeminiPoolSection';
+import GroqPoolSection from './sections/GroqPoolSection';
 
 export default function AdminPanel() {
   const navigate = useNavigate();
@@ -101,6 +102,9 @@ export default function AdminPanel() {
             </div>
             <div className={activeTab === 'gemini-pool' ? 'block' : 'hidden'}>
               <GeminiPoolSection />
+            </div>
+            <div className={activeTab === 'groq-pool' ? 'block' : 'hidden'}>
+              <GroqPoolSection />
             </div>
           </>
         )}

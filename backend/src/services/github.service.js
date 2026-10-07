@@ -328,6 +328,36 @@ const getFileContent = async (accessToken, owner, repo, path, ref) => {
   }
 };
 
+/**
+ * Commits UTF-8 text files onto an existing branch in ONE commit (Git Data
+ * API: blobs -> tree on top of the branch's current tree -> commit -> ref).
+ * Used by Kashi to push a build fix. The ref update is NOT forced, so if the
+ * branch moved while we were working GitHub rejects it (422) instead of
+ * overwriting someone's commit.
+ *
+ * @returns {Promise<string>} the new commit sha
+ */
+const commitFilesToBranch = async (accessToken, owner, repo, branch, { message, files }) => {
+  const api = githubApi(accessToken);
+  const { data: ref } = await api.get(`/repos/${owner}/${repo}/git/ref/heads/${encodeURI(branch)}`);
+  const parentSha = ref.object.sha;
+  const { data: parent } = await api.get(`/repos/${owner}/${repo}/git/commits/${parentSha}`);
+
+  const treeEntries = [];
+  for (const file of files) {
+    const { data: blob } = await api.post(`/repos/${owner}/${repo}/git/blobs`, {
+      content: Buffer.from(file.content, 'utf8').toString('base64'),
+      encoding: 'base64',
+    });
+    treeEntries.push({ path: file.path, mode: file.mode || '100644', type: 'blob', sha: blob.sha });
+  }
+
+  const { data: tree } = await api.post(`/repos/${owner}/${repo}/git/trees`, { base_tree: parent.tree.sha, tree: treeEntries });
+  const { data: commit } = await api.post(`/repos/${owner}/${repo}/git/commits`, { message, tree: tree.sha, parents: [parentSha] });
+  await api.patch(`/repos/${owner}/${repo}/git/refs/heads/${encodeURI(branch)}`, { sha: commit.sha, force: false });
+  return commit.sha;
+};
+
 module.exports = {
   isGithubConfigured,
   isGithubLoginConfigured,
@@ -349,4 +379,5 @@ module.exports = {
   getRepository,
   getRepoTree,
   getFileContent,
+  commitFilesToBranch,
 };

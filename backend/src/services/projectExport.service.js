@@ -344,7 +344,62 @@ export default defineConfig({
 });
 `;
 const AI_STUDIO_DEFAULT_INDEX_HTML = '<!doctype html>\n<html lang="en">\n  <head>\n    <meta charset="UTF-8" />\n    <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n    <title>__TITLE__</title>\n    <script src="https://cdn.tailwindcss.com"></script>\n  </head>\n  <body>\n    <div id="root"></div>\n    <script type="module" src="/main.jsx"></script>\n  </body>\n</html>\n';
-const AI_STUDIO_DEFAULT_MAIN_JSX = 'import React from "react";\nimport { createRoot } from "react-dom/client";\nimport App from "./App.js";\n\ncreateRoot(document.getElementById("root")).render(<React.StrictMode><App /></React.StrictMode>);\n';
+const AI_STUDIO_DEFAULT_MAIN_JSX = [
+  'import React from "react";',
+  'import { createRoot } from "react-dom/client";',
+  'import App from "./App.js";',
+  '',
+  '// A render error must never leave a black screen: show it, and log it.',
+  'class RootErrorBoundary extends React.Component {',
+  '  constructor(props) { super(props); this.state = { error: null }; }',
+  '  static getDerivedStateFromError(error) { return { error }; }',
+  '  componentDidCatch(error, info) { console.error("[site] render error:", error, info && info.componentStack); }',
+  '  render() {',
+  '    if (!this.state.error) return this.props.children;',
+  '    return (',
+  '      <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24, fontFamily: "system-ui, sans-serif", background: "#fff", color: "#111" }}>',
+  '        <div style={{ maxWidth: 560 }}>',
+  '          <h1 style={{ fontSize: 22, margin: "0 0 8px" }}>This page hit an error</h1>',
+  '          <pre style={{ whiteSpace: "pre-wrap", fontSize: 13, opacity: 0.8 }}>{String(this.state.error && this.state.error.message || this.state.error)}</pre>',
+  '        </div>',
+  '      </div>',
+  '    );',
+  '  }',
+  '}',
+  '',
+  'createRoot(document.getElementById("root")).render(<React.StrictMode><RootErrorBoundary><App /></RootErrorBoundary></React.StrictMode>);',
+  '',
+].join('\n');
+
+// Same rule the in-browser preview installs with (--legacy-peer-deps). Without it
+// Vercel's plain `npm install` aborts with ERESOLVE on peer-range mismatches that
+// the preview silently tolerated: "works in preview, fails on Vercel".
+const AI_STUDIO_NPMRC = 'legacy-peer-deps=true\n';
+const AI_STUDIO_VERCEL_JSON = JSON.stringify({
+  framework: 'vite',
+  installCommand: 'npm install',
+  buildCommand: 'npm run build',
+  outputDirectory: 'dist',
+  rewrites: [{ source: '/(.*)', destination: '/index.html' }],
+}, null, 2) + '\n';
+// The scaffold's vite.config.js uses transformWithEsbuild (present up to Vite 7),
+// so Vite / the React plugin must not be replaced by an older/newer range the
+// model happened to write into its package.json.
+const AI_STUDIO_PINNED_DEV_DEPS = { vite: '^7.0.0', '@vitejs/plugin-react': '^5.0.0' };
+
+/**
+ * A generated index.html must contain the #root mount node and point at an entry
+ * file that exists in the project; otherwise the build "succeeds" and the page is
+ * blank. Falls back to the known-good default instead of shipping a dead shell.
+ */
+const entryIsUsable = (indexHtml, files) => {
+  if (!/id=["']root["']/.test(indexHtml)) return false;
+  const m = indexHtml.match(/<script[^>]*\btype=["']module["'][^>]*\bsrc=["']([^"']+)["']/i)
+    || indexHtml.match(/<script[^>]*\bsrc=["']([^"']+)["'][^>]*\btype=["']module["']/i);
+  if (!m) return false;
+  const src = m[1].replace(/^\/+/, '').split('?')[0];
+  return Object.prototype.hasOwnProperty.call(files, `/${src}`);
+};
 
 const fileToText = (value) => {
   if (typeof value === 'string') return value;
@@ -381,12 +436,19 @@ const buildAiStudioRepoFiles = (project) => {
   pkg.type = pkg.type || 'module';
   pkg.scripts = { dev: 'vite', build: 'vite build', preview: 'vite preview', ...(pkg.scripts || {}) };
   pkg.dependencies = { react: '^19.0.0', 'react-dom': '^19.0.0', ...(pkg.dependencies || {}), ...(project.dependencies || {}) };
-  pkg.devDependencies = { vite: '^7.0.0', '@vitejs/plugin-react': '^5.0.0', ...(pkg.devDependencies || {}) };
+  const usesDefaultViteConfig = !out['/vite.config.js'] && !out['/vite.config.mjs'];
+  pkg.devDependencies = { ...AI_STUDIO_PINNED_DEV_DEPS, ...(pkg.devDependencies || {}) };
+  if (usesDefaultViteConfig) Object.assign(pkg.devDependencies, AI_STUDIO_PINNED_DEV_DEPS);
+  // Vite 7 needs Node >= 20.19; pin a Node line Vercel supports so the build never runs on an older default.
+  pkg.engines = { node: '22.x', ...(pkg.engines || {}) };
   out['/package.json'] = JSON.stringify(pkg, null, 2);
 
-  if (!out['/index.html']) out['/index.html'] = AI_STUDIO_DEFAULT_INDEX_HTML.replace('__TITLE__', escapeHtml(title));
+  const defaultIndex = AI_STUDIO_DEFAULT_INDEX_HTML.replace('__TITLE__', escapeHtml(title));
   if (!out['/main.jsx'] && !out['/main.js'] && !out['/src/main.jsx']) out['/main.jsx'] = AI_STUDIO_DEFAULT_MAIN_JSX;
-  if (!out['/vite.config.js'] && !out['/vite.config.mjs']) out['/vite.config.js'] = AI_STUDIO_DEFAULT_VITE_CONFIG;
+  if (!out['/index.html'] || !entryIsUsable(out['/index.html'], out)) out['/index.html'] = defaultIndex;
+  if (usesDefaultViteConfig) out['/vite.config.js'] = AI_STUDIO_DEFAULT_VITE_CONFIG;
+  if (!out['/.npmrc']) out['/.npmrc'] = AI_STUDIO_NPMRC;
+  if (!out['/vercel.json']) out['/vercel.json'] = AI_STUDIO_VERCEL_JSON;
   if (!out['/.gitignore']) out['/.gitignore'] = 'node_modules\ndist\n.env\n.env.*\n!.env.example\n.DS_Store\n';
   if (!Object.keys(out).some((k) => README_PATTERN.test(k.slice(1)))) {
     out['/README.md'] = `# ${title}\n\nGenerated with [DevDrop AI Studio](https://dev-drop-gamma.vercel.app).\n\n## Getting Started\n\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n\nBuild for production with \`npm run build\`.\n`;

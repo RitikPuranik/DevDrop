@@ -253,7 +253,46 @@ const getDeploymentStatus = async (credential, metadata, deployId) => {
     isTerminal: ['READY', 'ERROR', 'CANCELED'].includes(state),
     isSuccess: state === 'READY',
     url: data.url ? `https://${data.url}` : null,
+    // Production aliases (e.g. my-site.vercel.app) are public even when the unique deployment URL sits behind Deployment Protection.
+    aliases: Array.isArray(data.alias) ? data.alias : [],
   };
+};
+
+/** Vercel's own summary of why a deployment errored (fallback when no build log is available). */
+const getDeploymentError = async (credential, metadata, deployId) => {
+  const { data } = await vercelApi(credential, metadata?.teamId).get(`/v13/deployments/${deployId}`);
+  return { errorCode: data.errorCode || null, errorMessage: data.errorMessage || null };
+};
+
+/** The GitHub repo id Vercel linked to a project (needed to trigger a git deployment). */
+const getProjectRepoId = async (credential, metadata, projectId) => {
+  const { data } = await vercelApi(credential, metadata?.teamId).get(`/v9/projects/${projectId}`);
+  return { repoId: data.link?.repoId || null, projectName: data.name };
+};
+
+/** Plain-text build log of a deployment (stdout/stderr/command lines, in order). */
+const getBuildLogs = async (credential, metadata, deployId) => {
+  const { data } = await vercelApi(credential, metadata?.teamId).get(`/v3/deployments/${deployId}/events`, {
+    params: { builds: 1, direction: 'forward', limit: -1 },
+  });
+  const events = Array.isArray(data) ? data : data?.events || [];
+  return events
+    .map((e) => e?.text ?? e?.payload?.text ?? '')
+    .filter((line) => typeof line === 'string' && line.length)
+    .join('\n');
+};
+
+/** Most recent deployments of a project (newest first). */
+const listProjectDeployments = async (credential, metadata, projectId, limit = 10) => {
+  const { data } = await vercelApi(credential, metadata?.teamId).get('/v6/deployments', { params: { projectId, limit } });
+  return (data?.deployments || []).map((d) => ({
+    id: d.uid || d.id,
+    state: d.readyState || d.state,
+    url: d.url ? `https://${d.url}` : null,
+    createdAt: d.created || d.createdAt || 0,
+    target: d.target || null,
+    commitSha: d.meta?.githubCommitSha || null,
+  }));
 };
 
 /** Best-effort — used when a user cancels a deployment that's still
@@ -279,5 +318,9 @@ module.exports = {
   configureEnvironment,
   deploy,
   getDeploymentStatus,
+  getDeploymentError,
+  getProjectRepoId,
+  getBuildLogs,
+  listProjectDeployments,
   cancelDeployment,
 };

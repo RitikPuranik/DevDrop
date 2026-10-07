@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { deploymentAPI } from '../../api/deployment';
+import KashiFixPanel from '../../components/kashi/KashiFixPanel';
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -113,6 +114,7 @@ export default function DeploymentDetails() {
           {deployment.isActive && <ProgressView deployment={deployment} />}
           {deployment.status === 'SUCCESS' && <SuccessView deployment={deployment} onRedeploy={handleRedeploy} redeploying={redeploying} />}
           {deployment.status === 'FAILED' && <FailedView deployment={deployment} onRedeploy={handleRedeploy} redeploying={redeploying} />}
+          {['FAILED', 'SUCCESS'].includes(deployment.status) && <KashiFixPanel deployment={deployment} onChanged={fetchDeployment} />}
           {deployment.status === 'CANCELLED' && <CancelledView deployment={deployment} onRedeploy={handleRedeploy} redeploying={redeploying} />}
         </motion.div>
       </div>
