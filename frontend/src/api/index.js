@@ -12,4 +12,4 @@ export { analyticsAPI } from "./analytics";
 export { payoutAPI } from "./payout";
 export { adminAPI } from "./admin";
 export { deploymentAPI } from "./deployment";
-export { aiStudioAPI } from "./aiStudio";
+export { aiStudioAPI } from "./aiStudio";export { kashiAPI } from "./kashi";

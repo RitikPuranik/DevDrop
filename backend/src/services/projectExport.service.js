@@ -4,6 +4,8 @@ const ignore = require('ignore');
 const axios = require('axios');
 
 const Website = require('../modules/website/website.model');
+const AIStudioProject = require('../modules/ai-studio/aiStudioProject.model');
+const { normalizeProjectFiles } = require('./ai-studio/aiStudioZip.service');
 const Purchase = require('../modules/payment/purchase.model');
 const ProjectExport = require('../modules/github/projectExport.model');
 const GithubConnection = require('../modules/github/githubConnection.model');
@@ -317,10 +319,257 @@ const runExport = async (exportId) => {
   }
 };
 
+// ─────────────────────────────────────────
+// AI STUDIO EXPORT
+// ─────────────────────────────────────────
+// Same GitHub pipeline as runExport, but the source is the persisted
+// AIStudioProject.files map (the source of truth the project.zip is derived
+// from) instead of a purchased ZIP -- so no Purchase/Website is involved.
+
+const AI_STUDIO_DEFAULT_VITE_CONFIG = `import { defineConfig, transformWithEsbuild } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [
+    {
+      name: 'treat-js-files-as-jsx',
+      async transform(code, id) {
+        if (!id.match(/\\.js$/)) return null;
+        return transformWithEsbuild(code, id, { loader: 'jsx', jsx: 'automatic' });
+      },
+    },
+    react(),
+  ],
+  optimizeDeps: { esbuildOptions: { loader: { '.js': 'jsx' } } },
+});
+`;
+const AI_STUDIO_DEFAULT_INDEX_HTML = '<!doctype html>\n<html lang="en">\n  <head>\n    <meta charset="UTF-8" />\n    <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n    <title>__TITLE__</title>\n    <script src="https://cdn.tailwindcss.com"></script>\n  </head>\n  <body>\n    <div id="root"></div>\n    <script type="module" src="/main.jsx"></script>\n  </body>\n</html>\n';
+const AI_STUDIO_DEFAULT_MAIN_JSX = [
+  'import React from "react";',
+  'import { createRoot } from "react-dom/client";',
+  'import App from "./App.js";',
+  '',
+  '// A render error must never leave a black screen: show it, and log it.',
+  'class RootErrorBoundary extends React.Component {',
+  '  constructor(props) { super(props); this.state = { error: null }; }',
+  '  static getDerivedStateFromError(error) { return { error }; }',
+  '  componentDidCatch(error, info) { console.error("[site] render error:", error, info && info.componentStack); }',
+  '  render() {',
+  '    if (!this.state.error) return this.props.children;',
+  '    return (',
+  '      <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24, fontFamily: "system-ui, sans-serif", background: "#fff", color: "#111" }}>',
+  '        <div style={{ maxWidth: 560 }}>',
+  '          <h1 style={{ fontSize: 22, margin: "0 0 8px" }}>This page hit an error</h1>',
+  '          <pre style={{ whiteSpace: "pre-wrap", fontSize: 13, opacity: 0.8 }}>{String(this.state.error && this.state.error.message || this.state.error)}</pre>',
+  '        </div>',
+  '      </div>',
+  '    );',
+  '  }',
+  '}',
+  '',
+  'createRoot(document.getElementById("root")).render(<React.StrictMode><RootErrorBoundary><App /></RootErrorBoundary></React.StrictMode>);',
+  '',
+].join('\n');
+
+// Same rule the in-browser preview installs with (--legacy-peer-deps). Without it
+// Vercel's plain `npm install` aborts with ERESOLVE on peer-range mismatches that
+// the preview silently tolerated: "works in preview, fails on Vercel".
+const AI_STUDIO_NPMRC = 'legacy-peer-deps=true\n';
+const AI_STUDIO_VERCEL_JSON = JSON.stringify({
+  framework: 'vite',
+  installCommand: 'npm install',
+  buildCommand: 'npm run build',
+  outputDirectory: 'dist',
+  rewrites: [{ source: '/(.*)', destination: '/index.html' }],
+}, null, 2) + '\n';
+// The scaffold's vite.config.js uses transformWithEsbuild (present up to Vite 7),
+// so Vite / the React plugin must not be replaced by an older/newer range the
+// model happened to write into its package.json.
+const AI_STUDIO_PINNED_DEV_DEPS = { vite: '^7.0.0', '@vitejs/plugin-react': '^5.0.0' };
+
+// AI Studio generations sometimes arrive wrapped in a single top-level folder
+// such as `app/`. Preview can still render those files because it reads the
+// persisted source map directly, but a GitHub/Vercel deployment can then point
+// at the repository root and serve `/app/src/*.tsx` as raw source. Flatten only
+// when that wrapper contains a real application root (package.json or
+// index.html), so ordinary nested source layouts are left untouched.
+const flattenAiStudioRootWrapper = (files) => {
+  const entries = Object.entries(files || {});
+  if (!entries.length) return files;
+
+  const topLevel = new Set(entries.map(([key]) => key.replace(/^\/+/, '').split('/')[0]));
+  if (topLevel.size !== 1) return files;
+
+  const [wrapper] = topLevel;
+  const prefix = `/${wrapper}/`;
+  const hasAppRoot = Boolean(files[`${prefix}package.json`] || files[`${prefix}index.html`]);
+  if (!hasAppRoot) return files;
+
+  const flattened = {};
+  for (const [key, value] of entries) {
+    const clean = key.replace(/^\/+/, '');
+    if (clean === wrapper) continue;
+    if (!clean.startsWith(`${wrapper}/`)) {
+      flattened[`/${clean}`] = value;
+      continue;
+    }
+    flattened[`/${clean.slice(wrapper.length + 1)}`] = value;
+  }
+  return flattened;
+};
+
+/**
+ * A generated index.html must contain the #root mount node and point at an entry
+ * file that exists in the project; otherwise the build "succeeds" and the page is
+ * blank. Falls back to the known-good default instead of shipping a dead shell.
+ */
+const entryIsUsable = (indexHtml, files) => {
+  if (!/id=["']root["']/.test(indexHtml)) return false;
+  const m = indexHtml.match(/<script[^>]*\btype=["']module["'][^>]*\bsrc=["']([^"']+)["']/i)
+    || indexHtml.match(/<script[^>]*\bsrc=["']([^"']+)["'][^>]*\btype=["']module["']/i);
+  if (!m) return false;
+  const src = m[1].replace(/^\/+/, '').split('?')[0];
+  return Object.prototype.hasOwnProperty.call(files, `/${src}`);
+};
+
+const fileToText = (value) => {
+  if (typeof value === 'string') return value;
+  if (value && typeof value.code === 'string') return value.code;
+  if (value === null || value === undefined) return '';
+  return JSON.stringify(value, null, 2);
+};
+
+const escapeHtml = (v) => String(v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+/**
+ * Turns an AIStudioProject into a deployable Vite + React repo file list:
+ * generated files + any missing scaffold (package.json, index.html, main.jsx,
+ * vite.config.js), .gitignore and README. Never overrides a scaffold file the
+ * pipeline already produced.
+ */
+const buildAiStudioRepoFiles = (project) => {
+  const flat = {};
+  for (const [filePath, value] of Object.entries(project.files || {})) {
+    const safe = toSafeRelativePath(String(filePath).replace(/^\/+/, ''));
+    if (!safe || isAlwaysExcluded(safe)) continue;
+    flat[`/${safe}`] = fileToText(value);
+  }
+  const out = normalizeProjectFiles(flattenAiStudioRootWrapper(flat));
+  const title = project.title || 'DevDrop Site';
+  const slug = sanitizeRepoName(title);
+
+  let pkg = null;
+  try { pkg = out['/package.json'] ? JSON.parse(out['/package.json']) : null; } catch { pkg = null; }
+  pkg = pkg || {};
+  pkg.name = pkg.name || slug;
+  pkg.private = true;
+  pkg.version = pkg.version || '1.0.0';
+  pkg.type = pkg.type || 'module';
+  pkg.scripts = { dev: 'vite', build: 'vite build', preview: 'vite preview', ...(pkg.scripts || {}) };
+  pkg.dependencies = { react: '^19.0.0', 'react-dom': '^19.0.0', ...(pkg.dependencies || {}), ...(project.dependencies || {}) };
+  const usesDefaultViteConfig = !out['/vite.config.js'] && !out['/vite.config.mjs'];
+  pkg.devDependencies = { ...AI_STUDIO_PINNED_DEV_DEPS, ...(pkg.devDependencies || {}) };
+  if (usesDefaultViteConfig) Object.assign(pkg.devDependencies, AI_STUDIO_PINNED_DEV_DEPS);
+  // Vite 7 needs Node >= 20.19; pin a Node line Vercel supports so the build never runs on an older default.
+  pkg.engines = { node: '22.x', ...(pkg.engines || {}) };
+  out['/package.json'] = JSON.stringify(pkg, null, 2);
+
+  const defaultIndex = AI_STUDIO_DEFAULT_INDEX_HTML.replace('__TITLE__', escapeHtml(title));
+  if (!out['/main.jsx'] && !out['/main.js'] && !out['/src/main.jsx']) out['/main.jsx'] = AI_STUDIO_DEFAULT_MAIN_JSX;
+  if (!out['/index.html'] || !entryIsUsable(out['/index.html'], out)) out['/index.html'] = defaultIndex;
+  if (usesDefaultViteConfig) out['/vite.config.js'] = AI_STUDIO_DEFAULT_VITE_CONFIG;
+  if (!out['/.npmrc']) out['/.npmrc'] = AI_STUDIO_NPMRC;
+  if (!out['/vercel.json']) out['/vercel.json'] = AI_STUDIO_VERCEL_JSON;
+  if (!out['/.gitignore']) out['/.gitignore'] = 'node_modules\ndist\n.env\n.env.*\n!.env.example\n.DS_Store\n';
+  if (!Object.keys(out).some((k) => README_PATTERN.test(k.slice(1)))) {
+    out['/README.md'] = `# ${title}\n\nGenerated with [DevDrop AI Studio](https://dev-drop-gamma.vercel.app).\n\n## Getting Started\n\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n\nBuild for production with \`npm run build\`.\n`;
+  }
+
+  return Object.entries(out).map(([filePath, content]) => ({
+    relativePath: filePath.replace(/^\/+/, ''),
+    buffer: Buffer.from(content, 'utf8'),
+  }));
+};
+
+const runAiStudioExport = async (exportId) => {
+  const exportDoc = await ProjectExport.findById(exportId);
+  if (!exportDoc) return;
+
+  try {
+    exportDoc.status = EXPORT_STATUS.PROCESSING;
+    await exportDoc.save();
+
+    const [project, connection] = await Promise.all([
+      AIStudioProject.findOne({ _id: exportDoc.aiStudioProjectId, userId: exportDoc.userId }),
+      GithubConnection.findOne({ userId: exportDoc.userId }).select('+accessTokenEncrypted'),
+    ]);
+    if (!project) throw new Error('PROJECT_MISSING');
+    if (!connection) throw new Error('NOT_CONNECTED');
+    if (!project.files || Object.keys(project.files).length === 0) throw new Error('NO_FILES');
+
+    const accessToken = cryptoUtil.decrypt(connection.accessTokenEncrypted);
+    const files = buildAiStudioRepoFiles(project);
+    if (files.length > MAX_EXPORT_FILES) throw new Error('NO_FILES');
+
+    let repo;
+    try {
+      repo = await githubService.createRepository(accessToken, {
+        name: exportDoc.repositoryName,
+        description: exportDoc.description,
+        isPrivate: exportDoc.visibility === 'private',
+      });
+    } catch (err) {
+      if (githubService.isRepoNameTakenError(err)) throw new Error('NAME_TAKEN');
+      if (githubService.isAuthError(err)) throw new Error('AUTH_EXPIRED');
+      throw err;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
+    const blobEntries = await mapWithConcurrency(files, BLOB_UPLOAD_CONCURRENCY, async (file) => {
+      const sha = await githubService.createBlob(accessToken, repo.owner, repo.name, file.buffer.toString('base64'));
+      return { path: file.relativePath, mode: '100644', type: 'blob', sha };
+    });
+
+    const treeSha = await githubService.createTree(accessToken, repo.owner, repo.name, blobEntries);
+    const commitSha = await githubService.createCommit(accessToken, repo.owner, repo.name, {
+      message: `Initial commit — generated with DevDrop AI Studio (${project.title || 'site'})`,
+      treeSha,
+      parents: [],
+    });
+    await githubService.updateRef(accessToken, repo.owner, repo.name, repo.defaultBranch, commitSha);
+
+    exportDoc.status = EXPORT_STATUS.SUCCESS;
+    exportDoc.repositoryUrl = repo.htmlUrl;
+    exportDoc.repositoryOwner = repo.owner;
+    exportDoc.repositoryName = repo.name;
+    exportDoc.defaultBranch = repo.defaultBranch;
+    exportDoc.fileCount = files.length;
+    exportDoc.errorMessage = undefined;
+    await exportDoc.save();
+  } catch (error) {
+    console.error(`AI Studio GitHub export ${exportId} failed:`, error.message);
+    const friendly = {
+      PROJECT_MISSING: 'This AI Studio project is no longer available. Regenerate it and try again.',
+      NOT_CONNECTED: 'Your GitHub connection is missing. Please reconnect and try again.',
+      NO_FILES: 'This project has no generated files to push yet.',
+      NAME_TAKEN: 'A repository with this name already exists in your GitHub account. Please choose another name.',
+      AUTH_EXPIRED: 'Your GitHub authorization has expired. Please reconnect GitHub and try again.',
+    };
+    let safeMessage = friendly[error.message];
+    if (!safeMessage && error?.response?.status === 409) {
+      safeMessage = 'GitHub was still setting up the new repository and kept rejecting the upload. Please try again in a minute.';
+    }
+    await markFailed(exportDoc, safeMessage || 'We hit an unexpected error while pushing this project to GitHub. Please try again.');
+  }
+};
+
 module.exports = {
   sanitizeRepoName,
   isValidRepoName,
   extractExportableFiles,
   generateReadmeContent,
   runExport,
+  runAiStudioExport,
+  buildAiStudioRepoFiles,
 };

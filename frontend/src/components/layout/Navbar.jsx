@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import LinkTransition from '../navigation/TransitionLink';
 import AuthModal from '../auth/AuthModal';
 import { LogOut } from "lucide-react";
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -17,6 +17,7 @@ const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
 
   const navigate = useNavigate();
+  const { pathname } = useLocation();
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 1023px)');
@@ -34,6 +35,9 @@ const Navbar = () => {
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  // AI Studio is a full-screen workspace: always use the compact (scrolled) navbar there.
+  const compactNav = isScrolled || pathname.startsWith('/ai-studio');
 
   const syncFromStorage = () => {
     const token = localStorage.getItem("token");
@@ -165,6 +169,7 @@ const Navbar = () => {
       />
 
       {/* NAVBAR TOP STRIP */}
+<<<<<<< HEAD
      <nav
   className={`fixed top-0 w-full flex justify-between items-center z-[110] pointer-events-none transition-all duration-500 ease-out
     ${
@@ -176,10 +181,21 @@ const Navbar = () => {
     }
   `}
 >
+=======
+      <nav
+        className={`fixed top-0 w-full flex justify-between items-center z-[110] pointer-events-none transition-all duration-500 ease-out
+          ${isOpen
+            ? 'px-5 sm:px-8 lg:px-12 py-5 sm:py-6 lg:py-8 mix-blend-difference bg-transparent'
+            : compactNav
+            ? 'px-5 sm:px-8 lg:px-10 py-2.5 sm:py-3 bg-black/70 backdrop-blur-xl border-b border-white/10'
+            : 'px-5 sm:px-8 lg:px-12 py-5 sm:py-6 lg:py-8 mix-blend-difference bg-transparent'}
+        `}
+      >
+>>>>>>> 36d635f0cee5c7218c12401f33f9be9f8c513290
         <LinkTransition
           to="/"
           className={`text-blue-50 font-serif italic tracking-tighter pointer-events-auto transition-all duration-500
-            ${!isOpen && isScrolled ? 'text-xl sm:text-2xl' : 'text-2xl sm:text-3xl'}
+            ${!isOpen && compactNav ? 'text-xl sm:text-2xl' : 'text-2xl sm:text-3xl'}
           `}
         >
           devdrop
@@ -195,7 +211,7 @@ const Navbar = () => {
             }
           }}
           className={`flex flex-col justify-center items-center gap-1.5 cursor-pointer relative group pointer-events-auto transition-all duration-500
-            ${!isOpen && isScrolled ? 'w-8 h-8 sm:w-9 sm:h-9' : 'w-10 h-10 sm:w-12 sm:h-12'}
+            ${!isOpen && compactNav ? 'w-8 h-8 sm:w-9 sm:h-9' : 'w-10 h-10 sm:w-12 sm:h-12'}
           `}
         >
           <AnimatePresence>

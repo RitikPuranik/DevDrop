@@ -8,6 +8,7 @@ const DeploymentProviderConnection = require('./deploymentProviderConnection.mod
 const githubService = require('../../services/github.service');
 const { analyzeRepository } = require('../../services/deployment/analyzer');
 const { runDeployment } = require('../../services/deployment/orchestrator');
+const { resolveVercelFrontendConfig } = require('../../services/deployment/vercelConfigResolver');
 const vercelProvider = require('../../services/deployment/providers/vercel.provider');
 const renderProvider = require('../../services/deployment/providers/render.provider');
 
@@ -439,7 +440,8 @@ const analyze = async (req, res) => {
       repository: req.body?.repository,
       accessToken,
     });
-    const analysis = await analyzeRepository({ accessToken, owner: repository.owner, repo: repository.name, branch: repository.defaultBranch });
+    let analysis = await analyzeRepository({ accessToken, owner: repository.owner, repo: repository.name, branch: repository.defaultBranch });
+    analysis = await completeVercelAnalysis({ analysis, deployment: { frontendProvider: analysis.frontend?.provider }, accessToken, repository });
 
     res.json({ success: true, data: { ...analysis, repository } });
   } catch (error) {
@@ -482,12 +484,13 @@ const createDeployment = async (req, res) => {
       repository: req.body?.repository,
       accessToken,
     });
-    const analysis = await analyzeRepository({
+    let analysis = await analyzeRepository({
       accessToken,
       owner: repository.owner,
       repo: repository.name,
       branch: repository.defaultBranch,
     });
+    analysis = await completeVercelAnalysis({ analysis, deployment: { frontendProvider: analysis.frontend?.provider }, accessToken, repository });
 
     if (analysis.architecture === 'UNKNOWN') {
       return res.status(422).json({
@@ -542,7 +545,7 @@ const createDeployment = async (req, res) => {
       projectExportId: projectExport?._id || null,
       repository,
       architecture: analysis.architecture,
-      analysis: { frontend: analysis.frontend, backend: analysis.backend },
+      analysis: { frontend: analysis.frontend, backend: analysis.backend, selection: analysis.selection || null },
       envPlan: analysis.envPlan,
       frontendProvider: analysis.frontend?.provider || null,
       backendProvider: analysis.backend?.provider || null,
@@ -610,7 +613,8 @@ const analyzePersonalRepository = async (req, res) => {
       url: metadata.htmlUrl,
       defaultBranch: metadata.defaultBranch || selected.defaultBranch,
     };
-    const analysis = await analyzeRepository({ accessToken, owner: repository.owner, repo: repository.name, branch: repository.defaultBranch });
+    let analysis = await analyzeRepository({ accessToken, owner: repository.owner, repo: repository.name, branch: repository.defaultBranch });
+    analysis = await completeVercelAnalysis({ analysis, deployment: { frontendProvider: analysis.frontend?.provider }, accessToken, repository });
 
     res.json({ success: true, data: { ...analysis, repository } });
   } catch (error) {
@@ -667,12 +671,13 @@ const createPersonalDeployment = async (req, res) => {
       return res.status(200).json({ success: true, data: { deploymentId: existingActive._id, status: existingActive.status, resumed: true } });
     }
 
-    const analysis = await analyzeRepository({
+    let analysis = await analyzeRepository({
       accessToken,
       owner: repository.owner,
       repo: repository.name,
       branch: repository.defaultBranch,
     });
+    analysis = await completeVercelAnalysis({ analysis, deployment: { frontendProvider: analysis.frontend?.provider }, accessToken, repository });
 
     if (analysis.architecture === 'UNKNOWN') {
       return res.status(422).json({
@@ -725,7 +730,7 @@ const createPersonalDeployment = async (req, res) => {
       source: 'personal',
       repository,
       architecture: analysis.architecture,
-      analysis: { frontend: analysis.frontend, backend: analysis.backend },
+      analysis: { frontend: analysis.frontend, backend: analysis.backend, selection: analysis.selection || null },
       envPlan: analysis.envPlan,
       frontendProvider: analysis.frontend?.provider || null,
       backendProvider: analysis.backend?.provider || null,
@@ -796,6 +801,131 @@ const getDeployment = async (req, res) => {
   }
 };
 
+/**
+ * Refresh the persisted analyzer/AI deployment plan before a redeploy.
+ * Existing Deployment documents may predate the AI-assisted selector or may
+ * contain only a rootDirectory, which is not enough to safely configure an
+ * existing Vercel project. A redeploy must re-read the repository so the
+ * current framework/build/output settings reach the provider.
+ */
+const completeVercelAnalysis = async ({ analysis, deployment, accessToken, repository }) => {
+  if (!analysis) return analysis;
+  const frontendProvider = analysis.frontend?.provider || deployment?.frontendProvider || null;
+  const shouldResolveFrontend = frontendProvider === DEPLOYMENT_PROVIDERS.VERCEL || !analysis.frontend?.provider;
+  if (shouldResolveFrontend) {
+    const fallbackRoot = analysis.selection?.frontend?.rootDirectory || deployment?.analysis?.frontend?.rootDirectory || analysis.frontend?.rootDirectory || null;
+    if (!analysis.frontend && !fallbackRoot) return analysis;
+    const before = analysis.frontend || {};
+    analysis.frontend = await resolveVercelFrontendConfig({
+      accessToken,
+      owner: repository.owner,
+      repo: repository.name,
+      branch: repository.defaultBranch,
+      analysisFrontend: analysis.frontend || { rootDirectory: fallbackRoot, provider: DEPLOYMENT_PROVIDERS.VERCEL },
+      fallbackRoot,
+    });
+
+    if (analysis.frontend) {
+      analysis.architecture = analysis.backend
+        ? (analysis.frontend.rootDirectory !== analysis.backend.rootDirectory ? 'FULLSTACK' : 'UNKNOWN')
+        : 'FRONTEND_ONLY';
+      analysis.selection = {
+        ...(analysis.selection || {}),
+        frontend: {
+          ...(analysis.selection?.frontend || {}),
+          root: analysis.frontend.rootDirectory || '.',
+          rootDirectory: analysis.frontend.rootDirectory || null,
+          framework: analysis.frontend.framework || null,
+          method: before.framework || before.buildTool ? 'repository-recovery' : (analysis.selection?.frontend?.method || 'repository-recovery'),
+          confidence: analysis.selection?.frontend?.confidence || 1,
+          rationale: 'Deployment metadata was incomplete; Vercel configuration was recovered from the selected repository root.',
+        },
+      };
+      console.log(`[deployment] recovered Vercel frontend configuration for ${repository.owner}/${repository.name}`, {
+        rootDirectory: analysis.frontend.rootDirectory ?? null,
+        framework: analysis.frontend.framework ?? null,
+        buildTool: analysis.frontend.buildTool ?? null,
+        buildCommand: analysis.frontend.buildCommand ?? null,
+        outputDirectory: analysis.frontend.outputDirectory ?? null,
+        installCommand: analysis.frontend.installCommand ?? null,
+      });
+    }
+  }
+  return analysis;
+};
+
+const refreshAnalysisForRedeploy = async (deployment) => {
+  const connection = await GithubConnection.findOne({ userId: deployment.userId }).select('+accessTokenEncrypted');
+  if (!connection) {
+    const err = new Error('GitHub connection is required to refresh the deployment configuration before redeploy. Reconnect GitHub and try again.');
+    err.status = 409;
+    throw err;
+  }
+
+  const accessToken = cryptoUtil.decrypt(connection.accessTokenEncrypted);
+  const repository = deployment.repository || {};
+  if (!repository.owner || !repository.name) {
+    const err = new Error('This deployment has no valid GitHub repository metadata, so DevDrop cannot safely refresh its deployment configuration.');
+    err.status = 409;
+    throw err;
+  }
+
+  let analysis = await analyzeRepository({
+    accessToken,
+    owner: repository.owner,
+    repo: repository.name,
+    branch: repository.defaultBranch,
+  });
+
+  analysis = await completeVercelAnalysis({ analysis, deployment, accessToken, repository });
+
+  if (analysis.frontend && deployment.frontendProvider && analysis.frontend.provider !== deployment.frontendProvider) {
+    const err = new Error(
+      `Repository analysis now resolves the frontend to ${analysis.frontend.provider}, but this deployment is pinned to ${deployment.frontendProvider}.`
+    );
+    err.status = 409;
+    throw err;
+  }
+
+  if (deployment.frontendProvider === DEPLOYMENT_PROVIDERS.VERCEL) {
+    if (!analysis.frontend) {
+      const err = new Error('DevDrop could not resolve a frontend application for Vercel. Redeploy was stopped before changing the existing project.');
+      err.status = 409;
+      throw err;
+    }
+    try {
+      const settings = vercelProvider.buildProjectSettings(analysis.frontend);
+      vercelProvider.assertCompleteFrontendSettings(settings);
+    } catch (error) {
+      const err = new Error(`DevDrop could not resolve a complete Vercel build configuration from the repository. ${error.message}`);
+      err.status = 409;
+      throw err;
+    }
+  }
+
+  deployment.analysis = {
+    ...(deployment.analysis || {}),
+    frontend: analysis.frontend || null,
+    backend: analysis.backend || null,
+    selection: analysis.selection || null,
+    warnings: analysis.warnings || [],
+  };
+  await deployment.save();
+  console.log(`[deployment] refreshed analysis for redeploy ${deployment._id}`, {
+    frontend: deployment.analysis?.frontend ? {
+      rootDirectory: deployment.analysis.frontend.rootDirectory ?? null,
+      framework: deployment.analysis.frontend.framework ?? null,
+      buildTool: deployment.analysis.frontend.buildTool ?? null,
+      buildCommand: deployment.analysis.frontend.buildCommand ?? null,
+      outputDirectory: deployment.analysis.frontend.outputDirectory ?? null,
+      installCommand: deployment.analysis.frontend.installCommand ?? null,
+      provider: deployment.analysis.frontend.provider ?? null,
+    } : null,
+    selection: deployment.analysis?.selection || null,
+  });
+  return true;
+};
+
 /** POST /api/deployments/:deploymentId/redeploy — reuses existing Vercel
  * project / Render service; only the analyzer's env auto-values (URLs,
  * NODE_ENV) get refreshed. Buyer-supplied secrets from the original
@@ -808,6 +938,8 @@ const redeploy = async (req, res) => {
     if (DEPLOYMENT_ACTIVE_STATUSES.includes(deployment.status)) {
       return res.status(409).json({ success: false, message: 'This deployment is already in progress.' });
     }
+
+    await refreshAnalysisForRedeploy(deployment);
 
     deployment.status = DEPLOYMENT_STATUS.QUEUED;
     deployment.errorMessage = undefined;
@@ -822,7 +954,7 @@ const redeploy = async (req, res) => {
 
     res.status(202).json({ success: true, data: { deploymentId: deployment._id, status: deployment.status } });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Error starting redeploy', error: error.message });
+    res.status(error.status || 500).json({ success: false, message: error.message || 'Error starting redeploy', error: error.message });
   }
 };
 

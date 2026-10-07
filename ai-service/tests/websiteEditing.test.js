@@ -1,8 +1,10 @@
 jest.mock('../src/agents/edit.agent');
 jest.mock('../src/agents/debug.agent');
+jest.mock('../src/validators/build.validator', () => ({ run: jest.fn() }));
 
 const editAgent = require('../src/agents/edit.agent');
 const debugAgent = require('../src/agents/debug.agent');
+const buildValidator = require('../src/validators/build.validator');
 const { editWebsite } = require('../src/orchestrator/websiteEditing.orchestrator');
 
 const EXISTING_FILES = {
@@ -15,6 +17,8 @@ const EXISTING_FILES = {
 beforeEach(() => {
   editAgent.run.mockReset();
   debugAgent.run.mockReset();
+  buildValidator.run.mockReset();
+  buildValidator.run.mockResolvedValue({ success: true, errors: [] });
 });
 
 it('only touches the relevant file for a targeted edit and never calls the full generation agents', async () => {
@@ -41,7 +45,7 @@ it('only touches the relevant file for a targeted edit and never calls the full 
     { onStage: (name, status) => { if (status === 'started') stages.push(name); } }
   );
 
-  expect(stages).toEqual(['relevant-files', 'edit']);
+  expect(stages).toEqual(['relevant-files', 'edit', 'build-validator']);
   expect(editAgent.run).toHaveBeenCalledTimes(1);
   expect(debugAgent.run).not.toHaveBeenCalled();
   expect(result.files['/components/Navbar.js'].code).toContain('p-6');
@@ -87,4 +91,39 @@ it('returns the unchanged project when the edit agent decides nothing needs to c
 
 it('throws a clear error when called with no existing project', async () => {
   await expect(editWebsite({ messages: [{ role: 'user', content: 'fix it' }], existingFiles: {} }, {})).rejects.toThrow();
+});
+
+it('runs the build, feeds a build failure to the debug agent, and rebuilds', async () => {
+  editAgent.run.mockResolvedValue({
+    value: { assistantMessage: 'Updated navbar.', changes: [{ path: '/components/Navbar.js', code: 'export default function Navbar(){ return <nav>A</nav>; }' }] },
+    model: 'test',
+    attempt: 1,
+  });
+  buildValidator.run
+    .mockResolvedValueOnce({ success: false, errors: ['vite build failed'] })
+    .mockResolvedValueOnce({ success: true, errors: [] });
+  debugAgent.run.mockImplementation(async ({ buildOutput }) => {
+    expect(buildOutput).toEqual(['vite build failed']);
+    return { value: { changes: [{ path: '/components/Navbar.js', code: 'export default function Navbar(){ return <nav>B</nav>; }' }] }, model: 'test', attempt: 1 };
+  });
+
+  const result = await editWebsite({ messages: [{ role: 'user', content: 'Fix the navbar' }], existingFiles: EXISTING_FILES }, {});
+
+  expect(buildValidator.run).toHaveBeenCalledTimes(2);
+  expect(debugAgent.run).toHaveBeenCalledTimes(1);
+  expect(result.files['/components/Navbar.js'].code).toContain('<nav>B</nav>');
+});
+
+it('fails with a user message when the build still fails after the repair retries', async () => {
+  editAgent.run.mockResolvedValue({
+    value: { assistantMessage: 'Updated navbar.', changes: [{ path: '/components/Navbar.js', code: 'export default function Navbar(){ return <nav>A</nav>; }' }] },
+    model: 'test',
+    attempt: 1,
+  });
+  buildValidator.run.mockResolvedValue({ success: false, errors: ['still broken'] });
+  debugAgent.run.mockResolvedValue({ value: { changes: [] }, model: 'test', attempt: 1 });
+
+  await expect(
+    editWebsite({ messages: [{ role: 'user', content: 'Fix the navbar' }], existingFiles: EXISTING_FILES }, {})
+  ).rejects.toMatchObject({ userMessage: expect.stringContaining('still broken') });
 });

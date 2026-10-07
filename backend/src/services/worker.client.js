@@ -16,7 +16,7 @@ const dispatchTask = async (type, payload = {}) => {
   }
 
   const taskId = randomUUID();
-  registry.create(taskId, type);
+  registry.create(taskId, type, payload);
 
   const body = JSON.stringify({ taskId, type, payload });
   try {

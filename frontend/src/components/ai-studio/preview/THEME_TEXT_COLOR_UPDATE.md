@@ -1,3 +1,4 @@
+
 # AI Studio theme text colors
 
 Themes now carry semantic text colors in addition to background and surface colors:

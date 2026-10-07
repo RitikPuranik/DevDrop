@@ -101,3 +101,7 @@ cooldown and its expiry, failover on 429/503/timeout, invalid-key
 handling, per-key concurrency, and that raw keys never leak into thrown
 error messages — all against the env-var bootstrap path, so no database
 is required to run them.
+
+
+## Runtime validation
+Generated and edited sites are not considered valid merely because `npm run build` succeeds. The service runs a Chromium smoke test against the built `dist/` and fails generation on uncaught browser exceptions, console errors, missing local JS/CSS, or an empty app root. `AI_RUNTIME_CHECK=required` is the production default; when Chromium is missing the service attempts a one-time `playwright install chromium` and otherwise fails explicitly instead of shipping an unverified site. The production Dockerfile uses the Playwright base image so Chromium is present without relying on a host browser installation.

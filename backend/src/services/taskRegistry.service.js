@@ -16,10 +16,10 @@ const prune = () => {
   }
 };
 
-const create = (taskId, type) => {
+const create = (taskId, type, payload = null) => {
   prune();
   const now = Date.now();
-  const task = { taskId, type, status: 'queued', result: null, error: null, createdAt: now, updatedAt: now };
+  const task = { taskId, type, payload, status: 'queued', result: null, error: null, createdAt: now, updatedAt: now };
   tasks.set(taskId, task);
   return task;
 };

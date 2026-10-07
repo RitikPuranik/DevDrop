@@ -343,3 +343,64 @@ describe('projectExport.service', () => {
     });
   });
 });
+
+describe('buildAiStudioRepoFiles (Vercel-ready scaffold)', () => {
+  const build = (files, extra = {}) => {
+    const out = projectExportService.buildAiStudioRepoFiles({ title: 'Demo Site', files, dependencies: {}, ...extra });
+    return Object.fromEntries(out.map((f) => [f.relativePath, f.buffer.toString('utf8')]));
+  };
+  const app = { '/App.js': { code: 'export default function App(){return <div>hi</div>}' } };
+
+  it('installs with the preview\'s peer-dependency rule, so Vercel cannot fail with ERESOLVE', () => {
+    expect(build(app)['.npmrc']).toMatch(/legacy-peer-deps=true/);
+  });
+
+  it('flattens a single app/ wrapper so Vercel deploys the actual Vite project root', () => {
+    const files = build({
+      '/app/package.json': { code: JSON.stringify({}) },
+      '/app/index.html': { code: '<html><body><div id=\"root\"></div><script type=\"module\" src=\"/src/main.jsx\"></script></body></html>' },
+      '/app/src/main.jsx': { code: 'console.log(1)' },
+    });
+    expect(files['package.json']).toBeDefined();
+    expect(files['index.html']).toBeDefined();
+    expect(files['src/main.jsx']).toBe('console.log(1)');
+    expect(files['app/package.json']).toBeUndefined();
+  });
+
+  it('adds a vercel.json with the Vite preset and SPA rewrite', () => {
+    const v = JSON.parse(build(app)['vercel.json']);
+    expect(v).toMatchObject({ framework: 'vite', buildCommand: 'npm run build', outputDirectory: 'dist' });
+    expect(v.rewrites).toEqual([{ source: '/(.*)', destination: '/index.html' }]);
+  });
+
+  it('pins vite + react plugin so a model-written older range cannot break the scaffold config', () => {
+    const files = build({ ...app, '/package.json': { code: JSON.stringify({ devDependencies: { vite: '^4.4.5', '@vitejs/plugin-react': '^4.0.3' } }) } });
+    const pkg = JSON.parse(files['package.json']);
+    expect(pkg.devDependencies).toMatchObject({ vite: '^7.0.0', '@vitejs/plugin-react': '^5.0.0' });
+    expect(pkg.engines.node).toBe('22.x');
+  });
+
+  it('keeps the model\'s own vite versions when the pipeline authored its own vite.config.js', () => {
+    const files = build({ ...app, '/vite.config.js': { code: 'export default {}' }, '/package.json': { code: JSON.stringify({ devDependencies: { vite: '^5.0.0' } }) } });
+    expect(JSON.parse(files['package.json']).devDependencies.vite).toBe('^5.0.0');
+    expect(files['vite.config.js']).toBe('export default {}');
+  });
+
+  it('replaces an index.html with no #root or a dead entry script (build passes, page is blank)', () => {
+    const noRoot = build({ ...app, '/index.html': { code: '<html><body><div id="app"></div><script type="module" src="/main.jsx"></script></body></html>' } });
+    expect(noRoot['index.html']).toContain('id="root"');
+    const deadEntry = build({ ...app, '/index.html': { code: '<html><body><div id="root"></div><script type="module" src="/src/index.js"></script></body></html>' } });
+    expect(deadEntry['index.html']).toContain('src="/main.jsx"');
+  });
+
+  it('keeps a valid generated index.html untouched', () => {
+    const html = '<html><body><div id="root"></div><script type="module" src="/main.jsx"></script><!--custom--></body></html>';
+    expect(build({ ...app, '/index.html': { code: html } })['index.html']).toBe(html);
+  });
+
+  it('default entry shows an error message instead of a black screen when rendering throws', () => {
+    const main = build(app)['main.jsx'];
+    expect(main).toMatch(/RootErrorBoundary/);
+    expect(main).toMatch(/getDerivedStateFromError/);
+  });
+});

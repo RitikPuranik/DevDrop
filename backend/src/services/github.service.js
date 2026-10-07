@@ -306,6 +306,18 @@ const getRepoTree = async (accessToken, owner, repo, branch) => {
     .map((entry) => ({ path: entry.path, type: entry.type, size: entry.size }));
 };
 
+/** Search tracked source for a runtime identifier. Used by Kashi when a browser
+ * error names a symbol (for example `TestimonialsSection`) but the deployed
+ * bundle does not expose the original source filename in its stack. */
+const searchCode = async (accessToken, owner, repo, identifier, { max = 3 } = {}) => {
+  const needle = String(identifier || '').trim();
+  if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(needle)) return [];
+  const { data } = await githubApi(accessToken).get('/search/code', {
+    params: { q: `\"${needle}\" repo:${owner}/${repo}`, per_page: Math.min(10, Math.max(1, Number(max) || 3)) },
+  });
+  return (data?.items || []).map((item) => item.path).filter(Boolean);
+};
+
 /** Decoded UTF-8 text content of a single file at a given ref, or null if it
  * doesn't exist / isn't a regular file. */
 const getFileContent = async (accessToken, owner, repo, path, ref) => {
@@ -328,6 +340,36 @@ const getFileContent = async (accessToken, owner, repo, path, ref) => {
   }
 };
 
+/**
+ * Commits UTF-8 text files onto an existing branch in ONE commit (Git Data
+ * API: blobs -> tree on top of the branch's current tree -> commit -> ref).
+ * Used by Kashi to push a build fix. The ref update is NOT forced, so if the
+ * branch moved while we were working GitHub rejects it (422) instead of
+ * overwriting someone's commit.
+ *
+ * @returns {Promise<string>} the new commit sha
+ */
+const commitFilesToBranch = async (accessToken, owner, repo, branch, { message, files }) => {
+  const api = githubApi(accessToken);
+  const { data: ref } = await api.get(`/repos/${owner}/${repo}/git/ref/heads/${encodeURI(branch)}`);
+  const parentSha = ref.object.sha;
+  const { data: parent } = await api.get(`/repos/${owner}/${repo}/git/commits/${parentSha}`);
+
+  const treeEntries = [];
+  for (const file of files) {
+    const { data: blob } = await api.post(`/repos/${owner}/${repo}/git/blobs`, {
+      content: Buffer.from(file.content, 'utf8').toString('base64'),
+      encoding: 'base64',
+    });
+    treeEntries.push({ path: file.path, mode: file.mode || '100644', type: 'blob', sha: blob.sha });
+  }
+
+  const { data: tree } = await api.post(`/repos/${owner}/${repo}/git/trees`, { base_tree: parent.tree.sha, tree: treeEntries });
+  const { data: commit } = await api.post(`/repos/${owner}/${repo}/git/commits`, { message, tree: tree.sha, parents: [parentSha] });
+  await api.patch(`/repos/${owner}/${repo}/git/refs/heads/${encodeURI(branch)}`, { sha: commit.sha, force: false });
+  return commit.sha;
+};
+
 module.exports = {
   isGithubConfigured,
   isGithubLoginConfigured,
@@ -348,5 +390,7 @@ module.exports = {
   isAuthError,
   getRepository,
   getRepoTree,
+  searchCode,
   getFileContent,
+  commitFilesToBranch,
 };

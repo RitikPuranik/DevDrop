@@ -5,12 +5,15 @@ const { processEndedAuctions } = require('./jobs/auction.cron.service');
 const { runScheduledAiStudioCleanup } = require('./jobs/aiStudio.cleanup.cron.service');
 const { runScheduledCleanup: runSupabaseCleanup } = require('./jobs/supabase.cleanup.cron.service');
 const { runScheduledBackup, runManualBackup } = require('./jobs/backup.cron.service');
+const { sendTaskProgress } = require('./callback');
+const kashiFixer = require('../../backend/src/modules/kashi/kashiFixer.service');
 
 const TASK_TYPES = {
   PROCESS_ENDED_AUCTIONS: 'PROCESS_ENDED_AUCTIONS',
   AI_STUDIO_CLEANUP: 'AI_STUDIO_CLEANUP',
   SUPABASE_CLEANUP: 'SUPABASE_CLEANUP',
   RUN_BACKUP: 'RUN_BACKUP',
+  KASHI_FIX: 'KASHI_FIX',
 };
 
 const handlers = {
@@ -22,6 +25,13 @@ const handlers = {
     if (payload && payload.kind) return runManualBackup(payload);
     await runScheduledBackup();
     return { ok: true };
+  },
+  [TASK_TYPES.KASHI_FIX]: async (payload, task) => {
+    if (!payload?.runId) throw new Error('KASHI_FIX requires runId');
+    await kashiFixer.runLoop(payload.runId, {
+      onProgress: (event) => sendTaskProgress(task, event),
+    });
+    return { ok: true, runId: payload.runId };
   },
 };
 

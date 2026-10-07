@@ -1,36 +1,30 @@
 import {buildAssetContract} from '../../components/ai-studio/assetContract';
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowUp, Loader2, Bot, User, Check, Circle } from 'lucide-react';
+import { ArrowLeft, ArrowUp, Loader2, Bot, User, CheckSquare, ChevronDown, Paperclip, Mic, Sparkles, Send, X, Film, FileText } from 'lucide-react';
 import { usePostHog } from '../../analytics/PostHogProvider';
 import { aiGenerateAPI } from '../../api/aiGenerate';
 import { subscribeToJob } from '../../api/socket';
 import AppPreview from '../../components/ai-studio/AppPreview';
+import { PipelineSteps, computePipeline } from '../../components/ai-studio/pipelineSteps';
 import PortfolioBuilder from '../../components/ai-studio/PortfolioBuilder';
 import { buildPortfolioPrompt } from '../../components/ai-studio/portfolioPrompt';
 import WebsiteBuilder, { buildWebsitePrompt } from '../../components/ai-studio/WebsiteBuilder';
 import { WEBSITE_TYPES } from '../../config/aiStudio.config';
 import { useAiStudioSession } from '../../hooks/ai-studio/useAiStudioSession';
 
-const PIPELINE_STAGES = [
-  ['requirements', 'Requirements'], ['design', 'Design'], ['architecture', 'Architecture'],
-  ['code-generation', 'Code'], ['integration', 'Integration'], ['build-validator', 'Validation'],
-];
-// A targeted edit never runs the full pipeline above -- it only runs these
-// two (rarely three, if a repair pass is needed) stages. Showing the full
-// six-stage list during an edit is what made a fast, targeted edit look like
-// "the whole multi-agent thing is running again", even once the backend
-// itself was already only doing the small amount of work.
-const EDIT_PIPELINE_STAGES = [
-  ['relevant-files', 'Finding affected files'], ['edit', 'Applying edit'], ['edit-debug', 'Fixing an issue'],
-];
-const DEBUG_PIPELINE_STAGES = [
-  ['debug-only', 'Debugging existing code'], ['build-validator', 'Re-validating build'],
-];
+// Files attached while editing are uploaded through the normal AI Studio asset
+// endpoint, so they land in the same ai-studio/{projectId}/assets storage prefix
+// as every other project asset and are removed by the existing cleanup worker.
+const MAX_ATTACHMENTS = 5;
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024; // matches the backend asset upload limit
+const ATTACH_ACCEPT = 'image/*,video/*,.pdf,.doc,.docx';
+const attachKind = (f) => (f.type.startsWith('image/') ? 'image' : f.type.startsWith('video/') ? 'video' : 'file');
 
 export default function AiStudio() {
   const navigate = useNavigate(); const posthog = usePostHog();
-  const [studioMode,setStudioMode]=useState('types'); const [failedJobId,setFailedJobId]=useState(null); const [debugRetryAvailable,setDebugRetryAvailable]=useState(false); const [messages,setMessages]=useState([]); const [fileData,setFileData]=useState(null); const [appTitle,setAppTitle]=useState(null); const [input,setInput]=useState(''); const [isGenerating,setIsGenerating]=useState(false); const [genStatusLabel,setGenStatusLabel]=useState('Generating…'); const [pipeline,setPipeline]=useState({}); const [genMode,setGenMode]=useState('generate'); const [currentStage,setCurrentStage]=useState(null); const [error,setError]=useState(null); const scrollRef=useRef(null); const pollTimeoutRef=useRef(null);
+  const [studioMode,setStudioMode]=useState('types'); const [failedJobId,setFailedJobId]=useState(null); const [debugRetryAvailable,setDebugRetryAvailable]=useState(false); const [messages,setMessages]=useState([]); const [fileData,setFileData]=useState(null); const [appTitle,setAppTitle]=useState(null); const [input,setInput]=useState(''); const [isGenerating,setIsGenerating]=useState(false); const [genStatusLabel,setGenStatusLabel]=useState('Generating…'); const [pipeline,setPipeline]=useState({}); const [genMode,setGenMode]=useState('generate'); const [currentStage,setCurrentStage]=useState(null); const [error,setError]=useState(null); const [showContract,setShowContract]=useState(false); const scrollRef=useRef(null); const pollTimeoutRef=useRef(null);
+  const [attachments,setAttachments]=useState([]); const [isUploadingAttachments,setIsUploadingAttachments]=useState(false); const [attachError,setAttachError]=useState(null); const fileInputRef=useRef(null); const uploadedAttachmentsRef=useRef(new Map());
   // Persists the generated project (zip + files) to the backend for as long
   // as this AI Studio tab stays open/active. Refresh or close naturally lets
   // this session's heartbeat stop -- see useAiStudioSession -- rather than
@@ -148,7 +142,47 @@ export default function AiStudio() {
     setMessages(nextMessages);
     await runGeneration(nextMessages,{websiteType:type,userData:{...details,images:undefined,videos:undefined},preferences:design,assets:buildAssetContract({images:media.images,videos:media.videos})});
   };
-  const handleSend=()=>{const trimmed=input.trim();if(!trimmed||isGenerating)return;setInput('');const nextMessages=[...messages,{role:'user',content:trimmed}];setMessages(nextMessages);runGeneration(nextMessages,{websiteType:'portfolio',userData:{},preferences:{},conversation:nextMessages});};
+  const handlePickFiles=(e)=>{
+    const picked=Array.from(e.target.files||[]); e.target.value='';
+    if(!picked.length)return;
+    const next=[...attachments]; let problem=null;
+    for(const f of picked){
+      if(next.length>=MAX_ATTACHMENTS){problem=`You can attach up to ${MAX_ATTACHMENTS} files per message.`;break;}
+      if(f.size>MAX_ATTACHMENT_BYTES){problem=`${f.name} is larger than 10 MB.`;continue;}
+      next.push({id:`${Date.now()}-${Math.random().toString(36).slice(2,8)}`,file:f,kind:attachKind(f),previewUrl:f.type.startsWith('image/')?URL.createObjectURL(f):null});
+    }
+    setAttachments(next); setAttachError(problem);
+  };
+  const removeAttachment=(id)=>{setAttachments(prev=>{const gone=prev.find(a=>a.id===id);if(gone?.previewUrl)URL.revokeObjectURL(gone.previewUrl);return prev.filter(a=>a.id!==id);});uploadedAttachmentsRef.current.delete(id);setAttachError(null);};
+  const handleSend=async()=>{
+    const trimmed=input.trim(); if(!trimmed||isGenerating||isUploadingAttachments)return;
+    let content=trimmed; const pending=attachments;
+    if(pending.length){
+      setIsUploadingAttachments(true); setAttachError(null);
+      try{
+        const projectId=aiStudioSession.getProjectId()||await aiStudioSession.open('portfolio');
+        // Files that uploaded on a previous (partially failed) attempt are not uploaded twice.
+        for(const a of pending){
+          if(uploadedAttachmentsRef.current.has(a.id))continue;
+          const res=await aiStudioSession.uploadAsset(a.file,projectId); const d=res?.data?.data||{};
+          uploadedAttachmentsRef.current.set(a.id,{name:d.fileName||a.file.name,kind:d.kind||a.kind});
+        }
+        const list=pending.map(a=>uploadedAttachmentsRef.current.get(a.id)).filter(Boolean).map(u=>`${u.name} (${u.kind})`).join(', ');
+        // Edits resolve ALL of the project's assets server-side (see resolveGenerationAssets),
+        // so the new uploads reach the edit agent's media manifest automatically; this note
+        // just tells the model which of them the request is about.
+        content=`${trimmed}\n\n[Attached for this change - now in the project's assets: ${list}. Use these uploaded files where my request refers to them.]`;
+      }catch(err){
+        setAttachError(err?.response?.data?.message||err?.message||'Failed to upload attachment. Please try again.');
+        setIsUploadingAttachments(false); return;
+      }
+      setIsUploadingAttachments(false);
+      pending.forEach(a=>{if(a.previewUrl)URL.revokeObjectURL(a.previewUrl);uploadedAttachmentsRef.current.delete(a.id);});
+      setAttachments([]);
+    }
+    setInput(''); const nextMessages=[...messages,{role:'user',content}]; setMessages(nextMessages);
+    runGeneration(nextMessages,{websiteType:'portfolio',userData:{},preferences:{},conversation:nextMessages});
+  };
   const handleFixError=(previewError)=>{if(isGenerating)return;const prompt=`The preview threw this error, please fix it:\n\n${previewError}`;const nextMessages=[...messages,{role:'user',content:prompt}];setMessages(nextMessages);runGeneration(nextMessages,{websiteType:'portfolio',userData:{},preferences:{},conversation:nextMessages});};
   const handleDebugRetry=async()=>{
     if(!failedJobId||isGenerating)return;
@@ -170,12 +204,6 @@ export default function AiStudio() {
     }finally{setIsGenerating(false);}
   };
   const handleDownload=()=>{aiStudioSession.recordActivity();};
-  const stageView=(key,label)=>{const grouped=key==='code-generation'||key==='edit-debug';const prefix=key==='code-generation'?'code:':'edit-debug';const exact=pipeline[key];const groupDone=grouped&&Object.keys(pipeline).some(k=>k.startsWith(prefix)&&pipeline[k]==='completed');const active=grouped?Object.keys(pipeline).some(k=>k.startsWith(prefix)&&(pipeline[k]==='processing'||pipeline[k]==='started')):exact==='processing'||exact==='started';const done=grouped?groupDone:exact==='completed';
-    // The optional repair pass (edit-debug) only shows up at all if a repair
-    // was actually needed -- most edits never touch it.
-    if(key==='edit-debug'&&!active&&!done)return null;
-    return <div key={key} className="flex items-center gap-2 text-xs"><span className="flex h-4 w-4 items-center justify-center">{done?<Check className="h-3.5 w-3.5 text-emerald-400"/>:active?<Loader2 className="h-3.5 w-3.5 animate-spin text-violet-400"/>:<Circle className="h-3 w-3 text-white/20"/>}</span><span className={done?'text-white/70':active?'text-white':'text-white/30'}>{label}</span></div>;};
-  const activeStageList=genMode==='debug'?DEBUG_PIPELINE_STAGES:(genMode==='edit'?EDIT_PIPELINE_STAGES:PIPELINE_STAGES);
   if(studioMode==='types')return <div className="fixed inset-0 z-40 overflow-y-auto bg-neutral-950 text-white"><div className="mx-auto max-w-6xl px-5 pb-16 pt-24 md:px-8 md:pt-28"><div className="mb-8 flex flex-wrap items-end justify-between gap-5"><div><p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-violet-400">AI Studio</p><h1 className="text-3xl font-bold tracking-tight md:text-4xl">What do you want to build?</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-white/40">Choose a website type first. DevDrop will then collect the information that matters for that kind of site and turn it into a detailed build specification for the AI.</p></div><div className="hidden items-center gap-2 text-[10px] uppercase tracking-[0.18em] text-white/25 sm:flex"><span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-white/60">01 Choose type</span><span>→</span><span>02 Details</span><span>→</span><span>03 Design</span><span>→</span><span>04 Review</span></div></div><div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-4">{WEBSITE_TYPES.map(type=>{const Icon=type.icon;return <button key={type.id} type="button" disabled={!type.enabled} onClick={()=>type.enabled&&setStudioMode(type.id)} className={`group relative flex min-h-[176px] flex-col overflow-hidden rounded-[18px] border p-4 text-left transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/70 ${type.enabled?'border-white/[0.09] bg-[linear-gradient(145deg,rgba(255,255,255,.05),rgba(10,10,14,.9))] shadow-[inset_0_1px_0_rgba(255,255,255,.04)] hover:-translate-y-0.5 hover:border-violet-400/60 hover:shadow-[0_0_28px_rgba(139,92,246,.16),inset_0_1px_0_rgba(255,255,255,.06)]':'cursor-not-allowed border-white/5 bg-white/[0.015] opacity-45'}`}>
 <span className="relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] border border-white/10 bg-white/[0.04]"><Icon size={16} strokeWidth={1.35} className="text-white/60"/></span>
 {type.artImage&&<img src={type.artImage} alt="" aria-hidden="true" onError={(event)=>{event.currentTarget.style.display='none';}} className="pointer-events-none absolute right-3.5 top-3.5 h-[88px] w-[46%] object-contain object-right-top opacity-90 transition-transform duration-300 origin-top-right group-hover:scale-[1.05]"/>}
@@ -188,5 +216,54 @@ export default function AiStudio() {
 </button>;})}</div></div></div>;
   if(studioMode==='portfolio')return <div className="fixed inset-0 z-40 overflow-y-auto bg-neutral-950"><PortfolioBuilder onBack={()=>setStudioMode('types')} onGenerate={handlePortfolioGenerate}/></div>;
   if(['ecommerce','blog','landing','cafe','hotel','studio','saas','event','education','custom'].includes(studioMode))return <div className="fixed inset-0 z-40 overflow-y-auto bg-neutral-950"><WebsiteBuilder type={studioMode} onBack={()=>setStudioMode('types')} onGenerate={handleWebsiteGenerate}/></div>;
-  return <div className="fixed inset-0 z-40 flex flex-col bg-neutral-950 text-white"><div className="flex items-center justify-between border-b border-neutral-800 bg-neutral-950 px-4 py-2"><button type="button" onClick={()=>setStudioMode('types')} className="inline-flex items-center gap-2 text-sm text-neutral-300 hover:text-white"><ArrowLeft className="h-4 w-4"/> Website types</button><span className="text-sm font-medium text-neutral-300">{appTitle||'AI Studio'}</span><span className="w-24"/></div><div className="flex min-h-0 flex-1"><div className="flex w-[380px] shrink-0 flex-col border-r border-neutral-800"><div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto p-4">{messages.map((m,i)=><div key={i} className={`flex gap-2 ${m.role==='user'?'justify-end':'justify-start'}`}>{m.role==='assistant'&&<Bot className="mt-1 h-4 w-4 shrink-0 text-violet-400"/>}<div className={`max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm ${m.role==='user'?'bg-violet-600 text-white':'bg-neutral-900 text-neutral-200'}`}>{m.content}</div>{m.role==='user'&&<User className="mt-1 h-4 w-4 shrink-0 text-neutral-500"/>}</div>)}{isGenerating&&<div className="space-y-2 rounded-lg border border-white/5 bg-white/[0.02] p-3"><div className="flex items-center gap-2 text-sm text-neutral-300"><Loader2 className="h-4 w-4 animate-spin text-violet-400"/>{genStatusLabel}</div><div className="space-y-1.5">{activeStageList.map(([key,label])=>stageView(key,label))}</div></div>}</div><div className="border-t border-neutral-800 p-3">{error&&debugRetryAvailable&&!isGenerating&&<button type="button" onClick={handleDebugRetry} className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-300 hover:bg-amber-500/15">Retry Debug Only</button>}<div className="flex items-end gap-2 rounded-lg border border-neutral-700 bg-neutral-900 p-2"><textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSend();}}} placeholder="Describe a change to your generated website…" rows={2} className="flex-1 resize-none bg-transparent text-sm text-white placeholder:text-neutral-500 focus:outline-none"/><button type="button" onClick={handleSend} disabled={!input.trim()||isGenerating} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-violet-600 text-white disabled:cursor-not-allowed disabled:opacity-40">{isGenerating?<Loader2 className="h-4 w-4 animate-spin"/>:<ArrowUp className="h-4 w-4"/>}</button></div></div></div><div className="h-full min-h-0 flex-1"><AppPreview fileData={fileData} appTitle={appTitle} onFixError={handleFixError} isGenerating={isGenerating} pipeline={pipeline} currentStage={currentStage} onDownload={handleDownload}/></div></div></div>;
+  const pipelineMode=genMode==='debug'?'debug':(genMode==='edit'?'edit':'generate');
+  const {steps:pipelineSteps,percent,queued}=computePipeline({mode:pipelineMode,pipeline,isGenerating,complete:!isGenerating&&Boolean(fileData)&&!error,currentStage});
+  const statusText=isGenerating?(queued?'Queued…':`${pipelineMode==='edit'?'Editing':'Generating'} (${percent}%)`):(error&&!fileData?'Failed':fileData?'Generation Complete (100%)':'Ready');
+  const statusTone=isGenerating?'border-violet-500/30 bg-violet-500/10 text-violet-300':(error&&!fileData?'border-red-500/30 bg-red-500/10 text-red-300':'border-emerald-500/30 bg-emerald-500/10 text-emerald-300');
+  const dotTone=isGenerating?'bg-violet-400 animate-pulse':(error&&!fileData?'bg-red-400':'bg-emerald-400');
+  const firstPrompt=messages[0]?.role==='user'?messages[0].content:'';
+  const chatMessages=firstPrompt?messages.slice(1):messages;
+  const ruleLines=firstPrompt.split('\n').map(l=>l.replace(/^\s*[-*•]\s*/,'').trim()).filter(Boolean);
+  const shownRules=showContract?ruleLines:ruleLines.slice(0,3);
+  const history=messages.filter(m=>m.role==='user').map(m=>m.content);
+  const card='rounded-2xl border border-white/[0.12] bg-[#0b0b0c]';
+  return <div className="fixed inset-0 z-40 flex flex-col bg-[#070708] pt-[3.75rem] text-white">
+    <div className="flex min-h-0 flex-1">
+      <div className="flex w-[360px] shrink-0 flex-col border-r border-white/[0.08]">
+        <div ref={scrollRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+          {firstPrompt&&<div className={`${card} p-4`}>
+            <div className="mb-3 flex items-center gap-3 text-[14px] font-medium text-white"><CheckSquare className="h-5 w-5 text-white/60"/>Instructions &amp; Rules</div>
+            <ul className={`space-y-1.5 text-[12px] leading-5 text-white/80 ${showContract?'max-h-72 overflow-y-auto pr-1':''}`}>{shownRules.map((r,i)=><li key={i} className="flex gap-2"><span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-white/70"/><span className={showContract?'':'line-clamp-2'}>{r}</span></li>)}</ul>
+            <button type="button" onClick={()=>setShowContract(v=>!v)} className="mt-3 flex w-full items-center justify-center gap-1.5 border-t border-white/[0.1] pt-2.5 text-[12px] text-white/60 hover:text-white">[ <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showContract?'rotate-180':''}`}/> {showContract?'Hide':'View'} Contract ]</button>
+          </div>}
+          <div className="px-1 pt-2">
+            <div className="mb-2.5 text-[14px] font-semibold text-white">Build Status: <span className={isGenerating?'text-violet-300':(error&&!fileData?'text-red-300':'text-emerald-400')}>{isGenerating?(queued?'Queued':'In progress'):(error&&!fileData?'Failed':fileData?'Completed':'Idle')} ({percent}%)</span></div>
+            <PipelineSteps steps={pipelineSteps} variant="compact"/>
+          </div>
+          {chatMessages.length>0&&<div className="space-y-3">{chatMessages.map((m,i)=><div key={i} className={`flex gap-2 ${m.role==='user'?'justify-end':'justify-start'}`}>{m.role==='assistant'&&<Bot className="mt-1 h-4 w-4 shrink-0 text-violet-400"/>}<div className={`max-w-[88%] whitespace-pre-wrap rounded-lg px-3 py-2 text-[12px] ${m.role==='user'?'bg-violet-600 text-white':'bg-white/[0.04] text-white/80'}`}>{m.content}</div>{m.role==='user'&&<User className="mt-1 h-4 w-4 shrink-0 text-white/40"/>}</div>)}</div>}
+        </div>
+        <div className="shrink-0 p-5 pt-0">
+          {error&&debugRetryAvailable&&!isGenerating&&<button type="button" onClick={handleDebugRetry} className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-300 hover:bg-amber-500/15">Retry Debug Only</button>}
+          <div className={`${card} p-3`}>
+            <div className="rounded-xl border border-white/[0.12] p-3">
+              <div className="flex items-start gap-2"><textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSend();}}} placeholder="Describe a change to your website..." rows={2} className="flex-1 resize-none bg-transparent text-[13px] text-white placeholder:text-white/40 focus:outline-none"/><Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-white"/></div>
+              {(attachments.length>0||attachError)&&<div className="mt-2 space-y-1.5">
+                {attachments.length>0&&<div className="flex flex-wrap gap-1.5">{attachments.map(a=><div key={a.id} className="group relative flex max-w-[150px] items-center gap-1.5 rounded-lg border border-white/[0.12] bg-white/[0.04] py-1 pl-1 pr-6 text-[11px] text-white/70">
+                  {a.previewUrl?<img src={a.previewUrl} alt="" className="h-6 w-6 shrink-0 rounded object-cover"/>:<span className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-white/[0.06]">{a.kind==='video'?<Film className="h-3.5 w-3.5"/>:<FileText className="h-3.5 w-3.5"/>}</span>}
+                  <span className="truncate" title={a.file.name}>{a.file.name}</span>
+                  <button type="button" onClick={()=>removeAttachment(a.id)} disabled={isUploadingAttachments} aria-label={`Remove ${a.file.name}`} className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-0.5 text-white/40 hover:text-white disabled:opacity-40"><X className="h-3 w-3"/></button>
+                </div>)}</div>}
+                {attachError&&<p className="text-[11px] text-red-300">{attachError}</p>}
+              </div>}
+              <div className="mt-2 flex items-center justify-between">
+                <div className="flex items-center gap-3 text-white/45"><input ref={fileInputRef} type="file" multiple accept={ATTACH_ACCEPT} onChange={handlePickFiles} className="hidden"/><button type="button" onClick={()=>fileInputRef.current?.click()} disabled={isUploadingAttachments||attachments.length>=MAX_ATTACHMENTS} title={isGenerating?"Attach now, send once generation finishes":"Attach images, videos or files to this change"} aria-label="Attach files" className="relative hover:text-white disabled:cursor-not-allowed disabled:opacity-40"><Paperclip className="h-5 w-5"/>{attachments.length>0&&<span className="absolute -right-1.5 -top-1.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-violet-500 px-1 text-[9px] font-semibold text-white">{attachments.length}</span>}</button><button type="button" disabled title="Coming soon" className="cursor-not-allowed"><Mic className="h-5 w-5"/></button></div>
+                <button type="button" onClick={handleSend} disabled={!input.trim()||isGenerating||isUploadingAttachments} aria-label="Send" className="text-white/60 hover:text-white disabled:cursor-not-allowed disabled:opacity-40">{isGenerating||isUploadingAttachments?<Loader2 className="h-5 w-5 animate-spin"/>:<Send className="h-5 w-5"/>}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="h-full min-h-0 min-w-0 flex-1 p-4"><AppPreview fileData={fileData} appTitle={appTitle} onFixError={handleFixError} isGenerating={isGenerating} pipeline={pipeline} currentStage={currentStage} onDownload={handleDownload} history={history} projectId={aiStudioSession.projectId} pipelineSteps={pipelineSteps} pipelineMode={pipelineMode} percent={percent}/></div>
+    </div>
+  </div>;
 }

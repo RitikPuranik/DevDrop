@@ -97,6 +97,7 @@ app.use('/api/github',    require('./modules/github'));
 app.use('/api/deployments', require('./modules/deployment'));
 app.use('/api/ai-generate', require('./modules/ai-generate'));
 app.use('/api/ai-studio', require('./modules/ai-studio'));
+app.use('/api/kashi',     require('./modules/kashi'));
 
 app.get("/debug-sentry", function mainHandler(req, res) {
   throw new Error("My first Sentry error!");

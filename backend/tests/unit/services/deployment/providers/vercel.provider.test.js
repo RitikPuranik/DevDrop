@@ -184,14 +184,62 @@ describe('vercel.provider', () => {
   });
 
   describe('ensureProject', () => {
-    it('adopts an existing project when existing.projectId still resolves', async () => {
-      const get = jest.fn().mockResolvedValue({ data: { id: 'prj_1', name: 'my-app', link: { repoId: 55 } } });
-      axios.create = jest.fn(() => ({ get, post: jest.fn() }));
+    it('adopts an existing project and synchronizes its build settings', async () => {
+      const project = { id: 'prj_1', name: 'my-app', link: { repoId: 55 } };
+      const get = jest.fn()
+        .mockResolvedValueOnce({ data: project })
+        .mockImplementation(async () => ({ data: { ...project, framework: 'vite', rootDirectory: 'app', buildCommand: 'npm run build', outputDirectory: 'dist', installCommand: 'npm install' } }));
+      const patch = jest.fn().mockResolvedValue({ data: { framework: 'vite', rootDirectory: 'app', buildCommand: 'npm run build', outputDirectory: 'dist', installCommand: 'npm install' } });
+      axios.create = jest.fn(() => ({ get, post: jest.fn(), patch }));
 
-      const result = await provider.ensureProject('token', {}, { projectName: 'my-app' }, { projectId: 'prj_1' });
+      const result = await provider.ensureProject('token', {}, {
+        projectName: 'my-app',
+        framework: 'React',
+        rootDirectory: 'app',
+        buildCommand: 'npm run build',
+        outputDirectory: 'dist',
+        installCommand: 'npm install',
+      }, { projectId: 'prj_1' });
 
       expect(result).toEqual({ projectId: 'prj_1', projectName: 'my-app', repoId: 55 });
       expect(get).toHaveBeenCalledWith('/v9/projects/prj_1');
+      expect(patch).toHaveBeenCalledWith('/v9/projects/prj_1', {
+        framework: 'vite',
+        rootDirectory: 'app',
+        buildCommand: 'npm run build',
+        outputDirectory: 'dist',
+        installCommand: 'npm install',
+      });
+    });
+
+    it('fails closed when the redeploy config contains only a stale rootDirectory', async () => {
+      const get = jest.fn().mockResolvedValue({ data: { id: 'prj_1', name: 'my-app', link: { repoId: 55 } } });
+      const patch = jest.fn();
+      axios.create = jest.fn(() => ({ get, post: jest.fn(), patch }));
+
+      await expect(provider.ensureProject('token', {}, {
+        projectName: 'my-app',
+        rootDirectory: 'app',
+      }, { projectId: 'prj_1' })).rejects.toMatchObject({ status: 409, provider: 'vercel' });
+      expect(patch).not.toHaveBeenCalled();
+    });
+
+    it('fails closed when Vercel does not apply the requested project settings', async () => {
+      const get = jest.fn()
+        .mockResolvedValueOnce({ data: { id: 'prj_1', name: 'my-app', link: { repoId: 55 } } })
+        .mockResolvedValueOnce({ data: { framework: 'other', rootDirectory: 'app', buildCommand: null, outputDirectory: '.', installCommand: null } });
+      const patch = jest.fn().mockResolvedValue({ data: { framework: 'vite', rootDirectory: 'app', buildCommand: 'npm run build', outputDirectory: 'dist', installCommand: 'npm install' } });
+      axios.create = jest.fn(() => ({ get, post: jest.fn(), patch }));
+
+      await expect(provider.ensureProject('token', {}, {
+        projectName: 'my-app',
+        framework: 'Vite',
+        buildTool: 'Vite',
+        rootDirectory: 'app',
+      }, { projectId: 'prj_1' })).rejects.toMatchObject({
+        provider: 'vercel',
+        status: 502,
+      });
     });
 
     it('recreates the project when the existing projectId 404s on Vercel', async () => {
@@ -212,7 +260,7 @@ describe('vercel.provider', () => {
 
     it('throws a wrapped error when the existing-project lookup fails for a non-404 reason', async () => {
       const get = jest.fn().mockRejectedValue({ response: { status: 500, data: { error: { message: 'boom' } } } });
-      axios.create = jest.fn(() => ({ get, post: jest.fn() }));
+      axios.create = jest.fn(() => ({ get, post: jest.fn(), patch: jest.fn() }));
 
       await expect(
         provider.ensureProject('token', {}, { projectName: 'my-app' }, { projectId: 'prj_1' })
@@ -237,15 +285,17 @@ describe('vercel.provider', () => {
       );
     });
 
-    it('adopts an already-existing project by name on a 409 conflict', async () => {
+    it('adopts an already-existing project by name on a 409 conflict and reapplies settings', async () => {
       const post = jest.fn().mockRejectedValue({ response: { status: 409, data: { error: { message: 'already exists' } } } });
       const get = jest.fn().mockResolvedValue({ data: { id: 'prj_existing', name: 'my-app', link: { repoId: 3 } } });
-      axios.create = jest.fn(() => ({ get, post }));
+      const patch = jest.fn().mockImplementation(async (_path, settings) => ({ data: settings }));
+      axios.create = jest.fn(() => ({ get, post, patch }));
 
-      const result = await provider.ensureProject('token', {}, { projectName: 'my-app' }, null);
+      const result = await provider.ensureProject('token', {}, { projectName: 'my-app', framework: 'React', rootDirectory: 'src', buildCommand: 'npm run build', outputDirectory: 'dist', installCommand: 'npm install' }, null);
 
       expect(result).toEqual({ projectId: 'prj_existing', projectName: 'my-app', repoId: 3 });
       expect(get).toHaveBeenCalledWith('/v9/projects/my-app');
+      expect(patch).toHaveBeenCalledWith('/v9/projects/prj_existing', expect.objectContaining({ rootDirectory: 'src', outputDirectory: 'dist' }));
     });
 
     it('throws a wrapped error when project creation fails for an unrelated reason', async () => {
@@ -255,6 +305,98 @@ describe('vercel.provider', () => {
       await expect(
         provider.ensureProject('token', {}, { projectName: 'bad name!' }, null)
       ).rejects.toMatchObject({ provider: 'vercel', status: 400 });
+    });
+  });
+
+  describe('buildProjectSettings', () => {
+    it('treats Vite as the framework even when the analyzer reports framework=Vite', () => {
+      expect(provider.buildProjectSettings({
+        framework: 'Vite',
+        buildTool: 'Vite',
+        rootDirectory: 'app',
+      })).toEqual({
+        framework: 'vite',
+        rootDirectory: 'app',
+        buildCommand: 'npm run build',
+        outputDirectory: 'dist',
+        installCommand: 'npm install',
+      });
+    });
+
+    it('maps Vue to the Vue framework preset while keeping Vite build output', () => {
+      expect(provider.buildProjectSettings({
+        framework: 'Vue',
+        buildTool: 'Vite',
+        rootDirectory: 'frontend',
+        buildCommand: 'npm run build',
+        outputDirectory: 'dist',
+        installCommand: 'npm install',
+      })).toEqual({
+        framework: 'vue',
+        rootDirectory: 'frontend',
+        buildCommand: 'npm run build',
+        outputDirectory: 'dist',
+        installCommand: 'npm install',
+      });
+    });
+
+    it('infers Vite settings when an older deployment record has buildTool but no framework/build/output fields', () => {
+      expect(provider.buildProjectSettings({
+        framework: null,
+        buildTool: 'Vite',
+        rootDirectory: 'app',
+      })).toEqual({
+        framework: 'vite',
+        rootDirectory: 'app',
+        buildCommand: 'npm run build',
+        outputDirectory: 'dist',
+        installCommand: 'npm install',
+      });
+    });
+
+    it('infers Vite from a previous build command/output directory even when framework is missing', () => {
+      expect(provider.buildProjectSettings({
+        framework: null,
+        buildCommand: 'vite build',
+        rootDirectory: 'web',
+        outputDirectory: 'dist',
+      })).toEqual({
+        framework: 'vite',
+        rootDirectory: 'web',
+        buildCommand: 'vite build',
+        outputDirectory: 'dist',
+        installCommand: 'npm install',
+      });
+    });
+
+    it('allows a static site to use Vercel native source serving', () => {
+      expect(() => provider.assertCompleteFrontendSettings({
+        framework: null,
+        rootDirectory: 'site',
+        buildCommand: null,
+        outputDirectory: '.',
+        installCommand: null,
+      })).not.toThrow();
+    });
+
+    it('allows Next.js to rely on Vercel native output handling', () => {
+      expect(() => provider.assertCompleteFrontendSettings({
+        framework: 'nextjs',
+        rootDirectory: 'web',
+        buildCommand: null,
+        outputDirectory: null,
+        installCommand: 'npm install',
+      })).not.toThrow();
+    });
+
+    it('rejects an incomplete Vercel configuration instead of persisting Framework=Other / Output=.', () => {
+      expect(() => provider.assertCompleteFrontendSettings({
+        framework: 'vite',
+        rootDirectory: 'app',
+        buildCommand: null,
+        outputDirectory: '.',
+        installCommand: 'npm install',
+      })).toThrow('Vercel deployment configuration is incomplete');
     });
   });
 
@@ -328,7 +470,16 @@ describe('vercel.provider', () => {
 
       const result = await provider.getDeploymentStatus('token', {}, 'dpl_1');
 
-      expect(result).toEqual({ state, isTerminal, isSuccess, url: 'https://my-app.vercel.app' });
+      expect(result).toEqual({ state, isTerminal, isSuccess, url: 'https://my-app.vercel.app', aliases: [] });
+    });
+
+    it('exposes production aliases (public even when the unique deployment URL is protected)', async () => {
+      const get = jest.fn().mockResolvedValue({ data: { readyState: 'READY', url: 'my-app-abc-team.vercel.app', alias: ['my-app.vercel.app'] } });
+      axios.create = jest.fn(() => ({ get }));
+
+      const result = await provider.getDeploymentStatus('token', {}, 'dpl_1');
+
+      expect(result.aliases).toEqual(['my-app.vercel.app']);
     });
   });
 

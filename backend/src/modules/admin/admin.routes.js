@@ -7,6 +7,7 @@ const adminController = require('./admin.controller');
 const backupController = require('../backup/backup.controller');
 const couponController = require('../coupons/coupon.controller');
 const geminiPoolController = require('../gemini-pool/geminiPool.controller');
+const groqPoolController = require('../groq-pool/groqPool.controller');
 
 router.use(auth, adminOnly);
 
@@ -42,5 +43,15 @@ router.post('/gemini-keys/:id/test', geminiPoolController.testKey);
 router.patch('/gemini-keys/:id', geminiPoolController.updateKey);
 router.delete('/gemini-keys/:id', geminiPoolController.deleteKey);
 router.get('/gemini-pool/status', geminiPoolController.getPoolStatus);
+
+// Groq API key pool (Kashi assistant) — same dedicated database as the Gemini
+// pool, separate collection and separate pool service in ai-service.
+router.get('/groq-keys', groqPoolController.listKeys);
+router.post('/groq-keys', groqPoolController.addKey);
+router.post('/groq-keys/reorder', groqPoolController.reorderKeys);
+router.post('/groq-keys/:id/test', groqPoolController.testKey);
+router.patch('/groq-keys/:id', groqPoolController.updateKey);
+router.delete('/groq-keys/:id', groqPoolController.deleteKey);
+router.get('/groq-pool/status', groqPoolController.getPoolStatus);
 
 module.exports = router;

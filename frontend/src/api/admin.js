@@ -53,4 +53,17 @@ export const adminAPI = {
     if (status && status !== 'all') params.append('status', status);
     return api.get(`/admin/gemini-pool/status?${params.toString()}`);
   },
+
+  // Groq API Key Pool (Kashi assistant) — same database as the Gemini pool
+  getGroqKeys: ({ page = 1, limit = 50, search = '', status = 'all' } = {}) => {
+    const params = new URLSearchParams({ page, limit });
+    if (search) params.append('search', search);
+    if (status && status !== 'all') params.append('status', status);
+    return api.get(`/admin/groq-keys?${params.toString()}`);
+  },
+  addGroqKey: (data) => api.post("/admin/groq-keys", data),
+  updateGroqKey: (id, data) => api.patch(`/admin/groq-keys/${id}`, data),
+  deleteGroqKey: (id) => api.delete(`/admin/groq-keys/${id}`),
+  testGroqKey: (id) => api.post(`/admin/groq-keys/${id}/test`),
+  getGroqPoolStatus: ({ page = 1, limit = 100 } = {}) => api.get(`/admin/groq-pool/status?page=${page}&limit=${limit}`),
 };
