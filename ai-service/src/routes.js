@@ -9,6 +9,7 @@ const kashiChat = require('./kashi/kashi.chat');
 const kashiFix = require('./kashi/kashi.fix');
 const runtimeCheck = require('./validators/runtime.check');
 const { diagnoseRuntimeErrors } = require('./kashi/runtimeDiagnosis');
+const deploymentPlanner = require('./deployment/planner');
 const router = express.Router();
 const GEMINI_TEST_TIMEOUT_MS = 15000;
 
@@ -107,6 +108,17 @@ router.post('/kashi/runtime-check', requireServiceKey, async (req, res) => {
     const diagnosis = result.ok ? { kind: null, hint: null } : diagnoseRuntimeErrors(result.errors);
     res.status(200).json({ success: true, data: { ...result, ...diagnosis } });
   } catch (error) { kashiError(res, error, 'Kashi could not check the site.'); }
+});
+router.post('/deployment/plan', requireServiceKey, async (req, res) => {
+  try {
+    const data = await deploymentPlanner.planDeployment({
+      candidates: req.body?.candidates || {},
+      treePaths: Array.isArray(req.body?.treePaths) ? req.body.treePaths : [],
+    });
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    kashiError(res, error, 'Deployment planner could not choose an application root.');
+  }
 });
 router.post('/groq-pool/reload', requireServiceKey, async (req, res) => { try { groqPool.invalidate(); await groqPool.loadPool(true); res.status(200).json({ success: true }); } catch (error) { console.error('Groq pool reload error:', error.message); res.status(500).json({ success: false, message: 'Failed to reload Groq pool.' }); } });
 router.get('/groq-pool/status', requireServiceKey, async (req, res) => { try { await groqPool.loadPool(); res.status(200).json({ success: true, data: groqPool.getSnapshot() }); } catch (error) { console.error('Groq pool status error:', error.message); res.status(500).json({ success: false, message: 'Failed to load Groq pool status.' }); } });

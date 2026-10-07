@@ -156,9 +156,130 @@ const getTeam = async (accessToken, teamId) => {
  * so the dashboard shows the right build defaults. Left as `null` (Vercel
  * auto-detects) for anything we're not confident about — an unsupported
  * preset value is worse than none. */
-const mapFrameworkToVercelPreset = (framework) => {
-  const map = { 'Next.js': 'nextjs', React: 'vite', Vue: 'vite' };
-  return map[framework] || null;
+const mapFrameworkToVercelPreset = (framework, buildTool) => {
+  const rawFramework = String(framework || '').trim().toLowerCase();
+  const rawBuildTool = String(buildTool || '').trim().toLowerCase();
+
+  if (rawFramework === 'vite' || rawBuildTool === 'vite') return 'vite';
+  if (rawFramework === 'next.js' || rawFramework === 'nextjs' || rawFramework.includes('next')) return 'nextjs';
+  if (rawFramework === 'react' || rawFramework.includes('react')) return 'vite';
+  if (rawFramework === 'vue' || rawFramework.includes('vue')) return 'vue';
+  if (rawFramework === 'svelte') return 'svelte';
+  if (rawFramework === 'sveltekit') return 'sveltekit';
+  if (rawFramework === 'astro') return 'astro';
+  if (rawFramework === 'angular') return 'angular';
+  if (rawFramework === 'preact') return 'preact';
+  return null;
+};
+
+const buildProjectSettings = (config = {}) => {
+  const buildTool = String(config.buildTool || '').trim().toLowerCase();
+  const framework = String(config.framework || '').trim().toLowerCase();
+  const buildCommand = String(config.buildCommand || '').trim();
+  const outputDirectory = String(config.outputDirectory || '').trim();
+
+  // The analyzer may persist older deployment records that contain buildTool
+  // and outputDirectory but have a missing/legacy framework value. Recover the
+  // Vercel preset from the strongest available signals instead of sending
+  // framework=null and letting the project fall back to "Other".
+  const looksViteLike =
+    buildTool === 'vite' ||
+    framework === 'vite' ||
+    framework === 'react' ||
+    framework === 'vue' ||
+    /\bvite\b/i.test(buildCommand) ||
+    outputDirectory === 'dist';
+
+  const inferredFramework = config.framework || (looksViteLike ? 'Vite' : null);
+  const normalizedBuildCommand = config.buildCommand || (looksViteLike ? 'npm run build' : null);
+  const normalizedOutputDirectory = config.outputDirectory || (looksViteLike ? 'dist' : null);
+  const normalizedInstallCommand = config.installCommand || (inferredFramework || buildTool ? 'npm install' : null);
+  const frameworkPreset = mapFrameworkToVercelPreset(inferredFramework, buildTool);
+
+  return {
+    framework: frameworkPreset,
+    rootDirectory: config.rootDirectory || null,
+    buildCommand: normalizedBuildCommand,
+    outputDirectory: normalizedOutputDirectory,
+    installCommand: normalizedInstallCommand,
+  };
+};
+
+const assertCompleteFrontendSettings = (settings) => {
+  const isStaticSite =
+    !settings.framework &&
+    !settings.buildCommand &&
+    !settings.installCommand &&
+    (!settings.outputDirectory || settings.outputDirectory === '.');
+  if (isStaticSite) return;
+
+  const missing = [];
+  if (!settings.framework) missing.push('framework');
+
+  const isViteFamily = settings.framework === 'vite' || settings.framework === 'vue';
+  const isNextJs = settings.framework === 'nextjs';
+
+  if (isViteFamily && !settings.buildCommand) missing.push('buildCommand');
+  if (isViteFamily && (!settings.outputDirectory || settings.outputDirectory === '.')) missing.push('outputDirectory');
+  if (!settings.installCommand) missing.push('installCommand');
+
+  // Next.js and several other Vercel-native frameworks may intentionally leave
+  // outputDirectory unset so Vercel uses the framework's native output.
+  // Likewise, a framework can rely on Vercel's default build command when the
+  // analyzer explicitly identified the framework. Only Vite-family projects
+  // require the explicit dist/build pair that prevents raw source serving.
+  if (isNextJs) {
+    const nextOnlyMissing = missing.filter((field) => !['buildCommand', 'outputDirectory'].includes(field));
+    if (nextOnlyMissing.length === 0) return;
+  }
+
+  if (missing.length) {
+    const err = new Error(`Vercel deployment configuration is incomplete: ${missing.join(', ')} could not be resolved from the repository analysis.`);
+    err.status = 409;
+    err.provider = 'vercel';
+    err.missingSettings = missing;
+    throw err;
+  }
+};
+
+/**
+ * Re-applies the deployment plan to an existing Vercel project. This is
+ * intentionally done even when a project already exists: Vercel persists old
+ * framework/root/build overrides, and those stale settings can make an
+ * otherwise-correct repository serve raw source files (for example .tsx as
+ * application/octet-stream) instead of the production dist output.
+ */
+const synchronizeProjectSettings = async (api, projectId, config) => {
+  const settings = buildProjectSettings(config);
+  assertCompleteFrontendSettings(settings);
+
+  await api.patch(`/v9/projects/${projectId}`, settings);
+
+  // Verify with a fresh GET rather than trusting the PATCH response. This is
+  // important for integration credentials because the returned project object
+  // can be stale/partial even though the dashboard settings are persisted.
+  const { data: verified } = await api.get(`/v9/projects/${projectId}`);
+  const fields = ['framework', 'rootDirectory', 'buildCommand', 'outputDirectory', 'installCommand'];
+  const mismatches = fields.filter((field) => {
+    const expected = settings[field] ?? null;
+    const actual = verified?.[field] ?? null;
+    return expected !== actual;
+  });
+
+  if (mismatches.length) {
+    const err = new Error(`Vercel project settings were not persisted: ${mismatches.join(', ')}`);
+    err.status = 502;
+    err.provider = 'vercel';
+    err.expectedSettings = settings;
+    err.actualSettings = mismatches.reduce((acc, field) => {
+      acc[field] = verified?.[field] ?? null;
+      return acc;
+    }, {});
+    throw err;
+  }
+
+  console.log(`[vercel] verified project settings for ${projectId}`, settings);
+  return settings;
 };
 
 // --- Provider interface implementation (see provider.interface.js) ---
@@ -175,39 +296,21 @@ const validateConnection = async (credential, metadata) => {
 
 /** Creates the Vercel project for this deployment, or adopts the existing
  * one if we already have a projectId on record (redeploy / retry path). */
-const buildProjectSettings = (config = {}) => {
-  const settings = {};
-  const framework = mapFrameworkToVercelPreset(config.framework);
-  if (framework) settings.framework = framework;
-  // Root Directory is a project-level setting on Vercel. Explicitly send null
-  // when the deployment belongs at repository root so an older nested setting
-  // cannot survive a redeploy.
-  settings.rootDirectory = config.rootDirectory || null;
-  if (Object.prototype.hasOwnProperty.call(config, 'buildCommand')) settings.buildCommand = config.buildCommand || null;
-  if (Object.prototype.hasOwnProperty.call(config, 'outputDirectory')) settings.outputDirectory = config.outputDirectory || null;
-  if (Object.prototype.hasOwnProperty.call(config, 'installCommand')) settings.installCommand = config.installCommand || null;
-  return settings;
-};
-
-const syncProjectSettings = async (api, projectId, config) => {
-  const settings = buildProjectSettings(config);
-  if (!Object.keys(settings).length) return;
-  await api.patch(`/v9/projects/${projectId}`, settings);
-};
-
-/** Creates the Vercel project for this deployment, or adopts and reconfigures
- * the existing one on every redeploy/retry so stale Root Directory/build
- * settings can never make Vercel serve source files directly. */
 const ensureProject = async (credential, metadata, config, existing) => {
   const api = vercelApi(credential, metadata?.teamId);
 
   if (existing?.projectId) {
     try {
       const { data } = await api.get(`/v9/projects/${existing.projectId}`);
-      await syncProjectSettings(api, data.id, config);
+      try {
+        const settings = await synchronizeProjectSettings(api, data.id, config);
+        console.log(`[vercel] synchronized project ${data.name} (${data.id})`, settings);
+      } catch (error) {
+        throw wrapError(error, 'synchronizing existing project settings');
+      }
       return { projectId: data.id, projectName: data.name, repoId: data.link?.repoId || null };
     } catch (error) {
-      if (error?.response?.status !== 404) throw wrapError(error, 'looking up/configuring existing project');
+      if (error?.response?.status !== 404) throw error?.provider === 'vercel' ? error : wrapError(error, 'looking up existing project');
       // Project was deleted on Vercel's side since we last saw it — recreate below.
     }
   }
@@ -215,20 +318,23 @@ const ensureProject = async (credential, metadata, config, existing) => {
   try {
     const { data } = await api.post('/v9/projects', {
       name: config.projectName,
-      framework: mapFrameworkToVercelPreset(config.framework),
+      ...buildProjectSettings(config),
       gitRepository: { type: 'github', repo: `${config.repoOwner}/${config.repoName}` },
-      rootDirectory: config.rootDirectory || null,
-      buildCommand: config.buildCommand || null,
-      outputDirectory: config.outputDirectory || null,
-      installCommand: config.installCommand || null,
     });
     return { projectId: data.id, projectName: data.name, repoId: data.link?.repoId || null };
   } catch (error) {
     const alreadyExists = error?.response?.status === 409 || /already exists/i.test(error?.response?.data?.error?.message || '');
     if (alreadyExists) {
-      const { data } = await api.get(`/v9/projects/${config.projectName}`);
-      await syncProjectSettings(api, data.id, config);
-      return { projectId: data.id, projectName: data.name, repoId: data.link?.repoId || null };
+      // A project with this name is already in the account (e.g. a retried
+      // request after a timed-out response) — adopt it and force the new plan.
+      try {
+        const { data } = await api.get(`/v9/projects/${config.projectName}`);
+        const settings = await synchronizeProjectSettings(api, data.id, config);
+        console.log(`[vercel] synchronized adopted project ${data.name} (${data.id})`, settings);
+        return { projectId: data.id, projectName: data.name, repoId: data.link?.repoId || null };
+      } catch (adoptError) {
+        throw wrapError(adoptError, 'adopting existing project');
+      }
     }
     throw wrapError(error, 'creating project');
   }
@@ -338,6 +444,9 @@ module.exports = {
   getTeam,
   validateConnection,
   ensureProject,
+  synchronizeProjectSettings,
+  buildProjectSettings,
+  assertCompleteFrontendSettings,
   configureEnvironment,
   deploy,
   getDeploymentStatus,

@@ -5,9 +5,13 @@
 // this module away entirely. Only the GitHub API boundary is mocked here;
 // the real analyzer, real FRAMEWORK_RULES, and real envScan all run.
 jest.mock('../../../../src/services/github.service');
+jest.mock('../../../../src/services/deployment/analyzer/aiSelector', () => ({
+  selectRoots: jest.fn(),
+}));
 
 const githubService = require('../../../../src/services/github.service');
 const { analyzeRepository } = require('../../../../src/services/deployment/analyzer');
+const { selectRoots } = require('../../../../src/services/deployment/analyzer/aiSelector');
 
 const blob = (path, size = 100) => ({ type: 'blob', path, size });
 
@@ -17,6 +21,7 @@ describe('analyzeRepository', () => {
   beforeEach(() => {
     githubService.getRepository.mockResolvedValue({ defaultBranch: 'main' });
     githubService.getFileContent.mockResolvedValue(null);
+    selectRoots.mockResolvedValue({ status: 'unavailable', reason: 'test fallback' });
   });
 
   it('detects a FULLSTACK project with a Vite/React frontend and an Express backend in separate roots', async () => {
@@ -86,14 +91,55 @@ describe('analyzeRepository', () => {
     expect(result.backend).toBeNull();
   });
 
-  it('warns instead of guessing when two frontend candidates are found', async () => {
-    githubService.getRepoTree.mockResolvedValue([blob('app-a/package.json'), blob('app-b/package.json')]);
-    githubService.getFileContent.mockResolvedValue(JSON.stringify({ dependencies: { react: '18.0.0', vite: '5.0.0' } }));
+  it('uses deterministic evidence when the AI deployment planner is unavailable', async () => {
+    githubService.getRepoTree.mockResolvedValue([
+      blob('app-a/package.json'),
+      blob('app-a/index.html'),
+      blob('app-a/src/main.jsx'),
+      blob('app-b/package.json'),
+    ]);
+    githubService.getFileContent.mockImplementation(async (token, owner, repo, path) => {
+      if (path === 'app-a/package.json' || path === 'app-b/package.json') {
+        return JSON.stringify({ dependencies: { react: '18.0.0', vite: '5.0.0' }, scripts: { build: 'vite build' } });
+      }
+      return null;
+    });
 
     const result = await analyzeRepository(baseArgs);
 
-    expect(result.architecture).toBe('UNKNOWN');
-    expect(result.warnings[0]).toMatch(/multiple candidate/i);
+    expect(result.architecture).toBe('FRONTEND_ONLY');
+    expect(result.frontend.rootDirectory).toBe('app-a');
+    expect(result.selection.frontend.method).toBe('deterministic-override');
+    expect(result.warnings.join(' ')).toMatch(/planner unavailable|selected frontend root/i);
+  });
+
+  it('accepts the AI-selected root when deterministic evidence says it is safe', async () => {
+    githubService.getRepoTree.mockResolvedValue([
+      blob('store/package.json'),
+      blob('store/index.html'),
+      blob('store/src/main.jsx'),
+      blob('marketing/package.json'),
+      blob('marketing/index.html'),
+      blob('marketing/src/main.jsx'),
+    ]);
+    githubService.getFileContent.mockImplementation(async (token, owner, repo, path) => {
+      if (path === 'store/package.json' || path === 'marketing/package.json') {
+        return JSON.stringify({ dependencies: { react: '18.0.0', vite: '5.0.0' }, scripts: { build: 'vite build' } });
+      }
+      return null;
+    });
+    selectRoots.mockResolvedValue({
+      status: 'ok',
+      frontend: { root: 'store', confidence: 0.94, reason: 'production store app' },
+      backend: null,
+    });
+
+    const result = await analyzeRepository(baseArgs);
+
+    expect(result.frontend.rootDirectory).toBe('store');
+    expect(result.selection.frontend.method).toBe('ai-assisted');
+    expect(result.selection.frontend.confidence).toBe(0.94);
+    expect(selectRoots).toHaveBeenCalled();
   });
 
   // Removed: the "combined package.json" warning branch requires one

@@ -178,6 +178,7 @@ const runDeployment = async (deploymentId) => {
         {
           projectName: buildResourceName(deployment, 'frontend'),
           framework: deployment.analysis?.frontend?.framework,
+          buildTool: deployment.analysis?.frontend?.buildTool,
           repoOwner: deployment.repository.owner,
           repoName: deployment.repository.name,
           rootDirectory: deployment.analysis?.frontend?.rootDirectory,

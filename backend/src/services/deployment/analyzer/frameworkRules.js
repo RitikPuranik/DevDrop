@@ -36,7 +36,7 @@ const FRAMEWORK_RULES = [
     provider: DEPLOYMENT_PROVIDERS.VERCEL,
     framework: 'React',
     match: ({ deps, filesAtRoot }) =>
-      hasDep(deps, 'vite') && (hasDep(deps, 'react') || filesAtRoot.some((f) => /^vite\.config\.(js|ts|mjs)$/.test(f))),
+      (hasDep(deps, 'vite') || hasDep(deps, '@vitejs/plugin-react') || filesAtRoot.some((f) => /^vite\.config\.(js|ts|mjs|cjs)$/.test(f))) && (hasDep(deps, 'react') || hasDep(deps, 'react-dom') || hasDep(deps, '@vitejs/plugin-react') || filesAtRoot.some((f) => /\.(jsx|tsx)$/.test(f))),
     resolve: ({ scripts, viteConfigContent }) => {
       const outDirMatch = viteConfigContent && viteConfigContent.match(/outDir\s*:\s*['"]([^'"]+)['"]/);
       return {
@@ -53,7 +53,7 @@ const FRAMEWORK_RULES = [
     provider: DEPLOYMENT_PROVIDERS.VERCEL,
     framework: 'Vue',
     match: ({ deps, filesAtRoot }) =>
-      hasDep(deps, 'vite') && hasDep(deps, 'vue') && !filesAtRoot.some((f) => /^next\.config\.(js|mjs|ts)$/.test(f)),
+      (hasDep(deps, 'vite') || filesAtRoot.some((f) => /^vite\.config\.(js|ts|mjs|cjs)$/.test(f))) && hasDep(deps, 'vue') && !filesAtRoot.some((f) => /^next\.config\.(js|mjs|ts|cjs)$/.test(f)),
     resolve: ({ scripts, viteConfigContent }) => {
       const outDirMatch = viteConfigContent && viteConfigContent.match(/outDir\s*:\s*['"]([^'"]+)['"]/);
       return {
