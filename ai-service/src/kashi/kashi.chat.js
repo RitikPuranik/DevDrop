@@ -4,6 +4,21 @@ const { resolveNavigation, keywordRoute, describeRoutes } = require('./appMap');
 const MAX_HISTORY = 8;
 const MAX_MESSAGE_CHARS = 1200;
 
+const RESPONSE_SCHEMA = {
+  name: 'kashi_chat_response',
+  strict: true,
+  schema: {
+    type: 'object',
+    properties: {
+      reply: { type: 'string' },
+      navigate: { type: ['string', 'null'] },
+      fix_deployment: { type: 'boolean' },
+    },
+    required: ['reply', 'navigate', 'fix_deployment'],
+    additionalProperties: false,
+  },
+};
+
 function buildSystemPrompt(context) {
   return `You are Kashi, the friendly in-app assistant of DevDrop (a platform to buy website templates, generate websites with AI Studio, and deploy projects to Vercel/Render).
 
@@ -67,6 +82,7 @@ async function answer({ message, history, context = {} }) {
     out = await groq.chat({
       tier: 'fast',
       json: true,
+      jsonSchema: RESPONSE_SCHEMA,
       messages: [{ role: 'system', content: buildSystemPrompt(safeContext) }, ...sanitizeHistory(history), { role: 'user', content: text }],
     });
   } catch (error) {

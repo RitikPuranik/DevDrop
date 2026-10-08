@@ -10,7 +10,7 @@ const { resolveNavigation } = require('../src/kashi/appMap');
 const httpError = (status, headers = {}) => Object.assign(new Error(`HTTP ${status}`), { response: { status, headers, data: { error: { message: `HTTP ${status}` } } } });
 
 describe('groq pool', () => {
-  beforeEach(() => { groqPool._internal.pool.clear(); groqPool._internal.bootstrapFromEnv(); });
+  beforeEach(() => { groqPool._internal.pool.clear(); groqPool._internal.bootstrapFromEnv(); groqPool._internal.resetGlobalRateLimit(); });
 
   test('fails over to the next key on 429 and cools the first', async () => {
     const used = [];

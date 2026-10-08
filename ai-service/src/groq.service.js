@@ -21,9 +21,9 @@ const list = (value, fallback) => {
 
 function getModels(tier) {
   if (tier === 'edit') {
-    return list(process.env.GROQ_EDIT_MODELS || process.env.GROQ_EDIT_MODEL, ['llama-3.3-70b-versatile']);
+    return list(process.env.GROQ_EDIT_MODELS || process.env.GROQ_EDIT_MODEL, ['openai/gpt-oss-120b']);
   }
-  return list(process.env.GROQ_FAST_MODELS || process.env.GROQ_FAST_MODEL, ['llama-3.1-8b-instant']);
+  return list(process.env.GROQ_FAST_MODELS || process.env.GROQ_FAST_MODEL, ['openai/gpt-oss-20b']);
 }
 
 function parseJson(text) {
@@ -49,10 +49,10 @@ function parseJson(text) {
  *          json?: boolean, temperature?: number, maxTokens?: number, timeoutMs?: number}} opts
  * @returns {Promise<{text: string, json: any, model: string, keyId: string}>}
  */
-async function chat({ tier = 'fast', messages, json = false, temperature, maxTokens, timeoutMs }) {
+async function chat({ tier = 'fast', messages, json = false, jsonSchema = null, temperature, maxTokens, timeoutMs }) {
   const models = getModels(tier);
   const defaultTemp = tier === 'edit' ? 0.1 : 0.3;
-  const defaultMax = tier === 'edit' ? Number.parseInt(process.env.GROQ_EDIT_MAX_TOKENS || '8000', 10) : Number.parseInt(process.env.GROQ_FAST_MAX_TOKENS || '700', 10);
+  const defaultMax = tier === 'edit' ? Number.parseInt(process.env.GROQ_EDIT_MAX_TOKENS || '1800', 10) : Number.parseInt(process.env.GROQ_FAST_MAX_TOKENS || '500', 10);
   const timeout = timeoutMs || Number.parseInt(process.env.GROQ_TIMEOUT_MS || (tier === 'edit' ? '90000' : '25000'), 10);
 
   let lastError = null;
@@ -67,7 +67,11 @@ async function chat({ tier = 'fast', messages, json = false, temperature, maxTok
               messages,
               temperature: temperature ?? defaultTemp,
               max_tokens: maxTokens || defaultMax,
-              ...(json ? { response_format: { type: 'json_object' } } : {}),
+              ...(json ? {
+                response_format: jsonSchema
+                  ? { type: 'json_schema', json_schema: jsonSchema }
+                  : { type: 'json_object' },
+              } : {}),
             },
             { timeout, headers: { Authorization: `Bearer ${rawKey}`, 'Content-Type': 'application/json' } }
           )

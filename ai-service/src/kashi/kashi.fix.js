@@ -11,10 +11,39 @@ const groq = require('../groq.service');
 
 const MAX_EDITS = Number.parseInt(process.env.KASHI_MAX_EDITS || '8', 10);
 const MAX_CHANGED_LINES = Number.parseInt(process.env.KASHI_MAX_CHANGED_LINES || '60', 10);
-const MAX_LOG_CHARS = 14000;
-const MAX_FILE_CHARS = 14000;
-const MAX_TOTAL_FILE_CHARS = 70000;
+const MAX_LOG_CHARS = 6000;
+const MAX_FILE_CHARS = 6500;
+const MAX_TOTAL_FILE_CHARS = 18000;
 const MAX_REPO_PATHS = 700;
+
+const RESPONSE_SCHEMA = {
+  name: 'kashi_fix_response',
+  strict: true,
+  schema: {
+    type: 'object',
+    properties: {
+      action: { type: 'string', enum: ['fix', 'need_files', 'cannot_fix'] },
+      summary: { type: ['string', 'null'] },
+      reason: { type: ['string', 'null'] },
+      need_files: { type: 'array', items: { type: 'string' } },
+      edits: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            path: { type: 'string' },
+            find: { type: 'string' },
+            replace: { type: 'string' },
+          },
+          required: ['path', 'find', 'replace'],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ['action', 'summary', 'reason', 'need_files', 'edits'],
+    additionalProperties: false,
+  },
+};
 
 const FORBIDDEN_PATH = /(^|\/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb|\.env(\..*)?|\.git\/.*|\.github\/.*|node_modules\/.*)$/i;
 
@@ -29,10 +58,9 @@ STRICT RULES
 - If you need to see another file to be sure, respond with need_files (max 4 paths taken from REPO PATHS) and nothing else.
 - If PREVIOUS ATTEMPTS are listed, those fixes did not resolve the build; do not repeat them.
 
-OUTPUT: ONLY a JSON object, one of:
-{"need_files": ["path/from/repo/paths"]}
-{"cannot_fix": true, "reason": "..."}
-{"summary": "one sentence describing the fix", "edits": [{"path": "exact path from FILES", "find": "exact existing text, copied verbatim, unique within the file", "replace": "replacement text"}]}
+OUTPUT: ONLY a JSON object matching this structure:
+{"action":"fix|need_files|cannot_fix","summary":"string or null","reason":"string or null","need_files":["path/from/repo/paths"],"edits":[{"path":"exact path from FILES","find":"exact existing text, copied verbatim, unique within the file","replace":"replacement text"}]}
+Use action=fix with edits, action=need_files with up to 4 missing paths, or action=cannot_fix with a short reason. Set unused fields to null or empty arrays.
 
 "find" must be copied character-for-character from the file (including indentation) and must occur exactly once in that file. Keep "find" as short as possible while still being unique.`;
 
@@ -141,7 +169,7 @@ async function proposeFix({ errorLog, files = [], repoPaths = [], previousAttemp
   ];
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const out = await groq.chat({ tier: 'edit', json: true, messages });
+    const out = await groq.chat({ tier: 'edit', json: true, jsonSchema: RESPONSE_SCHEMA, maxTokens: Number.parseInt(process.env.GROQ_EDIT_MAX_TOKENS || '1800', 10), messages });
     const parsed = out.json;
     if (!parsed || typeof parsed !== 'object') {
       lastReason = 'The model returned invalid JSON.';
@@ -149,9 +177,9 @@ async function proposeFix({ errorLog, files = [], repoPaths = [], previousAttemp
       continue;
     }
 
-    if (parsed.cannot_fix === true) return { status: 'cannot_fix', reason: String(parsed.reason || 'This error cannot be fixed by changing code.').slice(0, 400) };
+    if (parsed.action === 'cannot_fix' || parsed.cannot_fix === true) return { status: 'cannot_fix', reason: String(parsed.reason || 'This error cannot be fixed by changing code.').slice(0, 400) };
 
-    if (Array.isArray(parsed.need_files) && parsed.need_files.length) {
+    if (parsed.action === 'need_files' && Array.isArray(parsed.need_files) && parsed.need_files.length) {
       const known = new Set(repoPaths);
       const wanted = parsed.need_files.filter((p) => typeof p === 'string' && known.has(p) && !FORBIDDEN_PATH.test(p)).slice(0, 4);
       const already = new Set(safeFiles.map((f) => f.path));
@@ -162,7 +190,7 @@ async function proposeFix({ errorLog, files = [], repoPaths = [], previousAttemp
       continue;
     }
 
-    const applied = applyEdits(parsed.edits, safeFiles);
+    const applied = applyEdits(parsed.action === 'fix' ? parsed.edits : parsed.edits, safeFiles);
     if (applied.ok) {
       return {
         status: 'fix',

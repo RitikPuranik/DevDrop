@@ -24,6 +24,7 @@ const DAILY_TOKEN_LIMIT = Number.parseInt(process.env.GROQ_DAILY_TOKEN_LIMIT || 
 const pool = new Map();
 let lastLoadedAt = 0;
 let loadingPromise = null;
+let globalRateLimitUntil = 0;
 
 const isMongoReady = () => mongoose.connection && mongoose.connection.readyState === 1;
 
@@ -184,11 +185,36 @@ function selectKey(excludeIds = []) {
 }
 
 /** Groq failure classification (HTTP semantics are OpenAI-compatible). */
+function parseDurationMs(value) {
+  if (value == null) return 0;
+  const raw = String(value).trim().toLowerCase();
+  if (!raw) return 0;
+  if (/^\d+(?:\.\d+)?$/.test(raw)) return Number(raw) * 1000;
+  let total = 0;
+  const re = /(\d+(?:\.\d+)?)(ms|s|m|h)/g;
+  let match;
+  while ((match = re.exec(raw))) {
+    const n = Number(match[1]);
+    if (match[2] === 'ms') total += n;
+    else if (match[2] === 's') total += n * 1000;
+    else if (match[2] === 'm') total += n * 60000;
+    else if (match[2] === 'h') total += n * 3600000;
+  }
+  return total;
+}
+
+function rateLimitWaitMs(error) {
+  const headers = error?.response?.headers || {};
+  const retryAfter = parseDurationMs(headers['retry-after']);
+  const tokenReset = parseDurationMs(headers['x-ratelimit-reset-tokens']);
+  const requestReset = parseDurationMs(headers['x-ratelimit-reset-requests']);
+  return Math.max(retryAfter, tokenReset, requestReset);
+}
+
 function classify(error) {
   const status = error?.response?.status;
   const code = error?.code;
-  const retryAfterHeader = error?.response?.headers?.['retry-after'];
-  const retryAfterMs = retryAfterHeader && Number.isFinite(Number(retryAfterHeader)) ? Number(retryAfterHeader) * 1000 : 0;
+  const retryAfterMs = rateLimitWaitMs(error);
   if (status === 401 || status === 403) return { classification: 'invalid', failoverKey: true, retryAfterMs: 0 };
   if (status === 429) return { classification: 'rate_limit', failoverKey: true, retryAfterMs };
   if (status >= 500 || ['ECONNABORTED', 'ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'EPIPE'].includes(code)) {
@@ -312,6 +338,13 @@ function shortestCooldownRemaining(excludeIds = []) {
  */
 async function execute(requestFn) {
   await loadPool();
+  if (globalRateLimitUntil > Date.now()) {
+    const retryAfterMs = globalRateLimitUntil - Date.now();
+    throw new PoolExhaustedError(
+      `Groq organization rate limit is active; retry in ${Math.ceil(retryAfterMs / 1000)}s.`,
+      retryAfterMs
+    );
+  }
   if (pool.size === 0) {
     const err = new Error('No Groq API keys are configured.');
     err.userMessage = 'Kashi is not configured yet. Add a Groq API key from Admin Panel -> Groq Pool (or set GROQ_API_KEY).';
@@ -349,6 +382,14 @@ async function execute(requestFn) {
       lastError = error;
       lastInfo = info;
       console.warn('[Groq Pool] FAILED', { key: entry.label, keyId: entry.id, reason: info.classification, status: error?.response?.status || null });
+      if (info.classification === 'rate_limit') {
+        const waitMs = Math.min(info.retryAfterMs || RATE_LIMIT_COOLDOWN_MS, MAX_COOLDOWN_MS);
+        globalRateLimitUntil = Math.max(globalRateLimitUntil, Date.now() + waitMs);
+        throw new PoolExhaustedError(
+          `Groq organization rate limit reached; retry in ${Math.ceil(waitMs / 1000)}s.`,
+          waitMs
+        );
+      }
       if (!info.failoverKey) throw error;
       excludeIds.push(entry.id);
     }
@@ -419,7 +460,8 @@ function getSnapshot() {
     activeRequests: keys.reduce((s, k) => s + k.inFlight, 0),
     totalDailyTokens: keys.reduce((s, k) => s + k.dailyTokensUsed, 0),
     dailyTokenLimit: DAILY_TOKEN_LIMIT,
-    hasAvailableKey: keys.some((k) => k.enabled && !['invalid', 'disabled'].includes(k.status) && k.cooldownRemainingMs === 0),
+    globalRateLimitRemainingMs: Math.max(0, globalRateLimitUntil - now),
+    hasAvailableKey: globalRateLimitUntil <= now && keys.some((k) => k.enabled && !['invalid', 'disabled'].includes(k.status) && k.cooldownRemainingMs === 0),
     keys,
   };
 }
@@ -432,5 +474,16 @@ module.exports = {
   testSingleKey,
   getSnapshot,
   PoolExhaustedError,
-  _internal: { pool, bootstrapFromEnv, markSuccess, markFailure, markAcquired, classify },
+  _internal: {
+    pool,
+    bootstrapFromEnv,
+    markSuccess,
+    markFailure,
+    markAcquired,
+    classify,
+    parseDurationMs,
+    rateLimitWaitMs,
+    getGlobalRateLimitUntil: () => globalRateLimitUntil,
+    resetGlobalRateLimit: () => { globalRateLimitUntil = 0; },
+  },
 };
