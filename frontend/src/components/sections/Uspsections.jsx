@@ -22,6 +22,7 @@ import {
 const EASE_OUT = [0.16, 1, 0.3, 1];
 const INK = '#1a1612';
 const BROWN = '#8b7355';
+const ACCENT = '#d2b48c';
 
 const IMG = {
   hero: 'https://images.unsplash.com/photo-1545231027-637d2f6210f8?auto=format&fm=webp&q=70&w=900',
@@ -72,7 +73,6 @@ const Scribble = ({ color = BROWN }) => (
 );
 
 export const Sheet = ({
-  bg,
   blobs,
   label,
   Icon,
@@ -83,62 +83,45 @@ export const Sheet = ({
   to,
   children,
 }) => {
-  const ref = useRef(null);
   const navigate = useNavigate();
 
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ['start end', 'start 0.25'],
-  });
-
-  const scale = useTransform(scrollYProgress, [0, 1], [0.92, 1]);
-  const radius = useTransform(scrollYProgress, [0, 1], [72, 40]);
-
   return (
-    <section className="px-3 py-3 sm:px-5 md:px-8">
-      <motion.div
-        ref={ref}
-        style={{
-          scale,
-          borderRadius: radius,
-          backgroundColor: bg,
-          color: INK,
-        }}
-        className="relative mx-auto flex min-h-[calc(100vh-80px)] max-w-[1100px] flex-col justify-center overflow-hidden px-4 py-7 sm:px-8 sm:py-8 md:py-9"
-      >
-        {blobs.map((b, i) => (
-          <motion.div
-            key={i}
-            aria-hidden="true"
-            animate={{
-              x: [0, b.dx, 0],
-              y: [0, b.dy, 0],
-            }}
-            transition={{
-              duration: 14 + i * 3,
-              repeat: Infinity,
-              ease: 'easeInOut',
-            }}
-            className="pointer-events-none absolute rounded-full blur-[90px]"
-            style={{
-              background: b.c,
-              width: b.s,
-              height: b.s,
-              left: b.x,
-              top: b.y,
-              opacity: 0.55,
-            }}
-          />
-        ))}
+    <section className="relative overflow-hidden px-4 py-14 sm:px-8 md:px-12 md:py-20">
+      {blobs.map((b, i) => (
+        <motion.div
+          key={i}
+          aria-hidden="true"
+          animate={{
+            x: [0, b.dx, 0],
+            y: [0, b.dy, 0],
+          }}
+          transition={{
+            duration: 14 + i * 3,
+            repeat: Infinity,
+            ease: 'easeInOut',
+          }}
+          className="pointer-events-none absolute rounded-full blur-[110px]"
+          style={{
+            background: b.c,
+            width: b.s,
+            height: b.s,
+            left: b.x,
+            top: b.y,
+            opacity: 0.16,
+          }}
+        />
+      ))}
 
-        <div className="relative z-10 flex flex-col items-center text-center">
+      <div className="relative z-10 mx-auto grid max-w-[1240px] items-center gap-10 lg:grid-cols-12 lg:gap-14">
+        {/* Text — left */}
+        <div className="flex flex-col items-start text-left lg:col-span-5">
           <motion.span
             initial={{ opacity: 0, y: 12 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="inline-flex items-center gap-2 rounded-full bg-black/[0.06] px-4 py-1.5 text-[12px] font-bold uppercase tracking-[0.14em]"
+            className="inline-flex items-center gap-2 rounded-full bg-white/[0.08] px-4 py-1.5 text-[12px] font-bold uppercase tracking-[0.14em] text-[#e8e2d6]"
           >
-            <Icon size={13} style={{ color: BROWN }} />
+            <Icon size={13} style={{ color: ACCENT }} />
             {label}
           </motion.span>
 
@@ -151,15 +134,15 @@ export const Sheet = ({
               delay: 0.08,
               ease: EASE_OUT,
             }}
-            className="font-napkin-display mt-3 text-[2.2rem] font-bold leading-[1.02] tracking-tight sm:text-5xl md:text-[4.5rem]"
+            className="font-napkin-display mt-4 text-[2.4rem] font-bold leading-[1.04] tracking-tight text-[#f4efe6] sm:text-5xl lg:text-[3.4rem] xl:text-[4rem]"
           >
             {headline}{' '}
             <span
               className="relative inline-block"
-              style={{ color: BROWN }}
+              style={{ color: ACCENT }}
             >
               {accent}
-              <Scribble />
+              <Scribble color={ACCENT} />
             </span>
           </motion.h2>
 
@@ -171,7 +154,7 @@ export const Sheet = ({
               delay: 0.3,
               duration: 0.8,
             }}
-            className="mt-3 text-sm font-medium text-black/55 md:text-base"
+            className="mt-5 max-w-md text-base font-medium text-white/60 md:text-lg"
           >
             {sub}
           </motion.p>
@@ -190,18 +173,16 @@ export const Sheet = ({
               window.scrollTo(0, 0);
               navigate(to);
             }}
-            className="mt-4 inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-bold text-white shadow-[0_10px_30px_rgba(26,22,18,0.25)]"
-            style={{ background: INK }}
+            className="mt-7 inline-flex items-center gap-2 rounded-full bg-[#f4efe6] px-6 py-3 text-sm font-bold text-[#1a1612] shadow-[0_10px_30px_rgba(0,0,0,0.35)]"
           >
             {cta}
             <ArrowUpRight size={16} />
           </motion.button>
         </div>
 
-        <div className="relative z-10 mt-6 md:mt-7">
-          {children}
-        </div>
-      </motion.div>
+        {/* Animation — right */}
+        <div className="min-w-0 lg:col-span-7">{children}</div>
+      </div>
     </section>
   );
 };
@@ -220,7 +201,7 @@ const Window = ({ url, children, tabs, activeTab }) => {
   return (
     <div
       style={{ perspective: 1600 }}
-      className="mx-auto w-full max-w-[1050px]"
+      className="@container w-full"
     >
       <motion.div
         ref={ref}
@@ -296,8 +277,8 @@ const DeployDemo = () => {
         tabs={['Connect', 'Build', 'Live']}
         activeTab={step}
       >
-        <div className="grid min-h-[255px] md:grid-cols-5">
-          <div className="flex flex-col justify-center gap-3 border-b border-black/[0.07] p-4 md:col-span-2 md:border-b-0 md:border-r md:p-5">
+        <div className="grid min-h-[255px] @xl:grid-cols-5">
+          <div className="flex flex-col justify-center gap-3 border-b border-black/[0.07] p-4 @xl:col-span-2 @xl:border-b-0 @xl:border-r @xl:p-5">
             <div className="flex items-center gap-2 rounded-xl bg-[#f6f2ea] p-3">
               <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#1a1612] text-white">
                 <GitBranch size={18} />
@@ -399,7 +380,7 @@ const DeployDemo = () => {
             </div>
           </div>
 
-          <div className="relative min-h-[220px] overflow-hidden bg-[#f1ede4] md:col-span-3">
+          <div className="relative min-h-[220px] overflow-hidden bg-[#f1ede4] @xl:col-span-3">
             <AnimatePresence>
               {!live && (
                 <motion.div
@@ -527,8 +508,8 @@ const AIDemo = () => {
         tabs={['Prompt', 'Build', 'Ship']}
         activeTab={tick <= 1 ? 0 : tick < 5 ? 1 : 2}
       >
-        <div className="grid min-h-[270px] md:grid-cols-5">
-          <div className="flex flex-col justify-between gap-3 border-b border-black/[0.07] p-4 md:col-span-2 md:border-b-0 md:border-r md:p-5">
+        <div className="grid min-h-[270px] @xl:grid-cols-5">
+          <div className="flex flex-col justify-between gap-3 border-b border-black/[0.07] p-4 @xl:col-span-2 @xl:border-b-0 @xl:border-r @xl:p-5">
             <div className="space-y-3 text-left">
               <div className="ml-auto w-fit max-w-[92%] rounded-2xl rounded-br-md bg-[#1a1612] px-4 py-3 text-sm font-semibold leading-snug text-white">
                 {typed}
@@ -580,7 +561,7 @@ const AIDemo = () => {
             </motion.div>
           </div>
 
-          <div className="relative overflow-hidden bg-[#f1ede4] p-4 md:col-span-3 md:p-6">
+          <div className="relative overflow-hidden bg-[#f1ede4] p-4 @xl:col-span-3 @xl:p-6">
             <div className="h-full min-h-[220px] overflow-hidden rounded-xl bg-white shadow-sm">
               <motion.div
                 animate={pop(2)}
@@ -678,7 +659,6 @@ const AIDemo = () => {
 
 export const DeployUSP = () => (
   <Sheet
-    bg="#f4efe6"
     Icon={Rocket}
     label="Deploy"
     headline="Ship it on"
@@ -711,7 +691,6 @@ export const DeployUSP = () => (
 
 export const AIStudioUSP = () => (
   <Sheet
-    bg="#e9e3d6"
     Icon={Sparkles}
     label="AI Studio"
     headline="Describe it. Get"
@@ -764,10 +743,10 @@ const MarketplaceDemo = () => {
           tick === 1 || tick === 2 ? 1 : 2
         }
       >
-        <div className="grid min-h-[255px] md:grid-cols-5">
+        <div className="grid min-h-[255px] @xl:grid-cols-5">
 
           {/* LEFT — Marketplace */}
-          <div className="flex flex-col justify-between gap-3 border-b border-black/[0.07] p-4 md:col-span-2 md:border-b-0 md:border-r md:p-5">
+          <div className="flex flex-col justify-between gap-3 border-b border-black/[0.07] p-4 @xl:col-span-2 @xl:border-b-0 @xl:border-r @xl:p-5">
 
             <div className="space-y-3">
 
@@ -873,7 +852,7 @@ const MarketplaceDemo = () => {
           </div>
 
           {/* RIGHT — Preview */}
-          <div className="relative min-h-[220px] overflow-hidden bg-[#f1ede4] p-4 md:col-span-3 md:p-5">
+          <div className="relative min-h-[220px] overflow-hidden bg-[#f1ede4] p-4 @xl:col-span-3 @xl:p-5">
 
             <div className="h-full overflow-hidden rounded-xl bg-white shadow-sm">
 
@@ -1021,7 +1000,6 @@ const MarketplaceDemo = () => {
 
 export const MarketplaceUSP = () => (
   <Sheet
-    bg="#eee6da"
     Icon={ShoppingBag}
     label="Asset Marketplace"
     headline="Buy, sell & auction"
