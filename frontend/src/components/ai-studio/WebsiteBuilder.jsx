@@ -372,7 +372,7 @@ export default function WebsiteBuilder({ type, onBack, onGenerate }) {
         onChange={setDesign}
         onBack={() => setStep(0)}
         onNext={() => setStep(2)}
-        topBar={<div className="pt-24 md:pt-28"><StudioTopBar title={schema?.title || 'Website builder'} step={step} /></div>}
+        topBar={<div className="pt-12 md:pt-[75px]"><StudioTopBar title={schema?.title || 'Website builder'} step={step} /></div>}
       />
     );
   }

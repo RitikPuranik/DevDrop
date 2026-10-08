@@ -262,8 +262,8 @@ export default function DesignPreferencesStep({ design, onChange, onBack, onNext
       <div className="relative z-10 grid min-h-0 flex-1 gap-4 px-4 pb-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
         {/* Controls: fills full height, scrolls inside */}
         <div className="min-h-0 rounded-3xl border border-white/10 bg-[#0a0a0c] p-6 lg:h-full lg:overflow-y-auto">
-          <h2 className="text-[26px] font-bold tracking-tight">Design Preferences</h2>
-          <p className="mb-6 mt-1 text-sm text-white/45">Guide the AI's Design Agent to match your exact brand aesthetic. The whole preview re-designs as you choose.</p>
+          <h2 className="text-[21px] font-bold tracking-tight">Design Preferences</h2>
+          <p className="mb-6 mt-1 text-xs text-white/45">Guide the AI's Design Agent to match your exact brand aesthetic. The whole preview re-designs as you choose.</p>
 
           <div className="space-y-7">
             <Section n={1} title="Vibe & Style">
@@ -352,7 +352,7 @@ export default function DesignPreferencesStep({ design, onChange, onBack, onNext
         {/* Preview: pinned in place, never scrolls with the options */}
         <div className="flex min-h-[560px] flex-col rounded-3xl border bg-[#0a0a0c] p-6 transition-colors lg:h-full lg:min-h-0" style={{ borderColor: alpha(accent, 0.28) }}>
           <div className="mb-5 flex shrink-0 items-center justify-between gap-3">
-            <h2 className="text-[22px] font-bold tracking-tight">Live Mockup Preview <span className="text-white/60">(Agent Draft)</span></h2>
+            <h2 className="text-[22px] font-bold tracking-tight">Mockup Preview</h2>
             <div className="flex items-center gap-2">
               <div className="inline-flex rounded-xl border border-white/10 bg-white/5 p-1" role="group" aria-label="Preview device">
                 <button type="button" onClick={() => setPreviewViewport('desktop')} aria-pressed={previewViewport === 'desktop'} className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition" style={previewViewport === 'desktop' ? { background: alpha(accent, .18), color: '#fff', boxShadow: `inset 0 0 0 1px ${alpha(accent, .35)}` } : { color: 'rgba(255,255,255,.48)' }}>
@@ -362,7 +362,6 @@ export default function DesignPreferencesStep({ design, onChange, onBack, onNext
                   <Smartphone size={13} /> Mobile
                 </button>
               </div>
-              <span className="hidden items-center gap-2 text-xs text-white/50 xl:inline-flex"><Loader2 size={14} className="animate-spin" style={{ color: accent }} /> Rendering in Real-Time</span>
             </div>
           </div>
           <ReferenceDrivenLivePreview design={design} palette={palette} paletteName={paletteName} typo={typo} websiteType={websiteType} captureRef={previewRef} viewportMode={previewViewport} />
@@ -370,10 +369,9 @@ export default function DesignPreferencesStep({ design, onChange, onBack, onNext
       </div>
 
       {/* Bottom action bar */}
-      <footer className="sticky bottom-0 z-20 flex shrink-0 items-center justify-between gap-3 border-t border-white/10 bg-neutral-950/90 px-4 py-3 backdrop-blur">
+      <footer className="sticky bottom-0 z-20 flex shrink-0 items-center justify-between gap-3 border-t border-white/10 bg-neutral-950/90 px-4 py-1.5 backdrop-blur">
         <button type="button" onClick={onBack} className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-6 py-3 text-[14px] font-bold"><ArrowLeft size={15} /> Back</button>
         <div className="flex items-center gap-4">
-          <span className="hidden items-center gap-2 text-xs text-white/40 sm:inline-flex"><Timer size={14} /> AI is ready to generate</span>
           <button type="button" onClick={handleContinue} disabled={capturing} className="inline-flex items-center gap-2 rounded-xl px-7 py-3 text-[14px] font-bold disabled:opacity-70" style={{ background: `linear-gradient(135deg,${shade(accent, 0.25)},${accent},${shade(accent, -0.25)})`, color: onAcc, boxShadow: `0 0 28px -6px ${alpha(accent, 0.75)}` }}>
             {capturing ? <><Loader2 size={16} className="animate-spin" /> Capturing full website…</> : <>Continue to Generate <ArrowRight size={16} /></>}
           </button>
