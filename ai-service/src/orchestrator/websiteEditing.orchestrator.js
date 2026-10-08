@@ -2,6 +2,7 @@ const editAgent = require('../agents/edit.agent');
 const debugAgent = require('../agents/debug.agent');
 const { validateGeneratedFiles } = require('../validators/generatedFiles.validator');
 const buildValidator = require('../validators/build.validator');
+const { ensureProductionReady } = require('./deploymentReadiness');
 const { identifyRelevantFiles } = require('./relevantFiles');
 const { withTimeout, stage: runStage } = require('./stageRunner');
 const { buildMediaManifest, toModelManifest, resolveAssetUrls } = require('../utils/assetContract');
@@ -128,6 +129,7 @@ async function runEdit(input, { onStage } = {}) {
   // (npm install -> npm run build). Any failure is sent to the debug agent,
   // scoped to the affected files, and the loop re-validates, up to
   // MAX_EDIT_REPAIR_RETRIES repair attempts.
+  let lastResolved = null;
   for (let attempt = 0; attempt <= MAX_EDIT_REPAIR_RETRIES; attempt += 1) {
     files = resolveAssetUrls(files, normalized.mediaManifest);
     const currentDependencies = dependenciesFromPackageJson(files, normalized.dependencies);
@@ -136,7 +138,7 @@ async function runEdit(input, { onStage } = {}) {
     let buildOutput = [];
     if (errors.length === 0) {
       const build = await stage('build-validator', () => buildValidator.run({ files, dependencies: currentDependencies }), meta, onStage);
-      if (build.success) break;
+      if (build.success) { lastResolved = build.resolvedDependencies || null; break; }
       errors = build.errors || ['Build failed'];
       buildOutput = errors;
       console.warn('[EDIT-VALIDATOR] build failed', { attempt, errors });
@@ -175,7 +177,10 @@ async function runEdit(input, { onStage } = {}) {
   }
 
   files = resolveAssetUrls(files, normalized.mediaManifest);
-  const dependencies = dependenciesFromPackageJson(files, normalized.dependencies);
+  let dependencies = dependenciesFromPackageJson(files, normalized.dependencies);
+  const ready = await ensureProductionReady({ files, dependencies, mediaManifest: toModelManifest(normalized.mediaManifest), resolvedDependencies: lastResolved }, meta, onStage);
+  files = ready.files;
+  dependencies = dependenciesFromPackageJson(files, normalized.dependencies);
 
   console.log('[EDIT-ORCHESTRATOR] edit completed', { changedFiles: [...changedPaths] });
   return {
@@ -188,6 +193,7 @@ async function runEdit(input, { onStage } = {}) {
       changedFiles: [...changedPaths],
       relevantFilesConsidered: relevantPaths,
       relevantFilesConfident: detection.value.confident,
+      deploymentReadiness: ready.report,
     },
   };
 }

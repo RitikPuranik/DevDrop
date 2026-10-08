@@ -8,6 +8,7 @@ function normalizeGeneratedPath(path){if(typeof path!=='string')return path;cons
 const {validateRequirements,validateDesign,validateArchitecture}=require('../validators/contracts.validator');
 const {validateGeneratedFiles}=require('../validators/generatedFiles.validator');
 const buildValidator=require('../validators/build.validator');
+const { ensureProductionReady }=require('./deploymentReadiness');
 const { withTimeout, stage: runStage }=require('./stageRunner');
 const { normalizeAssets, buildMediaManifest, buildAssetSummaries, normalizeMediaPlan, toModelManifest, resolveAssetUrls }=require('../utils/assetContract');
 const MAX_BUILD_FIX_RETRIES=Math.max(0,Number.parseInt(process.env.MAX_BUILD_FIX_RETRIES||'3',10)||3);
@@ -103,12 +104,13 @@ async function debugWebsite(input = {}, { onStage } = {}) {
 
    const build = await stage('build-validator', () => buildValidator.run({ files, dependencies }), meta, onStage);
    if (build.success) {
+     const ready = await ensureProductionReady({ files, dependencies, mediaManifest: modelManifest, resolvedDependencies: build.resolvedDependencies }, meta, onStage);
      return {
        assistantMessage: 'Debug repair completed successfully. The existing generated website was repaired without regenerating it.',
        title: buildGeneratedTitle(requirements),
-       files,
-       dependencies,
-       generationMeta: { agents: meta },
+       files: ready.files,
+       dependencies: ready.dependencies,
+       generationMeta: { agents: meta, deploymentReadiness: ready.report },
      };
    }
 
@@ -176,7 +178,7 @@ async function runGeneration(input,{onStage}={}){
   files=resolveAssetUrls(files,mediaManifest);
   const staticErrors=validateGeneratedFiles(files);
   if(staticErrors.length){console.warn('[VALIDATOR] static validation failed',{attempt,errors:staticErrors});if(attempt===MAX_BUILD_FIX_RETRIES)throw Object.assign(new Error(staticErrors.join(' | ')),{userMessage:`Generated code failed validation after the maximum repair attempts: ${staticErrors.join(' | ').slice(0,1200)}`,debugContext:buildDebugContext({files,dependencies,architecture,requirements,design,errors:staticErrors,mediaManifest,mediaPlan})});const debug=await stage(`debug:${attempt+1}`,()=>debugAgent.run({errors:staticErrors,affectedFiles:Object.keys(files),files,architecture,requirements,design,dependencies,mediaManifest:modelManifest}),meta,onStage);for(const change of debug.value?.changes||[])if(change.path&&change.code){const changePath=normalizeGeneratedPath(change.path);files[changePath]={code:change.code};}continue;}
-  console.log('[VALIDATOR] static validation passed');const build=await stage('build-validator',()=>buildValidator.run({files,dependencies}),meta,onStage);if(build.success){console.log('[VALIDATOR] build passed');warnUnusedAssets(files,mediaManifest);console.log('[ORCHESTRATOR] generation completed');return {assistantMessage:`Generated a ${requirements.websiteType} website through the multi-agent pipeline.`,title:buildGeneratedTitle(requirements),files,dependencies,generationMeta:{agents:meta}};}
+  console.log('[VALIDATOR] static validation passed');const build=await stage('build-validator',()=>buildValidator.run({files,dependencies}),meta,onStage);if(build.success){console.log('[VALIDATOR] build passed');warnUnusedAssets(files,mediaManifest);const ready=await ensureProductionReady({files,dependencies,mediaManifest:modelManifest,resolvedDependencies:build.resolvedDependencies},meta,onStage);console.log('[ORCHESTRATOR] generation completed');return {assistantMessage:`Generated a ${requirements.websiteType} website through the multi-agent pipeline.`,title:buildGeneratedTitle(requirements),files:ready.files,dependencies:ready.dependencies,generationMeta:{agents:meta,deploymentReadiness:ready.report}};}
   console.warn('[VALIDATOR] build failed',{attempt,errors:build.errors});if(attempt===MAX_BUILD_FIX_RETRIES)throw Object.assign(new Error('Build failed after maximum repair attempts'),{userMessage:`DevDrop could not produce a buildable website after the maximum repair attempts: ${(build.errors||[]).join(' | ').slice(0,1200)}`,debugContext:buildDebugContext({files,dependencies,architecture,requirements,design,errors:build.errors||[],buildOutput:build.errors||[],mediaManifest,mediaPlan})});const debug=await stage(`debug:${attempt+1}`,()=>debugAgent.run({errors:build.errors,affectedFiles:Object.keys(files),files,architecture,requirements,design,dependencies,buildOutput:build.errors,mediaManifest:modelManifest}),meta,onStage);for(const change of debug.value?.changes||[])if(change.path&&change.code){const changePath=normalizeGeneratedPath(change.path);files[changePath]={code:change.code};}
  }
  throw new Error('Generation failed after maximum repair attempts');

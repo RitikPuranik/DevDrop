@@ -51,8 +51,19 @@ export default defineConfig({
 // validator and Vercel resolve dependencies identically.
 const DEFAULT_NPMRC = 'legacy-peer-deps=true\n';
 
+// Mirrors backend/src/services/projectExport.service.js (buildAiStudioRepoFiles) so the project
+// is validated with the same files Vercel will actually receive.
+const DEFAULT_VERCEL_JSON = JSON.stringify({
+  framework: 'vite',
+  installCommand: 'npm install',
+  buildCommand: 'npm run build',
+  outputDirectory: 'dist',
+  rewrites: [{ source: '/(.*)', destination: '/index.html' }],
+}, null, 2) + '\n';
+const DEFAULT_ENGINES = { node: '22.x' };
+
 const DEFAULT_FAVICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#111827"/><path d="M18 16h20l8 8v24H18z" fill="none" stroke="#fff" stroke-width="4"/><path d="M38 16v10h10" fill="none" stroke="#fff" stroke-width="4"/></svg>';
-const DEFAULT_INDEX_HTML = '<!doctype html><html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/><link rel="icon" href="/favicon.svg"/><title>DevDrop</title></head><body><div id="root"></div><script type="module" src="/main.jsx"></script></body></html>';
+const DEFAULT_INDEX_HTML = '<!doctype html><html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/><link rel="icon" href="/favicon.svg"/><title>DevDrop</title><script src="https://cdn.tailwindcss.com"></script></head><body><div id="root"></div><script type="module" src="/main.jsx"></script></body></html>';
 const DEFAULT_MAIN_JSX = 'import React from "react"; import { createRoot } from "react-dom/client"; import App from "./App.js"; createRoot(document.getElementById("root")).render(<React.StrictMode><App /></React.StrictMode>);';
 
 // Pure helper: fills in the scaffold files a generated site needs to build
@@ -63,6 +74,7 @@ const DEFAULT_MAIN_JSX = 'import React from "react"; import { createRoot } from 
 // scaffold logic can be unit-tested without shelling out to npm/vite.
 function withScaffold(files, dependencies) {
   const out = { ...(files || {}) };
+  const usesDefaultViteConfig = !out['/vite.config.js'] && !out['/vite.config.mjs'];
   if (!out['/package.json']) {
     const pkg = {
       ...DEFAULT_PACKAGE,
@@ -75,6 +87,9 @@ function withScaffold(files, dependencies) {
       const pkg = JSON.parse(out['/package.json'].code);
       pkg.dependencies = { ...DEFAULT_PACKAGE.dependencies, ...(pkg.dependencies || {}), ...dependencies };
       pkg.devDependencies = { ...DEFAULT_PACKAGE.devDependencies, ...(pkg.devDependencies || {}) };
+      // The default vite.config.js needs Vite 7 / plugin-react 5: the export forces them, so validate with them.
+      if (usesDefaultViteConfig) Object.assign(pkg.devDependencies, DEFAULT_PACKAGE.devDependencies);
+      pkg.engines = { ...DEFAULT_ENGINES, ...(pkg.engines || {}) };
       if (!pkg.scripts?.build) pkg.scripts = { ...(pkg.scripts || {}), build: DEFAULT_PACKAGE.scripts.build };
       if (!pkg.type) pkg.type = DEFAULT_PACKAGE.type;
       out['/package.json'] = { code: JSON.stringify(pkg, null, 2) };
@@ -87,7 +102,24 @@ function withScaffold(files, dependencies) {
   if (!out['/vite.config.js']) out['/vite.config.js'] = { code: DEFAULT_VITE_CONFIG };
   if (!out['/favicon.svg']) out['/favicon.svg'] = { code: DEFAULT_FAVICON_SVG };
   if (!out['/.npmrc']) out['/.npmrc'] = { code: DEFAULT_NPMRC };
+  if (!out['/vercel.json']) out['/vercel.json'] = { code: DEFAULT_VERCEL_JSON };
   return out;
+}
+
+// Exact versions that `npm install` actually resolved: the orchestrator freezes package.json to these so the
+// deployed install matches what was validated (a floating ^range can pick a newer, broken release later).
+function readResolvedDependencies(dir) {
+  const resolved = {};
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
+    for (const name of Object.keys(pkg.dependencies || {})) {
+      try {
+        const v = JSON.parse(fs.readFileSync(path.join(dir, 'node_modules', ...name.split('/'), 'package.json'), 'utf8')).version;
+        if (typeof v === 'string') resolved[name] = v;
+      } catch { /* not installed at top level; leave unpinned */ }
+    }
+  } catch { /* ignore */ }
+  return resolved;
 }
 
 function auditProductionBundle(distDir) {
@@ -149,7 +181,9 @@ async function run({ files, dependencies = {} }) {
       ['install', '--no-audit', '--no-fund', '--include=dev'],
       spawnOpts
     );
-    const result = await execFileAsync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'build'], spawnOpts);
+    // Vercel builds with CI=1 / VERCEL=1; use the same so CI-only behaviour surfaces here instead of there.
+    const buildOpts = { ...spawnOpts, env: { ...spawnOpts.env, CI: 'true', VERCEL: '1' } };
+    const result = await execFileAsync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'build'], buildOpts);
     const warnings = result.stderr ? result.stderr.split('\n').filter(Boolean).slice(0, 20) : [];
 
     const productionAudit = auditProductionBundle(path.join(dir, 'dist'));
@@ -180,11 +214,11 @@ async function run({ files, dependencies = {} }) {
       };
     }
     if (runtime.skipped) warnings.push(`Runtime check skipped: ${runtime.reason}`);
-    return { success: true, errors: [], warnings, runtime, durationMs: Date.now() - started };
+    return { success: true, errors: [], warnings, runtime, resolvedDependencies: readResolvedDependencies(dir), durationMs: Date.now() - started };
   } catch (error) {
     return { success: false, errors: [String(error.stderr || error.stdout || error.message).slice(-12000)], warnings: [], durationMs: Date.now() - started, exitCode: error.code || null };
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 }
-module.exports = { run, withScaffold, auditProductionBundle };
+module.exports = { run, withScaffold, auditProductionBundle, readResolvedDependencies };

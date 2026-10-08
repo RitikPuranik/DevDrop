@@ -8,7 +8,7 @@ import { Check, Circle, Loader2 } from 'lucide-react';
 //   debug    -> debug-only retry
 // `pipeline` is { stageName: 'started'|'processing'|'completed'|'failed' } as
 // reported by the ai-service. Stage names: requirements, design, architecture,
-// code:<path> (one per file), integration, build-validator, debug:<n>,
+// code:<path> (one per file), integration, build-validator, debug:<n>, deployment-readiness:<n>,
 // relevant-files, edit, edit-debug:<n>, debug-only.
 
 const ACTIVE = new Set(['started', 'processing']);
@@ -41,8 +41,12 @@ const STEP_DEFS = {
     },
     {
       id: 'validation', label: 'Asset Loading & Validation', description: 'Running final syntax and build checks',
-      isDone: (p) => p['build-validator'] === 'completed' && !anyActive(p, (n) => n.startsWith('debug:')),
-      detail: (p) => (anyActive(p, (n) => n.startsWith('debug:')) ? 'Fixing an issue…' : null),
+      isDone: (p) => p['build-validator'] === 'completed' && !anyActive(p, (n) => n.startsWith('debug:') || n.startsWith('deployment-readiness')),
+      detail: (p) => {
+        if (anyActive(p, (n) => n.startsWith('debug:'))) return 'Fixing an issue…';
+        if (anyActive(p, (n) => n.startsWith('deployment-readiness'))) return 'Checking it will work on Vercel…';
+        return null;
+      },
     },
   ],
   edit: [

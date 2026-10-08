@@ -441,6 +441,32 @@ const fileToText = (value) => {
 
 const escapeHtml = (v) => String(v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+// ── Preview/Vercel parity ───────────────────────────────────────────────────────────────────────
+// The AI Studio preview (Sandpack) always loads the Tailwind CDN, so generated sites that use Tailwind
+// utility classes look right there. A model-written index.html usually omits the script, which left the
+// deployed site unstyled. Mirrors ai-service/src/utils/productionParity.js.
+const AI_STUDIO_TAILWIND_TAG = '<script src="https://cdn.tailwindcss.com"></script>';
+const TAILWIND_UTILITY = /\b(?:flex|grid|items-(?:center|start|end)|justify-(?:center|between|end)|gap-\d+|px-\d+|py-\d+|p-\d+|m[xytb]?-\d+|text-(?:xs|sm|base|lg|xl|[2-9]xl)|font-(?:medium|semibold|bold)|rounded(?:-[a-z0-9]+)?|bg-[a-z]+-\d{2,3}|text-[a-z]+-\d{2,3}|w-full|min-h-screen|max-w-[a-z0-9]+)\b/g;
+
+const usesTailwindClasses = (files) => {
+  const seen = new Set();
+  for (const [p, code] of Object.entries(files || {})) {
+    if (!/\.(js|jsx|mjs|cjs)$/i.test(p) || typeof code !== 'string') continue;
+    for (const m of code.matchAll(/className\s*=\s*(?:"([^"]*)"|'([^']*)'|\{`([^`]*)`\}|\{\s*"([^"]*)"\s*\}|\{\s*'([^']*)'\s*\})/g)) {
+      for (const t of (m[1] || m[2] || m[3] || m[4] || m[5] || '').match(TAILWIND_UTILITY) || []) seen.add(t);
+      if (seen.size >= 4) return true;
+    }
+  }
+  return false;
+};
+
+const injectTailwindCdn = (html) => {
+  if (/cdn\.tailwindcss\.com/i.test(html)) return html;
+  if (/<\/head>/i.test(html)) return html.replace(/<\/head>/i, `  ${AI_STUDIO_TAILWIND_TAG}\n  </head>`);
+  if (/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, (m) => `${m}\n  ${AI_STUDIO_TAILWIND_TAG}`);
+  return html;
+};
+
 /**
  * Turns an AIStudioProject into a deployable Vite + React repo file list:
  * generated files + any missing scaffold (package.json, index.html, main.jsx,
@@ -477,6 +503,10 @@ const buildAiStudioRepoFiles = (project) => {
   const defaultIndex = AI_STUDIO_DEFAULT_INDEX_HTML.replace('__TITLE__', escapeHtml(title));
   if (!out['/main.jsx'] && !out['/main.js'] && !out['/src/main.jsx']) out['/main.jsx'] = AI_STUDIO_DEFAULT_MAIN_JSX;
   if (!out['/index.html'] || !entryIsUsable(out['/index.html'], out)) out['/index.html'] = defaultIndex;
+  // A kept (model-written) index.html must still load Tailwind if the code relies on it, as the preview does.
+  if (!pkg.dependencies.tailwindcss && !pkg.devDependencies.tailwindcss && !out['/tailwind.config.js'] && usesTailwindClasses(out)) {
+    out['/index.html'] = injectTailwindCdn(out['/index.html']);
+  }
   if (usesDefaultViteConfig) out['/vite.config.js'] = AI_STUDIO_DEFAULT_VITE_CONFIG;
   if (!out['/.npmrc']) out['/.npmrc'] = AI_STUDIO_NPMRC;
   if (!out['/vercel.json']) out['/vercel.json'] = AI_STUDIO_VERCEL_JSON;
@@ -489,6 +519,67 @@ const buildAiStudioRepoFiles = (project) => {
     relativePath: filePath.replace(/^\/+/, ''),
     buffer: Buffer.from(content, 'utf8'),
   }));
+};
+
+// ── Expiring asset URLs ─────────────────────────────────────────────────────────────────────────
+// Uploaded images/videos/resumes are referenced in the generated code by signed storage URLs that expire
+// (24h by default). The preview regenerates them, but a deployed site keeps the old ones, so media would
+// break a day after deploying. Download each referenced asset into public/devdrop-assets and point the code
+// at the local copy. Best effort: an asset that cannot be fetched keeps its original URL.
+const SIGNED_ASSET_URL = /https?:\/\/[^\s"'`<>)\\]+?\/storage\/v1\/object\/sign\/([^/\s"'`<>)\\]+)\/([^?\s"'`<>)\\]+)\?[^\s"'`<>)\\]*/g;
+const TEXT_FILE = /\.(?:jsx?|mjs|cjs|css|html?|json|md|svg)$/i;
+const MAX_LOCALIZED_TOTAL_BYTES = 120 * 1024 * 1024;
+
+const localAssetName = (storagePath) => {
+  const m = /(?:^|\/)assets\/([^/]+)\/(.+)$/.exec(storagePath);
+  const safe = (v) => String(v).replace(/[^A-Za-z0-9._-]/g, '_').slice(-80);
+  return m ? `${safe(m[1])}-${safe(m[2])}` : safe(storagePath.split('/').slice(-2).join('-'));
+};
+
+const localizeSignedAssetUrls = async (repoFiles, { download, bucket } = {}) => {
+  const result = { files: repoFiles, localized: 0, failed: [] };
+  if (typeof download !== 'function') return result;
+
+  const decoded = repoFiles.map((f) => ({ f, text: TEXT_FILE.test(f.relativePath) ? f.buffer.toString('utf8') : null }));
+  const wanted = new Map(); // storagePath -> { urls:Set, local:string }
+  for (const { text } of decoded) {
+    if (text === null) continue;
+    for (const m of text.matchAll(SIGNED_ASSET_URL)) {
+      if (bucket && m[1] !== bucket) continue;
+      let storagePath;
+      try { storagePath = decodeURIComponent(m[2]); } catch { continue; }
+      if (!wanted.has(storagePath)) wanted.set(storagePath, { urls: new Set(), local: `/devdrop-assets/${localAssetName(storagePath)}` });
+      wanted.get(storagePath).urls.add(m[0]);
+    }
+  }
+  if (!wanted.size) return result;
+
+  const added = [];
+  const replacements = new Map(); // full signed url -> local path
+  let total = 0;
+  for (const [storagePath, { urls, local }] of wanted) {
+    try {
+      const buffer = await download(storagePath);
+      if (!buffer || buffer.length > MAX_FILE_SIZE_BYTES || total + buffer.length > MAX_LOCALIZED_TOTAL_BYTES) { result.failed.push(storagePath); continue; }
+      total += buffer.length;
+      added.push({ relativePath: `public${local}`, buffer });
+      for (const url of urls) replacements.set(url, local);
+    } catch (error) {
+      result.failed.push(storagePath);
+    }
+  }
+  if (!replacements.size) return result;
+
+  const out = decoded.map(({ f, text }) => {
+    if (text === null) return f;
+    let next = text;
+    // Longest first: the preview URL is a prefix of the same asset's "&download=" URL.
+    for (const [url, local] of [...replacements].sort((a, b) => b[0].length - a[0].length)) if (next.includes(url)) next = next.split(url).join(local);
+    return next === text ? f : { ...f, buffer: Buffer.from(next, 'utf8') };
+  });
+  result.files = [...out, ...added];
+  result.localized = added.length;
+  return result;
 };
 
 const runAiStudioExport = async (exportId) => {
@@ -508,7 +599,17 @@ const runAiStudioExport = async (exportId) => {
     if (!project.files || Object.keys(project.files).length === 0) throw new Error('NO_FILES');
 
     const accessToken = cryptoUtil.decrypt(connection.accessTokenEncrypted);
-    const files = buildAiStudioRepoFiles(project);
+    let files = buildAiStudioRepoFiles(project);
+    try {
+      // Lazy require: the AI Studio storage client needs Supabase env vars that unit tests do not set.
+      const aiStudioStorage = require('./ai-studio/aiStudioStorage.service');
+      const { AI_STUDIO_SUPABASE_BUCKET } = require('../shared/config/aiStudioSupabase');
+      const localized = await localizeSignedAssetUrls(files, { download: aiStudioStorage.downloadAsset, bucket: AI_STUDIO_SUPABASE_BUCKET });
+      files = localized.files;
+      if (localized.localized || localized.failed.length) console.log(`AI Studio export ${exportId}: localized ${localized.localized} asset(s), ${localized.failed.length} could not be copied`);
+    } catch (error) {
+      console.warn(`AI Studio export ${exportId}: asset localization skipped:`, error.message);
+    }
     if (files.length > MAX_EXPORT_FILES) throw new Error('NO_FILES');
 
     let repo;
@@ -572,4 +673,5 @@ module.exports = {
   runExport,
   runAiStudioExport,
   buildAiStudioRepoFiles,
+  localizeSignedAssetUrls,
 };

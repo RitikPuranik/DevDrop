@@ -32,4 +32,4 @@ async function run({ errors, affectedFiles, files, architecture, requirements, d
   return normalizeChanges(result);
 }
 
-module.exports = { run };
+module.exports = { run, normalizeChanges };

@@ -404,3 +404,71 @@ describe('buildAiStudioRepoFiles (Vercel-ready scaffold)', () => {
     expect(main).toMatch(/getDerivedStateFromError/);
   });
 });
+
+describe('AI Studio preview/Vercel parity', () => {
+  const build = (files, extra = {}) => {
+    const out = projectExportService.buildAiStudioRepoFiles({ title: 'Demo Site', files, dependencies: {}, ...extra });
+    return Object.fromEntries(out.map((f) => [f.relativePath, f.buffer.toString('utf8')]));
+  };
+  const twApp = { '/App.js': { code: 'export default function App(){return <div className="flex items-center gap-4 px-6 py-3 text-lg rounded-xl bg-gray-900">hi</div>}' } };
+  const html = '<html><head><title>x</title></head><body><div id="root"></div><script type="module" src="/main.jsx"></script></body></html>';
+
+  it('adds the Tailwind CDN to a model-written index.html when the code uses Tailwind classes (the preview always loads it)', () => {
+    const files = build({ ...twApp, '/main.jsx': { code: 'console.log(1)' }, '/index.html': { code: html } });
+    expect(files['index.html']).toContain('cdn.tailwindcss.com');
+    expect(files['index.html'].match(/cdn\.tailwindcss\.com/g)).toHaveLength(1);
+  });
+
+  it('leaves index.html alone when Tailwind is installed as a real dependency', () => {
+    const files = build({ ...twApp, '/main.jsx': { code: 'console.log(1)' }, '/index.html': { code: html }, '/package.json': { code: JSON.stringify({ dependencies: { tailwindcss: '^3.4.0' } }) } });
+    expect(files['index.html']).toBe(html);
+  });
+});
+
+describe('localizeSignedAssetUrls (signed storage URLs expire after 24h)', () => {
+  const BUCKET = 'ai-studio';
+  const url = (id, name) => `https://x.supabase.co/storage/v1/object/sign/${BUCKET}/proj1/assets/${id}/${name}?token=abc.def`;
+  const file = (relativePath, text) => ({ relativePath, buffer: Buffer.from(text, 'utf8') });
+
+  it('downloads each referenced asset into public/devdrop-assets and rewrites every reference', async () => {
+    const u = url('a1', 'me.png');
+    const download = jest.fn().mockResolvedValue(Buffer.from('PNGDATA'));
+    const out = await projectExportService.localizeSignedAssetUrls(
+      [file('App.js', `const a = "${u}"; const b = '${u}';`), file('src/Hero.jsx', `<img src="${u}" />`), file('logo.png', 'binary')],
+      { download, bucket: BUCKET }
+    );
+    expect(download).toHaveBeenCalledTimes(1);
+    expect(download).toHaveBeenCalledWith('proj1/assets/a1/me.png');
+    const byPath = Object.fromEntries(out.files.map((f) => [f.relativePath, f.buffer.toString('utf8')]));
+    expect(byPath['App.js']).toBe('const a = "/devdrop-assets/a1-me.png"; const b = \'/devdrop-assets/a1-me.png\';');
+    expect(byPath['src/Hero.jsx']).toBe('<img src="/devdrop-assets/a1-me.png" />');
+    expect(byPath['public/devdrop-assets/a1-me.png']).toBe('PNGDATA');
+    expect(out.localized).toBe(1);
+  });
+
+  it('maps the preview and download variants of one asset to the same local file', async () => {
+    const preview = url('r1', 'cv.pdf');
+    const dl = `${preview}&download=cv.pdf`;
+    const download = jest.fn().mockResolvedValue(Buffer.from('PDF'));
+    const out = await projectExportService.localizeSignedAssetUrls([file('App.js', `<a href="${preview}">v</a><a href="${dl}" download>d</a>`)], { download, bucket: BUCKET });
+    expect(download).toHaveBeenCalledTimes(1);
+    expect(out.files[0].buffer.toString('utf8')).toBe('<a href="/devdrop-assets/r1-cv.pdf">v</a><a href="/devdrop-assets/r1-cv.pdf" download>d</a>');
+  });
+
+  it('keeps the original URL when an asset cannot be downloaded, and skips other buckets', async () => {
+    const u = url('a2', 'x.png');
+    const other = 'https://x.supabase.co/storage/v1/object/sign/other-bucket/p/assets/a3/y.png?token=t';
+    const download = jest.fn().mockRejectedValue(new Error('gone'));
+    const input = [file('App.js', `"${u}" "${other}"`)];
+    const out = await projectExportService.localizeSignedAssetUrls(input, { download, bucket: BUCKET });
+    expect(out.files).toBe(input);
+    expect(out.failed).toEqual(['proj1/assets/a2/x.png']);
+    expect(download).toHaveBeenCalledTimes(1);
+  });
+
+  it('is a no-op without a downloader or without signed URLs', async () => {
+    const input = [file('App.js', 'plain')];
+    expect((await projectExportService.localizeSignedAssetUrls(input, {})).files).toBe(input);
+    expect((await projectExportService.localizeSignedAssetUrls(input, { download: jest.fn(), bucket: BUCKET })).files).toBe(input);
+  });
+});
