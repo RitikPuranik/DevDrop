@@ -169,7 +169,7 @@ async function proposeFix({ errorLog, files = [], repoPaths = [], previousAttemp
   ];
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const out = await groq.chat({ tier: 'edit', json: true, jsonSchema: RESPONSE_SCHEMA, maxTokens: Number.parseInt(process.env.GROQ_EDIT_MAX_TOKENS || '1800', 10), messages });
+    const out = await groq.chat({ tier: 'edit', json: true, jsonSchema: RESPONSE_SCHEMA, messages });
     const parsed = out.json;
     if (!parsed || typeof parsed !== 'object') {
       lastReason = 'The model returned invalid JSON.';
