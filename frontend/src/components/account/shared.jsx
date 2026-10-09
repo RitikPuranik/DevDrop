@@ -170,7 +170,7 @@ export function StatusBadge({ status }) {
   };
   const c = config[status] || { label: status, color: 'bg-white/15 text-white' };
   return (
-    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider backdrop-blur-md ${c.color}`}>
+    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider  ${c.color}`}>
       {c.pulse && (
         <span className="relative flex h-1.5 w-1.5">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
@@ -249,8 +249,8 @@ export function EmptyState({ icon: Icon, title, description, action, onAction })
       <div className="w-16 h-16 rounded-2xl bg-white/[0.04] border border-white/8 flex items-center justify-center mb-6">
         <Icon size={28} className="text-white/50" />
       </div>
-      <h3 className="text-xl font-bold text-white mb-2">{title}</h3>
-      <p className="text-white/60 text-sm mb-8 max-w-xs">{description}</p>
+      <h3 className="ws-display text-[22px] text-white mb-2">{title}</h3>
+      <p className="text-white/60 text-[14.5px] mb-8 max-w-xs">{description}</p>
       <button
         onClick={onAction}
         className="px-8 py-3 bg-[var(--accent)] text-white rounded-2xl font-bold text-xs uppercase tracking-widest hover:bg-[var(--accent-hover)] shadow-lg transition-all"

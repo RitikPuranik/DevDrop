@@ -122,7 +122,7 @@ function AppContent() {
 
       {appReady && (
         <>
-          {!isStandaloneAuthPage && !isAiStudio && <Loader suppressOnce={suppressNextLoader} />}
+          {!isStandaloneAuthPage && <Loader suppressOnce={suppressNextLoader} />}
           {!isBuilder && !isStandaloneAuthPage && <Navbar />}
           <main className="bg-black min-h-screen">
             <Suspense fallback={null}>

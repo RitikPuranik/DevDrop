@@ -81,11 +81,11 @@ const pageTransition = {
 
 
 const cardClass =
-  'bg-[#111214] border border-white/[0.075] rounded-2xl';
+  'bg-white/[0.03] border border-white/[0.08] rounded-2xl';
 
 
 const inputClass =
-  'w-full bg-[#0c0d0f] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[var(--accent)]/60 focus:ring-1 focus:ring-[var(--accent)]/20 transition-all';
+  'w-full bg-[#0a0a0a] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none placeholder:text-white/50 focus:border-[var(--accent)]/60 focus:ring-1 focus:ring-[var(--accent)]/20 transition-all';
 
 
 export default function Workspace() {
@@ -632,10 +632,10 @@ export default function Workspace() {
           gap-2
           px-4
           py-2.5
-          rounded-xl
+          rounded-full
           bg-[var(--accent)]
           text-white
-          text-[11px]
+          text-[13.5px]
           font-bold
           hover:opacity-90
           active:scale-[0.98]
@@ -651,7 +651,7 @@ export default function Workspace() {
   return (
     <div
       style={cssVars}
-      className="min-h-screen bg-[#090a0b] text-white"
+      className="ws min-h-screen"
     >
       <WorkspaceShell
         profile={profile}
@@ -718,8 +718,9 @@ export default function Workspace() {
                         relative
                         overflow-hidden
                         p-5
-                        hover:border-white/[0.13]
-                        transition-colors
+                        hover:border-white/[0.2]
+                        hover:-translate-y-0.5
+                        transition-all
                       `}
                     >
 
@@ -731,9 +732,9 @@ export default function Workspace() {
                       ">
 
                         <span className="
-                          text-[12px]
+                          text-[13px]
                           font-medium
-                          text-white/45
+                          text-white/60
                         ">
                           {stat.label}
                         </span>
@@ -758,9 +759,9 @@ export default function Workspace() {
                       </div>
 
                       <div className="
-                        text-[25px]
-                        font-semibold
-                        tracking-tight
+                        ws-display
+                        text-[34px]
+                        leading-none
                         text-white
                       ">
                         {stat.value}
@@ -772,7 +773,7 @@ export default function Workspace() {
                         left-0
                         right-0
                         h-px
-                        bg-[var(--accent)]/50
+                        bg-[#cbb392]/40
                       " />
 
                     </motion.div>
@@ -787,17 +788,13 @@ export default function Workspace() {
               <div className="mb-3 flex items-center justify-between">
 
                 <div>
-                  <h2 className="
-                    text-[14px]
-                    font-semibold
-                    text-white
-                  ">
+                  <h2 className="ws-display text-[22px] text-white">
                     Quick actions
                   </h2>
 
                   <p className="
-                    text-[12px]
-                    text-white/35
+                    text-[13px]
+                    text-white/50
                     mt-1
                   ">
                     Jump into your most common tasks.
@@ -863,80 +860,45 @@ export default function Workspace() {
                 gap-3
               ">
 
-                <div
-                  className={`${cardClass} p-5`}
-                >
-
-                  <div className="
-                    flex
-                    items-center
-                    justify-between
-                    mb-5
-                  ">
-                    <div>
-                      <h3 className="
-                        text-[14px]
-                        font-semibold
-                      ">
-                        Workspace activity
-                      </h3>
-
-                      <p className="
-                        text-[11px]
-                        text-white/35
-                        mt-1
-                      ">
-                        Your marketplace overview
-                      </p>
-                    </div>
-
-                    <TrendingUp
-                      size={16}
-                      className="text-white/30"
-                    />
+                <div className={`${cardClass} p-6`}>
+                  <div className="mb-5">
+                    <h3 className="ws-display text-[20px] text-white">Getting started</h3>
+                    <p className="mt-1 text-[13.5px] text-white/60">A few steps to get the most out of DevDrop.</p>
                   </div>
-
-
-                  <div className="
-                    h-36
-                    rounded-xl
-                    bg-white/[0.018]
-                    border
-                    border-white/[0.05]
-                    flex
-                    items-center
-                    justify-center
-                  ">
-                    <div className="text-center">
-                      <div className="
-                        text-[12px]
-                        text-white/40
-                      ">
-                        Keep building
-                      </div>
-
-                      <div className="
-                        text-[11px]
-                        text-white/25
-                        mt-1
-                      ">
-                        Your activity will appear here.
-                      </div>
-                    </div>
-                  </div>
-
+                  <ul className="space-y-2">
+                    {[
+                      { label: 'Verify your email', hint: profile?.isVerified ? 'Your email is verified.' : 'Check your inbox for the verification link.', done: Boolean(profile?.isVerified) },
+                      { label: 'Add payout details', hint: profile?.hasBankDetails ? 'Payouts are set up.' : 'Needed before you can get paid for sales.', done: Boolean(profile?.hasBankDetails), go: 'payouts' },
+                      { label: 'List your first project', hint: 'Publish a template to the marketplace.', go: 'listings' },
+                      { label: 'Deploy a project', hint: 'Connect a provider and go live.', go: 'deployments' },
+                    ].map((item) => {
+                      const Row = item.go ? 'button' : 'div';
+                      return (
+                        <li key={item.label}>
+                          <Row
+                            {...(item.go ? { type: 'button', onClick: () => setActiveSection(item.go) } : {})}
+                            className={`group flex w-full items-center gap-4 rounded-xl border border-white/[0.07] bg-white/[0.02] px-4 py-3.5 text-left transition-colors ${item.go ? 'hover:border-white/[0.18] hover:bg-white/[0.05]' : ''}`}
+                          >
+                            <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border ${item.done ? 'border-transparent bg-[#e8e2d6] text-[#050505]' : 'border-white/20 text-white/40'}`}>
+                              {item.done ? <CheckCircle size={15} /> : <span className="h-1.5 w-1.5 rounded-full bg-white/40" />}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className={`block text-[14.5px] font-semibold ${item.done ? 'text-white/60' : 'text-white'}`}>{item.label}</span>
+                              <span className="block text-[13px] text-white/50">{item.hint}</span>
+                            </span>
+                            {item.go && !item.done && <ChevronRight size={16} className="shrink-0 text-white/40 transition-transform group-hover:translate-x-0.5" />}
+                          </Row>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </div>
 
-
                 <div
                   className={`${cardClass} p-5`}
                 >
 
-                  <h3 className="
-                    text-[14px]
-                    font-semibold
-                    mb-5
-                  ">
+                  <h3 className="ws-display text-[20px] mb-5">
                     Account
                   </h3>
 
@@ -1011,9 +973,9 @@ export default function Workspace() {
                       inline-flex
                       items-center
                       gap-2
-                      text-[11px]
+                      text-[12.5px]
                       font-medium
-                      text-white/40
+                      text-white/60
                       hover:text-white
                       transition-colors
                       mb-5
@@ -1191,7 +1153,7 @@ export default function Workspace() {
                                 ">
 
                                   <span className="
-                                    text-[11px]
+                                    text-[12.5px]
                                     font-bold
                                     uppercase
                                     tracking-wider
@@ -1209,8 +1171,8 @@ export default function Workspace() {
                                 </div>
 
                                 <p className="
-                                  text-[11px]
-                                  text-white/40
+                                  text-[12.5px]
+                                  text-white/60
                                   leading-relaxed
                                 ">
                                   {
@@ -1274,7 +1236,7 @@ export default function Workspace() {
                                 left-4
                                 top-1/2
                                 -translate-y-1/2
-                                text-white/30
+                                text-white/50
                                 text-sm
                               ">
                                 ₹
@@ -1372,7 +1334,7 @@ export default function Workspace() {
                                 uppercase
                                 tracking-widest
                                 font-semibold
-                                text-white/35
+                                text-white/50
                                 mb-2
                               ">
                                 {section}
@@ -1466,7 +1428,7 @@ export default function Workspace() {
                         rounded-xl
                         bg-[var(--accent)]
                         text-white
-                        text-[11px]
+                        text-[12.5px]
                         font-bold
                         uppercase
                         tracking-wider
@@ -1670,7 +1632,7 @@ export default function Workspace() {
 
                                 <p className="
                                   text-[10px]
-                                  text-white/30
+                                  text-white/50
                                   mt-1
                                 ">
                                   {p.createdAt
@@ -1702,7 +1664,7 @@ export default function Workspace() {
                                 text-[9px]
                                 uppercase
                                 tracking-wider
-                                text-white/45
+                                text-white/60
                               ">
                                 <CheckCircle
                                   size={9}
@@ -1739,7 +1701,7 @@ export default function Workspace() {
                                 text-[9px]
                                 uppercase
                                 tracking-wider
-                                text-white/35
+                                text-white/50
                               ">
                                 {cat}
                               </span>
@@ -1906,8 +1868,8 @@ export default function Workspace() {
                   </h2>
 
                   <p className="
-                    text-[11px]
-                    text-white/30
+                    text-[12.5px]
+                    text-white/50
                     mt-1
                   ">
                     {deployments.length} total deployment
@@ -1955,7 +1917,7 @@ export default function Workspace() {
                           deploymentFilter ===
                           filter
                             ? 'bg-white text-black'
-                            : 'text-white/40 hover:text-white'
+                            : 'text-white/60 hover:text-white'
                         }
                       `}
                     >
@@ -1978,7 +1940,7 @@ export default function Workspace() {
                 ">
                   <Loader2
                     size={20}
-                    className="animate-spin text-white/30"
+                    className="animate-spin text-white/50"
                   />
                 </div>
 
@@ -2010,8 +1972,8 @@ export default function Workspace() {
                   </p>
 
                   <p className="
-                    text-[11px]
-                    text-white/25
+                    text-[12.5px]
+                    text-white/50
                     mt-1
                   ">
                     Deploy a purchased project to
@@ -2188,7 +2150,7 @@ export default function Workspace() {
                               text-[9px]
                               uppercase
                               tracking-wider
-                              text-white/30
+                              text-white/50
                             ">
                               {cat}
                             </span>
@@ -2273,8 +2235,8 @@ export default function Workspace() {
                             </h3>
 
                             <p className="
-                              text-[11px]
-                              text-white/30
+                              text-[12.5px]
+                              text-white/50
                               mt-1
                             ">
                               Used when marketplace
@@ -2360,7 +2322,7 @@ export default function Workspace() {
                         rounded-xl
                         bg-[var(--accent)]
                         text-white
-                        text-[11px]
+                        text-[12.5px]
                         font-bold
                         uppercase
                         tracking-wider
@@ -2427,9 +2389,12 @@ function QuickAction({
         group
         text-left
         ${cardClass}
-        p-5
-        hover:border-white/[0.14]
+        p-6
+        hover:border-white/[0.22]
+        hover:bg-white/[0.05]
+        hover:-translate-y-0.5
         transition-all
+        duration-200
         ${
           accent
             ? 'border-[var(--accent)]/20'
@@ -2446,16 +2411,16 @@ function QuickAction({
       ">
 
         <div className={`
-          w-8
-          h-8
-          rounded-lg
+          w-10
+          h-10
+          rounded-xl
           flex
           items-center
           justify-center
           border
           ${
             accent
-              ? 'bg-[var(--accent)]/[0.08] border-[var(--accent)]/20'
+              ? 'bg-[#cbb392]/[0.12] border-[#cbb392]/30'
               : 'bg-white/[0.035] border-white/[0.06]'
           }
         `}>
@@ -2464,8 +2429,8 @@ function QuickAction({
             size={15}
             className={
               accent
-                ? 'text-[var(--accent)]'
-                : 'text-white/55'
+                ? 'text-[#cbb392]'
+                : 'text-white/60'
             }
           />
 
@@ -2484,16 +2449,16 @@ function QuickAction({
 
 
       <h3 className="
-        text-[13px]
-        font-semibold
+        ws-display
+        text-[18px]
         text-white
       ">
         {title}
       </h3>
 
       <p className="
-        text-[11px]
-        text-white/35
+        text-[13.5px]
+        text-white/60
         leading-relaxed
         mt-1.5
       ">
@@ -2519,14 +2484,14 @@ function AccountRow({
     ">
 
       <span className="
-        text-[11px]
-        text-white/35
+        text-[12.5px]
+        text-white/50
       ">
         {label}
       </span>
 
       <span className={`
-        text-[11px]
+        text-[12.5px]
         ${
           status === 'success'
             ? 'text-emerald-400/70'
@@ -2580,8 +2545,8 @@ function FormSection({
           </h2>
 
           <p className="
-            text-[11px]
-            text-white/30
+            text-[12.5px]
+            text-white/50
             mt-1
           ">
             {description}
@@ -2611,7 +2576,7 @@ function Field({
         uppercase
         tracking-wider
         font-semibold
-        text-white/35
+        text-white/50
       ">
         {label}
       </label>
@@ -2672,7 +2637,7 @@ function ProviderBox({
           />
 
           <span className="
-            text-white/35
+            text-white/50
           ">
             {connected
               ? `@${username}`
@@ -2760,7 +2725,7 @@ function ListingCard({
             py-1
             rounded-md
             bg-black/65
-            backdrop-blur-sm
+            
             border
             border-white/10
             text-[8px]
@@ -2801,8 +2766,8 @@ function ListingCard({
         </h3>
 
         <p className="
-          text-[11px]
-          text-white/35
+          text-[12.5px]
+          text-white/50
           mt-1.5
           leading-relaxed
           line-clamp-2
@@ -2832,7 +2797,7 @@ function ListingCard({
             uppercase
             tracking-wider
             font-semibold
-            text-white/35
+            text-white/50
             mb-1
           ">
             <AlertCircle size={10} />
@@ -2841,7 +2806,7 @@ function ListingCard({
 
           <p className="
             text-[10px]
-            text-white/45
+            text-white/60
             leading-relaxed
           ">
             {item.adminComment}
@@ -2869,7 +2834,7 @@ function ListingCard({
             items-center
             gap-3
             text-[9px]
-            text-white/30
+            text-white/50
           ">
 
             <span className="
@@ -2903,7 +2868,7 @@ function ListingCard({
 
 
           <span className="
-            text-[12px]
+            text-[13px]
             font-semibold
             text-[var(--accent)]
           ">
@@ -2938,7 +2903,7 @@ function ListingCard({
                 flex
                 items-center
                 justify-center
-                text-white/40
+                text-white/60
                 hover:text-white
                 hover:bg-white/[0.07]
                 transition-all
@@ -2966,7 +2931,7 @@ function ListingCard({
                 flex
                 items-center
                 justify-center
-                text-white/40
+                text-white/60
                 hover:text-white
                 hover:bg-white/[0.07]
                 transition-all
@@ -2994,7 +2959,7 @@ function ListingCard({
               flex
               items-center
               justify-center
-              text-white/25
+              text-white/50
               hover:text-red-400
               hover:bg-red-400/[0.06]
               transition-all

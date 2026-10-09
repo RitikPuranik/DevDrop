@@ -230,3 +230,25 @@ h1, h2, h3 {
 .studio .s-btn-ghost:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
 .studio .s-btn:disabled { opacity: .4; cursor: not-allowed; }
 .studio :focus-visible { outline: 2px solid var(--s-text); outline-offset: 2px; }
+
+/* ───────────── Workspace theme (matches home page) ───────────── */
+.ws { font-family: var(--font-napkin); background: #050505; color: #e8e2d6; -webkit-font-smoothing: antialiased; }
+.ws .ws-display { font-family: var(--font-napkin-display); font-weight: 700; letter-spacing: -0.01em; }
+.ws .text-white { color: #e8e2d6; }
+.ws ::selection { background: #e8e2d6; color: #000; }
+.ws :focus-visible { outline: 2px solid #e8e2d6; outline-offset: 2px; }
+/* primary actions become the home page's cream pill */
+.ws button.bg-\[var\(--accent\)\], .ws a.bg-\[var\(--accent\)\] { background: #e8e2d6; color: #050505; border-radius: 999px; font-weight: 700; }
+.ws button.bg-\[var\(--accent\)\]:hover:not(:disabled), .ws a.bg-\[var\(--accent\)\]:hover { background: #fff; opacity: 1; }
+.ws button.bg-\[var\(--accent\)\].text-white, .ws a.bg-\[var\(--accent\)\].text-white { color: #050505; }
+
+.ws h1, .ws h2, .ws h3, .ws h4 { font-weight: 600; }
+.ws h3.ws-display, .ws h2.ws-display, .ws h1.ws-display { font-weight: 700; }
+
+/* ───────────── Templates page theme (matches home page) ───────────── */
+.tpl { font-family: var(--font-napkin); background: #050505; color: #e8e2d6; -webkit-font-smoothing: antialiased; }
+.tpl .tpl-display { font-family: var(--font-napkin-display); font-weight: 700; letter-spacing: -0.01em; }
+.tpl .text-white { color: #e8e2d6; }
+.tpl ::selection { background: #e8e2d6; color: #000; }
+.tpl h1, .tpl h2, .tpl h3 { font-weight: 600; }
+.tpl h1.tpl-display, .tpl h2.tpl-display, .tpl h3.tpl-display { font-weight: 700; }

@@ -1,61 +1,81 @@
 import React, { useState, useEffect } from 'react';
+import { ACCENT_THEMES } from '../../hooks/useAccentTheme';
 
-const COLUMNS = [
-  { title: 'Explore', links: [{ label: 'Templates' }, { label: 'Archive' }, { label: 'Components' }, { label: 'Documentation', href: '/docs' }] },
-  { title: 'Studio', links: [{ label: 'Process' }, { label: 'Licensing' }, { label: 'Contact' }] },
-  { title: 'Elsewhere', links: [{ label: 'Instagram' }, { label: 'Dribbble' }, { label: 'X.com' }] },
+// Follows the site's black + beige theme and the user's chosen accent (gold, beige, brown, charcoal).
+const readAccent = () => {
+  try {
+    const t = ACCENT_THEMES[localStorage.getItem('devdrop_accent_theme')];
+    return (t || ACCENT_THEMES.gold).accent;
+  } catch {
+    return ACCENT_THEMES.gold.accent;
+  }
+};
+
+const NAV = [
+  { label: 'Templates' },
+  { label: 'Archive' },
+  { label: 'Components' },
+  { label: 'Documentation', href: '/docs' },
+  { label: 'Process' },
+  { label: 'Licensing' },
+  { label: 'Contact' },
 ];
 
-const LINK = 'text-[15px] text-[#e8e2d6]/60 transition-colors duration-200 hover:text-[#e8e2d6]';
+const SOCIAL = ['Instagram', 'Dribbble', 'X.com'];
+
+const Rule = () => <span aria-hidden="true" className="h-px flex-1 bg-[var(--f-accent)]" />;
 
 const DevDropFooter = () => {
-  const [time, setTime] = useState('');
-
+  const [accent, setAccent] = useState(readAccent);
   useEffect(() => {
-    const tick = () => setTime(new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }));
-    tick();
-    const timer = setInterval(tick, 30000);
-    return () => clearInterval(timer);
+    const sync = () => setAccent(readAccent());
+    window.addEventListener('storage', sync);
+    return () => window.removeEventListener('storage', sync);
   }, []);
 
   return (
-    <footer className="w-full border-t border-[#e8e2d6]/15 bg-[#050505] px-[6vw] pb-8 pt-20 text-[#e8e2d6]">
-      <div className="grid gap-16 lg:grid-cols-[1.3fr_1fr]">
-        {/* Wordmark + statement */}
-        <div>
-          <h2 className="font-display text-[64px] italic leading-[0.9] tracking-tight md:text-[104px]">devdrop</h2>
-          <p className="mt-8 max-w-md text-[15px] leading-7 text-[#e8e2d6]/55">
-            A marketplace for considered web templates, components and AI-built sites. Made carefully, shipped quickly.
-          </p>
-        </div>
+  <footer style={{ '--f-accent': accent }} className="mb-2  h-100 w-full border-t border-[#050505]/15 bg-[#e8e2d6] px-[5vw] pb-24 pt-16 text-[#050505] md:pb-6">
+    {/* Wordmark between hairlines */}
+    <div className="flex items-center gap-8">
+      <Rule />
+      <h2 className="font-display text-[52px] italic leading-none tracking-tight md:text-[76px]">devdrop<span className="text-[var(--f-accent)]">.</span></h2>
+      <Rule />
+    </div>
 
-        {/* Link columns */}
-        <nav aria-label="Footer" className="grid grid-cols-2 gap-x-8 gap-y-12 sm:grid-cols-3">
-          {COLUMNS.map((col) => (
-            <div key={col.title}>
-              <h3 className="mb-5 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#b89f78]" style={{ fontWeight: 600 }}>{col.title}</h3>
-              <ul className="space-y-3">
-                {col.links.map((l) => (
-                  <li key={l.label}>
-                    {l.href ? <a href={l.href} className={LINK}>{l.label}</a> : <span className={`${LINK} cursor-pointer`}>{l.label}</span>}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </nav>
-      </div>
+    <p className="font-display mx-auto mt-6 max-w-2xl text-balance text-center text-[20px] italic leading-snug text-[#050505]/65 md:text-[24px]">
+      Considered templates, components and sites — made with care.
+    </p>
 
-      {/* Bottom bar */}
-      <div className="mt-20 flex flex-col gap-4 border-t border-[#e8e2d6]/15 pt-6 text-[12px] text-[#e8e2d6]/45 md:flex-row md:items-center md:justify-between md:pr-28">
-        <p>© {new Date().getFullYear()} DevDrop Studio</p>
-        <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
-          <a href="/terms" className="transition-colors hover:text-[#e8e2d6]">Terms of Service</a>
-          <a href="/privacy" className="transition-colors hover:text-[#e8e2d6]">Privacy Policy</a>
-          {time && <span className="tabular-nums">Local time {time}</span>}
-        </div>
+    {/* Navigation */}
+    <nav aria-label="Footer" className="mx-auto mt-10 flex max-w-4xl flex-wrap items-center justify-center gap-x-3 gap-y-3">
+      {NAV.map((item, i) => (
+        <React.Fragment key={item.label}>
+          {i > 0 && <span aria-hidden="true" className="text-[var(--f-accent)]">·</span>}
+          {item.href ? (
+            <a href={item.href} className="font-display text-[19px] text-[#050505] transition-colors hover:text-[var(--f-accent)]/80">{item.label}</a>
+          ) : (
+            <span className="font-display cursor-pointer text-[19px] text-[#050505] transition-colors hover:text-[var(--f-accent)]/80">{item.label}</span>
+          )}
+        </React.Fragment>
+      ))}
+    </nav>
+
+    {/* Social */}
+    <div className="mt-5 flex items-center justify-center gap-8 text-[10.5px] uppercase tracking-[0.24em] text-[#050505]/55">
+      {SOCIAL.map((s) => (
+        <span key={s} className="cursor-pointer border-b border-transparent pb-0.5 transition-colors hover:border-[var(--f-accent)] hover:text-[#050505]" style={{ fontWeight: 600 }}>{s}</span>
+      ))}
+    </div>
+
+    {/* Legal */}
+    <div className="mt-10 flex flex-col items-center gap-3 border-t border-[#050505]/15 pt-5 text-[12px] text-[#050505]/80 md:flex-row md:justify-between md:pr-28">
+      <p>© {new Date().getFullYear()} DevDrop Studio. All rights reserved.</p>
+      <div className="flex items-center gap-7">
+        <a href="/terms" className="transition-colors hover:text-[#050505]">Terms of Service</a>
+        <a href="/privacy" className="transition-colors hover:text-[#050505]">Privacy Policy</a>
       </div>
-    </footer>
+    </div>
+  </footer>
   );
 };
 
