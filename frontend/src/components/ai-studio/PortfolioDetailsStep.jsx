@@ -118,7 +118,7 @@ function SkillPicker({ selected, onChange }) {
   return (
     <div>
       <div className="relative mb-3">
-        <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/35" />
+        <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--s-faint)]" />
         <input
           value={query}
           onChange={(e) => { setQuery(e.target.value); if (e.target.value) setOpenCats(new Set(SKILL_CATEGORIES.map((c) => c.label))); }}
@@ -131,9 +131,9 @@ function SkillPicker({ selected, onChange }) {
       <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
         {filtered.map((cat) => (
           <div key={cat.label}>
-            <button type="button" onClick={() => toggleCat(cat.label)} className="flex w-full items-center justify-between rounded-lg px-1 py-1.5 text-[12px] font-semibold text-white/80 hover:text-white">
+            <button type="button" onClick={() => toggleCat(cat.label)} className="flex w-full items-center justify-between rounded-lg px-1 py-1.5 text-[12px] font-semibold text-[var(--s-text)] hover:text-[var(--s-text)]">
               <span>{cat.label}</span>
-              {openCats.has(cat.label) ? <ChevronUp size={13} className="text-white/40" /> : <ChevronDown size={13} className="text-white/40" />}
+              {openCats.has(cat.label) ? <ChevronUp size={13} className="text-[var(--s-faint)]" /> : <ChevronDown size={13} className="text-[var(--s-faint)]" />}
             </button>
             {openCats.has(cat.label) && (
               <div className="mb-2 flex flex-wrap gap-1.5">
@@ -145,7 +145,7 @@ function SkillPicker({ selected, onChange }) {
                       type="button"
                       onClick={() => toggle(skill)}
                       style={on ? { borderColor: `${cat.color}99`, background: `${cat.color}26`, color: cat.color } : undefined}
-                      className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${on ? '' : 'border-white/10 bg-white/[0.03] text-white/55 hover:border-white/25 hover:text-white/85'}`}
+                      className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${on ? '' : 'border-[var(--s-line)] bg-[var(--s-surface)] text-[var(--s-muted)] hover:border-[var(--s-line)] hover:text-[var(--s-text)]'}`}
                     >
                       {on ? '✓ ' : ''}{skill}
                     </button>
@@ -155,13 +155,13 @@ function SkillPicker({ selected, onChange }) {
             )}
           </div>
         ))}
-        {filtered.length === 0 && <p className="py-4 text-center text-xs text-white/30">No skills match &quot;{query}&quot;</p>}
+        {filtered.length === 0 && <p className="py-4 text-center text-xs text-[var(--s-faint)]">No skills match &quot;{query}&quot;</p>}
       </div>
 
       {customSelected.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {customSelected.map((skill) => (
-            <button key={skill} type="button" onClick={() => toggle(skill)} className="inline-flex items-center gap-1 rounded-full border border-violet-400/40 bg-violet-500/15 px-2.5 py-1 text-[11px] font-medium text-violet-200">
+            <button key={skill} type="button" onClick={() => toggle(skill)} className="inline-flex items-center gap-1 rounded-full border border-[var(--s-accent)] bg-[var(--s-raised)] px-2.5 py-1 text-[11px] font-medium text-[var(--s-accent)]">
               {skill} <X size={10} />
             </button>
           ))}
@@ -178,7 +178,7 @@ function SkillPicker({ selected, onChange }) {
         />
         <button type="button" onClick={addCustom} className={`rounded-xl px-4 text-xs font-semibold ${GRAD}`}>Add</button>
       </div>
-      {selected.length > 0 && <p className="mt-2 text-right text-[11px] text-white/30">{selected.length} selected</p>}
+      {selected.length > 0 && <p className="mt-2 text-right text-[11px] text-[var(--s-faint)]">{selected.length} selected</p>}
     </div>
   );
 }
@@ -203,13 +203,13 @@ function ResumeUpload({ file, onChange }) {
 
   if (file) {
     return (
-      <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/30 px-4 py-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-600/20"><FileText size={18} className="text-violet-300" /></div>
+      <div className="flex items-center gap-3 rounded-xl border border-[var(--s-line)] bg-[var(--s-bg)] px-4 py-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--s-raised)]"><FileText size={18} className="text-[var(--s-accent)]" /></div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-white/85">{file.name}</p>
-          <p className="text-[11px] text-white/35">{formatFileSize(file.size)}</p>
+          <p className="truncate text-sm font-medium text-[var(--s-text)]">{file.name}</p>
+          <p className="text-[11px] text-[var(--s-faint)]">{formatFileSize(file.size)}</p>
         </div>
-        <button type="button" onClick={() => onChange(null)} className="rounded-lg p-1.5 text-white/35 hover:bg-white/10 hover:text-white" aria-label="Remove resume"><X size={16} /></button>
+        <button type="button" onClick={() => onChange(null)} className="rounded-lg p-1.5 text-[var(--s-faint)] hover:bg-[var(--s-surface)] hover:text-[var(--s-text)]" aria-label="Remove resume"><X size={16} /></button>
       </div>
     );
   }
@@ -220,12 +220,12 @@ function ResumeUpload({ file, onChange }) {
         onDrop={(e) => { e.preventDefault(); setDragging(false); handleFile(e.dataTransfer.files?.[0]); }}
         onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
-        className={`flex flex-col items-center justify-center gap-2.5 rounded-xl border border-dashed px-4 py-7 text-center transition-colors ${dragging ? 'border-violet-400 bg-violet-500/10' : 'border-white/20 bg-black/20'}`}
+        className={`flex flex-col items-center justify-center gap-2.5 rounded-xl border border-dashed px-4 py-7 text-center transition-colors ${dragging ? 'border-[var(--s-accent)] bg-[var(--s-raised)]' : 'border-[var(--s-line)] bg-[var(--s-bg)]'}`}
       >
-        <Upload size={26} strokeWidth={1.4} className={dragging ? 'text-violet-300' : 'text-white/55'} />
-        <p className="text-[13px] font-semibold text-white/85">{dragging ? 'Drop your resume here' : 'Drag & drop your resume here'}</p>
+        <Upload size={26} strokeWidth={1.4} className={dragging ? 'text-[var(--s-accent)]' : 'text-[var(--s-muted)]'} />
+        <p className="text-[13px] font-semibold text-[var(--s-text)]">{dragging ? 'Drop your resume here' : 'Drag & drop your resume here'}</p>
         <button type="button" onClick={() => inputRef.current?.click()} className={`rounded-lg px-4 py-1.5 text-xs font-semibold ${GRAD}`}>Browse files</button>
-        <p className="text-[10px] text-white/35">PDF, DOC, or DOCX • Max 10 MB</p>
+        <p className="text-[10px] text-[var(--s-faint)]">PDF, DOC, or DOCX • Max 10 MB</p>
         <input ref={inputRef} type="file" accept={ACCEPTED_EXT} onChange={(e) => { handleFile(e.target.files?.[0]); e.target.value = ''; }} className="hidden" />
       </div>
       {error && <p className="mt-2 text-[11px] text-red-400">{error}</p>}
@@ -252,9 +252,9 @@ function StringList({ label, items, onChange, placeholder, addLabel = 'Add' }) {
       {items.length > 0 && (
         <div className="mt-2.5 flex flex-wrap gap-1.5">
           {items.map((item) => (
-            <span key={item} className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-[11px] text-white/85">
+            <span key={item} className="inline-flex items-center gap-1.5 rounded-md border border-[var(--s-line)] bg-[var(--s-surface)] px-3 py-1 text-[11px] text-[var(--s-text)]">
               {item}
-              <button type="button" onClick={() => onChange(items.filter((x) => x !== item))} aria-label={`Remove ${item}`} className="text-white/45 hover:text-white"><X size={11} /></button>
+              <button type="button" onClick={() => onChange(items.filter((x) => x !== item))} aria-label={`Remove ${item}`} className="text-[var(--s-faint)] hover:text-[var(--s-text)]"><X size={11} /></button>
             </span>
           ))}
         </div>
@@ -271,9 +271,9 @@ function Repeatable({ items, onChange, fields, addLabel }) {
     <div>
       <div className="space-y-3">
         {items.map((item, index) => (
-          <div key={index} className="rounded-xl border border-white/10 bg-black/30 p-4">
+          <div key={index} className="rounded-xl border border-[var(--s-line)] bg-[var(--s-bg)] p-4">
             <div className="mb-2 flex justify-end">
-              <button type="button" onClick={() => onChange(items.filter((_, i) => i !== index))} aria-label={`Remove item ${index + 1}`} className="text-white/35 hover:text-white"><X size={15} /></button>
+              <button type="button" onClick={() => onChange(items.filter((_, i) => i !== index))} aria-label={`Remove item ${index + 1}`} className="text-[var(--s-faint)] hover:text-[var(--s-text)]"><X size={15} /></button>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               {fields.map((field) => (
@@ -285,7 +285,7 @@ function Repeatable({ items, onChange, fields, addLabel }) {
           </div>
         ))}
       </div>
-      <button type="button" onClick={add} className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/20 py-2.5 text-xs font-semibold text-white/65 transition-colors hover:border-violet-400/60 hover:text-white">
+      <button type="button" onClick={add} className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[var(--s-line)] py-2.5 text-xs font-semibold text-[var(--s-muted)] transition-colors hover:border-[var(--s-accent)] hover:text-[var(--s-text)]">
         <Plus size={14} /> {addLabel}
       </button>
     </div>
@@ -392,7 +392,7 @@ export default function PortfolioDetailsStep({ details, onChange, onBack, onNext
         </Card>
 
         <Card title="Media Assets" className="lg:col-span-5">
-          <p className="-mt-2 mb-3 text-[11px] text-white/35">Optional. The AI can use these in your website.</p>
+          <p className="-mt-2 mb-3 text-[11px] text-[var(--s-faint)]">Optional. The AI can use these in your website.</p>
           <div className="grid grid-cols-2 gap-3">
             <MediaDrop kind="image" list={details.images || []} onChange={(images) => update({ images })} />
             <MediaDrop kind="video" list={details.videos || []} onChange={(videos) => update({ videos })} />
@@ -431,12 +431,12 @@ export default function PortfolioDetailsStep({ details, onChange, onBack, onNext
       </div>
 
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-        <button type="button" onClick={onBack} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-5 py-3 text-[13px] font-semibold text-white/70 transition-colors hover:text-white">
+        <button type="button" onClick={onBack} className="inline-flex items-center gap-2 rounded-xl border border-[var(--s-line)] bg-[var(--s-surface)] px-5 py-3 text-[13px] font-semibold text-[var(--s-muted)] transition-colors hover:text-[var(--s-text)]">
           <ArrowLeft size={14} /> Previous Step
         </button>
         <div className="flex items-center gap-3">
           {Object.keys(errors).length > 0 && <span className="text-xs text-red-400">Fix the highlighted fields to continue.</span>}
-          <button type="button" onClick={handleNext} className={`inline-flex items-center gap-2 rounded-xl px-6 py-3 text-[13px] font-semibold shadow-[0_0_28px_rgba(139,92,246,.35)] transition-opacity hover:opacity-90 ${GRAD}`}>
+          <button type="button" onClick={handleNext} className={`inline-flex items-center gap-2 rounded-xl px-6 py-3 text-[13px] font-semibold  transition-opacity hover:opacity-90 ${GRAD}`}>
             Continue to Design <ArrowRight size={14} />
           </button>
         </div>

@@ -1,27 +1,21 @@
 import React from 'react';
-import { Sparkles } from 'lucide-react';
 
 const LABELS = ['Details', 'Design', 'Review'];
 
-/**
- * Compact one-line header used on the full-height Design step so the
- * options panel and preview can reach the bottom of the screen.
- */
+/** Compact one-line header used on the full-height Design step. */
 export default function StudioTopBar({ title, step }) {
   return (
-    <div className="border-b border-white/[0.06] bg-neutral-950/80 px-5 py-3 backdrop-blur-xl md:px-8">
-      <div className="mx-auto flex max-w-6xl items-center gap-5">
-        <div className="hidden shrink-0 items-center gap-2 text-xs text-white/45 sm:inline-flex">
-          <Sparkles size={14} className="text-violet-400" /> {title}
-        </div>
-        <div className="flex flex-1 gap-2" aria-label="AI Studio progress">
+    <div className="studio border-b border-[var(--s-line)] px-5 py-3 md:px-8">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-6">
+        <div className="s-display hidden text-[17px] sm:block">{title}</div>
+        <ol className="flex items-center gap-2" aria-label="AI Studio progress">
           {LABELS.map((label, i) => (
-            <div key={label} className="flex-1">
-              <div className={`h-1 rounded-full ${i <= step ? 'bg-violet-500' : 'bg-white/10'}`} />
-              <p className={`mt-1 text-[10px] ${i === step ? 'text-white' : 'text-white/30'}`}>{String(i + 2).padStart(2, '0')} {label}</p>
-            </div>
+            <li key={label} aria-current={i === step ? 'step' : undefined}
+              className={`rounded-full border px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] ${i === step ? 'border-transparent bg-[var(--s-text)] text-[#050505]' : i < step ? 'border-white/15 bg-white/5 text-[var(--s-text)]' : 'border-white/8 text-[var(--s-faint)]'}`}>
+              {String(i + 1).padStart(2, '0')} {label}
+            </li>
           ))}
-        </div>
+        </ol>
       </div>
     </div>
   );

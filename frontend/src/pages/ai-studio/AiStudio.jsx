@@ -1,6 +1,7 @@
 import {buildAssetContract} from '../../components/ai-studio/assetContract';
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { ArrowLeft, ArrowUp, Loader2, Bot, User, CheckSquare, ChevronDown, Paperclip, Mic, Sparkles, Send, X, Film, FileText } from 'lucide-react';
 import { usePostHog } from '../../analytics/PostHogProvider';
 import { aiGenerateAPI } from '../../api/aiGenerate';
@@ -204,60 +205,67 @@ export default function AiStudio() {
     }finally{setIsGenerating(false);}
   };
   const handleDownload=()=>{aiStudioSession.recordActivity();};
-  if(studioMode==='types')return <div className="fixed inset-0 z-40 overflow-y-auto bg-neutral-950 text-white"><div className="mx-auto max-w-6xl px-5 pb-16 pt-24 md:px-8 md:pt-28"><div className="mb-8 flex flex-wrap items-end justify-between gap-5"><div><p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-violet-400">AI Studio</p><h1 className="text-3xl font-bold tracking-tight md:text-4xl">What do you want to build?</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-white/40">Choose a website type first. DevDrop will then collect the information that matters for that kind of site and turn it into a detailed build specification for the AI.</p></div><div className="hidden items-center gap-2 text-[10px] uppercase tracking-[0.18em] text-white/25 sm:flex"><span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-white/60">01 Choose type</span><span>→</span><span>02 Details</span><span>→</span><span>03 Design</span><span>→</span><span>04 Review</span></div></div><div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-4">{WEBSITE_TYPES.map(type=>{const Icon=type.icon;return <button key={type.id} type="button" disabled={!type.enabled} onClick={()=>type.enabled&&setStudioMode(type.id)} className={`group relative flex min-h-[176px] flex-col overflow-hidden rounded-[18px] border p-4 text-left transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/70 ${type.enabled?'border-white/[0.09] bg-[linear-gradient(145deg,rgba(255,255,255,.05),rgba(10,10,14,.9))] shadow-[inset_0_1px_0_rgba(255,255,255,.04)] hover:-translate-y-0.5 hover:border-violet-400/60 hover:shadow-[0_0_28px_rgba(139,92,246,.16),inset_0_1px_0_rgba(255,255,255,.06)]':'cursor-not-allowed border-white/5 bg-white/[0.015] opacity-45'}`}>
-<span className="relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] border border-white/10 bg-white/[0.04]"><Icon size={16} strokeWidth={1.35} className="text-white/60"/></span>
-{type.artImage&&<img src={type.artImage} alt="" aria-hidden="true" onError={(event)=>{event.currentTarget.style.display='none';}} className="pointer-events-none absolute right-3.5 top-3.5 h-[88px] w-[46%] object-contain object-right-top opacity-90 transition-transform duration-300 origin-top-right group-hover:scale-[1.05]"/>}
-<div className="relative z-10 mt-auto max-w-[80%] pt-5">
-<h2 className="text-[15px] font-medium leading-5 tracking-tight text-white/90">{type.title}</h2>
-<p className="mt-1 text-[11px] leading-[1.5] text-white/40">{type.description}</p>
-{!type.enabled&&<p className="mt-2 text-[8px] font-bold uppercase tracking-[0.16em] text-white/25">Coming soon</p>}
+  if(studioMode==='types')return <div className="studio fixed inset-0 z-40 overflow-y-auto">
+  <div className="mx-auto max-w-[1300px] px-4 pb-24 pt-28 sm:px-6 md:px-10 md:pt-36">
+    <header className="mb-14 space-y-4 text-center md:mb-16">
+      <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider">AI Studio</span>
+      <h1 className="s-display text-4xl font-bold tracking-tight md:text-6xl">What do you want to <span className="text-[var(--s-hi)]">build?</span></h1>
+      <p className="mx-auto max-w-xl text-sm leading-7 text-[var(--s-muted)] md:text-base">Choose a website type. We&apos;ll ask only what matters for it, then turn your answers into a ready-to-ship build.</p>
+    </header>
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-6 lg:grid-cols-3">{WEBSITE_TYPES.map((type,idx)=>{const Icon=type.icon;return <motion.button key={type.id} type="button" disabled={!type.enabled} onClick={()=>type.enabled&&setStudioMode(type.id)} initial={{opacity:0,y:14}} animate={{opacity:1,y:0}} transition={{duration:0.4,delay:idx*0.04}} className={`group s-card flex flex-col overflow-hidden text-left transition-all duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--s-text)] ${type.enabled?'hover:-translate-y-1 hover:border-white/25 hover:bg-white/[0.05]':'cursor-not-allowed opacity-45'}`}>
+<div className="relative flex h-44 items-center justify-center border-b border-[var(--s-line)] bg-[var(--s-surface)] p-6">
+{type.artImage?<img src={type.artImage} alt="" loading="lazy" className="max-h-full w-auto object-contain opacity-70 transition-opacity duration-500 group-hover:opacity-100"/>:<Icon size={44} strokeWidth={1.1} className="text-[var(--s-faint)]"/>}
+<span className="absolute left-4 top-4 flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5"><Icon size={15} className="text-[var(--s-text)]"/></span>
 </div>
-{type.id==='custom'&&<span className="absolute right-3 top-3 z-20 rounded-full border border-white/10 bg-black/30 px-2 py-1 text-[8px] font-semibold uppercase tracking-[0.14em] text-white/50">Custom</span>}
-</button>;})}</div></div></div>;
-  if(studioMode==='portfolio')return <div className="fixed inset-0 z-40 overflow-y-auto bg-neutral-950"><PortfolioBuilder onBack={()=>setStudioMode('types')} onGenerate={handlePortfolioGenerate}/></div>;
-  if(['ecommerce','blog','landing','cafe','hotel','studio','saas','event','education','custom'].includes(studioMode))return <div className="fixed inset-0 z-40 overflow-y-auto bg-neutral-950"><WebsiteBuilder type={studioMode} onBack={()=>setStudioMode('types')} onGenerate={handleWebsiteGenerate}/></div>;
+<div className="flex flex-1 flex-col p-6">
+<h2 className="s-display text-[22px] leading-7">{type.title}</h2>
+<p className="mt-2 flex-1 text-sm leading-relaxed text-[var(--s-muted)]">{type.description}</p>
+{type.enabled?<span className="mt-5 inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em]">Start <span className="transition-transform duration-300 group-hover:translate-x-1">→</span></span>:<span className="s-label mt-5">Coming soon</span>}
+</div>
+</motion.button>;})}</div>
+  </div>
+</div>;
+  if(studioMode==='portfolio')return <div className="studio fixed inset-0 z-40 overflow-y-auto"><PortfolioBuilder onBack={()=>setStudioMode('types')} onGenerate={handlePortfolioGenerate}/></div>;
+  if(['ecommerce','blog','landing','cafe','hotel','studio','saas','event','education','custom'].includes(studioMode))return <div className="studio fixed inset-0 z-40 overflow-y-auto"><WebsiteBuilder type={studioMode} onBack={()=>setStudioMode('types')} onGenerate={handleWebsiteGenerate}/></div>;
   const pipelineMode=genMode==='debug'?'debug':(genMode==='edit'?'edit':'generate');
   const {steps:pipelineSteps,percent,queued}=computePipeline({mode:pipelineMode,pipeline,isGenerating,complete:!isGenerating&&Boolean(fileData)&&!error,currentStage});
-  const statusText=isGenerating?(queued?'Queued…':`${pipelineMode==='edit'?'Editing':'Generating'} (${percent}%)`):(error&&!fileData?'Failed':fileData?'Generation Complete (100%)':'Ready');
-  const statusTone=isGenerating?'border-violet-500/30 bg-violet-500/10 text-violet-300':(error&&!fileData?'border-red-500/30 bg-red-500/10 text-red-300':'border-emerald-500/30 bg-emerald-500/10 text-emerald-300');
-  const dotTone=isGenerating?'bg-violet-400 animate-pulse':(error&&!fileData?'bg-red-400':'bg-emerald-400');
   const firstPrompt=messages[0]?.role==='user'?messages[0].content:'';
   const chatMessages=firstPrompt?messages.slice(1):messages;
   const ruleLines=firstPrompt.split('\n').map(l=>l.replace(/^\s*[-*•]\s*/,'').trim()).filter(Boolean);
   const shownRules=showContract?ruleLines:ruleLines.slice(0,3);
   const history=messages.filter(m=>m.role==='user').map(m=>m.content);
-  const card='rounded-2xl border border-white/[0.12] bg-[#0b0b0c]';
-  return <div className="fixed inset-0 z-40 flex flex-col bg-[#070708] pt-[3.75rem] text-white">
+  const card='s-card';
+  return <div className="studio fixed inset-0 z-40 flex flex-col pt-[3.75rem]">
     <div className="flex min-h-0 flex-1">
-      <div className="flex w-[360px] shrink-0 flex-col border-r border-white/[0.08]">
+      <div className="flex w-[360px] shrink-0 flex-col border-r border-[var(--s-line)]">
         <div ref={scrollRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
           {firstPrompt&&<div className={`${card} p-4`}>
-            <div className="mb-3 flex items-center gap-3 text-[14px] font-medium text-white"><CheckSquare className="h-5 w-5 text-white/60"/>Instructions &amp; Rules</div>
-            <ul className={`space-y-1.5 text-[12px] leading-5 text-white/80 ${showContract?'max-h-72 overflow-y-auto pr-1':''}`}>{shownRules.map((r,i)=><li key={i} className="flex gap-2"><span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-white/70"/><span className={showContract?'':'line-clamp-2'}>{r}</span></li>)}</ul>
-            <button type="button" onClick={()=>setShowContract(v=>!v)} className="mt-3 flex w-full items-center justify-center gap-1.5 border-t border-white/[0.1] pt-2.5 text-[12px] text-white/60 hover:text-white">[ <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showContract?'rotate-180':''}`}/> {showContract?'Hide':'View'} Contract ]</button>
+            <div className="mb-3 flex items-center gap-3 text-[14px] font-medium text-[var(--s-text)]"><CheckSquare className="h-5 w-5 text-[var(--s-muted)]"/>Instructions &amp; Rules</div>
+            <ul className={`space-y-1.5 text-[12px] leading-5 text-[var(--s-text)] ${showContract?'max-h-72 overflow-y-auto pr-1':''}`}>{shownRules.map((r,i)=><li key={i} className="flex gap-2"><span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-[var(--s-muted)]"/><span className={showContract?'':'line-clamp-2'}>{r}</span></li>)}</ul>
+            <button type="button" onClick={()=>setShowContract(v=>!v)} className="mt-3 flex w-full items-center justify-center gap-1.5 border-t border-[var(--s-line)] pt-2.5 text-[12px] text-[var(--s-muted)] hover:text-[var(--s-text)]">[ <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showContract?'rotate-180':''}`}/> {showContract?'Hide':'View'} Contract ]</button>
           </div>}
           <div className="px-1 pt-2">
-            <div className="mb-2.5 text-[14px] font-semibold text-white">Build Status: <span className={isGenerating?'text-violet-300':(error&&!fileData?'text-red-300':'text-emerald-400')}>{isGenerating?(queued?'Queued':'In progress'):(error&&!fileData?'Failed':fileData?'Completed':'Idle')} ({percent}%)</span></div>
+            <div className="mb-2.5 text-[14px] font-semibold text-[var(--s-text)]">Build Status: <span className={isGenerating?'text-[var(--s-accent)]':(error&&!fileData?'text-[var(--s-err)]':'text-[var(--s-ok)]')}>{isGenerating?(queued?'Queued':'In progress'):(error&&!fileData?'Failed':fileData?'Completed':'Idle')} ({percent}%)</span></div>
             <PipelineSteps steps={pipelineSteps} variant="compact"/>
           </div>
-          {chatMessages.length>0&&<div className="space-y-3">{chatMessages.map((m,i)=><div key={i} className={`flex gap-2 ${m.role==='user'?'justify-end':'justify-start'}`}>{m.role==='assistant'&&<Bot className="mt-1 h-4 w-4 shrink-0 text-violet-400"/>}<div className={`max-w-[88%] whitespace-pre-wrap rounded-lg px-3 py-2 text-[12px] ${m.role==='user'?'bg-violet-600 text-white':'bg-white/[0.04] text-white/80'}`}>{m.content}</div>{m.role==='user'&&<User className="mt-1 h-4 w-4 shrink-0 text-white/40"/>}</div>)}</div>}
+          {chatMessages.length>0&&<div className="space-y-3">{chatMessages.map((m,i)=><div key={i} className={`flex gap-2 ${m.role==='user'?'justify-end':'justify-start'}`}>{m.role==='assistant'&&<Bot className="mt-1 h-4 w-4 shrink-0 text-[var(--s-accent)]"/>}<div className={`max-w-[88%] whitespace-pre-wrap rounded-lg px-3 py-2 text-[12px] ${m.role==='user'?'bg-[var(--s-accent)] text-[#f6f2ea]':'bg-[var(--s-surface)] text-[var(--s-muted)]'}`}>{m.content}</div>{m.role==='user'&&<User className="mt-1 h-4 w-4 shrink-0 text-[var(--s-faint)]"/>}</div>)}</div>}
         </div>
         <div className="shrink-0 p-5 pt-0">
-          {error&&debugRetryAvailable&&!isGenerating&&<button type="button" onClick={handleDebugRetry} className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-300 hover:bg-amber-500/15">Retry Debug Only</button>}
+          {error&&debugRetryAvailable&&!isGenerating&&<button type="button" onClick={handleDebugRetry} className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--s-line-strong)] bg-[var(--s-raised)] px-3 py-2 text-xs font-medium text-[var(--s-hi)] hover:bg-[var(--s-hi)]">Retry Debug Only</button>}
           <div className={`${card} p-3`}>
-            <div className="rounded-xl border border-white/[0.12] p-3">
-              <div className="flex items-start gap-2"><textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSend();}}} placeholder="Describe a change to your website..." rows={2} className="flex-1 resize-none bg-transparent text-[13px] text-white placeholder:text-white/40 focus:outline-none"/><Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-white"/></div>
+            <div className="rounded-xl border border-[var(--s-line)] p-3">
+              <div className="flex items-start gap-2"><textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSend();}}} placeholder="Describe a change to your website..." rows={2} className="flex-1 resize-none bg-transparent text-[13px] text-[var(--s-text)] placeholder:text-[var(--s-muted)] focus:outline-none"/><Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-[var(--s-text)]"/></div>
               {(attachments.length>0||attachError)&&<div className="mt-2 space-y-1.5">
-                {attachments.length>0&&<div className="flex flex-wrap gap-1.5">{attachments.map(a=><div key={a.id} className="group relative flex max-w-[150px] items-center gap-1.5 rounded-lg border border-white/[0.12] bg-white/[0.04] py-1 pl-1 pr-6 text-[11px] text-white/70">
-                  {a.previewUrl?<img src={a.previewUrl} alt="" className="h-6 w-6 shrink-0 rounded object-cover"/>:<span className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-white/[0.06]">{a.kind==='video'?<Film className="h-3.5 w-3.5"/>:<FileText className="h-3.5 w-3.5"/>}</span>}
+                {attachments.length>0&&<div className="flex flex-wrap gap-1.5">{attachments.map(a=><div key={a.id} className="group relative flex max-w-[150px] items-center gap-1.5 rounded-lg border border-[var(--s-line)] bg-[var(--s-surface)] py-1 pl-1 pr-6 text-[11px] text-[var(--s-muted)]">
+                  {a.previewUrl?<img src={a.previewUrl} alt="" className="h-6 w-6 shrink-0 rounded object-cover"/>:<span className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-[var(--s-surface)]">{a.kind==='video'?<Film className="h-3.5 w-3.5"/>:<FileText className="h-3.5 w-3.5"/>}</span>}
                   <span className="truncate" title={a.file.name}>{a.file.name}</span>
-                  <button type="button" onClick={()=>removeAttachment(a.id)} disabled={isUploadingAttachments} aria-label={`Remove ${a.file.name}`} className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-0.5 text-white/40 hover:text-white disabled:opacity-40"><X className="h-3 w-3"/></button>
+                  <button type="button" onClick={()=>removeAttachment(a.id)} disabled={isUploadingAttachments} aria-label={`Remove ${a.file.name}`} className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-0.5 text-[var(--s-faint)] hover:text-[var(--s-text)] disabled:opacity-40"><X className="h-3 w-3"/></button>
                 </div>)}</div>}
-                {attachError&&<p className="text-[11px] text-red-300">{attachError}</p>}
+                {attachError&&<p className="text-[11px] text-[var(--s-err)]">{attachError}</p>}
               </div>}
               <div className="mt-2 flex items-center justify-between">
-                <div className="flex items-center gap-3 text-white/45"><input ref={fileInputRef} type="file" multiple accept={ATTACH_ACCEPT} onChange={handlePickFiles} className="hidden"/><button type="button" onClick={()=>fileInputRef.current?.click()} disabled={isUploadingAttachments||attachments.length>=MAX_ATTACHMENTS} title={isGenerating?"Attach now, send once generation finishes":"Attach images, videos or files to this change"} aria-label="Attach files" className="relative hover:text-white disabled:cursor-not-allowed disabled:opacity-40"><Paperclip className="h-5 w-5"/>{attachments.length>0&&<span className="absolute -right-1.5 -top-1.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-violet-500 px-1 text-[9px] font-semibold text-white">{attachments.length}</span>}</button><button type="button" disabled title="Coming soon" className="cursor-not-allowed"><Mic className="h-5 w-5"/></button></div>
-                <button type="button" onClick={handleSend} disabled={!input.trim()||isGenerating||isUploadingAttachments} aria-label="Send" className="text-white/60 hover:text-white disabled:cursor-not-allowed disabled:opacity-40">{isGenerating||isUploadingAttachments?<Loader2 className="h-5 w-5 animate-spin"/>:<Send className="h-5 w-5"/>}</button>
+                <div className="flex items-center gap-3 text-[var(--s-faint)]"><input ref={fileInputRef} type="file" multiple accept={ATTACH_ACCEPT} onChange={handlePickFiles} className="hidden"/><button type="button" onClick={()=>fileInputRef.current?.click()} disabled={isUploadingAttachments||attachments.length>=MAX_ATTACHMENTS} title={isGenerating?"Attach now, send once generation finishes":"Attach images, videos or files to this change"} aria-label="Attach files" className="relative hover:text-[var(--s-text)] disabled:cursor-not-allowed disabled:opacity-40"><Paperclip className="h-5 w-5"/>{attachments.length>0&&<span className="absolute -right-1.5 -top-1.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-[var(--s-accent)] px-1 text-[9px] font-semibold text-[var(--s-text)]">{attachments.length}</span>}</button><button type="button" disabled title="Coming soon" className="cursor-not-allowed"><Mic className="h-5 w-5"/></button></div>
+                <button type="button" onClick={handleSend} disabled={!input.trim()||isGenerating||isUploadingAttachments} aria-label="Send" className="text-[var(--s-muted)] hover:text-[var(--s-text)] disabled:cursor-not-allowed disabled:opacity-40">{isGenerating||isUploadingAttachments?<Loader2 className="h-5 w-5 animate-spin"/>:<Send className="h-5 w-5"/>}</button>
               </div>
             </div>
           </div>

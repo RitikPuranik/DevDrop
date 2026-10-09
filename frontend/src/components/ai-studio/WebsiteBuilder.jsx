@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, ArrowRight, Check, Sparkles } from 'lucide-react';
+import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Card, Field, StepHeader, MediaDrop, SpecialRequestsCard } from './studioUi';
 import { GRAD, PAGE_BG } from './studioStyles';
@@ -324,18 +324,26 @@ function DetailsStep({ type, details, onChange, onBack, onNext }) {
       <div className="grid gap-4 lg:grid-cols-12">
         {schema.sections.map(([sectionTitle, fields]) => (
           <Card key={sectionTitle} title={sectionTitle} className="lg:col-span-6">
-            <div className="grid gap-3 sm:grid-cols-2">
-              {fields.map(([key, label, placeholder, multiline]) => (
-                <div key={key} className={multiline ? 'sm:col-span-2' : ''}>
-                  <Field label={label} value={details[key] || ''} onChange={(value) => update(key, value)} placeholder={placeholder} multiline={multiline} rows={3} />
-                </div>
-              ))}
+            <div className="grid gap-4 sm:grid-cols-2">
+              {(() => {
+                // Single-line fields share a row only when paired with a single-line neighbour.
+                const wide = []; let n = 0;
+                while (n < fields.length) {
+                  if (fields[n][3] || n + 1 >= fields.length || fields[n + 1][3]) { wide[n] = true; n += 1; }
+                  else { wide[n] = false; wide[n + 1] = false; n += 2; }
+                }
+                return fields.map(([key, label, placeholder, multiline], i) => (
+                  <div key={key} className={wide[i] ? 'sm:col-span-2' : ''}>
+                    <Field label={label} value={details[key] || ''} onChange={(value) => update(key, value)} placeholder={placeholder} multiline={multiline} rows={3} />
+                  </div>
+                ));
+              })()}
             </div>
           </Card>
         ))}
 
         <Card title="Media Assets" className="lg:col-span-12">
-          <p className="-mt-2 mb-3 text-[11px] text-white/35">Optional. The AI can use these in your website.</p>
+          <p className="-mt-2 mb-3 text-[11px] text-[var(--s-faint)]">Optional. The AI can use these in your website.</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <MediaDrop kind="image" list={details.images || []} onChange={(images) => update('images', images)} />
             <MediaDrop kind="video" list={details.videos || []} onChange={(videos) => update('videos', videos)} />
@@ -346,8 +354,8 @@ function DetailsStep({ type, details, onChange, onBack, onNext }) {
       </div>
 
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-        <button type="button" onClick={onBack} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-5 py-3 text-[13px] font-semibold text-white/70 transition-colors hover:text-white"><ArrowLeft size={14} /> Previous Step</button>
-        <button type="button" onClick={onNext} className={`inline-flex items-center gap-2 rounded-xl px-6 py-3 text-[13px] font-semibold shadow-[0_0_28px_rgba(139,92,246,.35)] transition-opacity hover:opacity-90 ${GRAD}`}>Continue to Design <ArrowRight size={14} /></button>
+        <button type="button" onClick={onBack} className="inline-flex items-center gap-2 rounded-xl border border-[var(--s-line)] bg-[var(--s-surface)] px-5 py-3 text-[13px] font-semibold text-[var(--s-muted)] transition-colors hover:text-[var(--s-text)]"><ArrowLeft size={14} /> Previous Step</button>
+        <button type="button" onClick={onNext} className={GRAD}>Continue to Design <ArrowRight size={14} /></button>
       </div>
     </div>
   );
@@ -380,21 +388,20 @@ export default function WebsiteBuilder({ type, onBack, onGenerate }) {
   const reviewEntries = Object.entries(details).filter(([key, value]) => !['specialRequests', 'images', 'videos'].includes(key) && value !== '' && value !== null && value !== undefined);
 
   return (
-    <div className={`min-h-full ${PAGE_BG} text-white`}>
+    <div className="studio min-h-full">
       <div className={`mx-auto px-5 pb-12 pt-24 md:px-8 md:pt-28 ${step === 0 ? 'max-w-6xl' : 'max-w-4xl'}`}>
         <div className="mb-8 flex items-center justify-between">
-          <button type="button" onClick={onBack} disabled={generating} className="inline-flex items-center gap-2 text-sm text-white/60 hover:text-white disabled:opacity-40"><ArrowLeft size={16} /> Website types</button>
-          <div className="inline-flex items-center gap-2 text-sm text-violet-200/80"><Sparkles size={15} className="text-violet-400" /> {schema?.title || 'AI Studio'}</div>
+          <button type="button" onClick={onBack} disabled={generating} className="s-btn s-btn-ghost !px-4 !py-2 !text-[12px]"><ArrowLeft size={16} /> Website types</button>
+          <div className="s-label">{schema?.title || 'AI Studio'}</div>
         </div>
 
-        <div className="mb-8 flex gap-4">
+        <ol className="mb-10 flex flex-wrap items-center justify-center gap-2" aria-label="AI Studio progress">
           {['Details', 'Design', 'Review'].map((label, index) => (
-            <div key={label} className="flex-1">
-              <div className={`h-1.5 rounded-full ${index <= step ? 'bg-[linear-gradient(90deg,#7c3aed,#a78bfa)]' : 'bg-white/10'}`} />
-              <div className={`mt-2 flex justify-between text-[11px] ${index === step ? 'text-white' : 'text-white/35'}`}><span>{label}</span><span>Step {String(index + 1).padStart(2, '0')}</span></div>
-            </div>
+            <li key={label} aria-current={index === step ? 'step' : undefined} className={`flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] ${index === step ? 'border-transparent bg-[var(--s-text)] text-[#050505]' : index < step ? 'border-white/15 bg-white/5 text-[var(--s-text)]' : 'border-white/8 text-[var(--s-faint)]'}`}>
+              <span className="tabular-nums">{index < step ? '✓' : String(index + 1).padStart(2, '0')}</span> {label}
+            </li>
           ))}
-        </div>
+        </ol>
 
         <motion.div key={step} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
           {step === 0 && <DetailsStep type={type} details={details} onChange={setDetails} onBack={onBack} onNext={() => setStep(1)} />}
@@ -404,31 +411,31 @@ export default function WebsiteBuilder({ type, onBack, onGenerate }) {
               <StepHeader lead="Review your " accent="website" subtitle="Review everything before sending it to the AI builder." />
               <div className="grid gap-3 md:grid-cols-2">
                 {reviewEntries.map(([key, value]) => (
-                  <div key={key} className="rounded-2xl border border-white/10 bg-[linear-gradient(150deg,rgba(255,255,255,.05),rgba(12,12,18,.92))] p-4">
-                    <p className="text-[11px] uppercase tracking-wider text-white/35">{key.replace(/([A-Z])/g, ' $1')}</p>
-                    <p className="mt-1 whitespace-pre-wrap text-sm text-white/80">{String(value)}</p>
+                  <div key={key} className="s-card p-4">
+                    <p className="s-label">{key.replace(/([A-Z])/g, ' $1')}</p>
+                    <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--s-text)]">{String(value)}</p>
                   </div>
                 ))}
                 {((details.images || []).length > 0 || (details.videos || []).length > 0) && (
-                  <div className="rounded-2xl border border-white/10 bg-[linear-gradient(150deg,rgba(255,255,255,.05),rgba(12,12,18,.92))] p-4">
-                    <p className="text-[11px] uppercase tracking-wider text-white/35">Media assets</p>
-                    <p className="mt-1 text-sm text-white/80">{(details.images || []).length} image(s), {(details.videos || []).length} video(s)</p>
+                  <div className="s-card p-4">
+                    <p className="s-label">Media assets</p>
+                    <p className="mt-1 text-sm text-[var(--s-text)]">{(details.images || []).length} image(s), {(details.videos || []).length} video(s)</p>
                   </div>
                 )}
               </div>
-              <div className="mt-4 rounded-2xl border border-fuchsia-400/30 bg-[linear-gradient(135deg,rgba(124,58,237,.16),rgba(192,38,211,.10)_60%,rgba(12,12,18,.9))] p-4">
-                <p className="text-xs font-semibold text-violet-200">Anything else you want?</p>
-                <p className="mt-1 whitespace-pre-wrap text-sm text-white/65">{details.specialRequests || 'Nothing extra provided.'}</p>
+              <div className="mt-4 rounded-xl border border-[var(--s-raised)] bg-[var(--s-surface)] p-4">
+                <p className="text-xs font-semibold text-[var(--s-accent)]">Anything else you want?</p>
+                <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--s-muted)]">{details.specialRequests || 'Nothing extra provided.'}</p>
               </div>
               <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-                <button type="button" onClick={() => setStep(1)} disabled={generating} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-5 py-3 text-[13px] font-semibold text-white/70 hover:text-white disabled:opacity-40"><ArrowLeft size={14} /> Previous Step</button>
-                <button type="button" onClick={generate} disabled={generating} className={`inline-flex items-center gap-2 rounded-xl px-6 py-3 text-[13px] font-semibold shadow-[0_0_28px_rgba(139,92,246,.35)] transition-opacity hover:opacity-90 disabled:opacity-60 ${GRAD}`}>{generating ? 'Generating…' : `Generate ${schema?.title?.replace(/^Build your /, '') || 'Website'}`} <Sparkles size={14} /></button>
+                <button type="button" onClick={() => setStep(1)} disabled={generating} className="inline-flex items-center gap-2 rounded-xl border border-[var(--s-line)] bg-[var(--s-surface)] px-5 py-3 text-[13px] font-semibold text-[var(--s-muted)] hover:text-[var(--s-text)] disabled:opacity-40"><ArrowLeft size={14} /> Previous Step</button>
+                <button type="button" onClick={generate} disabled={generating} className={GRAD}>{generating ? 'Generating…' : `Generate ${schema?.title?.replace(/^Build your /, '') || 'Website'}`}</button>
               </div>
             </div>
           )}
         </motion.div>
 
-        {generating && <div className="mt-5 flex items-center justify-center gap-2 text-xs text-white/40"><Check size={14} className="text-violet-400" /> Questionnaire locked while generation runs…</div>}
+        {generating && <div className="mt-5 flex items-center justify-center gap-2 text-xs text-[var(--s-faint)]">Questionnaire locked while generation runs…</div>}
       </div>
     </div>
   );

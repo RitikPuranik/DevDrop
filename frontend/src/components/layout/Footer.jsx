@@ -1,94 +1,62 @@
 import React, { useState, useEffect } from 'react';
 
-const DevDropCompactFooter = () => {
-  const [time, setTime] = useState("");
+const COLUMNS = [
+  { title: 'Explore', links: [{ label: 'Templates' }, { label: 'Archive' }, { label: 'Components' }, { label: 'Documentation', href: '/docs' }] },
+  { title: 'Studio', links: [{ label: 'Process' }, { label: 'Licensing' }, { label: 'Contact' }] },
+  { title: 'Elsewhere', links: [{ label: 'Instagram' }, { label: 'Dribbble' }, { label: 'X.com' }] },
+];
+
+const LINK = 'text-[15px] text-[#e8e2d6]/60 transition-colors duration-200 hover:text-[#e8e2d6]';
+
+const DevDropFooter = () => {
+  const [time, setTime] = useState('');
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setTime(new Date().toLocaleTimeString('en-GB', { 
-        hour: '2-digit', minute: '2-digit', hour12: false 
-      }));
-    }, 1000);
+    const tick = () => setTime(new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }));
+    tick();
+    const timer = setInterval(tick, 30000);
     return () => clearInterval(timer);
   }, []);
 
   return (
-    <footer className="relative w-full py-12 px-[6vw] bg-transparent overflow-hidden border-t border-white/5">
-      
-      {/* ─── THE TOP ROW: BRANDING & STATUS ─── */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 border-b border-white/5 pb-8">
-        <div className="flex items-center gap-6">
-          <h2 className="text-3xl font-serif italic text-[#e8e2d6] tracking-tighter">devdrop</h2>
-          <div className="h-4 w-[1px] bg-white/10 hidden md:block" />
-          <p className="text-[9px] font-mono text-white/30 uppercase tracking-[0.5em]">Digital Artifact Marketplace</p>
-        </div>
-        
-        <div className="mt-4 md:mt-0 flex items-center gap-3">
-          <div className="w-1.5 h-1.5 rounded-full bg-[#e8e2d6]  animate-pulse" />
-          <span className="text-[10px] font-mono text-[#e8e2d6]/60 uppercase tracking-widest">System Active / {time} IST</span>
-        </div>
-      </div>
-
-      {/* ─── THE MAIN GRID ─── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-10 md:gap-4">
-        
-        {/* Column 1: Directory */}
-        <div className="space-y-4">
-          <h5 className="text-[12px] font-mono text-[#8b7355] uppercase tracking-[0.3em]">Navigation</h5>
-          <ul className="space-y-2">
-            {['Templates', 'Archive', 'Components'].map(link => (
-              <li key={link} className="text-xs font-serif italic text-[#e8e2d6]/40 hover:text-[#e8e2d6] cursor-pointer transition-colors">{link}</li>
-            ))}
-            <li><a href="/docs" className="text-xs font-serif italic text-[#e8e2d6]/40 hover:text-[#e8e2d6] transition-colors">Documentation</a></li>
-            <li><a href="/terms" className="text-xs font-serif italic text-[#e8e2d6]/40 hover:text-[#e8e2d6] transition-colors">Terms of Service</a></li>
-            <li><a href="/privacy" className="text-xs font-serif italic text-[#e8e2d6]/40 hover:text-[#e8e2d6] transition-colors">Privacy Policy</a></li>
-          </ul>
-        </div>
-
-        {/* Column 2: Studio */}
-        <div className="space-y-4">
-          <h5 className="text-[12px] font-mono text-[#8b7355] uppercase tracking-[0.3em]">Studio</h5>
-          <ul className="space-y-2">
-            {['Process', 'Licensing', 'Contact'].map(link => (
-              <li key={link} className="text-xs font-serif italic text-[#e8e2d6]/40 hover:text-[#e8e2d6] cursor-pointer transition-colors">
-                {link}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Column 3: Social */}
-        <div className="space-y-4">
-          <h5 className="text-[12px] font-mono text-[#8b7355] uppercase tracking-[0.3em]">Social</h5>
-          <ul className="space-y-2">
-            {['Instagram', 'Dribbble', 'X.com'].map(link => (
-              <li key={link} className="text-xs font-serif italic text-[#e8e2d6]/40 hover:text-[#e8e2d6] cursor-pointer transition-colors">
-                {link}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Column 4: Invisible Spacer for Desktop */}
-        <div className="hidden lg:block"></div>
-
-        {/* Column 5: The "Legal" Anchor */}
-        <div className="col-span-2 lg:col-span-1 flex flex-col justify-between items-start md:items-end text-left md:text-right">
-          <div className="space-y-2">
-             <p className="text-[9px] font-mono text-white/20 uppercase tracking-[0.2em] leading-relaxed">
-               Boutique Design & <br /> Technical Excellence
-             </p>
-          </div>
-          <p className="text-[8px] font-mono text-white/10 uppercase tracking-[0.4em] mt-8">
-            © 2026 DEVDROP STUDIO
+    <footer className="w-full border-t border-[#e8e2d6]/15 bg-[#050505] px-[6vw] pb-8 pt-20 text-[#e8e2d6]">
+      <div className="grid gap-16 lg:grid-cols-[1.3fr_1fr]">
+        {/* Wordmark + statement */}
+        <div>
+          <h2 className="font-display text-[64px] italic leading-[0.9] tracking-tight md:text-[104px]">devdrop</h2>
+          <p className="mt-8 max-w-md text-[15px] leading-7 text-[#e8e2d6]/55">
+            A marketplace for considered web templates, components and AI-built sites. Made carefully, shipped quickly.
           </p>
         </div>
+
+        {/* Link columns */}
+        <nav aria-label="Footer" className="grid grid-cols-2 gap-x-8 gap-y-12 sm:grid-cols-3">
+          {COLUMNS.map((col) => (
+            <div key={col.title}>
+              <h3 className="mb-5 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#b89f78]" style={{ fontWeight: 600 }}>{col.title}</h3>
+              <ul className="space-y-3">
+                {col.links.map((l) => (
+                  <li key={l.label}>
+                    {l.href ? <a href={l.href} className={LINK}>{l.label}</a> : <span className={`${LINK} cursor-pointer`}>{l.label}</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </nav>
       </div>
 
-      {/* Subtle Noise Overlay for Texture */}
-      <div className="absolute inset-0 z-[-1] opacity-[0.03] pointer-events-none" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")` }} />
+      {/* Bottom bar */}
+      <div className="mt-20 flex flex-col gap-4 border-t border-[#e8e2d6]/15 pt-6 text-[12px] text-[#e8e2d6]/45 md:flex-row md:items-center md:justify-between md:pr-28">
+        <p>© {new Date().getFullYear()} DevDrop Studio</p>
+        <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
+          <a href="/terms" className="transition-colors hover:text-[#e8e2d6]">Terms of Service</a>
+          <a href="/privacy" className="transition-colors hover:text-[#e8e2d6]">Privacy Policy</a>
+          {time && <span className="tabular-nums">Local time {time}</span>}
+        </div>
+      </div>
     </footer>
   );
 };
 
-export default DevDropCompactFooter;
+export default DevDropFooter;

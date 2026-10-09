@@ -1,39 +1,26 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 
-const STEP_LABELS = ['Website Type', 'Details', 'Assets', 'Design', 'Review'];
+const STEP_LABELS = ['Type', 'Details', 'Assets', 'Design', 'Review'];
 
-/**
- * Shared header + progress indicator for every AI Studio step. Progress
- * dots double as an accessible step list (Section 28: proper labels,
- * aria-current) — not just decorative.
- */
+/** Shared header + progress pills for AI Studio steps (aria-current on the active step). */
 export default function StepShell({ stepIndex, title, subtitle, children }) {
   return (
-    <motion.div
-      key={title}
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -8 }}
-      transition={{ duration: 0.25 }}
-    >
-      <ol className="flex items-center gap-2 mb-8" aria-label="AI Studio progress">
-        {STEP_LABELS.map((label, i) => (
-          <li key={label} className="flex items-center gap-2 flex-1 last:flex-none">
-            <span
-              aria-current={i === stepIndex ? 'step' : undefined}
-              className={`h-1.5 rounded-full flex-1 transition-colors ${
-                i <= stepIndex ? 'bg-[#8b7355]' : 'bg-white/10'
-              }`}
-              title={label}
-            />
-          </li>
-        ))}
+    <motion.div key={title} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+      <ol className="mb-10 flex flex-wrap items-center justify-center gap-2" aria-label="AI Studio progress">
+        {STEP_LABELS.map((label, i) => {
+          const done = i < stepIndex; const active = i === stepIndex;
+          return (
+            <li key={label} aria-current={active ? 'step' : undefined}
+              className={`flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] transition-colors ${active ? 'border-transparent bg-[var(--s-text)] text-[#050505]' : done ? 'border-white/15 bg-white/5 text-[var(--s-text)]' : 'border-white/8 text-[var(--s-faint)]'}`}>
+              <span className="tabular-nums">{done ? '✓' : String(i + 1).padStart(2, '0')}</span>
+              <span className="hidden sm:inline">{label}</span>
+            </li>
+          );
+        })}
       </ol>
-
-      <h2 className="text-[20px] font-bold tracking-tight mb-1">{title}</h2>
-      {subtitle && <p className="text-white/35 text-sm mb-8 max-w-md">{subtitle}</p>}
-
+      <h2 className="s-display mb-2 text-center text-3xl md:text-4xl">{title}</h2>
+      {subtitle && <p className="mx-auto mb-10 max-w-xl text-center text-[14.5px] leading-7 text-[var(--s-muted)]">{subtitle}</p>}
       {children}
     </motion.div>
   );

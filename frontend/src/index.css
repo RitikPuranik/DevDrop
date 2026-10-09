@@ -195,3 +195,38 @@ h1, h2, h3 {
   flex: 1 !important;
   min-height: 0 !important;
 }
+/* ───────────── AI Studio design system ─────────────
+   Mirrors the home page: near-black canvas, cream text, Baloo 2 headlines,
+   Plus Jakarta Sans body, rounded cards with hairline borders, cream pill
+   buttons. Flat — no glows, gradients or blurred orbs. Scoped to .studio. */
+.studio {
+  --s-bg: #050505;
+  --s-surface: #0b0b0b;
+  --s-raised: #131312;
+  --s-line: rgba(255,255,255,0.08);
+  --s-line-strong: rgba(255,255,255,0.16);
+  --s-text: #e8e2d6;
+  --s-muted: rgba(232,226,214,0.58);
+  --s-faint: rgba(232,226,214,0.36);
+  --s-accent: #e8e2d6;
+  --s-accent-ink: #050505;
+  --s-hi: #cbb392;
+  --s-ok: #86efac;
+  --s-err: #fca5a5;
+  font-family: var(--font-napkin);
+  background: var(--s-bg);
+  color: var(--s-text);
+  -webkit-font-smoothing: antialiased;
+}
+.studio .s-display { font-family: var(--font-napkin-display); font-weight: 700; letter-spacing: -0.01em; }
+.studio .s-mono { font-variant-numeric: tabular-nums; font-weight: 700; letter-spacing: 0.14em; }
+.studio .s-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.18em; color: var(--s-muted); }
+.studio ::selection { background: var(--s-text); color: #000; }
+.studio .s-card { background: rgba(255,255,255,0.03); border: 1px solid var(--s-line); border-radius: 18px; }
+.studio .s-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 999px; padding: 12px 24px; font-size: 13.5px; font-weight: 700; transition: background-color .2s, border-color .2s, transform .2s; }
+.studio .s-btn-primary { background: var(--s-text); color: #050505; }
+.studio .s-btn-primary:hover:not(:disabled) { background: #fff; transform: translateY(-1px); }
+.studio .s-btn-ghost { border: 1px solid rgba(255,255,255,0.15); color: var(--s-text); background: rgba(255,255,255,0.05); }
+.studio .s-btn-ghost:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
+.studio .s-btn:disabled { opacity: .4; cursor: not-allowed; }
+.studio :focus-visible { outline: 2px solid var(--s-text); outline-offset: 2px; }
