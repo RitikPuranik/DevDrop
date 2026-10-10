@@ -17,13 +17,25 @@ import { useAiStudioSession } from '../../hooks/ai-studio/useAiStudioSession';
 // endpoint, so they land in the same ai-studio/{projectId}/assets storage prefix
 // as every other project asset and are removed by the existing cleanup worker.
 const MAX_ATTACHMENTS = 5;
+// Remembers the active AI Studio project in this browser so leaving the page
+// (back button, refresh, navigating elsewhere) never loses the website or a
+// generation that is still running: coming back re-attaches to the project
+// and to its in-flight job. The server keeps the project until its heartbeat
+// has been silent for the inactivity threshold (~20 min).
+const ACTIVE_STUDIO_KEY='devdrop.aiStudio.active.v1';
+const readActiveStudio=()=>{try{return JSON.parse(localStorage.getItem(ACTIVE_STUDIO_KEY)||'null');}catch{return null;}};
+const clearActiveStudio=()=>{try{localStorage.removeItem(ACTIVE_STUDIO_KEY);}catch{}};
+// Updates the saved pointer directly (works even if this page unmounted while a
+// job was still running, so a job that finished in the background is never
+// replayed on return and its reply isn't lost).
+const patchActiveStudio=(fn)=>{try{const sv=readActiveStudio();if(sv?.projectId)localStorage.setItem(ACTIVE_STUDIO_KEY,JSON.stringify(fn(sv)));}catch{}};
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024; // matches the backend asset upload limit
 const ATTACH_ACCEPT = 'image/*,video/*,.pdf,.doc,.docx';
 const attachKind = (f) => (f.type.startsWith('image/') ? 'image' : f.type.startsWith('video/') ? 'video' : 'file');
 
 export default function AiStudio() {
   const navigate = useNavigate(); const posthog = usePostHog();
-  const [versionRefreshKey,setVersionRefreshKey]=useState(0); const [studioMode,setStudioMode]=useState('types'); const [failedJobId,setFailedJobId]=useState(null); const [debugRetryAvailable,setDebugRetryAvailable]=useState(false); const [messages,setMessages]=useState([]); const [fileData,setFileData]=useState(null); const [appTitle,setAppTitle]=useState(null); const [input,setInput]=useState(''); const [isGenerating,setIsGenerating]=useState(false); const [genStatusLabel,setGenStatusLabel]=useState('Generating…'); const [pipeline,setPipeline]=useState({}); const [genMode,setGenMode]=useState('generate'); const [currentStage,setCurrentStage]=useState(null); const [error,setError]=useState(null); const [showContract,setShowContract]=useState(false); const scrollRef=useRef(null); const pollTimeoutRef=useRef(null);
+  const [versionRefreshKey,setVersionRefreshKey]=useState(0); const [studioMode,setStudioMode]=useState('types'); const [activeJobId,setActiveJobId]=useState(null); const [isResuming,setIsResuming]=useState(()=>Boolean(readActiveStudio()?.projectId)); const resumedOnceRef=useRef(false); const resumeRef=useRef(null); const [failedJobId,setFailedJobId]=useState(null); const [debugRetryAvailable,setDebugRetryAvailable]=useState(false); const [messages,setMessages]=useState([]); const [fileData,setFileData]=useState(null); const [appTitle,setAppTitle]=useState(null); const [input,setInput]=useState(''); const [isGenerating,setIsGenerating]=useState(false); const [genStatusLabel,setGenStatusLabel]=useState('Generating…'); const [pipeline,setPipeline]=useState({}); const [genMode,setGenMode]=useState('generate'); const [currentStage,setCurrentStage]=useState(null); const [error,setError]=useState(null); const [showContract,setShowContract]=useState(false); const scrollRef=useRef(null); const pollTimeoutRef=useRef(null);
   const [attachments,setAttachments]=useState([]); const [isUploadingAttachments,setIsUploadingAttachments]=useState(false); const [attachError,setAttachError]=useState(null); const fileInputRef=useRef(null); const uploadedAttachmentsRef=useRef(new Map());
   // Persists the generated project (zip + files) to the backend for as long
   // as this AI Studio tab stays open/active. Refresh or close naturally lets
@@ -35,6 +47,18 @@ export default function AiStudio() {
   useEffect(()=>{try{posthog?.capture('ai_studio_opened');}catch{}},[posthog]);
   useEffect(()=>{scrollRef.current?.scrollTo({top:scrollRef.current.scrollHeight,behavior:'smooth'});},[messages,isGenerating]);
   useEffect(()=>()=>{if(pollTimeoutRef.current)clearTimeout(pollTimeoutRef.current);},[]);
+  // Save the active project pointer + chat so it can be resumed.
+  useEffect(()=>{
+    if(!aiStudioSession.projectId||studioMode!=='chat')return;
+    try{localStorage.setItem(ACTIVE_STUDIO_KEY,JSON.stringify({projectId:aiStudioSession.projectId,messages:messages.slice(-80),appTitle,activeJobId,activeMode:genMode,savedAt:Date.now()}));}catch{}
+  },[aiStudioSession.projectId,studioMode,messages,appTitle,activeJobId,genMode]);
+  // On open, resume the saved project (once).
+  useEffect(()=>{
+    if(!aiStudioEnabled||resumedOnceRef.current)return;
+    resumedOnceRef.current=true;
+    if(!readActiveStudio()?.projectId){setIsResuming(false);return;}
+    Promise.resolve(resumeRef.current?.()).finally(()=>setIsResuming(false));
+  },[aiStudioEnabled]);
   if(!aiStudioEnabled)return null;
   // Safety-net resync only — NOT a poll loop. If the socket silently missed
   // an event (brief disconnect, etc.) this checks in once, well after the
@@ -90,6 +114,56 @@ export default function AiStudio() {
     setMessages(prev=>[...prev,{role:'assistant',content:`Switched to version ${version}. Edits from here are saved as a new version marked "Edited from v${version}".`}]);
     setVersionRefreshKey(k=>k+1);
   };
+  // Re-attaches to a generation that was running when the user left. The job
+  // keeps running server-side, so it may still be going, or already finished.
+  const resumeJob=async(jobId,mode,lastUserText)=>{
+    setIsGenerating(true);setError(null);setFailedJobId(null);setDebugRetryAvailable(false);setPipeline({});setCurrentStage('queued');
+    setGenMode(mode||'generate');setGenStatusLabel('Reconnecting to your generation…');setActiveJobId(jobId);
+    try{
+      const {data}=await aiGenerateAPI.getJob(jobId);const job=data?.data;
+      let result;
+      if(job?.status==='completed')result=job.result;
+      else if(job?.status==='failed'){const failure=new Error(job.error||'AI generation failed.');failure.jobId=jobId;failure.debugAvailable=Boolean(job.debugAvailable);throw failure;}
+      else{if(job)updateProgress(job);result=await waitForJob(jobId);}
+      setMessages(prev=>[...prev,{role:'assistant',content:result.assistantMessage||'Done.'}]);
+      setFileData({files:result.files,dependencies:result.dependencies});if(result.title)setAppTitle(result.title);
+      const isEdit=mode==='edit';
+      await aiStudioSession.syncFiles({files:result.files,dependencies:result.dependencies,title:result.title,source:isEdit?'edit':'generate',label:isEdit?String(lastUserText||'').slice(0,120):''});
+      setVersionRefreshKey(k=>k+1);
+    }catch(err){
+      const status=err?.response?.status;
+      if(status===404)return; // job expired/unknown -- the saved project is still shown
+      const msg=err.response?.data?.message||err.message||'Something went wrong generating your app. Please try again.';
+      if(err.jobId){setFailedJobId(err.jobId);setDebugRetryAvailable(Boolean(err.debugAvailable));}
+      setError(msg);setMessages(prev=>[...prev,{role:'assistant',content:`⚠️ ${msg}`}]);
+    }finally{if(pollTimeoutRef.current){clearTimeout(pollTimeoutRef.current);pollTimeoutRef.current=null;}setIsGenerating(false);setActiveJobId(null);}
+  };
+  const resumeStudio=async()=>{
+    const saved=readActiveStudio();
+    if(!saved?.projectId)return;
+    let project=null;
+    try{project=await aiStudioSession.resume(saved.projectId);}catch{return;} // network hiccup: keep the saved pointer for next time
+    if(!project){clearActiveStudio();return;} // project was already cleaned up after inactivity
+    const files=toSandpackFiles(project.files||{});
+    const hasFiles=Object.keys(files).length>0;
+    if(!hasFiles&&!saved.activeJobId){clearActiveStudio();aiStudioSession.reset();return;}
+    if(hasFiles)setFileData({files,dependencies:project.dependencies||{}});
+    if(project.title||saved.appTitle)setAppTitle(project.title||saved.appTitle);
+    const savedMessages=Array.isArray(saved.messages)?saved.messages:[];
+    setMessages(savedMessages);
+    setStudioMode('chat');
+    if(saved.activeJobId){
+      const lastUser=[...savedMessages].reverse().find(m=>m?.role==='user')?.content||'';
+      await resumeJob(saved.activeJobId,saved.activeMode,lastUser);
+    }
+  };
+  resumeRef.current=resumeStudio;
+  const handleNewWebsite=()=>{
+    if(isGenerating)return;
+    if(!window.confirm('Start a new website? This one stays available in History for a few minutes, then is cleaned up automatically. Download or publish it first if you want to keep it.'))return;
+    clearActiveStudio();aiStudioSession.reset();
+    setFileData(null);setMessages([]);setAppTitle(null);setError(null);setPipeline({});setCurrentStage(null);setFailedJobId(null);setDebugRetryAvailable(false);setActiveJobId(null);setStudioMode('types');
+  };
   const runGeneration=async(nextMessages,spec={})=>{setIsGenerating(true);setError(null);setFailedJobId(null);setDebugRetryAvailable(false);setPipeline({});setCurrentStage('queued');
     // Optimistic guess so the sidebar shows the right stage list immediately,
     // before the first poll response confirms the actual mode the backend
@@ -100,11 +174,11 @@ export default function AiStudio() {
     try{
       const projectId=aiStudioSession.getProjectId()||await aiStudioSession.open(spec?.websiteType);
       if(!projectId)throw new Error('AI Studio project could not be initialized.');
-      const {data}=await aiGenerateAPI.generate(nextMessages,fileData,{...spec,projectId});const {jobId}=data?.data||{};if(!jobId)throw new Error('No jobId returned from server.');const result=await waitForJob(jobId);setMessages(prev=>[...prev,{role:'assistant',content:result.assistantMessage||'Done.'}]);setFileData({files:result.files,dependencies:result.dependencies});if(result.title)setAppTitle(result.title);
+      const {data}=await aiGenerateAPI.generate(nextMessages,fileData,{...spec,projectId});const {jobId}=data?.data||{};if(!jobId)throw new Error('No jobId returned from server.');setActiveJobId(jobId);const result=await waitForJob(jobId);setMessages(prev=>[...prev,{role:'assistant',content:result.assistantMessage||'Done.'}]);setFileData({files:result.files,dependencies:result.dependencies});if(result.title)setAppTitle(result.title);
       // Persist the latest generated state -- this is what makes the
       // project outlive an individual (30-minute-TTL'd) AI generation job.
-      await aiStudioSession.syncFiles({files:result.files,dependencies:result.dependencies,title:result.title,source:expectingEdit?'edit':'generate',label:expectingEdit?String(nextMessages?.[nextMessages.length-1]?.content||'').slice(0,120):''});setVersionRefreshKey(k=>k+1);
-    }catch(err){const msg=err.response?.data?.message||err.message||'Something went wrong generating your app. Please try again.';if(err.jobId){setFailedJobId(err.jobId);setDebugRetryAvailable(Boolean(err.debugAvailable));}setError(msg);setMessages(prev=>[...prev,{role:'assistant',content:`⚠️ ${msg}`}]);}finally{if(pollTimeoutRef.current){clearTimeout(pollTimeoutRef.current);pollTimeoutRef.current=null;}setIsGenerating(false);}};
+      await aiStudioSession.syncFiles({files:result.files,dependencies:result.dependencies,title:result.title,source:expectingEdit?'edit':'generate',label:expectingEdit?String(nextMessages?.[nextMessages.length-1]?.content||'').slice(0,120):''});setVersionRefreshKey(k=>k+1);patchActiveStudio(sv=>({...sv,activeJobId:null,appTitle:result.title||sv.appTitle,messages:[...(sv.messages||[]),{role:'assistant',content:result.assistantMessage||'Done.'}]}));
+    }catch(err){const msg=err.response?.data?.message||err.message||'Something went wrong generating your app. Please try again.';if(err.jobId){setFailedJobId(err.jobId);setDebugRetryAvailable(Boolean(err.debugAvailable));}setError(msg);setMessages(prev=>[...prev,{role:'assistant',content:`⚠️ ${msg}`}]);}finally{if(pollTimeoutRef.current){clearTimeout(pollTimeoutRef.current);pollTimeoutRef.current=null;}setIsGenerating(false);setActiveJobId(null);patchActiveStudio(sv=>({...sv,activeJobId:null}));}};
   const handlePortfolioGenerate=async(prompt,spec)=>{
     const nextMessages=[{role:'user',content:prompt}];
     setStudioMode('chat');
@@ -200,7 +274,7 @@ export default function AiStudio() {
     try{
       const {data}=await aiGenerateAPI.debugRetry(failedJobId);
       const jobId=data?.data?.jobId;
-      if(!jobId)throw new Error('No debug retry jobId returned.');
+      if(!jobId)throw new Error('No debug retry jobId returned.');setActiveJobId(jobId);
       const result=await waitForJob(jobId);
       setFileData({files:result.files,dependencies:result.dependencies});
       if(result.title)setAppTitle(result.title);
@@ -211,9 +285,10 @@ export default function AiStudio() {
       const msg=err.response?.data?.message||err.message||'Debug retry failed.';
       if(err.jobId){setFailedJobId(err.jobId);setDebugRetryAvailable(Boolean(err.debugAvailable));}
       setError(msg); setMessages(prev=>[...prev,{role:'assistant',content:`⚠️ ${msg}`}]);
-    }finally{setIsGenerating(false);}
+    }finally{setIsGenerating(false);setActiveJobId(null);patchActiveStudio(sv=>({...sv,activeJobId:null}));}
   };
   const handleDownload=()=>{aiStudioSession.recordActivity();};
+  if(isResuming)return <div className="fixed inset-0 z-40 flex items-center justify-center bg-neutral-950 text-sm text-white/60">Restoring your website…</div>;
   if(studioMode==='types')return <div className="fixed inset-0 z-40 overflow-y-auto bg-neutral-950 text-white"><div className="mx-auto max-w-6xl px-5 pb-16 pt-24 md:px-8 md:pt-28"><div className="mb-8 flex flex-wrap items-end justify-between gap-5"><div><p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-violet-400">AI Studio</p><h1 className="text-3xl font-bold tracking-tight md:text-4xl">What do you want to build?</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-white/40">Choose a website type first. DevDrop will then collect the information that matters for that kind of site and turn it into a detailed build specification for the AI.</p></div><div className="hidden items-center gap-2 text-[10px] uppercase tracking-[0.18em] text-white/25 sm:flex"><span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-white/60">01 Choose type</span><span>→</span><span>02 Details</span><span>→</span><span>03 Design</span><span>→</span><span>04 Review</span></div></div><div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-4">{WEBSITE_TYPES.map(type=>{const Icon=type.icon;return <button key={type.id} type="button" disabled={!type.enabled} onClick={()=>type.enabled&&setStudioMode(type.id)} className={`group relative flex min-h-[176px] flex-col overflow-hidden rounded-[18px] border p-4 text-left transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/70 ${type.enabled?'border-white/[0.09] bg-[linear-gradient(145deg,rgba(255,255,255,.05),rgba(10,10,14,.9))] shadow-[inset_0_1px_0_rgba(255,255,255,.04)] hover:-translate-y-0.5 hover:border-violet-400/60 hover:shadow-[0_0_28px_rgba(139,92,246,.16),inset_0_1px_0_rgba(255,255,255,.06)]':'cursor-not-allowed border-white/5 bg-white/[0.015] opacity-45'}`}>
 <span className="relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] border border-white/10 bg-white/[0.04]"><Icon size={16} strokeWidth={1.35} className="text-white/60"/></span>
 {type.artImage&&<img src={type.artImage} alt="" aria-hidden="true" onError={(event)=>{event.currentTarget.style.display='none';}} className="pointer-events-none absolute right-3.5 top-3.5 h-[88px] w-[46%] object-contain object-right-top opacity-90 transition-transform duration-300 origin-top-right group-hover:scale-[1.05]"/>}
@@ -246,6 +321,7 @@ export default function AiStudio() {
             <button type="button" onClick={()=>setShowContract(v=>!v)} className="mt-3 flex w-full items-center justify-center gap-1.5 border-t border-white/[0.1] pt-2.5 text-[12px] text-white/60 hover:text-white">[ <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showContract?'rotate-180':''}`}/> {showContract?'Hide':'View'} Contract ]</button>
           </div>}
           <div className="px-1 pt-2">
+            <button type="button" onClick={handleNewWebsite} disabled={isGenerating} className="mb-2 text-[11px] text-white/45 hover:text-white disabled:opacity-40">+ New website</button>
             <div className="mb-2.5 text-[14px] font-semibold text-white">Build Status: <span className={isGenerating?'text-violet-300':(error&&!fileData?'text-red-300':'text-emerald-400')}>{isGenerating?(queued?'Queued':'In progress'):(error&&!fileData?'Failed':fileData?'Completed':'Idle')} ({percent}%)</span></div>
             <PipelineSteps steps={pipelineSteps} variant="compact"/>
           </div>

@@ -166,6 +166,7 @@ const Navbar = () => {
 
       {/* NAVBAR TOP STRIP */}
          <nav
+  data-main-navbar
   className={`fixed top-0 w-full flex justify-between items-center z-[110] pointer-events-none transition-all duration-500 ease-out
     ${
       isOpen

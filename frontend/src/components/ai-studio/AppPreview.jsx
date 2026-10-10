@@ -181,6 +181,17 @@ function PipelineProgress({ steps, mode = 'generate', percent = 0 }) {
   return <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center px-4">{card}</div>;
 }
 
+// Toolbar buttons show only their icon; the text label slides out on hover
+// (the button needs the `group` class). Keeps the toolbar compact so the
+// preview gets more room.
+function HoverLabel({ children }) {
+  return (
+    <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 group-hover:ml-1.5 group-hover:max-w-[130px] group-hover:opacity-100 group-focus-visible:ml-1.5 group-focus-visible:max-w-[130px] group-focus-visible:opacity-100">
+      {children}
+    </span>
+  );
+}
+
 function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiveTab, pipelineSteps, pipelineMode, percent, onDownload, device, setDevice, projectId, appTitle, onListVersions, onRestoreVersion, versionRefreshKey }) {
   const { sandpack, listen } = useSandpack();
   const [shipMode, setShipMode] = useState(null); // 'github' | 'live' | null
@@ -219,7 +230,9 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
     document.addEventListener('fullscreenchange', onFsChange);
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
+    document.body.classList.add('devdrop-preview-fullscreen');
     return () => {
+      document.body.classList.remove('devdrop-preview-fullscreen');
       window.removeEventListener('keydown', onKey);
       document.removeEventListener('fullscreenchange', onFsChange);
       document.body.style.overflow = prevOverflow;
@@ -291,48 +304,48 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
   };
 
   return (
-    <div className={isFullscreen ? 'fixed inset-0 z-[100] flex flex-col bg-[#050506] p-4' : 'flex h-full flex-col'}>
+    <div className={isFullscreen ? 'fixed inset-0 z-[200] flex flex-col bg-[#050506] p-4' : 'flex h-full flex-col'}>
       <div className="mb-3 h-px w-full bg-white/[0.12]" aria-hidden="true" />
       <div className="flex items-center justify-between gap-3 pb-2.5">
         <div className="flex items-center gap-3">
           <div className="flex rounded-lg border border-white/[0.12] bg-[#0b0b0c] p-0.5">
-            <button onClick={() => setActiveTab('preview')} className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] ${activeTab === 'preview' ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white'}`}>
-              <Eye className="h-3.5 w-3.5" /> Preview
+            <button onClick={() => setActiveTab('preview')} title="Preview" aria-label="Preview" className={`group flex items-center rounded-md px-2.5 py-1 text-[11px] ${activeTab === 'preview' ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white'}`}>
+              <Eye className="h-3.5 w-3.5" /><HoverLabel>Preview</HoverLabel>
             </button>
-            <button onClick={() => setActiveTab('code')} className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] ${activeTab === 'code' ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white'}`}>
-              <Code2 className="h-3.5 w-3.5" /> Code
+            <button onClick={() => setActiveTab('code')} title="Code" aria-label="Code" className={`group flex items-center rounded-md px-2.5 py-1 text-[11px] ${activeTab === 'code' ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white'}`}>
+              <Code2 className="h-3.5 w-3.5" /><HoverLabel>Code</HoverLabel>
             </button>
           </div>
           <div className="flex rounded-lg border border-white/[0.12] bg-[#0b0b0c] p-0.5">
             {[['desktop', Monitor], ['tablet', Tablet], ['mobile', Smartphone]].map(([id, Icon]) => (
-              <button key={id} onClick={() => setDevice(id)} aria-label={`${id} preview`} className={`rounded-md px-2 py-1 ${device === id ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white'}`}>
+              <button key={id} onClick={() => setDevice(id)} title={`${id[0].toUpperCase()}${id.slice(1)} view`} aria-label={`${id} preview`} className={`rounded-md px-2 py-1 ${device === id ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white'}`}>
                 <Icon className="h-3.5 w-3.5" />
               </button>
             ))}
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={handleExportZip} disabled={isExporting || !fileData} className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-violet-500 to-fuchsia-500 px-3.5 py-1.5 text-[12px] font-medium text-white hover:brightness-110 disabled:opacity-40">
-            {isExporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} Download
+          <button onClick={handleExportZip} disabled={isExporting || !fileData} title="Download" aria-label="Download" className="group flex items-center rounded-lg bg-gradient-to-r from-violet-500 to-fuchsia-500 px-3 py-1.5 text-[12px] font-medium text-white hover:brightness-110 disabled:opacity-40">
+            {isExporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}<HoverLabel>Download</HoverLabel>
           </button>
-          <button onClick={() => setShipMode('github')} disabled={!canShip} title={canShip ? 'Push this website to a new GitHub repository' : 'Available once generation is complete'} className="flex items-center gap-2 rounded-lg border border-white/[0.12] bg-[#0b0b0c] px-3 py-1.5 text-[12px] text-white/80 hover:text-white disabled:cursor-not-allowed disabled:opacity-40">
-            <Github className="h-3.5 w-3.5" /> Push to GitHub
+          <button onClick={() => setShipMode('github')} disabled={!canShip} title={canShip ? 'Push this website to a new GitHub repository' : 'Available once generation is complete'} aria-label="Push to GitHub" className="group flex items-center rounded-lg border border-white/[0.12] bg-[#0b0b0c] px-3 py-1.5 text-[12px] text-white/80 hover:text-white disabled:cursor-not-allowed disabled:opacity-40">
+            <Github className="h-3.5 w-3.5" /><HoverLabel>Push to GitHub</HoverLabel>
           </button>
-          <button onClick={() => setShipMode('live')} disabled={!canShip} title={canShip ? 'Deploy this website live on your Vercel account' : 'Available once generation is complete'} className="flex items-center gap-2 rounded-lg border border-white/[0.12] bg-[#0b0b0c] px-3 py-1.5 text-[12px] text-white/80 hover:text-white disabled:cursor-not-allowed disabled:opacity-40">
-            <Rocket className="h-3.5 w-3.5" /> Publish Live
+          <button onClick={() => setShipMode('live')} disabled={!canShip} title={canShip ? 'Deploy this website live on your Vercel account' : 'Available once generation is complete'} aria-label="Publish Live" className="group flex items-center rounded-lg border border-white/[0.12] bg-[#0b0b0c] px-3 py-1.5 text-[12px] text-white/80 hover:text-white disabled:cursor-not-allowed disabled:opacity-40">
+            <Rocket className="h-3.5 w-3.5" /><HoverLabel>Publish Live</HoverLabel>
           </button>
           {onListVersions && (
             <div className="relative">
-              <button onClick={() => { setShowVersions((v) => !v); }} disabled={!projectId} className="flex items-center gap-2 rounded-lg border border-white/[0.12] bg-[#0b0b0c] px-3 py-1.5 text-[12px] text-white/80 hover:text-white disabled:opacity-40">
-                <History className="h-3.5 w-3.5" /> History
+              <button onClick={() => { setShowVersions((v) => !v); }} disabled={!projectId} title="History" aria-label="History" className="group flex items-center rounded-lg border border-white/[0.12] bg-[#0b0b0c] px-3 py-1.5 text-[12px] text-white/80 hover:text-white disabled:opacity-40">
+                <History className="h-3.5 w-3.5" /><HoverLabel>History</HoverLabel>
               </button>
               {showVersions && (
                 <VersionHistoryPanel projectId={projectId} refreshKey={versionRefreshKey} disabled={isGenerating} onList={onListVersions} onRestore={async (v) => { await onRestoreVersion(v); setShowVersions(false); }} />
               )}
             </div>
           )}
-          <button onClick={isFullscreen ? exitFullscreen : enterFullscreen} title={isFullscreen ? 'Exit full screen (Esc)' : 'View the website full screen'} aria-label={isFullscreen ? 'Exit full screen' : 'Full screen'} className="flex items-center gap-1.5 rounded-lg border border-white/[0.12] bg-[#0b0b0c] px-2.5 py-1.5 text-[12px] text-white/80 hover:text-white">
-            {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />} {isFullscreen ? 'Exit' : 'Full screen'}
+          <button onClick={isFullscreen ? exitFullscreen : enterFullscreen} title={isFullscreen ? 'Exit full screen (Esc)' : 'View the website full screen'} aria-label={isFullscreen ? 'Exit full screen' : 'Full screen'} className="group flex items-center rounded-lg border border-white/[0.12] bg-[#0b0b0c] px-2.5 py-1.5 text-[12px] text-white/80 hover:text-white">
+            {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}<HoverLabel>{isFullscreen ? 'Exit' : 'Full screen'}</HoverLabel>
           </button>
         </div>
       </div>
