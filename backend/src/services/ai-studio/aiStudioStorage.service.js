@@ -2,6 +2,9 @@ const { aiStudioSupabase, AI_STUDIO_SUPABASE_BUCKET } = require('../../shared/co
 
 const storagePrefixFor = (projectId) => `ai-studio/${projectId}`;
 const zipPathFor = (projectId) => `${storagePrefixFor(projectId)}/project.zip`;
+// Version snapshots live under the project prefix, so the existing
+// inactivity cleanup (deleteProjectStorage) removes them with the assets.
+const versionZipPathFor = (projectId, version) => `${storagePrefixFor(projectId)}/versions/v${version}.zip`;
 // Strips directory components and anything outside a conservative charset so a
 // hostile or odd file name can never escape the asset folder.
 const sanitizeFileName = (fileName) => {
@@ -32,6 +35,28 @@ const downloadProjectZip = async (zipPath) => {
   const { data, error } = await aiStudioSupabase.storage.from(AI_STUDIO_SUPABASE_BUCKET).download(zipPath);
   if (error) throw new Error(`AI Studio zip download error: ${error.message}`);
   return data;
+};
+
+const uploadVersionZip = async (projectId, version, zipBuffer) => {
+  const path = versionZipPathFor(projectId, version);
+  const { error } = await aiStudioSupabase.storage
+    .from(AI_STUDIO_SUPABASE_BUCKET)
+    .upload(path, zipBuffer, { contentType: 'application/zip', upsert: true });
+  if (error) throw new Error(`AI Studio version upload error: ${error.message}`);
+  return path;
+};
+
+const downloadVersionZip = async (storagePath) => {
+  const { data, error } = await aiStudioSupabase.storage.from(AI_STUDIO_SUPABASE_BUCKET).download(storagePath);
+  if (error) throw new Error(`AI Studio version download error: ${error.message}`);
+  return Buffer.from(await data.arrayBuffer());
+};
+
+const deleteObjects = async (paths) => {
+  if (!paths.length) return 0;
+  const { error } = await aiStudioSupabase.storage.from(AI_STUDIO_SUPABASE_BUCKET).remove(paths);
+  if (error) throw new Error(`AI Studio storage delete error: ${error.message}`);
+  return paths.length;
 };
 
 const createSignedZipUrl = async (zipPath, expiresIn = 300) => {
@@ -123,11 +148,15 @@ const deleteAsset = async (storagePath) => {
 module.exports = {
   storagePrefixFor,
   zipPathFor,
+  versionZipPathFor,
   assetPathFor,
   sanitizeFileName,
   ASSET_URL_TTL_SECONDS,
   uploadProjectZip,
   downloadProjectZip,
+  uploadVersionZip,
+  downloadVersionZip,
+  deleteObjects,
   createSignedZipUrl,
   uploadAsset,
   downloadAsset,

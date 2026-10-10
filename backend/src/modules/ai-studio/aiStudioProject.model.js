@@ -72,6 +72,13 @@ const aiStudioProjectSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: {},
     },
+    // Last version number issued for this project (see
+    // AIStudioProjectVersion). Incremented atomically so concurrent syncs
+    // from several tabs can never collide on a version number.
+    versionCounter: {
+      type: Number,
+      default: 0,
+    },
     status: {
       type: String,
       enum: Object.values(AI_STUDIO_PROJECT_STATUS),

@@ -121,16 +121,16 @@ export function PipelineSteps({ steps, variant = 'compact' }) {
         return (
           <div key={step.id} className="flex items-start gap-2.5">
             <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center">
-              {state === 'done' ? <Check className="h-4 w-4 text-emerald-400" />
-                : state === 'active' ? <Loader2 className="h-4 w-4 animate-spin text-violet-400" />
-                : <Circle className="h-3.5 w-3.5 text-white/25" />}
+              {state === 'done' ? <Check className="h-4 w-4 text-[var(--s-ok)]" />
+                : state === 'active' ? <Loader2 className="h-4 w-4 animate-spin text-[var(--s-accent)]" />
+                : <Circle className="h-3.5 w-3.5 text-[var(--s-faint)]" />}
             </span>
             <div className="min-w-0 flex-1">
-              <div className={`text-[12.5px] ${state === 'done' ? 'text-white/85' : state === 'active' ? 'text-white' : 'text-white/35'}`}>
+              <div className={`text-[12.5px] ${state === 'done' ? 'text-[var(--s-text)]' : state === 'active' ? 'text-[var(--s-text)]' : 'text-[var(--s-faint)]'}`}>
                 {step.label}
-                {step.detail && <span className="ml-1.5 text-[11px] text-violet-300/80">{step.detail}</span>}
+                {step.detail && <span className="ml-1.5 text-[11px] text-[var(--s-muted)]">{step.detail}</span>}
               </div>
-              {detailed && <p className="mt-0.5 text-[10px] text-white/25">{step.description}</p>}
+              {detailed && <p className="mt-0.5 text-[10px] text-[var(--s-faint)]">{step.description}</p>}
             </div>
           </div>
         );

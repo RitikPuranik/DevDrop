@@ -20,15 +20,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const apiError = (err, fallback) => err?.response?.data?.message || err?.message || fallback;
 
 function Step({ state, label, children }) {
-  const icon = state === 'done' ? <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-    : state === 'active' ? <Loader2 className="h-4 w-4 animate-spin text-violet-400" />
+  const icon = state === 'done' ? <CheckCircle2 className="h-4 w-4 text-[var(--s-ok)]" />
+    : state === 'active' ? <Loader2 className="h-4 w-4 animate-spin text-[var(--s-accent)]" />
     : state === 'error' ? <AlertCircle className="h-4 w-4 text-red-400" />
-    : <Circle className="h-3.5 w-3.5 text-white/25" />;
+    : <Circle className="h-3.5 w-3.5 text-[var(--s-faint)]" />;
   return (
     <div className="flex items-start gap-3">
       <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center">{icon}</span>
       <div className="min-w-0 flex-1">
-        <p className={`text-[13px] ${state === 'pending' ? 'text-white/40' : 'text-white/90'}`}>{label}</p>
+        <p className={`text-[13px] ${state === 'pending' ? 'text-[var(--s-faint)]' : 'text-[var(--s-text)]'}`}>{label}</p>
         {children}
       </div>
     </div>
@@ -197,18 +197,18 @@ export default function ShipProjectModal({ open, mode, onClose, onModeChange, pr
   const hasPrevious = previousExport?.status === 'success' && previousExport.repositoryOwner;
   const reusing = mode === 'live' && hasPrevious && !pushFresh;
 
-  const field = 'w-full rounded-lg border border-white/[0.12] bg-black/40 px-3 py-2 text-[13px] text-white placeholder:text-white/30 focus:border-violet-400/60 focus:outline-none disabled:opacity-50';
-  const primary = 'flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-violet-500 to-fuchsia-500 px-4 py-2.5 text-[13px] font-semibold text-white hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40';
+  const field = 'w-full rounded-lg border border-[var(--s-line)] bg-[var(--s-bg)] px-3 py-2 text-[13px] text-[var(--s-text)] placeholder:text-[var(--s-faint)] focus:border-[var(--s-accent)] focus:outline-none disabled:opacity-50';
+  const primary = 'flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-[var(--s-accent)] to-[var(--s-accent)] px-4 py-2.5 text-[13px] font-semibold text-[var(--s-text)] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40';
 
   const repoForm = (
     <div className="space-y-3">
       <div>
-        <label className="mb-1 block text-[11px] uppercase tracking-wide text-white/40">Repository name</label>
+        <label className="mb-1 block text-[11px] uppercase tracking-wide text-[var(--s-faint)]">Repository name</label>
         <input value={repoName} onChange={(e) => setRepoName(e.target.value)} disabled={busy} maxLength={100} className={field} placeholder="my-website" />
       </div>
       <div className="flex gap-2">
         {[['public', Globe, 'Public'], ['private', Lock, 'Private']].map(([v, Icon, label]) => (
-          <button key={v} type="button" disabled={busy} onClick={() => setVisibility(v)} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-[12px] ${visibility === v ? 'border-violet-400/60 bg-violet-500/10 text-white' : 'border-white/[0.12] text-white/50 hover:text-white'}`}>
+          <button key={v} type="button" disabled={busy} onClick={() => setVisibility(v)} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-[12px] ${visibility === v ? 'border-[var(--s-accent)] bg-[var(--s-raised)] text-[var(--s-text)]' : 'border-[var(--s-line)] text-[var(--s-muted)] hover:text-[var(--s-text)]'}`}>
             <Icon className="h-3.5 w-3.5" /> {label}
           </button>
         ))}
@@ -217,45 +217,45 @@ export default function ShipProjectModal({ open, mode, onClose, onModeChange, pr
   );
 
   const githubConnectRow = !githubOk && (
-    <div className="rounded-xl border border-white/[0.12] bg-white/[0.03] p-3">
-      <p className="mb-2 text-[12px] text-white/60">Authorize DevDrop to create repositories in your GitHub account.</p>
-      <button type="button" onClick={connectGithub} disabled={connectingGithub} className="flex w-full items-center justify-center gap-2 rounded-lg bg-white px-3 py-2 text-[12.5px] font-semibold text-black hover:bg-white/90 disabled:opacity-60">
+    <div className="rounded-xl border border-[var(--s-line)] bg-[var(--s-surface)] p-3">
+      <p className="mb-2 text-[12px] text-[var(--s-muted)]">Authorize DevDrop to create repositories in your GitHub account.</p>
+      <button type="button" onClick={connectGithub} disabled={connectingGithub} className="flex w-full items-center justify-center gap-2 rounded-lg bg-white px-3 py-2 text-[12.5px] font-semibold text-black hover:bg-[var(--s-surface)] disabled:opacity-60">
         {connectingGithub ? <Loader2 className="h-4 w-4 animate-spin" /> : <Github className="h-4 w-4" />} {connectingGithub ? 'Waiting for GitHub…' : 'Connect GitHub'}
       </button>
     </div>
   );
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}>
-      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-white/[0.12] bg-[#0b0b0c] p-5 text-white shadow-2xl">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[var(--s-bg)] p-4 " onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}>
+      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-[var(--s-line)] bg-[var(--s-surface)] p-5 text-[var(--s-text)] shadow-none">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04]">
-              {mode === 'live' ? <Rocket className="h-4 w-4 text-violet-300" /> : <Github className="h-4 w-4 text-white/80" />}
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--s-line)] bg-[var(--s-surface)]">
+              {mode === 'live' ? <Rocket className="h-4 w-4 text-[var(--s-accent)]" /> : <Github className="h-4 w-4 text-[var(--s-text)]" />}
             </span>
             <div>
               <h2 className="text-[15px] font-semibold">{mode === 'live' ? 'Publish Live' : 'Push to GitHub'}</h2>
-              <p className="text-[11px] text-white/40">{mode === 'live' ? 'Opens the Workspace deploy flow for this site' : 'Creates a new repo in your GitHub account'}</p>
+              <p className="text-[11px] text-[var(--s-faint)]">{mode === 'live' ? 'Opens the Workspace deploy flow for this site' : 'Creates a new repo in your GitHub account'}</p>
             </div>
           </div>
-          <button type="button" onClick={onClose} disabled={busy} aria-label="Close" className="rounded-md p-1 text-white/50 hover:text-white disabled:opacity-30"><X className="h-4 w-4" /></button>
+          <button type="button" onClick={onClose} disabled={busy} aria-label="Close" className="rounded-md p-1 text-[var(--s-muted)] hover:text-[var(--s-text)] disabled:opacity-30"><X className="h-4 w-4" /></button>
         </div>
 
         {loading && !providers ? (
-          <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-violet-400" /></div>
+          <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-[var(--s-accent)]" /></div>
         ) : mode === 'github' ? (
           <div className="space-y-4">
             {phase === 'done' && repo ? (
-              <div className="space-y-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4">
-                <div className="flex items-center gap-2 text-[13px] font-medium text-emerald-300"><CheckCircle2 className="h-4 w-4" /> Pushed to GitHub</div>
-                <a href={repo.url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 break-all text-[12.5px] text-white underline underline-offset-2">{repo.owner}/{repo.name} <ExternalLink className="h-3 w-3 shrink-0" /></a>
+              <div className="space-y-3 rounded-xl border border-[var(--s-line-strong)] bg-[var(--s-raised)] p-4">
+                <div className="flex items-center gap-2 text-[13px] font-medium text-[var(--s-ok)]"><CheckCircle2 className="h-4 w-4" /> Pushed to GitHub</div>
+                <a href={repo.url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 break-all text-[12.5px] text-[var(--s-text)] underline underline-offset-2">{repo.owner}/{repo.name} <ExternalLink className="h-3 w-3 shrink-0" /></a>
                 <button type="button" onClick={() => { setPhase('idle'); onModeChange?.('live'); }} className={primary}><Rocket className="h-4 w-4" /> Publish Live next <ArrowRight className="h-4 w-4" /></button>
               </div>
             ) : (
               <>
-                {githubOk ? <p className="text-[12px] text-white/50">Signed in to GitHub as <span className="text-white/80">@{providers.github.username}</span></p> : githubConnectRow}
+                {githubOk ? <p className="text-[12px] text-[var(--s-muted)]">Signed in to GitHub as <span className="text-[var(--s-text)]">@{providers.github.username}</span></p> : githubConnectRow}
                 {githubOk && repoForm}
-                {error && <p className="flex gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-[12px] text-red-300"><AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />{error}</p>}
+                {error && <p className="flex gap-2 rounded-lg border border-[var(--s-line-strong)] bg-[var(--s-raised)] p-3 text-[12px] text-[var(--s-err)]"><AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />{error}</p>}
                 <button type="button" onClick={handlePush} disabled={!githubOk || busy || !repoName.trim()} className={primary}>
                   {phase === 'pushing' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Github className="h-4 w-4" />} {phase === 'pushing' ? 'Pushing…' : 'Push to GitHub'}
                 </button>
@@ -276,7 +276,7 @@ export default function ShipProjectModal({ open, mode, onClose, onModeChange, pr
                 {githubOk && (
                   <>
                     {hasPrevious && (
-                      <label className="flex cursor-pointer items-start gap-2 text-[11.5px] text-white/50">
+                      <label className="flex cursor-pointer items-start gap-2 text-[11.5px] text-[var(--s-muted)]">
                         <input type="checkbox" checked={pushFresh} disabled={busy} onChange={(e) => setPushFresh(e.target.checked)} className="mt-0.5" />
                         <span>Edited the site since your last push? Push a fresh copy to a new repo so those changes go live.</span>
                       </label>
@@ -284,7 +284,7 @@ export default function ShipProjectModal({ open, mode, onClose, onModeChange, pr
                     {!reusing && repoForm}
                   </>
                 )}
-                {error && <p className="flex gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-[12px] text-red-300"><AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />{error}</p>}
+                {error && <p className="flex gap-2 rounded-lg border border-[var(--s-line-strong)] bg-[var(--s-raised)] p-3 text-[12px] text-[var(--s-err)]"><AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />{error}</p>}
                 <button type="button" onClick={handlePublish} disabled={!githubOk || busy || (!reusing && !repoName.trim())} className={primary}>
                   {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />} {phase === 'pushing' ? 'Pushing code…' : 'Continue to Deployments'}
                 </button>

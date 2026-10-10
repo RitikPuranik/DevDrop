@@ -1,8 +1,9 @@
 const mongoose = require('mongoose');
 const AIStudioProject = require('../../modules/ai-studio/aiStudioProject.model');
 const AIStudioAsset = require('../../modules/ai-studio/aiStudioAsset.model');
+const AIStudioProjectVersion = require('../../modules/ai-studio/aiStudioProjectVersion.model');
 const storage = require('./aiStudioStorage.service');
-const { buildProjectZip, normalizeProjectFiles } = require('./aiStudioZip.service');
+const { buildProjectZip, normalizeProjectFiles, buildVersionZip, readVersionZip } = require('./aiStudioZip.service');
 const logger = require('../../shared/utils/logger');
 
 const { AI_STUDIO_PROJECT_STATUS } = AIStudioProject;
@@ -17,6 +18,10 @@ const INACTIVITY_THRESHOLD_MS = Number.parseInt(
 );
 
 const now = () => new Date();
+
+// Oldest snapshots beyond this are pruned so a long editing session can't
+// grow a project document set without bound.
+const MAX_VERSIONS_PER_PROJECT = Number.parseInt(process.env.AI_STUDIO_MAX_VERSIONS || '50', 10);
 
 /**
  * Creates a brand-new AI Studio project for this session, or resumes an
@@ -99,10 +104,11 @@ async function recordActivity({ projectId, userId }) {
  * replaces it in Supabase. Safe to call repeatedly/idempotently — it always
  * rebuilds from the full current file map and upserts the same zip path.
  */
-async function syncGeneratedFiles({ projectId, userId, files, dependencies, title }) {
+async function syncGeneratedFiles({ projectId, userId, files, dependencies, title, source = 'sync', label = '' }) {
   const project = await getOwnedProject(projectId, userId);
   if (!project) return null;
 
+  const hadFiles = Object.keys(project.files || {}).length > 0;
   if (files) project.files = normalizeProjectFiles(files);
   if (dependencies) project.dependencies = dependencies;
   if (title) project.title = title;
@@ -112,6 +118,113 @@ async function syncGeneratedFiles({ projectId, userId, files, dependencies, titl
   const zipPath = await storage.uploadProjectZip(project._id, zipBuffer);
   project.zipPath = zipPath;
   await project.save();
+
+  // Only snapshot when there is real content to roll back to.
+  if (files && Object.keys(project.files).length > 0) {
+    const resolvedSource = source !== 'sync' ? source : hadFiles ? 'edit' : 'generate';
+    await recordVersion(project, { source: resolvedSource, label });
+  }
+  return project;
+}
+
+/**
+ * Snapshots the project's CURRENT files as the next version: the zip goes to
+ * Supabase, the history row (metadata + storage path) goes to Mongo.
+ * Best-effort: a failed snapshot is logged and never fails the user's edit.
+ */
+async function recordVersion(project, { source = 'sync', label = '', restoredFromVersion = null } = {}) {
+  try {
+    const bumped = await AIStudioProject.findOneAndUpdate(
+      { _id: project._id },
+      { $inc: { versionCounter: 1 } },
+      { new: true, projection: { versionCounter: 1 } }
+    );
+    const version = bumped.versionCounter;
+    const storagePath = await storage.uploadVersionZip(
+      project._id,
+      version,
+      buildVersionZip({ files: project.files, dependencies: project.dependencies, title: project.title })
+    );
+    let doc;
+    try {
+      doc = await AIStudioProjectVersion.create({
+        projectId: project._id,
+        userId: project.userId,
+        version,
+        source,
+        label: String(label || '').slice(0, 300),
+        restoredFromVersion,
+        title: project.title,
+        storagePath,
+        fileCount: Object.keys(project.files || {}).length,
+      });
+    } catch (err) {
+      await storage.deleteObjects([storagePath]).catch(() => {}); // don't orphan the zip
+      throw err;
+    }
+
+    // Prune oldest beyond the cap (version numbers are never reused).
+    const stale = await AIStudioProjectVersion.find({ projectId: project._id })
+      .sort({ version: -1 })
+      .skip(MAX_VERSIONS_PER_PROJECT)
+      .select('_id storagePath')
+      .lean();
+    if (stale.length) {
+      await storage.deleteObjects(stale.map((v) => v.storagePath)).catch((e) =>
+        logger.error('AI Studio version prune (storage) failed', { error: e.message }));
+      await AIStudioProjectVersion.deleteMany({ _id: { $in: stale.map((v) => v._id) } });
+    }
+    return doc;
+  } catch (error) {
+    logger.error('AI Studio version snapshot failed', { projectId: String(project._id), error: error.message });
+    return null;
+  }
+}
+
+/** Lightweight list (metadata only), newest first. */
+async function listVersions({ projectId, userId }) {
+  const project = await getOwnedProject(projectId, userId);
+  if (!project) return null;
+  return AIStudioProjectVersion.find({ projectId: project._id })
+    .sort({ version: -1 })
+    .select('version label source restoredFromVersion title fileCount createdAt')
+    .lean();
+}
+
+/** Full snapshot of one version (fetched from Supabase), e.g. to preview it. */
+async function getVersion({ projectId, userId, version }) {
+  const project = await getOwnedProject(projectId, userId);
+  if (!project) return null;
+  const meta = await AIStudioProjectVersion.findOne({ projectId: project._id, version }).lean();
+  if (!meta) return null;
+  const snapshot = readVersionZip(await storage.downloadVersionZip(meta.storagePath));
+  return { version: meta.version, source: meta.source, label: meta.label, createdAt: meta.createdAt, ...snapshot };
+}
+
+/**
+ * Non-destructive rollback: loads the chosen snapshot zip from Supabase,
+ * copies it onto the project, rebuilds project.zip, and records a new
+ * "restore" version. Nothing is deleted.
+ */
+async function restoreVersion({ projectId, userId, version }) {
+  const project = await getOwnedProject(projectId, userId);
+  if (!project) return null;
+  const meta = await AIStudioProjectVersion.findOne({ projectId: project._id, version }).lean();
+  if (!meta) return { notFound: true };
+  const snapshot = readVersionZip(await storage.downloadVersionZip(meta.storagePath));
+
+  project.files = normalizeProjectFiles(snapshot.files);
+  project.dependencies = snapshot.dependencies;
+  if (snapshot.title) project.title = snapshot.title;
+  project.touchActivity();
+  project.zipPath = await storage.uploadProjectZip(project._id, buildProjectZip(project.files));
+  await project.save();
+
+  await recordVersion(project, {
+    source: 'restore',
+    label: `Restored version ${version}`,
+    restoredFromVersion: version,
+  });
   return project;
 }
 
@@ -223,6 +336,7 @@ async function cleanupProject(projectId, { threshold = INACTIVITY_THRESHOLD_MS }
   try {
     await storage.deleteProjectStorage(project._id);
     await AIStudioAsset.deleteMany({ projectId: project._id });
+    await AIStudioProjectVersion.deleteMany({ projectId: project._id });
     project.status = AI_STUDIO_PROJECT_STATUS.DELETED;
     project.lastCleanupError = null;
     await project.save();
@@ -272,6 +386,9 @@ module.exports = {
   heartbeat,
   recordActivity,
   syncGeneratedFiles,
+  listVersions,
+  getVersion,
+  restoreVersion,
   addAsset,
   removeAsset,
   isAbandoned,

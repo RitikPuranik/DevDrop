@@ -1088,8 +1088,8 @@ export default function ReferenceDrivenLivePreview({
   const accent = design?.primaryColor || palette?.[0] || '#3167ef';
   return (
     <div
-      className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/15"
-      style={{ boxShadow:`0 24px 60px -24px ${alpha(accent,.48)}`, background:'#0a0a0c' }}
+      className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--s-line)]"
+      style={{ background:'#0a0a0c' }}
     >
       <style>{css}</style>
       <div className={`rdp-device-stage rdp-device-${viewportMode}`}>

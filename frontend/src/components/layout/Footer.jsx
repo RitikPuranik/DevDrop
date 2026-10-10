@@ -1,94 +1,82 @@
 import React, { useState, useEffect } from 'react';
+import { ACCENT_THEMES } from '../../hooks/useAccentTheme';
 
-const DevDropCompactFooter = () => {
-  const [time, setTime] = useState("");
+// Follows the site's black + beige theme and the user's chosen accent (gold, beige, brown, charcoal).
+const readAccent = () => {
+  try {
+    const t = ACCENT_THEMES[localStorage.getItem('devdrop_accent_theme')];
+    return (t || ACCENT_THEMES.gold).accent;
+  } catch {
+    return ACCENT_THEMES.gold.accent;
+  }
+};
 
+const NAV = [
+  { label: 'Templates' },
+  { label: 'Archive' },
+  { label: 'Components' },
+  { label: 'Documentation', href: '/docs' },
+  { label: 'Process' },
+  { label: 'Licensing' },
+  { label: 'Contact' },
+];
+
+const SOCIAL = ['Instagram', 'Dribbble', 'X.com'];
+
+const Rule = () => <span aria-hidden="true" className="h-px flex-1 bg-[var(--f-accent)]" />;
+
+const DevDropFooter = () => {
+  const [accent, setAccent] = useState(readAccent);
   useEffect(() => {
-    const timer = setInterval(() => {
-      setTime(new Date().toLocaleTimeString('en-GB', { 
-        hour: '2-digit', minute: '2-digit', hour12: false 
-      }));
-    }, 1000);
-    return () => clearInterval(timer);
+    const sync = () => setAccent(readAccent());
+    window.addEventListener('storage', sync);
+    return () => window.removeEventListener('storage', sync);
   }, []);
 
   return (
-    <footer className="relative w-full py-12 px-[6vw] bg-transparent overflow-hidden border-t border-white/5">
-      
-      {/* ─── THE TOP ROW: BRANDING & STATUS ─── */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 border-b border-white/5 pb-8">
-        <div className="flex items-center gap-6">
-          <h2 className="text-3xl font-serif italic text-[#e8e2d6] tracking-tighter">devdrop</h2>
-          <div className="h-4 w-[1px] bg-white/10 hidden md:block" />
-          <p className="text-[9px] font-mono text-white/30 uppercase tracking-[0.5em]">Digital Artifact Marketplace</p>
-        </div>
-        
-        <div className="mt-4 md:mt-0 flex items-center gap-3">
-          <div className="w-1.5 h-1.5 rounded-full bg-[#e8e2d6]  animate-pulse" />
-          <span className="text-[10px] font-mono text-[#e8e2d6]/60 uppercase tracking-widest">System Active / {time} IST</span>
-        </div>
+  <footer style={{ '--f-accent': accent }} className="mb-2  h-100 w-full border-t border-[#050505]/15 bg-[#e8e2d6] px-[5vw] pb-24 pt-16 text-[#050505] md:pb-6">
+    {/* Wordmark between hairlines */}
+    <div className="flex items-center gap-8">
+      <Rule />
+      <h2 className="font-display text-[52px] italic leading-none tracking-tight md:text-[76px]">devdrop<span className="text-[var(--f-accent)]">.</span></h2>
+      <Rule />
+    </div>
+
+    <p className="font-display mx-auto mt-6 max-w-2xl text-balance text-center text-[20px] italic leading-snug text-[#050505]/65 md:text-[24px]">
+      Considered templates, components and sites — made with care.
+    </p>
+
+    {/* Navigation */}
+    <nav aria-label="Footer" className="mx-auto mt-10 flex max-w-4xl flex-wrap items-center justify-center gap-x-3 gap-y-3">
+      {NAV.map((item, i) => (
+        <React.Fragment key={item.label}>
+          {i > 0 && <span aria-hidden="true" className="text-[var(--f-accent)]">·</span>}
+          {item.href ? (
+            <a href={item.href} className="font-display text-[19px] text-[#050505] transition-colors hover:text-[var(--f-accent)]/80">{item.label}</a>
+          ) : (
+            <span className="font-display cursor-pointer text-[19px] text-[#050505] transition-colors hover:text-[var(--f-accent)]/80">{item.label}</span>
+          )}
+        </React.Fragment>
+      ))}
+    </nav>
+
+    {/* Social */}
+    <div className="mt-5 flex items-center justify-center gap-8 text-[10.5px] uppercase tracking-[0.24em] text-[#050505]/55">
+      {SOCIAL.map((s) => (
+        <span key={s} className="cursor-pointer border-b border-transparent pb-0.5 transition-colors hover:border-[var(--f-accent)] hover:text-[#050505]" style={{ fontWeight: 600 }}>{s}</span>
+      ))}
+    </div>
+
+    {/* Legal */}
+    <div className="mt-10 flex flex-col items-center gap-3 border-t border-[#050505]/15 pt-5 text-[12px] text-[#050505]/80 md:flex-row md:justify-between md:pr-28">
+      <p>© {new Date().getFullYear()} DevDrop Studio. All rights reserved.</p>
+      <div className="flex items-center gap-7">
+        <a href="/terms" className="transition-colors hover:text-[#050505]">Terms of Service</a>
+        <a href="/privacy" className="transition-colors hover:text-[#050505]">Privacy Policy</a>
       </div>
-
-      {/* ─── THE MAIN GRID ─── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-10 md:gap-4">
-        
-        {/* Column 1: Directory */}
-        <div className="space-y-4">
-          <h5 className="text-[12px] font-mono text-[#8b7355] uppercase tracking-[0.3em]">Navigation</h5>
-          <ul className="space-y-2">
-            {['Templates', 'Archive', 'Components'].map(link => (
-              <li key={link} className="text-xs font-serif italic text-[#e8e2d6]/40 hover:text-[#e8e2d6] cursor-pointer transition-colors">{link}</li>
-            ))}
-            <li><a href="/docs" className="text-xs font-serif italic text-[#e8e2d6]/40 hover:text-[#e8e2d6] transition-colors">Documentation</a></li>
-            <li><a href="/terms" className="text-xs font-serif italic text-[#e8e2d6]/40 hover:text-[#e8e2d6] transition-colors">Terms of Service</a></li>
-            <li><a href="/privacy" className="text-xs font-serif italic text-[#e8e2d6]/40 hover:text-[#e8e2d6] transition-colors">Privacy Policy</a></li>
-          </ul>
-        </div>
-
-        {/* Column 2: Studio */}
-        <div className="space-y-4">
-          <h5 className="text-[12px] font-mono text-[#8b7355] uppercase tracking-[0.3em]">Studio</h5>
-          <ul className="space-y-2">
-            {['Process', 'Licensing', 'Contact'].map(link => (
-              <li key={link} className="text-xs font-serif italic text-[#e8e2d6]/40 hover:text-[#e8e2d6] cursor-pointer transition-colors">
-                {link}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Column 3: Social */}
-        <div className="space-y-4">
-          <h5 className="text-[12px] font-mono text-[#8b7355] uppercase tracking-[0.3em]">Social</h5>
-          <ul className="space-y-2">
-            {['Instagram', 'Dribbble', 'X.com'].map(link => (
-              <li key={link} className="text-xs font-serif italic text-[#e8e2d6]/40 hover:text-[#e8e2d6] cursor-pointer transition-colors">
-                {link}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Column 4: Invisible Spacer for Desktop */}
-        <div className="hidden lg:block"></div>
-
-        {/* Column 5: The "Legal" Anchor */}
-        <div className="col-span-2 lg:col-span-1 flex flex-col justify-between items-start md:items-end text-left md:text-right">
-          <div className="space-y-2">
-             <p className="text-[9px] font-mono text-white/20 uppercase tracking-[0.2em] leading-relaxed">
-               Boutique Design & <br /> Technical Excellence
-             </p>
-          </div>
-          <p className="text-[8px] font-mono text-white/10 uppercase tracking-[0.4em] mt-8">
-            © 2026 DEVDROP STUDIO
-          </p>
-        </div>
-      </div>
-
-      {/* Subtle Noise Overlay for Texture */}
-      <div className="absolute inset-0 z-[-1] opacity-[0.03] pointer-events-none" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")` }} />
-    </footer>
+    </div>
+  </footer>
   );
 };
 
-export default DevDropCompactFooter;
+export default DevDropFooter;
