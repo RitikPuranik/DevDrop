@@ -38,7 +38,7 @@ function notifyStage(jobId, stage, status, details) {
 // One event when the whole job finishes (success or failure).
 function notifyComplete(jobId, job) {
   if (job.status === 'failed') {
-    return sendWebhook('failed', jobId, { error: job.error });
+    return sendWebhook('failed', jobId, { error: job.error, errorType: job.errorType || 'failed' });
   }
   return sendWebhook('completed', jobId, {
     result: job.result,

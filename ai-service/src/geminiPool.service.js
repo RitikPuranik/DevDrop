@@ -1,62 +1,137 @@
+const crypto = require('crypto');
 const mongoose = require('mongoose');
 const GeminiApiKey = require('./models/geminiApiKey.model');
+const GeminiPoolState = require('./models/geminiPoolState.model');
 const { decrypt } = require('./utils/crypto');
-const { classify, cooldownForFailure } = require('./geminiFailureClassifier');
+const { classify, cooldownMsFor, envMs } = require('./geminiFailureClassifier');
+const { getJobContext } = require('./utils/jobContext');
 
 /**
- * Maintains a pool of Gemini credentials with per-credential state, and
- * wraps a single "make one Gemini request for this model" function with
- * key selection + automatic failover. Model fallback (which Gemini model
- * to try) stays in gemini.service.js and is orthogonal to this.
+ * Maintains a pool of Gemini credentials (Google Cloud projects) and wraps a
+ * "make one Gemini request for this model" function with project selection
+ * and automatic failover.
  *
- * Config (label/enabled/priority/encryptedKey) is read from Mongo via a
- * short-TTL cache — see loadPool(). Live health/usage state (cooldowns,
- * consecutive failures, in-flight counts) lives in the `pool` Map in this
- * process's memory for fast selection, and is mirrored back to Mongo
- * best-effort so the admin UI and a future restart both see it.
+ * Availability is tracked per project AND per model:
+ *   - entry.cooldownUntil         project-wide quota (only when the provider's
+ *                                 quota is clearly not model-scoped)
+ *   - entry.modelCooldowns[model] per-project-per-model quota (RPM/TPM/RPD)
+ *   - globalModelCooldowns[model] shared model capacity (503/overloaded) —
+ *                                 independent of any project's quota
+ * A cooldown on project A never affects project B. Keys that report the same
+ * Google Cloud project (projectId) share project/model cooldowns, and
+ * identical credentials are de-duplicated for quota accounting.
+ *
+ * Failover happens INSIDE one executeModels() call: a project-specific rate
+ * limit marks that project/model unavailable and the very next attempt goes to
+ * another eligible project, without waiting for any cooldown. When nothing is
+ * eligible the call throws PoolExhaustedError carrying a structured result
+ * (reason, attempted projects, failure categories, earliest retry time,
+ * whether retrying is sensible); callers decide how to wait.
+ *
+ * Shared state: cooldowns are written to Mongo with atomic $max operations and
+ * re-read (throttled, GEMINI_POOL_STATE_SYNC_MS) before every attempt so that
+ * several workers/instances stop hammering the same exhausted project.
  *
  * Backwards compatibility: if Mongo isn't connected, or the collection is
  * empty, falls back to GEMINI_API_KEY (single key) or GEMINI_API_KEYS
- * (comma-separated migration bootstrap) from the environment. Those
- * bootstrap entries are virtual (id starts with "env-") and are never
- * persisted — they exist only in memory for this process's lifetime.
+ * (comma-separated). Those bootstrap entries are virtual (id "env-N") and are
+ * never persisted.
  */
 
-const POOL_REFRESH_MS = Number.parseInt(process.env.GEMINI_POOL_REFRESH_MS || '5000', 10);
-// Number of different credentials a single Gemini call may try before the
-// pool gives control back to the LLM layer.  The old hard-coded value of 4
-// made a 57-project pool behave like a 4-key pool and caused the outer LLM
-// retry loop to start the same failover cycle again.
+const POOL_REFRESH_MS = envMs('GEMINI_POOL_REFRESH_MS', 5000);
+const DAILY_TOKEN_LIMIT = Number.parseInt(process.env.GEMINI_DAILY_TOKEN_LIMIT || '1500000', 10);
+
+// Max distinct projects a single request may try (default: all of them).
 function getMaxKeyAttempts() {
   const raw = Number.parseInt(process.env.GEMINI_POOL_MAX_KEY_ATTEMPTS || '', 10);
   return Number.isFinite(raw) && raw > 0 ? raw : pool.size || 1;
 }
-const DAILY_TOKEN_LIMIT = Number.parseInt(process.env.GEMINI_DAILY_TOKEN_LIMIT || '1500000', 10);
 function getPerKeyConcurrency() {
   const raw = Number.parseInt(process.env.GEMINI_PER_KEY_CONCURRENCY || '', 10);
   return Number.isFinite(raw) && raw > 0 ? raw : Infinity;
 }
+// Wall-clock bound for one failover cycle (default 0 = none: keep trying every
+// eligible key until one answers or all are exhausted). Each HTTP attempt is
+// additionally bounded by the caller's axios timeout.
+const getRequestDeadlineMs = () => envMs('GEMINI_POOL_REQUEST_DEADLINE_MS', 0);
+// Unusable-JSON (HTTP 200) answers tried across projects before giving up.
+const getMaxBadOutputAttempts = () => Math.max(1, envMs('GEMINI_POOL_MAX_BAD_OUTPUT_ATTEMPTS', 10));
+const getStateSyncMs = () => envMs('GEMINI_POOL_STATE_SYNC_MS', 1000);
 
 /** @type {Map<string, object>} keyId -> runtime+config state */
 const pool = new Map();
 
-// Provider-side capacity failures (typically HTTP 503) are not credential
-// failures. When a model is overloaded, trying the same model on dozens of
-// other credentials only adds latency and can amplify provider pressure.
-// Keep a small process-local model cooldown so a capacity failure temporarily
-// removes that model from every key's traversal. A successful request clears
-// the cooldown immediately.
-const MODEL_CAPACITY_COOLDOWN_MS = Math.max(
-  5_000,
-  Number.parseInt(process.env.GEMINI_MODEL_CAPACITY_COOLDOWN_MS || '30000', 10) || 30000
-);
+// Shared model-capacity cooldowns: modelKey -> until (epoch ms). Mirrored to
+// Mongo (GeminiPoolState) so every worker avoids an overloaded model.
 const globalModelCooldowns = new Map();
 
 let lastLoadedAt = 0;
 let loadingPromise = null;
+let lastSyncAt = 0;
+let syncPromise = null;
 
 function isMongoReady() {
   return mongoose.connection && mongoose.connection.readyState === 1;
+}
+
+// ---------------------------------------------------------------- helpers --
+
+// Mongoose maps (and Mongo update paths) cannot contain '.', but model names do.
+const mk = (model) => String(model).replace(/[.$]/g, '_');
+const ts = (value) => (value ? new Date(value).getTime() || 0 : 0);
+const groupOf = (entry) => (entry.projectKey ? `p:${entry.projectKey}` : `k:${entry.id}`);
+
+function keyLogName(entry) {
+  const suffix = entry?.id ? String(entry.id).slice(-6) : 'unknown';
+  return entry?.label ? `${entry.label} (${suffix})` : `key-${suffix}`;
+}
+
+/** Structured log line. Never pass credentials or prompts into `fields`. */
+function plog(level, event, fields = {}) {
+  const fn = level === 'error' ? console.error : level === 'warn' ? console.warn : console.log;
+  fn(`[Gemini Pool] ${event}`, { jobId: getJobContext().jobId || null, ...fields });
+}
+
+function persistAsync(id, update) {
+  if (String(id).startsWith('env-')) return; // virtual bootstrap key, nothing to persist
+  if (!isMongoReady()) return;
+  Promise.resolve(GeminiApiKey.findByIdAndUpdate(id, update)).catch((error) => {
+    console.error(`Gemini pool: failed to persist state for key ${id}`, error.message);
+  });
+}
+
+function newEntryState(id, persisted, base) {
+  return {
+    id,
+    persisted,
+    label: base.label,
+    rawKey: base.rawKey,
+    fingerprint: crypto.createHash('sha256').update(base.rawKey).digest('hex'),
+    enabled: base.enabled,
+    priority: base.priority,
+    projectKey: base.projectKey || null,
+    duplicateOf: null,
+    status: base.status || 'healthy',
+    consecutiveFailures: base.consecutiveFailures || 0,
+    cooldownUntil: base.cooldownUntil || null,
+    lastUsedAt: base.lastUsedAt || null,
+    lastSuccessAt: base.lastSuccessAt || null,
+    lastFailureAt: base.lastFailureAt || null,
+    lastErrorCode: base.lastErrorCode || null,
+    lastErrorMessage: base.lastErrorMessage || null,
+    totalRequests: base.totalRequests || 0,
+    totalSuccesses: base.totalSuccesses || 0,
+    totalFailures: base.totalFailures || 0,
+    inFlight: base.inFlight || 0,
+    totalTokensUsed: base.totalTokensUsed || 0,
+    promptTokensUsed: base.promptTokensUsed || 0,
+    candidateTokensUsed: base.candidateTokensUsed || 0,
+    dailyTokensUsed: base.dailyTokensUsed || 0,
+    lastTokenResetAt: base.lastTokenResetAt || null,
+    modelCooldowns: base.modelCooldowns || {},
+    failureStreaks: base.failureStreaks || {},
+    invalidAt: base.invalidAt || 0,
+  };
 }
 
 function bootstrapFromEnv() {
@@ -71,95 +146,64 @@ function bootstrapFromEnv() {
 
   rawKeys.forEach((rawKey, index) => {
     const id = `env-${index}`;
-    pool.set(id, {
-      id,
-      persisted: false,
+    pool.set(id, newEntryState(id, false, {
       label: rawKeys.length > 1 ? `Env key ${index + 1}` : 'Default (GEMINI_API_KEY)',
       rawKey,
       enabled: true,
-      // Same priority tier for every env-bootstrapped key (matching the
-      // Mongo model's shared default of 100) so they round-robin via LRU
-      // instead of always hammering "key 1" — explicit ordering is an
-      // admin-UI concept, and env-var bootstrap has no ordering signal to
-      // honor besides list position, which isn't a strong enough one.
+      // Same priority tier for every env-bootstrapped key so they round-robin
+      // via LRU instead of always hammering "key 1".
       priority: 0,
-      status: 'healthy',
-      consecutiveFailures: 0,
-      cooldownUntil: null,
-      lastUsedAt: null,
-      lastSuccessAt: null,
-      lastFailureAt: null,
-      lastErrorCode: null,
-      lastErrorMessage: null,
-      totalRequests: 0,
-      totalSuccesses: 0,
-      totalFailures: 0,
-      inFlight: 0,
-      // Token usage tracking
-      totalTokensUsed: 0,
-      promptTokensUsed: 0,
-      candidateTokensUsed: 0,
-      dailyTokensUsed: 0,
-      lastTokenResetAt: null,
-      modelCooldowns: {},
-    });
+    }));
   });
+  markDuplicates();
 }
 
 /**
- * Refreshes `pool` from Mongo, preserving live runtime fields (cooldown,
- * consecutive failures, in-flight count, lastUsedAt) for keys that already
- * exist so a routine config refresh never clobbers active health state.
- * New keys are added; deleted keys are dropped (an in-flight request on a
- * deleted key already holds its own decrypted copy and finishes fine).
+ * Identical credentials are one quota bucket. Only the first copy
+ * (lowest priority number, then id) is eligible; the others are kept for the
+ * admin UI but never selected and never counted as extra capacity.
  */
+function markDuplicates() {
+  const seen = new Map();
+  const ordered = Array.from(pool.values()).sort(
+    (a, b) => a.priority - b.priority || String(a.id).localeCompare(String(b.id))
+  );
+  for (const entry of ordered) {
+    const first = seen.get(entry.fingerprint);
+    if (!first) {
+      seen.set(entry.fingerprint, entry.id);
+      entry.duplicateOf = null;
+    } else {
+      if (entry.duplicateOf !== first) {
+        plog('warn', 'DUPLICATE CREDENTIAL IGNORED', { project: keyLogName(entry), duplicateOf: first });
+      }
+      entry.duplicateOf = first;
+    }
+  }
+}
+
 function normalizeModelCooldowns(value) {
   if (!value) return {};
-  if (value instanceof Map) return Object.fromEntries(value.entries());
-  if (typeof value === 'object') return { ...value };
-  return {};
+  const plain = value instanceof Map ? Object.fromEntries(value.entries()) : typeof value === 'object' ? { ...value } : {};
+  const out = {};
+  for (const [key, until] of Object.entries(plain)) out[mk(key)] = until; // tolerate legacy dotted keys
+  return out;
 }
 
-function modelCooldownRemaining(entry, model) {
-  const until = entry?.modelCooldowns?.[model];
-  if (!until) return 0;
-  return Math.max(0, new Date(until).getTime() - Date.now());
+function maxFutureDate(a, b) {
+  const now = Date.now();
+  const best = Math.max(ts(a), ts(b));
+  return best > now ? new Date(best) : null;
 }
 
-function clearExpiredModelCooldowns(entry) {
-  if (!entry?.modelCooldowns) return;
-  for (const [model, until] of Object.entries(entry.modelCooldowns)) {
-    if (new Date(until).getTime() <= Date.now()) delete entry.modelCooldowns[model];
-  }
-}
-
-function setModelCooldown(entry, model, cooldownMs) {
-  if (!entry.modelCooldowns) entry.modelCooldowns = {};
-  if (cooldownMs > 0) entry.modelCooldowns[model] = new Date(Date.now() + cooldownMs);
-  else delete entry.modelCooldowns[model];
-  persistAsync(entry.id, { modelCooldowns: entry.modelCooldowns });
-}
-
-function setModelCooldownUntil(entry, model, untilMs) {
-  if (!Number.isFinite(untilMs) || untilMs <= Date.now()) {
-    setModelCooldown(entry, model, 0);
-    return;
-  }
-  if (!entry.modelCooldowns) entry.modelCooldowns = {};
-  entry.modelCooldowns[model] = new Date(untilMs);
-  persistAsync(entry.id, { modelCooldowns: entry.modelCooldowns });
-}
-
-function getNextModelCooldown(entry, models) {
-  clearExpiredModelCooldowns(entry);
-  const items = (models || [])
-    .map((model) => ({ model, remainingMs: modelCooldownRemaining(entry, model) }))
-    .filter((x) => x.remainingMs > 0)
-    .sort((a, b) => a.remainingMs - b.remainingMs);
-  return items[0] || null;
-}
-
-async function loadFromDB() {
+/**
+ * Refreshes `pool` from Mongo. Live runtime fields (in-flight, LRU, streaks)
+ * of existing entries are preserved. Cooldowns are merged with the shared
+ * state (latest future time wins) so another worker's cooldown is honored;
+ * an explicit admin reload (`authoritative`) adopts the DB values instead so
+ * an operator can clear cooldowns.
+ */
+async function loadFromDB({ authoritative = false } = {}) {
   const docs = await GeminiApiKey.find().select('+encryptedKey');
   const seenIds = new Set();
 
@@ -175,18 +219,37 @@ async function loadFromDB() {
     }
 
     const existing = pool.get(id);
-    pool.set(id, {
-      id,
-      persisted: true,
+    const dbModelCooldowns = normalizeModelCooldowns(doc.modelCooldowns);
+    const modelCooldowns = {};
+    const localModelCooldowns = existing?.modelCooldowns || {};
+    for (const key of new Set([...Object.keys(dbModelCooldowns), ...Object.keys(localModelCooldowns)])) {
+      const merged = authoritative
+        ? maxFutureDate(dbModelCooldowns[key], null)
+        : maxFutureDate(dbModelCooldowns[key], localModelCooldowns[key]);
+      if (merged) modelCooldowns[key] = merged;
+    }
+
+    // An operator re-enabling a key we marked invalid flips the DB status
+    // back; adopt that after a short grace so our own pending write can land.
+    let status = existing?.status ?? doc.status;
+    let invalidAt = existing?.invalidAt || 0;
+    if (existing?.status === 'invalid' && doc.status !== 'invalid' && Date.now() - invalidAt > 10_000) {
+      status = doc.status;
+      invalidAt = 0;
+    }
+
+    const next = newEntryState(id, true, {
       label: doc.label,
       rawKey,
       enabled: doc.enabled,
       priority: doc.priority,
-      // Live fields: keep existing runtime state if we have it, otherwise
-      // seed from the DB's last-known values (covers a fresh process start).
-      status: existing?.status ?? doc.status,
+      projectKey: doc.projectId || existing?.projectKey || null,
+      status,
+      invalidAt,
       consecutiveFailures: existing?.consecutiveFailures ?? doc.consecutiveFailures ?? 0,
-      cooldownUntil: existing?.cooldownUntil ?? doc.cooldownUntil ?? null,
+      cooldownUntil: authoritative
+        ? maxFutureDate(doc.cooldownUntil, null)
+        : maxFutureDate(doc.cooldownUntil, existing?.cooldownUntil),
       lastUsedAt: existing?.lastUsedAt ?? doc.lastUsedAt ?? null,
       lastSuccessAt: existing?.lastSuccessAt ?? doc.lastSuccessAt ?? null,
       lastFailureAt: existing?.lastFailureAt ?? doc.lastFailureAt ?? null,
@@ -196,21 +259,22 @@ async function loadFromDB() {
       totalSuccesses: existing?.totalSuccesses ?? doc.totalSuccesses ?? 0,
       totalFailures: existing?.totalFailures ?? doc.totalFailures ?? 0,
       inFlight: existing?.inFlight ?? 0,
-      // Token usage tracking
       totalTokensUsed: existing?.totalTokensUsed ?? doc.totalTokensUsed ?? 0,
       promptTokensUsed: existing?.promptTokensUsed ?? doc.promptTokensUsed ?? 0,
       candidateTokensUsed: existing?.candidateTokensUsed ?? doc.candidateTokensUsed ?? 0,
       dailyTokensUsed: existing?.dailyTokensUsed ?? doc.dailyTokensUsed ?? 0,
       lastTokenResetAt: existing?.lastTokenResetAt ?? doc.lastTokenResetAt ?? null,
-      modelCooldowns: existing?.modelCooldowns ?? normalizeModelCooldowns(doc.modelCooldowns),
+      modelCooldowns,
+      failureStreaks: existing?.failureStreaks || {},
     });
+    pool.set(id, next);
   }
 
-  // Drop keys removed from the DB (but never drop env-bootstrap entries —
-  // those have no DB doc to begin with).
+  // Drop keys removed from the DB (never env-bootstrap entries).
   for (const id of Array.from(pool.keys())) {
     if (!id.startsWith('env-') && !seenIds.has(id)) pool.delete(id);
   }
+  markDuplicates();
 }
 
 async function loadPool(force = false) {
@@ -223,7 +287,8 @@ async function loadPool(force = false) {
       if (isMongoReady()) {
         const count = await GeminiApiKey.estimatedDocumentCount();
         if (count > 0) {
-          await loadFromDB();
+          await loadFromDB({ authoritative: force });
+          lastSyncAt = Date.now();
         } else if (pool.size === 0) {
           bootstrapFromEnv();
         }
@@ -245,114 +310,225 @@ async function loadPool(force = false) {
 /** Force-drop the cache so the next request re-reads Mongo immediately. */
 function invalidate() {
   lastLoadedAt = 0;
-}
-
-function isUsable(entry, excludeIds, now) {
-  if (!entry.enabled) return false;
-  if (entry.status === 'invalid' || entry.status === 'disabled') return false;
-  if (excludeIds.includes(entry.id)) return false;
-  if (entry.cooldownUntil && new Date(entry.cooldownUntil).getTime() > now) return false;
-  if (entry.inFlight >= getPerKeyConcurrency()) return false;
-  return true;
+  lastSyncAt = 0;
 }
 
 /**
- * Picks the best available key: enabled, not in cooldown, under its
- * per-key concurrency cap, lowest priority number first, and among equal
- * priority the least-recently-used — so a healthy pool doesn't just
- * hammer whichever key happens to be priority 1 forever.
+ * Pulls cooldowns written by OTHER workers/instances into this process's view
+ * (throttled). Only future timestamps are merged and the later one wins, so
+ * this can never shorten a wait this process already knows about.
  */
-function keyLogName(entry) {
-  const suffix = entry?.id ? String(entry.id).slice(-6) : 'unknown';
-  return entry?.label ? `${entry.label} (${suffix})` : `key-${suffix}`;
+async function syncSharedState(force = false) {
+  if (!isMongoReady()) return;
+  if (!force && Date.now() - lastSyncAt < getStateSyncMs()) return;
+  if (syncPromise) return syncPromise;
+  lastSyncAt = Date.now();
+
+  syncPromise = (async () => {
+    try {
+      const now = Date.now();
+      const docs = await GeminiApiKey.find({}).select('cooldownUntil modelCooldowns status projectId').lean();
+      for (const doc of docs || []) {
+        const entry = pool.get(String(doc._id));
+        if (!entry) continue;
+        const cooldown = ts(doc.cooldownUntil);
+        if (cooldown > now && cooldown > ts(entry.cooldownUntil)) entry.cooldownUntil = new Date(cooldown);
+        for (const [key, until] of Object.entries(normalizeModelCooldowns(doc.modelCooldowns))) {
+          const t = ts(until);
+          if (t > now && t > ts(entry.modelCooldowns[key])) entry.modelCooldowns[key] = new Date(t);
+        }
+        if (doc.status === 'invalid' && entry.status !== 'invalid') {
+          entry.status = 'invalid';
+          entry.invalidAt = now;
+        }
+        if (doc.projectId && !entry.projectKey) entry.projectKey = doc.projectId;
+      }
+
+      const states = await GeminiPoolState.find({ kind: 'model_capacity' }).lean();
+      for (const state of states || []) {
+        const key = mk(state.model || String(state._id).replace(/^capacity:/, ''));
+        const t = ts(state.until);
+        if (t > now && t > Number(globalModelCooldowns.get(key) || 0)) globalModelCooldowns.set(key, t);
+      }
+    } catch (error) {
+      console.error('Gemini pool: shared state sync failed', error.message);
+    } finally {
+      syncPromise = null;
+    }
+  })();
+  return syncPromise;
 }
 
-function logModelTry(entry, model, meta = {}) {
-  console.log('[Gemini Pool] TRY', {
-    key: keyLogName(entry),
-    keyId: entry?.id || null,
-    model,
-    ...meta,
-  });
+// ------------------------------------------------------ availability state --
+
+function groupMembers(entry) {
+  const group = groupOf(entry);
+  return Array.from(pool.values()).filter((e) => groupOf(e) === group);
 }
 
-function logModelResult(entry, model, result, meta = {}) {
-  const method = result === 'SUCCESS' ? console.log : console.warn;
-  method(`[Gemini Pool] ${result}`, {
-    key: keyLogName(entry),
-    keyId: entry?.id || null,
-    model,
-    ...meta,
-  });
+/** ms until the project-wide cooldown (any member of the project) ends. */
+function projectCooldownRemaining(members, now = Date.now()) {
+  return Math.max(0, ...members.map((e) => ts(e.cooldownUntil) - now));
 }
 
-function selectKey(excludeIds = []) {
-  const now = Date.now();
-  const candidates = Array.from(pool.values()).filter((entry) => isUsable(entry, excludeIds, now));
-  if (candidates.length === 0) return null;
-
-  candidates.sort((a, b) => {
-    if (a.priority !== b.priority) return a.priority - b.priority;
-    const aLast = a.lastUsedAt ? new Date(a.lastUsedAt).getTime() : 0;
-    const bLast = b.lastUsedAt ? new Date(b.lastUsedAt).getTime() : 0;
-    return aLast - bLast; // least-recently-used first
-  });
-
-  return candidates[0];
+/** ms until this project's quota for `model` is available again. */
+function modelCooldownRemaining(entryOrMembers, model, now = Date.now()) {
+  const members = Array.isArray(entryOrMembers) ? entryOrMembers : [entryOrMembers];
+  return Math.max(0, ...members.map((e) => ts(e?.modelCooldowns?.[mk(model)]) - now));
 }
 
 function globalModelCooldownRemaining(model) {
-  const until = Number(globalModelCooldowns.get(model) || 0);
+  const until = Number(globalModelCooldowns.get(mk(model)) || 0);
   return until > Date.now() ? until - Date.now() : 0;
 }
 
-function markGlobalModelCapacity(model) {
-  if (!model) return;
-  globalModelCooldowns.set(model, Date.now() + MODEL_CAPACITY_COOLDOWN_MS);
+function getNextModelCooldown(entry, models) {
+  const items = (models || [])
+    .map((model) => ({ model, remainingMs: modelCooldownRemaining(entry, model) }))
+    .filter((x) => x.remainingMs > 0)
+    .sort((a, b) => a.remainingMs - b.remainingMs);
+  return items[0] || null;
+}
+
+function markGlobalModelCapacity(model, cooldownMs) {
+  if (!model || !(cooldownMs > 0)) return;
+  const until = Date.now() + cooldownMs;
+  if (until > Number(globalModelCooldowns.get(mk(model)) || 0)) globalModelCooldowns.set(mk(model), until);
+  if (isMongoReady()) {
+    Promise.resolve(
+      GeminiPoolState.updateOne(
+        { _id: `capacity:${mk(model)}` },
+        { $max: { until: new Date(until) }, $set: { kind: 'model_capacity', model: String(model) } },
+        { upsert: true }
+      )
+    ).catch((error) => console.error('Gemini pool: failed to persist model capacity state', error.message));
+  }
 }
 
 function clearGlobalModelCapacity(model) {
-  if (!model) return;
-  globalModelCooldowns.delete(model);
+  if (!model || !globalModelCooldowns.has(mk(model))) return;
+  globalModelCooldowns.delete(mk(model));
+  if (isMongoReady()) {
+    Promise.resolve(GeminiPoolState.deleteOne({ _id: `capacity:${mk(model)}` })).catch(() => {});
+  }
 }
 
-function shortestGlobalModelCooldown(models = []) {
-  const remaining = models
-    .map((model) => globalModelCooldownRemaining(model))
-    .filter((ms) => ms > 0);
-  return remaining.length ? Math.min(...remaining) : null;
-}
-
-function shortestCooldownRemaining(excludeIds = [], models = []) {
-  const now = Date.now();
-  const relevant = Array.from(pool.values()).filter(
-    (e) => e.enabled && e.status !== 'invalid' && e.status !== 'disabled' && !excludeIds.includes(e.id)
-  );
-  const cooldowns = [];
-
-  for (const e of relevant) {
-    if (e.cooldownUntil) {
-      const ms = new Date(e.cooldownUntil).getTime() - now;
-      if (ms > 0) cooldowns.push(ms);
+/**
+ * Records a cooldown for a project (scope "project") or a project+model quota
+ * (scope "model"). Shared by every credential of the same Google Cloud
+ * project, and persisted with an atomic $max so concurrent workers can only
+ * ever extend, never shorten, each other's cooldowns.
+ */
+function applyCooldown(entry, { model, scope, untilMs }) {
+  if (!(untilMs > Date.now())) return;
+  const date = new Date(untilMs);
+  for (const member of groupMembers(entry)) {
+    if (scope === 'project') {
+      if (ts(member.cooldownUntil) < untilMs) member.cooldownUntil = date;
+      persistAsync(member.id, { $max: { cooldownUntil: date } });
+    } else {
+      member.modelCooldowns = member.modelCooldowns || {};
+      if (ts(member.modelCooldowns[mk(model)]) < untilMs) member.modelCooldowns[mk(model)] = date;
+      persistAsync(member.id, { $max: { [`modelCooldowns.${mk(model)}`]: date } });
     }
-    for (const model of models) {
-      const ms = modelCooldownRemaining(e, model);
-      if (ms > 0) cooldowns.push(ms);
+  }
+}
+
+/**
+ * Why a project/model pair can or cannot take a request right now.
+ * `waitMs` is only set when a timed cooldown is the reason.
+ */
+function evaluatePair(entry, model, ctx, now, members) {
+  if (!entry.enabled) return { ok: false, permanent: true };
+  if (entry.status === 'invalid' || entry.status === 'disabled') return { ok: false, permanent: true };
+  if (entry.duplicateOf) return { ok: false, permanent: true };
+  if (ctx?.excludeIds?.includes(entry.id)) return { ok: false, local: true };
+
+  const group = groupOf(entry);
+  if (ctx) {
+    if (ctx.blockedGroups.has(group) || ctx.blockedModels.has(mk(model)) || ctx.blockedPairs.has(`${group}|${mk(model)}`)) {
+      return { ok: false, local: true };
     }
   }
 
-  const globalCooldown = shortestGlobalModelCooldown(models);
-  if (globalCooldown) cooldowns.push(globalCooldown);
-
-  return cooldowns.length ? Math.min(...cooldowns) : null;
+  const wait = Math.max(
+    projectCooldownRemaining(members, now),
+    model == null ? 0 : modelCooldownRemaining(members, model, now),
+    model == null ? 0 : globalModelCooldownRemaining(model)
+  );
+  if (wait > 0) return { ok: false, waitMs: wait };
+  if (entry.inFlight >= getPerKeyConcurrency()) return { ok: false, waitMs: 250 };
+  return { ok: true };
 }
 
+function compareEntries(a, b) {
+  if (a.priority !== b.priority) return a.priority - b.priority;
+  return ts(a.lastUsedAt) - ts(b.lastUsedAt); // least-recently-used first
+}
 
-function persistAsync(id, update) {
-  if (id.startsWith('env-')) return; // virtual bootstrap key, nothing to persist
-  GeminiApiKey.findByIdAndUpdate(id, update).catch((error) => {
-    console.error(`Gemini pool: failed to persist state for key ${id}`, error.message);
-  });
+/**
+ * Picks the next (project, model) pair: first model in preference order that
+ * has an eligible project; among projects, lowest priority number then LRU.
+ * Cooling/invalid/already-failed projects are skipped without any request.
+ */
+function pickPair(models, ctx, allowNewProject) {
+  const now = Date.now();
+  const all = Array.from(pool.values());
+  const byGroup = new Map();
+  for (const e of all) {
+    const g = groupOf(e);
+    if (!byGroup.has(g)) byGroup.set(g, []);
+    byGroup.get(g).push(e);
+  }
+
+  for (const model of models) {
+    const candidates = all.filter((entry) => {
+      const group = groupOf(entry);
+      if (!allowNewProject && !ctx.attemptedGroups.has(group)) return false;
+      return evaluatePair(entry, model, ctx, now, byGroup.get(group)).ok;
+    });
+    if (candidates.length) {
+      candidates.sort(compareEntries);
+      return { entry: candidates[0], model };
+    }
+  }
+  return { entry: null, model: null };
+}
+
+/**
+ * Earliest moment any non-permanently-dead project/model pair may be tried
+ * again (ms from now), or null when nothing is waiting on a timer.
+ */
+function earliestRetryMs(models, ctx) {
+  const now = Date.now();
+  const all = Array.from(pool.values());
+  let best = null;
+  for (const entry of all) {
+    const members = groupMembers(entry);
+    for (const model of models) {
+      const state = evaluatePair(entry, model, null, now, members);
+      if (state.permanent) continue;
+      const wait = state.ok ? 0 : state.waitMs;
+      if (wait == null) continue;
+      if (best === null || wait < best) best = wait;
+    }
+  }
+  return best;
+}
+
+/**
+ * Backwards-compatible selector: best enabled, usable project (no
+ * project-wide cooldown, under its concurrency cap), lowest priority then LRU.
+ */
+function selectKey(excludeIds = []) {
+  const now = Date.now();
+  const ctx = { excludeIds, blockedGroups: new Set(), blockedModels: new Set(), blockedPairs: new Set() };
+  const candidates = Array.from(pool.values()).filter(
+    (entry) => evaluatePair(entry, null, ctx, now, groupMembers(entry)).ok
+  );
+  if (candidates.length === 0) return null;
+  candidates.sort(compareEntries);
+  return candidates[0];
 }
 
 function markAcquired(entry) {
@@ -363,27 +539,41 @@ function markAcquired(entry) {
   persistAsync(entry.id, { lastUsedAt: entry.lastUsedAt, $inc: { totalRequests: 1 } });
 }
 
-function markSuccess(entry, model = null) {
+function releaseInFlight(entry) {
   entry.inFlight = Math.max(0, entry.inFlight - 1);
+}
+
+function markSuccess(entry, model = null) {
+  releaseInFlight(entry);
   entry.consecutiveFailures = 0;
-  if (model && entry.modelCooldowns?.[model]) {
-    delete entry.modelCooldowns[model];
-    persistAsync(entry.id, { $unset: { [`modelCooldowns.${model}`]: 1 } });
-  }
-  entry.status = 'healthy';
-  entry.lastSuccessAt = new Date();
-  entry.totalSuccesses += 1;
-  entry.lastErrorCode = null;
-  entry.lastErrorMessage = null;
-  persistAsync(entry.id, {
+  const update = {
     status: 'healthy',
     consecutiveFailures: 0,
-    cooldownUntil: null,
-    lastSuccessAt: entry.lastSuccessAt,
+    lastSuccessAt: new Date(),
     lastErrorCode: null,
     lastErrorMessage: null,
     $inc: { totalSuccesses: 1 },
-  });
+  };
+  // A success proves this project is serving this model: clear that quota's
+  // cooldown (and the project-wide one) and reset its failure streak.
+  if (model) {
+    delete entry.failureStreaks?.[mk(model)];
+    if (entry.modelCooldowns?.[mk(model)]) {
+      delete entry.modelCooldowns[mk(model)];
+      update.$unset = { [`modelCooldowns.${mk(model)}`]: 1 };
+    }
+  }
+  delete entry.failureStreaks?.project;
+  if (entry.cooldownUntil) {
+    entry.cooldownUntil = null;
+    update.cooldownUntil = null;
+  }
+  entry.status = 'healthy';
+  entry.lastSuccessAt = update.lastSuccessAt;
+  entry.totalSuccesses += 1;
+  entry.lastErrorCode = null;
+  entry.lastErrorMessage = null;
+  persistAsync(entry.id, update);
 }
 
 /**
@@ -479,15 +669,60 @@ function recordTokenUsageFromResult(entry, result, model) {
   return usage;
 }
 
-function markFailure(entry, error, options = {}) {
-  entry.inFlight = Math.max(0, entry.inFlight - 1);
+class PoolExhaustedError extends Error {
+  constructor(message, retryAfterMs) {
+    super(message);
+    this.name = 'PoolExhaustedError';
+    this.code = 'GEMINI_POOL_EXHAUSTED';
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
+const TEMPORARY_CATEGORIES = ['rate_limit', 'quota_exceeded', 'capacity', 'timeout', 'transient', 'unknown'];
+const CATEGORY_PRIORITY = ['quota_exceeded', 'rate_limit', 'capacity', 'timeout', 'transient', 'unknown', 'invalid', 'bad_output'];
+
+function errorSummary(error) {
+  return {
+    status: error?.response?.status || null,
+    message: String(error?.response?.data?.error?.message || error?.message || 'Unknown error').slice(0, 300),
+  };
+}
+
+function newRequestContext(modelList, options, requestId) {
+  return {
+    requestId,
+    models: modelList,
+    legacy: Boolean(options.legacy),
+    attempts: 0,
+    attemptedGroups: new Set(),
+    attemptedKeyIds: [],
+    blockedGroups: new Set(), // project unusable for the rest of this request
+    blockedModels: new Set(), // model unusable for the rest of this request (shared capacity)
+    blockedPairs: new Set(), // project+model unusable for the rest of this request
+    failures: {},
+    badOutputs: 0,
+    lastFailedEntry: null,
+  };
+}
+
+/**
+ * Classifies one failed attempt, updates the affected project/model state and
+ * the per-request exclusions. Returns an Error to rethrow when the failure
+ * cannot be fixed by trying another project, otherwise null (keep failing over).
+ */
+function handleAttemptFailure(entry, model, error, ctx, startedAt) {
+  releaseInFlight(entry);
   const info = classify(error);
-  const apiMessage = error.response?.data?.error?.message || error.message || 'Unknown error';
+  const summary = errorSummary(error);
+  const group = groupOf(entry);
+  const pairKey = `${group}|${mk(model)}`;
+  ctx.failures[info.classification] = (ctx.failures[info.classification] || 0) + 1;
+  ctx.lastFailedEntry = entry;
+
   entry.lastFailureAt = new Date();
   entry.totalFailures += 1;
-  entry.lastErrorCode = String(error.response?.status || error.code || info.classification);
-  entry.lastErrorMessage = apiMessage.slice(0, 500);
-
+  entry.lastErrorCode = String(error?.response?.status || error?.code || info.classification);
+  entry.lastErrorMessage = summary.message.slice(0, 500);
   const update = {
     lastFailureAt: entry.lastFailureAt,
     lastErrorCode: entry.lastErrorCode,
@@ -495,87 +730,206 @@ function markFailure(entry, error, options = {}) {
     $inc: { totalFailures: 1, failureCount: 1 },
   };
 
-  if (info.classification === 'invalid') {
-    entry.status = 'invalid';
-    entry.cooldownUntil = null;
-    update.status = 'invalid';
-    update.cooldownUntil = null;
-    console.error('Gemini pool: key marked invalid', { keyId: entry.id, reason: entry.lastErrorMessage });
-  } else if (info.classification === 'permanent') {
-    // Bad request / unsupported model. Do not punish the credential.
-    entry.status = 'healthy';
-    update.status = 'healthy';
-  } else {
-    // For model-sequence requests, a model failure is NOT a key failure.
-    // The credential becomes unavailable only after every configured model
-    // has failed for that same key. executeModels() applies the key-level
-    // cooldown once the complete model sequence is exhausted.
-    if (!options.model) {
+  // Learn which Google Cloud project this credential belongs to so keys of
+  // the same project share cooldown state from now on.
+  if (info.projectKey && entry.projectKey !== info.projectKey) {
+    entry.projectKey = info.projectKey;
+    update.projectId = info.projectKey;
+  }
+
+  const base = {
+    project: keyLogName(entry),
+    keyId: entry.id,
+    model,
+    status: summary.status,
+    reason: info.classification,
+    latencyMs: Date.now() - startedAt,
+  };
+  let rethrow = null;
+
+  switch (info.classification) {
+    case 'permanent':
+      // Bad request / unsupported model: another project cannot fix it.
+      entry.status = 'healthy';
+      update.status = 'healthy';
+      plog('warn', 'REQUEST REJECTED (not retried)', { ...base, message: summary.message });
+      rethrow = error;
+      break;
+
+    case 'invalid':
+      entry.status = 'invalid';
+      entry.invalidAt = Date.now();
+      entry.cooldownUntil = null;
+      update.status = 'invalid';
+      update.cooldownUntil = null;
+      ctx.blockedGroups.add(group);
+      plog('error', 'CREDENTIAL INVALID - excluded until re-enabled', { ...base, message: summary.message });
+      break;
+
+    case 'bad_output':
+      // The provider answered but the output was unusable. That is not a
+      // project fault: no cooldown, just try another project/model.
+      entry.status = 'healthy';
+      update.status = 'healthy';
+      ctx.blockedPairs.add(pairKey);
+      ctx.badOutputs += 1;
+      plog('warn', 'UNUSABLE MODEL OUTPUT - trying another project', base);
+      if (ctx.badOutputs >= getMaxBadOutputAttempts()) rethrow = error;
+      break;
+
+    case 'capacity': {
+      // Shared model capacity: the project is fine, the MODEL is not.
+      entry.status = 'healthy';
+      update.status = 'healthy';
+      if (ctx.legacy) {
+        ctx.blockedPairs.add(pairKey);
+      } else {
+        ctx.blockedModels.add(mk(model));
+        const cooldownMs = cooldownMsFor(info, 1);
+        markGlobalModelCapacity(model, cooldownMs);
+        plog('warn', 'MODEL CAPACITY - avoiding model, not the project', {
+          ...base,
+          modelCooldownMs: cooldownMs,
+          nextModel: ctx.models.find((m) => !ctx.blockedModels.has(mk(m))) || null,
+        });
+      }
+      break;
+    }
+
+    case 'rate_limit':
+    case 'quota_exceeded':
+    case 'timeout':
+    case 'transient':
+    default: {
+      const scope = ctx.legacy ? 'project' : info.scope === 'project' ? 'project' : 'model';
+      const streakKey = scope === 'project' ? 'project' : mk(model);
+      entry.failureStreaks = entry.failureStreaks || {};
+      entry.failureStreaks[streakKey] = (entry.failureStreaks[streakKey] || 0) + 1;
       entry.consecutiveFailures += 1;
 
-      const exactQuotaResetAt = Number(info.quotaResetAt) || 0;
-      if (exactQuotaResetAt > Date.now()) {
-        entry.cooldownUntil = new Date(exactQuotaResetAt);
-      } else {
-        const cooldownMs = Math.max(
-          1_000,
-          cooldownForFailure(entry.consecutiveFailures, info.classification, info.retryAfterMs)
-        );
-        entry.cooldownUntil = new Date(Date.now() + cooldownMs);
-      }
+      const cooldownMs = cooldownMsFor(info, entry.failureStreaks[streakKey]);
+      const untilMs = Date.now() + cooldownMs;
+      applyCooldown(entry, { model, scope, untilMs });
+      if (scope === 'project') ctx.blockedGroups.add(group);
+      else ctx.blockedPairs.add(pairKey);
 
-      entry.status = info.classification === 'rate_limit' || info.classification === 'quota_exceeded'
-        ? 'rate_limited'
-        : 'degraded';
+      const isQuota = info.classification === 'rate_limit' || info.classification === 'quota_exceeded';
+      entry.status = isQuota ? 'rate_limited' : 'degraded';
       update.status = entry.status;
-      update.cooldownUntil = entry.cooldownUntil;
       update.consecutiveFailures = entry.consecutiveFailures;
-    } else {
-      // Keep the key itself available while the caller walks the models.
-      // Do not create a per-model cooldown. Model fallback must remain:
-      //   key -> model1 -> model2 -> model3 -> model4 -> next key
-      entry.cooldownUntil = null;
-      entry.status = info.classification === 'rate_limit' || info.classification === 'quota_exceeded'
-        ? 'rate_limited'
-        : 'degraded';
-      update.status = entry.status;
-      update.cooldownUntil = null;
+
+      plog(isQuota ? 'warn' : 'warn', isQuota ? 'PROJECT RATE LIMITED' : 'PROJECT ATTEMPT FAILED', {
+        ...base,
+        scope,
+        quotaId: info.quotaId || null,
+        providerRetryAfterMs: info.retryAfterMs || 0,
+        daily: info.classification === 'quota_exceeded',
+      });
+      plog('info', 'PROJECT TEMPORARILY EXCLUDED', {
+        project: base.project,
+        model,
+        scope,
+        excludedForMs: cooldownMs,
+        until: cooldownMs > 0 ? new Date(untilMs).toISOString() : null,
+      });
+      break;
     }
   }
 
   persistAsync(entry.id, update);
-  return info;
+  return rethrow;
 }
 
+function buildExhaustedError(ctx, modelList) {
+  const retryAfterMs = earliestRetryMs(modelList, ctx);
+  const categories = ctx.failures;
+  const present = CATEGORY_PRIORITY.filter((c) => categories[c]);
+  const attemptedProjects = ctx.attemptedGroups.size;
 
-class PoolExhaustedError extends Error {
-  constructor(message, retryAfterMs) {
-    super(message);
-    this.name = 'PoolExhaustedError';
-    this.retryAfterMs = retryAfterMs;
+  const usable = Array.from(pool.values()).some(
+    (e) => e.enabled && e.status !== 'invalid' && e.status !== 'disabled' && !e.duplicateOf
+  );
+  const hasTemporaryFailure = present.some((c) => TEMPORARY_CATEGORIES.includes(c));
+  const temporary = usable && (hasTemporaryFailure || (ctx.attempts === 0 && retryAfterMs !== null));
+  const shouldRetry = temporary && retryAfterMs !== null;
+
+  let classification;
+  let reason;
+  if (!usable) {
+    classification = 'invalid';
+    reason = pool.size === 0 ? 'no_keys' : 'no_usable_credentials';
+  } else if (present.length === 0) {
+    classification = retryAfterMs !== null ? 'cooldown' : 'unavailable';
+    reason = retryAfterMs !== null ? 'all_projects_cooling_down' : 'no_eligible_project';
+  } else if (present.every((c) => c === 'capacity')) {
+    classification = 'capacity';
+    reason = 'model_capacity';
+  } else {
+    classification = present[0];
+    reason = present[0] === 'quota_exceeded' ? 'daily_quota_exhausted'
+      : present[0] === 'rate_limit' ? 'all_projects_rate_limited'
+        : present[0] === 'invalid' ? 'all_credentials_invalid'
+          : 'projects_failed';
   }
+
+  const retryAt = retryAfterMs !== null ? new Date(Date.now() + retryAfterMs).toISOString() : null;
+  const seconds = retryAfterMs !== null ? Math.max(1, Math.ceil(retryAfterMs / 1000)) : null;
+
+  let message;
+  if (!usable) {
+    message = pool.size === 0
+      ? 'No Gemini API keys are configured.'
+      : 'No enabled, valid Gemini credentials are available (all are invalid, disabled or duplicates).';
+  } else if (ctx.attempts === 0) {
+    message = retryAfterMs !== null
+      ? `All Gemini keys are temporarily unavailable; shortest cooldown is ${seconds}s.`
+      : 'No enabled, healthy Gemini API keys are available.';
+  } else {
+    message = `Gemini pool exhausted after trying ${attemptedProjects} project(s) (${present.join(', ') || 'no failures'})` +
+      (seconds !== null ? `; earliest retry in ${seconds}s.` : '.');
+  }
+
+  const result = {
+    reason,
+    classification,
+    temporary,
+    shouldRetry,
+    retryAfterMs,
+    retryAt,
+    attemptedProjects,
+    failureCategories: { ...categories },
+    requestId: ctx.requestId,
+  };
+
+  const error = new PoolExhaustedError(message, retryAfterMs);
+  Object.assign(error, result, { attemptedKeyIds: ctx.attemptedKeyIds.slice(), result });
+  plog('warn', 'POOL EXHAUSTED', { ...result, attempts: ctx.attempts });
+  return error;
 }
 
 /**
- * Runs a model sequence on the SAME credential before moving to the next
- * credential. This is the important traversal order for website generation:
+ * Runs `requestFn(rawKey, model)` with project selection and failover.
  *
- *   key A -> model 1 -> model 2 -> model 3 -> model 4
- *          -> key B -> model 1 -> model 2 -> ...
+ * One call = one logical AI operation. On a project-specific rate limit the
+ * affected project/model is marked unavailable and the SAME call immediately
+ * continues with the next eligible project (same model first), so the caller
+ * never sees the failure and nobody has to click Generate again. A model
+ * is abandoned for the request only when it reports shared capacity trouble
+ * or no eligible project remains for it; then the next model is used.
+ * Each pair is tried at most once per call, bounded by the number of
+ * projects, GEMINI_POOL_MAX_KEY_ATTEMPTS and GEMINI_POOL_REQUEST_DEADLINE_MS.
  *
- * A retryable provider failure (429/503/timeout/transient) moves to the next
- * model while keeping the current key. Only after every model has failed for
- * that key do we move to another credential.
+ * `requestFn` must resolve with the provider result or reject with the
+ * provider error. Throws PoolExhaustedError (structured, see
+ * buildExhaustedError) when nothing could complete the operation.
  *
- * `requestFn(rawKey, model)` must resolve with the provider result or reject
- * with the provider error.
- *
- * @returns {Promise<{result: any, keyId: string, model: string}>}
+ * @returns {Promise<{result: any, keyId: string, model: string, attempts: number, projectsTried: number}>}
  */
-async function executeModels(models, requestFn) {
+async function executeModels(models, requestFn, options = {}) {
   await loadPool();
+  await syncSharedState();
 
-  const modelList = Array.isArray(models) ? models.filter(Boolean) : [];
+  const modelList = Array.isArray(models) ? models.filter(Boolean).filter((m, i, a) => a.indexOf(m) === i) : [];
   if (modelList.length === 0) {
     const err = new Error('No Gemini models are configured.');
     err.code = 'GEMINI_NO_MODELS';
@@ -590,331 +944,89 @@ async function executeModels(models, requestFn) {
     throw err;
   }
 
-  const excludeIds = [];
-  const maxKeyAttempts = Math.max(1, Math.min(pool.size, getMaxKeyAttempts()));
-  let lastError = null;
-  let lastInfo = null;
+  const requestId = options.requestId || getJobContext().jobId || crypto.randomBytes(4).toString('hex');
+  const ctx = newRequestContext(modelList, options, requestId);
+  const distinctProjects = new Set(Array.from(pool.values()).filter((e) => !e.duplicateOf).map(groupOf)).size;
+  const maxProjects = Math.max(1, Math.min(distinctProjects || 1, getMaxKeyAttempts()));
+  const maxAttempts = maxProjects * modelList.length;
+  const deadlineMs = getRequestDeadlineMs();
+  const deadlineAt = deadlineMs > 0 ? Date.now() + deadlineMs : 0;
 
-  const globalRetryAfterAtStart = shortestGlobalModelCooldown(modelList);
-  if (globalRetryAfterAtStart && globalRetryAfterAtStart > 0) {
-    const anyModelAvailable = modelList.some((model) => globalModelCooldownRemaining(model) <= 0);
-    if (!anyModelAvailable) {
-      const exhaustedByCapacity = new PoolExhaustedError(
-        `Gemini models are temporarily at capacity; retrying after ${Math.ceil(globalRetryAfterAtStart / 1000)}s.`,
-        globalRetryAfterAtStart
-      );
-      exhaustedByCapacity.code = 'GEMINI_POOL_EXHAUSTED';
-      exhaustedByCapacity.classification = 'capacity';
-      exhaustedByCapacity.retryAfterMs = globalRetryAfterAtStart;
-      exhaustedByCapacity.attemptedKeyIds = [];
-      throw exhaustedByCapacity;
-    }
-  }
-
-  for (let keyAttempt = 0; keyAttempt < maxKeyAttempts; keyAttempt += 1) {
-    const entry = selectKey(excludeIds);
-    if (!entry) {
-      const retryAfterMs = shortestCooldownRemaining(excludeIds, modelList);
-      throw new PoolExhaustedError(
-        retryAfterMs
-          ? `All Gemini keys are temporarily unavailable; shortest cooldown is ${Math.ceil(retryAfterMs / 1000)}s.`
-          : 'No enabled, healthy Gemini API keys are available.',
-        retryAfterMs
-      );
+  while (ctx.attempts < maxAttempts) {
+    if (deadlineAt && Date.now() > deadlineAt) {
+      plog('warn', 'FAILOVER DEADLINE REACHED', { requestId, attempts: ctx.attempts });
+      break;
     }
 
-    entry._currentSequenceFailures = [];
+    // Other workers may have exhausted a project since our last attempt.
+    await syncSharedState();
 
-    console.log('Gemini pool key sequence start', {
+    const pick = pickPair(modelList, ctx, ctx.attemptedGroups.size < maxProjects);
+    if (!pick.entry) break;
+    const { entry, model } = pick;
+
+    if (ctx.lastFailedEntry && ctx.lastFailedEntry.id !== entry.id) {
+      plog('info', 'SWITCHING PROJECT', {
+        requestId,
+        from: keyLogName(ctx.lastFailedEntry),
+        to: keyLogName(entry),
+        model,
+        attempt: ctx.attempts + 1,
+      });
+    }
+
+    ctx.attempts += 1;
+    ctx.attemptedGroups.add(groupOf(entry));
+    if (!ctx.attemptedKeyIds.includes(entry.id)) ctx.attemptedKeyIds.push(entry.id);
+    markAcquired(entry);
+    const startedAt = Date.now();
+    plog('info', 'PROJECT SELECTED', {
+      requestId,
+      project: keyLogName(entry),
       keyId: entry.id,
-      keyAttempt: keyAttempt + 1,
-      models: modelList,
+      model,
+      attempt: ctx.attempts,
+      projectsTried: ctx.attemptedGroups.size,
     });
 
-    for (let modelAttempt = 0; modelAttempt < modelList.length; modelAttempt += 1) {
-      const model = modelList[modelAttempt];
-      const globalCapacityCooldownMs = globalModelCooldownRemaining(model);
-      if (globalCapacityCooldownMs > 0) {
-        console.log('[Gemini Pool] SKIP GLOBAL MODEL CAPACITY COOLDOWN', {
-          model,
-          remainingMs: globalCapacityCooldownMs,
-          remaining: `${Math.ceil(globalCapacityCooldownMs / 1000)}s`,
-        });
-        continue;
-      }
-
-      const modelCooldownMs = modelCooldownRemaining(entry, model);
-      if (modelCooldownMs > 0) {
-        console.log('[Gemini Pool] SKIP COOLDOWN', {
-          keyId: entry.id,
-          model,
-          remainingMs: modelCooldownMs,
-          remaining: `${Math.ceil(modelCooldownMs / 1000)}s`,
-        });
-        continue;
-      }
-      markAcquired(entry);
-      const startedAt = Date.now();
-
-      logModelTry(entry, model, {
-        keyAttempt: keyAttempt + 1,
-        modelAttempt: modelAttempt + 1,
-        totalKeys: maxKeyAttempts,
-        totalModels: modelList.length,
-      });
-
-      try {
-        const result = await requestFn(entry.rawKey, model);
-        // Count tokens for every successful provider response at the pool
-        // boundary. This covers all callers, including the agent service,
-        // and ensures malformed generated JSON is still accounted for.
-        recordTokenUsageFromResult(entry, result, model);
-        markSuccess(entry, model);
-        clearGlobalModelCapacity(model);
-        delete entry._currentSequenceFailures;
-        logModelResult(entry, model, 'SUCCESS', {
-          keyAttempt: keyAttempt + 1,
-          modelAttempt: modelAttempt + 1,
-          latencyMs: Date.now() - startedAt,
-        });
-        return { result, keyId: entry.id, model };
-      } catch (error) {
-        const info = markFailure(entry, error, { model, deferTemporaryCooldown: modelAttempt < modelList.length - 1 });
-        entry._currentSequenceFailures.push(info);
-        if (info.classification === 'capacity') {
-          markGlobalModelCapacity(model);
-        }
-        lastError = error;
-        lastInfo = info;
-
-        logModelResult(entry, model, 'FAILED', {
-          keyAttempt: keyAttempt + 1,
-          modelAttempt: modelAttempt + 1,
-          reason: info.classification,
-          status: error?.response?.status || null,
-          latencyMs: Date.now() - startedAt,
-        });
-
-        if (info.classification === 'timeout') {
-          console.warn('[Gemini Pool] TIMEOUT -> falling back immediately', {
-            keyId: entry.id,
-            model,
-            timeoutMs: Date.now() - startedAt,
-            nextModel: modelList[modelAttempt + 1] || null,
-          });
-        }
-
-        if (!info.failoverKey) throw error;
-
-        // Same key, next model first. Do not immediately cool a credential
-        // while we are still walking the model list. A 429 may be model- or
-        // dimension-specific, and the caller explicitly wants model fallback
-        // before credential fallback.
-        if (modelAttempt < modelList.length - 1) {
-          console.log('[Gemini Pool] NEXT MODEL ON SAME KEY', {
-            keyId: entry.id,
-            failedModel: model,
-            reason: info.classification,
-            nextModel: modelList[modelAttempt + 1],
-          });
-          continue;
-        }
-
-        // Every configured model failed on this credential. Do not punish a
-        // credential when the entire sequence failed only because the provider
-        // reported model capacity. The global model cooldown already prevents
-        // the same overloaded models from being retried across other keys.
-        const keyFailureStreak = Math.max(1, entry.consecutiveFailures + 1);
-        const sequenceInfos = Array.isArray(entry._currentSequenceFailures)
-          ? entry._currentSequenceFailures
-          : [];
-        const allCapacityFailures = sequenceInfos.length === modelList.length &&
-          sequenceInfos.every((failureInfo) => failureInfo?.classification === 'capacity');
-
-        if (allCapacityFailures) {
-          entry.status = 'healthy';
-          entry.cooldownUntil = null;
-          entry.consecutiveFailures = Math.max(0, entry.consecutiveFailures);
-          persistAsync(entry.id, { status: 'healthy', cooldownUntil: null });
-          excludeIds.push(entry.id);
-          delete entry._currentSequenceFailures;
-          console.warn('[Gemini Pool] MODEL CAPACITY ONLY - KEY REMAINS HEALTHY', {
-            keyId: entry.id,
-            failedModels: modelList,
-          });
-          continue;
-        }
-        const resetTimes = sequenceInfos
-          .map((failureInfo) => Number(failureInfo?.quotaResetAt) || 0)
-          .filter((resetAt) => resetAt > Date.now());
-        const exactQuotaResetAt = resetTimes.length ? Math.max(...resetTimes) : 0;
-
-        let keyCooldownUntil = exactQuotaResetAt;
-        if (!keyCooldownUntil) {
-          const suggestedCooldowns = sequenceInfos.map((failureInfo) =>
-            Math.max(
-              1_000,
-              cooldownForFailure(
-                keyFailureStreak,
-                failureInfo?.classification || 'unknown',
-                Number(failureInfo?.retryAfterMs) || 0
-              )
-            )
-          );
-          const fallbackCooldown = Math.max(
-            1_000,
-            cooldownForFailure(
-              keyFailureStreak,
-              info.classification,
-              Number(info.retryAfterMs) || 0
-            )
-          );
-          const cooldownMs = Math.max(fallbackCooldown, ...suggestedCooldowns, 0);
-          keyCooldownUntil = Date.now() + cooldownMs;
-        }
-
-        entry.consecutiveFailures = keyFailureStreak;
-        entry.cooldownUntil = new Date(keyCooldownUntil);
-        entry.status = info.classification === 'rate_limit' || info.classification === 'quota_exceeded'
-          ? 'rate_limited'
-          : 'degraded';
-        // No per-model cooldown survives a complete key failure. The key is
-        // cooled as one unit and all of its models become eligible together.
-        entry.modelCooldowns = {};
-        persistAsync(entry.id, {
-          status: entry.status,
-          cooldownUntil: entry.cooldownUntil,
-          consecutiveFailures: entry.consecutiveFailures,
-          modelCooldowns: {},
-        });
-
-        console.warn('[Gemini Pool] KEY COOLDOWN - ALL MODELS FAILED', {
-          keyId: entry.id,
-          failedModels: modelList,
-          cooldownUntil: entry.cooldownUntil.toISOString(),
-          remainingMs: Math.max(0, keyCooldownUntil - Date.now()),
-          quotaReset: Boolean(exactQuotaResetAt),
-        });
-
-        // This key is now excluded at the credential level for the remainder
-        // of the current execution as well as future requests until cooldown.
-        excludeIds.push(entry.id);
-        const nextEntry = selectKey(excludeIds);
-        delete entry._currentSequenceFailures;
-        console.log('[Gemini Pool] NEXT KEY', {
-          failedKeyId: entry.id,
-          reason: info.classification,
-          nextKeyId: nextEntry?.id || null,
-        });
-      }
+    let result;
+    try {
+      result = await requestFn(entry.rawKey, model);
+    } catch (error) {
+      const rethrow = handleAttemptFailure(entry, model, error, ctx, startedAt);
+      if (rethrow) throw rethrow;
+      continue;
     }
+
+    // Count tokens for every successful provider response at the pool
+    // boundary (even if the caller later rejects the content).
+    recordTokenUsageFromResult(entry, result, model);
+    markSuccess(entry, model);
+    clearGlobalModelCapacity(model);
+    plog('info', ctx.attempts > 1 ? 'FALLBACK PROJECT SUCCEEDED' : 'REQUEST SUCCEEDED', {
+      requestId,
+      project: keyLogName(entry),
+      keyId: entry.id,
+      model,
+      attempt: ctx.attempts,
+      projectsTried: ctx.attemptedGroups.size,
+      latencyMs: Date.now() - startedAt,
+    });
+    return { result, keyId: entry.id, model, attempts: ctx.attempts, projectsTried: ctx.attemptedGroups.size };
   }
 
-  if (lastInfo?.classification === 'invalid') throw lastError;
-
-  const globalRetryAfterMs = shortestGlobalModelCooldown(modelList);
-  if (!lastInfo && globalRetryAfterMs) {
-    const exhaustedByCapacity = new PoolExhaustedError(
-      `Gemini models are temporarily at capacity; retrying after ${Math.ceil(globalRetryAfterMs / 1000)}s.`,
-      globalRetryAfterMs
-    );
-    exhaustedByCapacity.code = 'GEMINI_POOL_EXHAUSTED';
-    exhaustedByCapacity.classification = 'capacity';
-    exhaustedByCapacity.retryAfterMs = globalRetryAfterMs;
-    exhaustedByCapacity.attemptedKeyIds = [];
-    throw exhaustedByCapacity;
-  }
-
-  const exhausted = new PoolExhaustedError(
-    lastInfo?.quotaResetAt && lastInfo.quotaResetAt > Date.now()
-      ? `Gemini pool exhausted; quota refreshes at ${new Date(lastInfo.quotaResetAt).toISOString()}.`
-      : lastInfo?.retryAfterMs
-        ? `Gemini pool exhausted after trying ${excludeIds.length} credentials across ${modelList.length} models each; retry after ${Math.ceil(lastInfo.retryAfterMs / 1000)}s.`
-        : `Gemini pool exhausted after trying ${excludeIds.length} credentials across ${modelList.length} models each.`,
-    lastInfo?.quotaResetAt && lastInfo.quotaResetAt > Date.now()
-      ? lastInfo.quotaResetAt - Date.now()
-      : (lastInfo?.retryAfterMs || null)
-  );
-  exhausted.code = 'GEMINI_POOL_EXHAUSTED';
-  exhausted.classification = lastInfo?.classification || 'unknown';
-  exhausted.attemptedKeyIds = excludeIds.slice();
-  exhausted.lastError = lastError;
-  throw exhausted;
+  throw buildExhaustedError(ctx, modelList);
 }
 
 /**
- * Runs `requestFn(rawKey)` for a given model, automatically trying another
- * key on any retryable failure. Bounds the number of distinct keys tried
- * so a fully-degraded pool fails fast instead of looping forever.
+ * Model-less variant kept for existing callers/tests: every rate limit is
+ * treated as project-wide because there is no model dimension.
  *
  * @returns {Promise<{result: any, keyId: string}>}
  */
-async function execute(requestFn) {
-  await loadPool();
-
-  if (pool.size === 0) {
-    const err = new Error('No Gemini API keys are configured.');
-    err.userMessage =
-      'AI Studio is not configured yet. Add at least one Gemini API key from the admin panel (or set GEMINI_API_KEY).';
-    err.statusCode = 500;
-    throw err;
-  }
-
-  const excludeIds = [];
-  const maxKeyAttempts = Math.max(1, Math.min(pool.size, getMaxKeyAttempts()));
-  let lastError = null;
-  let lastInfo = null;
-
-  for (let attempt = 0; attempt < maxKeyAttempts; attempt += 1) {
-    const entry = selectKey(excludeIds);
-    if (!entry) {
-      const retryAfterMs = shortestCooldownRemaining(excludeIds);
-      throw new PoolExhaustedError(
-        retryAfterMs
-          ? `All Gemini keys are temporarily unavailable; shortest cooldown is ${Math.ceil(retryAfterMs / 1000)}s.`
-          : 'No enabled, healthy Gemini API keys are available.',
-        retryAfterMs
-      );
-    }
-
-    markAcquired(entry);
-    const startedAt = Date.now();
-    try {
-      const result = await requestFn(entry.rawKey);
-      recordTokenUsageFromResult(entry, result, undefined);
-      markSuccess(entry);
-      console.log('Gemini pool request', { keyId: entry.id, attempt: attempt + 1, result: 'success', latencyMs: Date.now() - startedAt });
-      return { result, keyId: entry.id };
-    } catch (error) {
-      const info = markFailure(entry, error);
-      lastError = error;
-      lastInfo = info;
-      console.error('Gemini pool request', { keyId: entry.id, attempt: attempt + 1, result: 'failure', reason: info.classification, latencyMs: Date.now() - startedAt });
-
-      if (!info.failoverKey) throw error; // permanent/bad-request — failing over won't help
-
-      excludeIds.push(entry.id);
-      const nextEntry = selectKey(excludeIds);
-      console.warn('Gemini pool failover', {
-        failedKeyId: entry.id,
-        reason: info.classification,
-        nextKeyId: nextEntry?.id || null,
-      });
-    }
-  }
-
-  if (lastInfo?.classification === 'invalid') throw lastError;
-  const exhausted = new PoolExhaustedError(
-    lastInfo?.retryAfterMs
-      ? `Gemini pool exhausted after trying ${excludeIds.length} credentials; retry after ${Math.ceil(lastInfo.retryAfterMs / 1000)}s.`
-      : `Gemini pool exhausted after trying ${excludeIds.length} credentials.`,
-    lastInfo?.retryAfterMs || null
-  );
-  exhausted.code = 'GEMINI_POOL_EXHAUSTED';
-  exhausted.classification = lastInfo?.classification || 'unknown';
-  exhausted.attemptedKeyIds = excludeIds.slice();
-  exhausted.lastError = lastError;
-  throw exhausted;
+async function execute(requestFn, options = {}) {
+  const out = await executeModels(['*'], (rawKey) => requestFn(rawKey), { ...options, legacy: true });
+  return { result: out.result, keyId: out.keyId };
 }
 
 /** Lightweight single-key test call (used by the admin "Test" button). */
@@ -942,9 +1054,14 @@ function modelListForSnapshot() {
 
 function getSnapshot() {
   const now = Date.now();
+  const snapshotModels = modelListForSnapshot();
   const keys = Array.from(pool.values()).map((e) => {
-    // Auto-reset daily tokens for the snapshot if it's a new day
     maybeResetDailyTokens(e);
+    const modelCooldowns = {};
+    for (const model of snapshotModels) {
+      const until = ts(e.modelCooldowns?.[mk(model)]);
+      if (until > now) modelCooldowns[model] = new Date(until).toISOString();
+    }
     return {
       id: e.id,
       label: e.label,
@@ -952,8 +1069,10 @@ function getSnapshot() {
       enabled: e.enabled,
       priority: e.priority,
       status: e.status,
+      projectId: e.projectKey || null,
+      duplicateOf: e.duplicateOf || null,
       consecutiveFailures: e.consecutiveFailures,
-      cooldownRemainingMs: e.cooldownUntil ? Math.max(0, new Date(e.cooldownUntil).getTime() - now) : 0,
+      cooldownRemainingMs: e.cooldownUntil ? Math.max(0, ts(e.cooldownUntil) - now) : 0,
       cooldownUntil: e.cooldownUntil,
       inFlight: e.inFlight,
       totalRequests: e.totalRequests,
@@ -962,33 +1081,22 @@ function getSnapshot() {
       lastUsedAt: e.lastUsedAt,
       lastErrorCode: e.lastErrorCode,
       lastErrorMessage: e.lastErrorMessage,
-      // Token usage
       totalTokensUsed: e.totalTokensUsed || 0,
       promptTokensUsed: e.promptTokensUsed || 0,
       candidateTokensUsed: e.candidateTokensUsed || 0,
       dailyTokensUsed: e.dailyTokensUsed || 0,
       lastTokenResetAt: e.lastTokenResetAt,
       dailyTokenLimit: DAILY_TOKEN_LIMIT,
-      modelCooldowns: Object.fromEntries(
-        Object.entries(e.modelCooldowns || {})
-          .filter(([, until]) => new Date(until).getTime() > now)
-          .map(([model, until]) => [model, new Date(until).toISOString()])
-      ),
-      activeModelCooldown: getNextModelCooldown(e, modelListForSnapshot()),
+      modelCooldowns,
+      activeModelCooldown: getNextModelCooldown(e, snapshotModels),
       isOutOfTokens: e.status === 'rate_limited' || (DAILY_TOKEN_LIMIT > 0 && (e.dailyTokensUsed || 0) >= DAILY_TOKEN_LIMIT),
     };
   });
 
-  const snapshotModels = modelListForSnapshot();
   const activeRequests = keys.reduce((sum, k) => sum + k.inFlight, 0);
-  const availableNow = keys.some((k) => {
-    if (!k.enabled || k.status === 'invalid' || k.status === 'disabled') return false;
-    if (k.cooldownRemainingMs > 0) return false;
-    return snapshotModels.some((model) => {
-      if (globalModelCooldownRemaining(model) > 0) return false;
-      const until = k.modelCooldowns?.[model];
-      return !until || new Date(until).getTime() <= now;
-    });
+  const availableNow = Array.from(pool.values()).some((entry) => {
+    const members = groupMembers(entry);
+    return snapshotModels.some((model) => evaluatePair(entry, model, null, now, members).ok);
   });
   const totalDailyTokens = keys.reduce((sum, k) => sum + k.dailyTokensUsed, 0);
   const outOfTokensKeys = keys.filter((k) => k.isOutOfTokens).length;
@@ -1010,6 +1118,7 @@ function getSnapshot() {
     rateLimitedKeys: keys.filter((k) => k.status === 'rate_limited').length,
     invalidKeys: keys.filter((k) => k.status === 'invalid').length,
     disabledKeys: keys.filter((k) => !k.enabled).length,
+    duplicateKeys: keys.filter((k) => k.duplicateOf).length,
     outOfTokensKeys,
     activeRequests,
     totalDailyTokens,
@@ -1031,6 +1140,7 @@ module.exports = {
   testSingleKey,
   getSnapshot,
   markTokenUsage,
+  syncSharedState,
   PoolExhaustedError,
   // exported for tests only
   _internal: {
@@ -1038,8 +1148,11 @@ module.exports = {
     globalModelCooldowns,
     bootstrapFromEnv,
     markSuccess,
-    markFailure,
     markAcquired,
     markTokenUsage,
+    markDuplicates,
+    syncSharedState,
+    loadFromDB,
+    modelKey: mk,
   },
 };

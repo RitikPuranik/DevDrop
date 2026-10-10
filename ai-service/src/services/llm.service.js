@@ -1,5 +1,7 @@
 const geminiPool = require('../geminiPool.service');
 const axios = require('axios');
+const { classify, envMs } = require('../geminiFailureClassifier');
+const { getJobContext } = require('../utils/jobContext');
 
 const CONFIGURED_TIMEOUT_MS = Number.parseInt(process.env.GEMINI_TIMEOUT_MS || '45000', 10);
 // Never let a single Gemini model attempt block the whole credential pool for
@@ -12,11 +14,18 @@ const DEFAULT_TIMEOUT_MS = Math.min(
 );
 const MAX_AGENT_RETRIES = Math.max(1, Number.parseInt(process.env.AGENT_MAX_RETRIES || '2', 10) || 2);
 const RETRY_DELAY_MS = Math.max(0, Number.parseInt(process.env.GEMINI_RETRY_DELAY_MS || '500', 10) || 0);
-const RATE_LIMIT_COOLDOWN_MS = Math.max(0, Number.parseInt(process.env.GEMINI_RATE_LIMIT_COOLDOWN_MS || '5000', 10) || 0);
-const RATE_LIMIT_COOLDOWN_MAX_MS = Math.max(
-  RATE_LIMIT_COOLDOWN_MS,
-  Number.parseInt(process.env.GEMINI_RATE_LIMIT_COOLDOWN_MAX_MS || '60000', 10) || 60000
-);
+// Temporary pool exhaustion (every project rate limited / cooling down / model
+// at capacity) is waited out HERE, between complete failover cycles, without
+// consuming the agent-retry budget and without restarting the pipeline:
+//   GEMINI_CAPACITY_WAIT_MAX_MS      total time one call may wait for capacity
+//                                    (default 1800000, 0 = never wait, fail fast)
+//   GEMINI_CAPACITY_MAX_CYCLES       max waits per call (default 50)
+//   GEMINI_CAPACITY_FALLBACK_WAIT_MS first wait when no retry time is known
+//                                    (default 5000, doubles each cycle, jittered)
+// A provider-supplied wait is used as-is; only the fallback is bounded.
+const CAPACITY_WAIT_MAX_MS = envMs('GEMINI_CAPACITY_WAIT_MAX_MS', 1800000);
+const CAPACITY_MAX_CYCLES = envMs('GEMINI_CAPACITY_MAX_CYCLES', 50);
+const CAPACITY_FALLBACK_WAIT_MS = envMs('GEMINI_CAPACITY_FALLBACK_WAIT_MS', 5000);
 const DEFAULT_GEMINI_MODELS = [
   'gemini-3.7-flash',
   'gemini-3.6-flash',
@@ -349,7 +358,8 @@ function safeError(error) {
   const status = error?.response?.status ?? null;
   let category = 'model_error';
 
-  if (error?.code === 'ECONNABORTED') category = 'timeout';
+  if (error?.code === 'GEMINI_POOL_EXHAUSTED') category = error.temporary ? 'capacity' : 'model_error';
+  else if (error?.code === 'ECONNABORTED') category = 'timeout';
   else if (status === 429) category = 'rate_limit';
   else if (status >= 500) category = 'capacity';
   else if (error?.category === 'generated_json') category = 'generated_json';
@@ -361,10 +371,45 @@ function safeError(error) {
   };
 }
 
-function retrySecondsFromMessage(message) {
-  const match = String(message || '').match(/retry in ([\d.]+)s/i);
-  if (!match) return 0;
-  return Math.max(0, Number.parseFloat(match[1]) * 1000);
+// How long to wait before the next full failover cycle. Provider/pool-derived
+// retry times are honored exactly; the fallback is exponential with jitter.
+function capacityWaitMs(poolError, cycle) {
+  const known = Number(poolError?.retryAfterMs);
+  if (Number.isFinite(known) && known >= 0) return Math.ceil(known) + 50; // small margin past the reset
+  const base = CAPACITY_FALLBACK_WAIT_MS * (2 ** cycle);
+  return Math.round(Math.min(base, 60000) * (0.8 + Math.random() * 0.4));
+}
+
+/**
+ * Waits (async, no thread blocked) for Gemini capacity. If the call runs
+ * inside a job, the job reports "Waiting for Gemini capacity" and gives its
+ * worker slot back while it waits, then re-acquires a slot before resuming
+ * exactly where it stopped (completed stages and results are untouched).
+ */
+async function waitForCapacity(waitMs, poolError) {
+  const ctx = getJobContext();
+  const info = {
+    waitMs,
+    retryAfterMs: poolError?.retryAfterMs ?? null,
+    retryAt: poolError?.retryAt || new Date(Date.now() + waitMs).toISOString(),
+    reason: poolError?.reason || 'capacity',
+    attemptedProjects: poolError?.attemptedProjects ?? null,
+    message: 'Waiting for Gemini capacity',
+  };
+  console.warn('[LLM] waiting for Gemini capacity', {
+    jobId: ctx.jobId || null,
+    waitMs,
+    reason: info.reason,
+    attemptedProjects: info.attemptedProjects,
+    retryAt: info.retryAt,
+  });
+  let resume = null;
+  if (typeof ctx.onCapacityWait === 'function') resume = await ctx.onCapacityWait(info);
+  try {
+    await sleep(waitMs);
+  } finally {
+    if (typeof resume === 'function') await resume();
+  }
 }
 
 async function callGemini({ system, input, timeout = DEFAULT_TIMEOUT_MS }) {
@@ -373,22 +418,17 @@ async function callGemini({ system, input, timeout = DEFAULT_TIMEOUT_MS }) {
     Number.isFinite(MAX_GEMINI_TIMEOUT_MS) && MAX_GEMINI_TIMEOUT_MS > 0 ? MAX_GEMINI_TIMEOUT_MS : 60000
   );
   let lastError;
+  let capacityCycles = 0;
+  let capacityWaitedMs = 0;
 
-  for (let attempt = 1; attempt <= MAX_AGENT_RETRIES; attempt += 1) {
+  for (let attempt = 1; attempt <= MAX_AGENT_RETRIES;) {
     const startedAt = Date.now();
 
     try {
-      // IMPORTANT: credential-first traversal lives inside the pool.
-      // For each key/project, executeModels tries the entire model list before
-      // moving to the next credential:
-      //
-      //   key A -> 3.8 -> 3.7 -> 3.6 -> 3.5-lite
-      //   key B -> 3.8 -> 3.7 -> 3.6 -> 3.5-lite
-      //   ...
-      //
-      // Do not wrap this in a separate `for (const model of MODELS)` loop,
-      // because that changes the traversal back to model-first and causes the
-      // exact regression this pool was added to solve.
+      // ALL provider failover (project rate limits, model capacity, invalid
+      // credentials, transient errors) lives in the pool. Do not add another
+      // key/model loop here: executeModels() already switches to the next
+      // eligible project immediately inside this one call.
       const { result, model } = await geminiPool.executeModels(MODELS, async (apiKey, model) => {
         const response = await axios.post(
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
@@ -426,11 +466,7 @@ async function callGemini({ system, input, timeout = DEFAULT_TIMEOUT_MS }) {
         // Otherwise a model can return HTTP 200 with malformed JSON, the pool
         // marks that credential/model as successful, and the LLM layer gets
         // the parse error after the pool has already stopped. Throwing here
-        // makes malformed output participate in the same key-first fallback:
-        //
-        //   key A -> 3.7 -> malformed JSON -> 3.6 -> ... -> key B
-        //
-        // without treating a bad model response as a successful request.
+        // lets the pool try another project/model for the same call.
         const raw = extractText(response);
         try {
           const parsed = extractJson(raw);
@@ -439,11 +475,7 @@ async function callGemini({ system, input, timeout = DEFAULT_TIMEOUT_MS }) {
             parsed,
           };
         } catch (error) {
-          // HTTP 200 does not mean the generated contract is usable. Keep
-          // malformed JSON inside the pool's fallback path so this exact
-          // credential can try the next model before we move to another key.
           console.warn('[Gemini Pool] INVALID GENERATED JSON', {
-            keyId: String(apiKey).length > 8 ? `${String(apiKey).slice(0, 4)}...${String(apiKey).slice(-4)}` : 'redacted',
             model,
             message: error.message,
             position: String(error.message).match(/position (\d+)/i)?.[1] || null,
@@ -458,8 +490,7 @@ async function callGemini({ system, input, timeout = DEFAULT_TIMEOUT_MS }) {
 
       return {
         value: parsed,
-        // The pool selected the model after walking the model list for the
-        // winning credential. Preserve that selected model for callers.
+        // The pool selected the model after walking the model list.
         model,
         durationMs: Date.now() - startedAt,
         attempt,
@@ -468,69 +499,61 @@ async function callGemini({ system, input, timeout = DEFAULT_TIMEOUT_MS }) {
       lastError = error;
       const detail = safeError(error);
 
+      // One concise line per failure (no stack trace for expected 429s).
       console.warn('[LLM] agent request failed', {
+        jobId: getJobContext().jobId || null,
         attempt,
         durationMs: Date.now() - startedAt,
         ...detail,
       });
 
-      if (detail.category === 'generated_json') {
+      if (error?.code === 'GEMINI_POOL_EXHAUSTED') {
+        // Every eligible project was tried (or none was eligible). Wait for
+        // capacity between complete cycles instead of failing the stage; this
+        // does NOT consume the agent retry budget (`attempt` is unchanged).
+        const waitMs = capacityWaitMs(error, capacityCycles);
+        const withinBudget =
+          CAPACITY_WAIT_MAX_MS > 0 &&
+          capacityCycles < CAPACITY_MAX_CYCLES &&
+          capacityWaitedMs + waitMs <= CAPACITY_WAIT_MAX_MS;
+        if (error.shouldRetry && withinBudget) {
+          capacityCycles += 1;
+          capacityWaitedMs += waitMs;
+          await waitForCapacity(waitMs, error);
+          continue;
+        }
         break;
       }
 
-      const poolUnavailable =
-        error?.code === 'GEMINI_POOL_EXHAUSTED' ||
-        (detail.category === 'model_error' &&
-          /all gemini keys are temporarily unavailable|gemini pool exhausted/i.test(detail.message || ''));
-
-      if (poolUnavailable) {
-        const retryAfterMs = Number.isFinite(error?.retryAfterMs) ? error.retryAfterMs : 0;
-        console.warn('[LLM] Gemini pool exhausted for this agent attempt', {
-          attempt,
-          retryAfterMs,
-          attemptedKeys: error?.attemptedKeyIds?.length || null,
-          classification: error?.classification || detail.category,
-        });
-
-        // The pool has already tried every key across every model. Waiting for
-        // the shortest provider cooldown before the next agent attempt is
-        // useful, but NEVER run another model loop here.
-        if (attempt < MAX_AGENT_RETRIES && retryAfterMs > 0) {
-          const waitMs = Math.min(RATE_LIMIT_COOLDOWN_MAX_MS, retryAfterMs);
-          console.warn('[LLM] waiting before retrying the full key-first pool', {
-            waitMs,
-            retryAfterMs,
-            nextAttempt: attempt + 1,
-          });
-          await sleep(waitMs);
-        }
-        continue;
+      // Bad requests and unusable generated output will not improve by
+      // repeating the identical call; surface them straight away.
+      if (detail.category === 'generated_json' || classify(error).classification === 'permanent') {
+        break;
       }
 
-      if (detail.category === 'rate_limit') {
-        const providerRetryMs = retrySecondsFromMessage(detail.message);
-        const waitMs = Math.min(
-          RATE_LIMIT_COOLDOWN_MAX_MS,
-          Math.max(RATE_LIMIT_COOLDOWN_MS, providerRetryMs)
-        );
-        if (attempt < MAX_AGENT_RETRIES && waitMs > 0) {
-          console.warn('[LLM] rate limit cooldown after pool request', {
-            waitMs,
-            retryIndex: attempt,
-          });
-          await sleep(waitMs);
-        }
-      }
-
-      if (attempt < MAX_AGENT_RETRIES && RETRY_DELAY_MS > 0) {
+      attempt += 1;
+      if (attempt <= MAX_AGENT_RETRIES && RETRY_DELAY_MS > 0) {
         await sleep(RETRY_DELAY_MS);
       }
     }
   }
 
-  const finalMessage = lastError?.message || 'All Gemini agent attempts failed';
+  // Prefer the provider's own explanation (e.g. "invalid argument ...") over
+  // axios' generic "Request failed with status code 400".
+  const failure = lastError ? safeError(lastError) : null;
+  const finalMessage = failure?.message || lastError?.message || 'All Gemini agent attempts failed';
   const error = new Error(finalMessage);
-  error.failure = safeError(lastError || error);
+  error.failure = failure || safeError(error);
+  if (lastError?.code === 'GEMINI_POOL_EXHAUSTED') {
+    error.code = 'GEMINI_POOL_EXHAUSTED';
+    error.temporary = Boolean(lastError.temporary);
+    error.retryAfterMs = lastError.retryAfterMs ?? null;
+    error.retryAt = lastError.retryAt || null;
+    error.poolResult = lastError.result || null;
+    error.userMessage = lastError.temporary
+      ? 'Gemini capacity is temporarily exhausted. Please try again shortly.'
+      : undefined;
+  }
   throw error;
 }
 

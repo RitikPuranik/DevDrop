@@ -65,9 +65,9 @@ router.post('/jobs/:id/debug-retry', requireServiceKey, (req, res) => {
 
 router.get('/jobs/:id', requireServiceKey, (req, res) => {
   const job = getJob(req.params.id); if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
-  const progress = { currentStage: job.currentStage, stageStatus: job.stageStatus, generationMeta: job.generationMeta, mode: job.mode, debugAvailable: Boolean(job.debugContext) };
+  const progress = { currentStage: job.currentStage, stageStatus: job.stageStatus, generationMeta: job.generationMeta, mode: job.mode, debugAvailable: Boolean(job.debugContext), statusMessage: job.statusMessage || null, waitingUntil: job.waitingUntil || null };
   if (job.status === 'completed') return res.status(200).json({ success: true, data: { jobId: job.id, status: job.status, ...progress, result: job.result } });
-  if (job.status === 'failed') return res.status(200).json({ success: true, data: { jobId: job.id, status: job.status, ...progress, error: job.error } });
+  if (job.status === 'failed') return res.status(200).json({ success: true, data: { jobId: job.id, status: job.status, ...progress, error: job.error, errorType: job.errorType || 'failed' } });
   return res.status(200).json({ success: true, data: { jobId: job.id, status: job.status, ...progress } });
 });
 

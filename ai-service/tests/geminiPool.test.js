@@ -172,7 +172,6 @@ describe('execute()', () => {
         order.push(rawKey);
         return Promise.resolve('ok');
       });
-      // eslint-disable-next-line no-await-in-loop
       await geminiPool.execute(requestFn);
     }
     // With LRU tie-breaking among equal priority, three requests should
@@ -211,33 +210,26 @@ describe('execute()', () => {
     expect(secondRun[0][1]).toBe('MODEL_B');
   });
 
-  test('executeModels is key-first: one key tries every model before the next key', async () => {
+  test('executeModels switches to the next project immediately (same model first), not through every model on one key', async () => {
     const calls = [];
     const models = ['MODEL_A', 'MODEL_B', 'MODEL_C', 'MODEL_D'];
     const entries = Array.from(_internal.pool.values());
     const firstKey = entries[0].rawKey;
-    const secondKey = entries[1].rawKey;
 
     const requestFn = jest.fn((rawKey, model) => {
       calls.push([rawKey, model]);
       if (rawKey === firstKey) return Promise.reject(httpError(429, 'quota exceeded'));
-      if (rawKey === secondKey && model === 'MODEL_C') return Promise.resolve('ok');
-      return Promise.reject(httpError(429, 'quota exceeded'));
+      return Promise.resolve('ok');
     });
 
     const { result, keyId, model } = await geminiPool.executeModels(models, requestFn);
 
     expect(result).toBe('ok');
     expect(keyId).toBe(entries[1].id);
-    expect(model).toBe('MODEL_C');
+    expect(model).toBe('MODEL_A'); // preferred model preserved by moving to another project
     expect(calls).toEqual([
       [firstKey, 'MODEL_A'],
-      [firstKey, 'MODEL_B'],
-      [firstKey, 'MODEL_C'],
-      [firstKey, 'MODEL_D'],
-      [secondKey, 'MODEL_A'],
-      [secondKey, 'MODEL_B'],
-      [secondKey, 'MODEL_C'],
+      [entries[1].rawKey, 'MODEL_A'],
     ]);
   });
 

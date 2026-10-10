@@ -42,10 +42,15 @@ const geminiApiKeySchema = new mongoose.Schema(
 
     cooldownUntil: { type: Date, default: null },
 
+    // Google Cloud project number learned from provider errors. Keys that
+    // report the same project share quota, so they share cooldown state.
+    projectId: { type: String, default: null },
+
     lastErrorCode: { type: String, default: null },
     lastErrorMessage: { type: String, default: null },
 
     // Per-model cooldown timestamps. The credential remains usable with other models.
+    // Keys are model names with '.' replaced by '_' (Mongoose maps reject dots).
     modelCooldowns: { type: Map, of: Date, default: {} },
 
     // Token usage tracking — written by ai-service after each successful Gemini call
