@@ -1,4 +1,10 @@
+const versionObjects = new Map();
 module.exports = {
+  versionZipPathFor: jest.fn((projectId, v) => `ai-studio/${projectId}/versions/v${v}.zip`),
+  uploadVersionZip: jest.fn(async (projectId, v, buf) => { const p = `ai-studio/${projectId}/versions/v${v}.zip`; versionObjects.set(p, buf); return p; }),
+  downloadVersionZip: jest.fn(async (p) => versionObjects.get(p)),
+  deleteObjects: jest.fn(async (paths) => { paths.forEach((p) => versionObjects.delete(p)); return paths.length; }),
+  __versionObjects: versionObjects,
   storagePrefixFor: jest.fn((projectId) => `ai-studio/${projectId}`),
   zipPathFor: jest.fn((projectId) => `ai-studio/${projectId}/project.zip`),
   assetPathFor: jest.fn((projectId, assetId, fileName) => `ai-studio/${projectId}/assets/${assetId}/${fileName}`),

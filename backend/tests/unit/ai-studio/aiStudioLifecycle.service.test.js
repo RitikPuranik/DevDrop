@@ -1,12 +1,17 @@
 jest.mock('../../../src/modules/ai-studio/aiStudioProject.model', () => require('../../mocks/models/aiStudioProject.model.mock'));
+jest.mock('../../../src/modules/ai-studio/aiStudioProjectVersion.model', () => require('../../mocks/models/aiStudioProjectVersion.model.mock'));
 jest.mock('../../../src/modules/ai-studio/aiStudioAsset.model', () => require('../../mocks/models/aiStudioAsset.model.mock'));
 jest.mock('../../../src/services/ai-studio/aiStudioStorage.service', () => require('../../mocks/services/aiStudioStorage.service.mock'));
 jest.mock('../../../src/services/ai-studio/aiStudioZip.service', () => ({
   buildProjectZip: jest.fn(() => Buffer.from('zip-bytes')),
+  normalizeProjectFiles: jest.fn((f) => f),
+  buildVersionZip: jest.fn((snap) => Buffer.from(JSON.stringify(snap))),
+  readVersionZip: jest.fn((buf) => JSON.parse(buf.toString())),
 }));
 
 const AIStudioProject = require('../../../src/modules/ai-studio/aiStudioProject.model');
 const AIStudioAsset = require('../../../src/modules/ai-studio/aiStudioAsset.model');
+const AIStudioProjectVersion = require('../../../src/modules/ai-studio/aiStudioProjectVersion.model');
 const storage = require('../../../src/services/ai-studio/aiStudioStorage.service');
 
 const { AI_STUDIO_PROJECT_STATUS } = AIStudioProject;
@@ -25,6 +30,8 @@ const minutesAgo = (mins) => new Date(Date.now() - mins * 60 * 1000);
 beforeEach(() => {
   AIStudioProject.__reset();
   AIStudioAsset.__reset();
+  AIStudioProjectVersion.__reset();
+  storage.__versionObjects.clear();
   jest.clearAllMocks();
 });
 
@@ -202,5 +209,73 @@ describe('Multiple tabs', () => {
     await lifecycle.heartbeat({ projectId: project._id, userId: USER_A, sessionId: 'tab-b' });
 
     expect(lifecycle.isAbandoned(await AIStudioProject.findById(project._id))).toBe(false);
+  });
+});
+
+describe('Version history + rollback', () => {
+  const sync = (project, files, extra = {}) =>
+    lifecycle.syncGeneratedFiles({ projectId: project._id, userId: USER_A, files, dependencies: {}, ...extra });
+
+  test('each sync records a numbered snapshot; first is "generate", later ones "edit"', async () => {
+    const project = await lifecycle.openSession({ userId: USER_A, sessionId: 's' });
+    await sync(project, { 'App.jsx': 'v1' });
+    await sync(project, { 'App.jsx': 'v2' });
+    const versions = await lifecycle.listVersions({ projectId: project._id, userId: USER_A });
+    expect(versions.map((v) => [v.version, v.source])).toEqual([[2, 'edit'], [1, 'generate']]);
+  });
+
+  test('restoring an old version rewrites project files and ADDS a restore version (history preserved)', async () => {
+    const project = await lifecycle.openSession({ userId: USER_A, sessionId: 's' });
+    await sync(project, { 'App.jsx': 'v1' });
+    await sync(project, { 'App.jsx': 'v2' });
+    const restored = await lifecycle.restoreVersion({ projectId: project._id, userId: USER_A, version: 1 });
+    expect(JSON.stringify(restored.files)).toContain('v1');
+    expect(JSON.stringify(restored.files)).not.toContain('v2');
+    const versions = await lifecycle.listVersions({ projectId: project._id, userId: USER_A });
+    expect(versions).toHaveLength(3);
+    expect(versions[0]).toMatchObject({ version: 3, source: 'restore', restoredFromVersion: 1 });
+    // the pre-rollback state is still recoverable
+    const v2 = await lifecycle.getVersion({ projectId: project._id, userId: USER_A, version: 2 });
+    expect(JSON.stringify(v2.files)).toContain('v2');
+  });
+
+  test('snapshot zips go to Supabase under the project prefix; Mongo keeps only metadata', async () => {
+    const project = await lifecycle.openSession({ userId: USER_A, sessionId: 's' });
+    await sync(project, { 'App.jsx': 'v1' });
+    expect(storage.uploadVersionZip).toHaveBeenCalledWith(project._id, 1, expect.any(Buffer));
+    const [row] = AIStudioProjectVersion.__all();
+    expect(row.storagePath).toBe(`ai-studio/${project._id}/versions/v1.zip`);
+    expect(row.files).toBeUndefined();
+    expect(storage.__versionObjects.has(row.storagePath)).toBe(true);
+  });
+
+  test('a failed snapshot upload never fails the sync itself', async () => {
+    const project = await lifecycle.openSession({ userId: USER_A, sessionId: 's' });
+    storage.uploadVersionZip.mockRejectedValueOnce(new Error('storage down'));
+    const updated = await sync(project, { 'App.jsx': 'v1' });
+    expect(updated).toBeTruthy();
+    expect(AIStudioProjectVersion.__all()).toHaveLength(0);
+  });
+
+  test('versions beyond the cap are pruned, including their Supabase zips', async () => {
+    const project = await lifecycle.openSession({ userId: USER_A, sessionId: 's' });
+    for (let i = 0; i < 51; i += 1) await sync(project, { 'App.jsx': `v${i}` });
+    expect(storage.deleteObjects).toHaveBeenCalledWith([`ai-studio/${project._id}/versions/v1.zip`]);
+    const versions = await lifecycle.listVersions({ projectId: project._id, userId: USER_A });
+    expect(versions).toHaveLength(50);
+    expect(versions[versions.length - 1].version).toBe(2);
+  });
+
+  test('another user cannot list or restore versions', async () => {
+    const project = await lifecycle.openSession({ userId: USER_A, sessionId: 's' });
+    await sync(project, { 'App.jsx': 'v1' });
+    expect(await lifecycle.listVersions({ projectId: project._id, userId: USER_B })).toBeNull();
+    expect(await lifecycle.restoreVersion({ projectId: project._id, userId: USER_B, version: 1 })).toBeNull();
+  });
+
+  test('restoring a missing version reports notFound without touching files', async () => {
+    const project = await lifecycle.openSession({ userId: USER_A, sessionId: 's' });
+    await sync(project, { 'App.jsx': 'v1' });
+    expect(await lifecycle.restoreVersion({ projectId: project._id, userId: USER_A, version: 99 })).toEqual({ notFound: true });
   });
 });

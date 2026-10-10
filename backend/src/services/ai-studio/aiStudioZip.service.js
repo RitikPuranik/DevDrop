@@ -83,4 +83,22 @@ const buildProjectZip = (files = {}) => {
   return zip.toBuffer();
 };
 
-module.exports = { buildProjectZip, normalizeProjectFiles };
+// A version zip is a normal, openable project zip PLUS an exact snapshot
+// manifest. The manifest makes restore lossless (file values can be strings
+// or { code } objects, which a plain zip of files would flatten).
+const SNAPSHOT_ENTRY = '.devdrop/snapshot.json';
+
+const buildVersionZip = ({ files = {}, dependencies = {}, title = null } = {}) => {
+  const zip = new AdmZip(buildProjectZip(files));
+  zip.addFile(SNAPSHOT_ENTRY, Buffer.from(JSON.stringify({ files, dependencies, title }), 'utf8'));
+  return zip.toBuffer();
+};
+
+const readVersionZip = (buffer) => {
+  const entry = new AdmZip(buffer).getEntry(SNAPSHOT_ENTRY);
+  if (!entry) throw new Error('Version zip is missing its snapshot manifest');
+  const parsed = JSON.parse(entry.getData().toString('utf8'));
+  return { files: parsed.files || {}, dependencies: parsed.dependencies || {}, title: parsed.title || null };
+};
+
+module.exports = { buildProjectZip, normalizeProjectFiles, buildVersionZip, readVersionZip };

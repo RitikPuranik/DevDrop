@@ -1,7 +1,8 @@
+jest.mock('../../../src/modules/ai-studio/aiStudioProjectVersion.model', () => require('../../mocks/models/aiStudioProjectVersion.model.mock'));
 jest.mock('../../../src/modules/ai-studio/aiStudioProject.model', () => require('../../mocks/models/aiStudioProject.model.mock'));
 jest.mock('../../../src/modules/ai-studio/aiStudioAsset.model', () => require('../../mocks/models/aiStudioAsset.model.mock'));
 jest.mock('../../../src/services/ai-studio/aiStudioStorage.service', () => require('../../mocks/services/aiStudioStorage.service.mock'));
-jest.mock('../../../src/services/ai-studio/aiStudioZip.service', () => ({ buildProjectZip: jest.fn(() => Buffer.from('zip')) }));
+jest.mock('../../../src/services/ai-studio/aiStudioZip.service', () => ({ buildProjectZip: jest.fn(() => Buffer.from('zip')), normalizeProjectFiles: jest.fn((f) => f), buildVersionZip: jest.fn((snap) => Buffer.from(JSON.stringify(snap))), readVersionZip: jest.fn((buf) => JSON.parse(buf.toString())) }));
 
 const AdmZip = require('adm-zip');
 const AIStudioProject = require('../../../src/modules/ai-studio/aiStudioProject.model');

@@ -63,19 +63,62 @@ exports.recordActivity = async (req, res) => {
 // project (and its zip in Supabase) reflect the latest generated files.
 exports.syncFiles = async (req, res) => {
   try {
-    const { files, dependencies, title } = req.body;
+    const { files, dependencies, title, source, label } = req.body;
     const project = await lifecycle.syncGeneratedFiles({
       projectId: req.params.projectId,
       userId: req.userId,
       files,
       dependencies,
       title,
+      source: ['generate', 'edit'].includes(source) ? source : 'sync',
+      label: typeof label === 'string' ? label : '',
     });
     if (!project) return res.status(404).json({ success: false, message: 'Project not found' });
     res.status(200).json({ success: true, data: serializeProject(project) });
   } catch (error) {
     console.error('AI Studio syncFiles error:', error.message);
     res.status(500).json({ success: false, message: 'Failed to save project state' });
+  }
+};
+
+// GET /api/ai-studio/:projectId/versions — newest first, without file contents
+exports.listVersions = async (req, res) => {
+  try {
+    const versions = await lifecycle.listVersions({ projectId: req.params.projectId, userId: req.userId });
+    if (!versions) return res.status(404).json({ success: false, message: 'Project not found' });
+    res.status(200).json({ success: true, data: { versions } });
+  } catch (error) {
+    console.error('AI Studio listVersions error:', error.message);
+    res.status(500).json({ success: false, message: 'Failed to load version history' });
+  }
+};
+
+// GET /api/ai-studio/:projectId/versions/:version — full snapshot
+exports.getVersion = async (req, res) => {
+  try {
+    const version = Number.parseInt(req.params.version, 10);
+    if (!Number.isInteger(version) || version < 1) return res.status(400).json({ success: false, message: 'Invalid version' });
+    const snapshot = await lifecycle.getVersion({ projectId: req.params.projectId, userId: req.userId, version });
+    if (!snapshot) return res.status(404).json({ success: false, message: 'Version not found' });
+    res.status(200).json({ success: true, data: snapshot });
+  } catch (error) {
+    console.error('AI Studio getVersion error:', error.message);
+    res.status(500).json({ success: false, message: 'Failed to load version' });
+  }
+};
+
+// POST /api/ai-studio/:projectId/versions/:version/restore
+exports.restoreVersion = async (req, res) => {
+  try {
+    const version = Number.parseInt(req.params.version, 10);
+    if (!Number.isInteger(version) || version < 1) return res.status(400).json({ success: false, message: 'Invalid version' });
+    const result = await lifecycle.restoreVersion({ projectId: req.params.projectId, userId: req.userId, version });
+    if (!result) return res.status(404).json({ success: false, message: 'Project not found' });
+    if (result.notFound) return res.status(404).json({ success: false, message: 'Version not found' });
+    res.status(200).json({ success: true, data: serializeProject(result) });
+  } catch (error) {
+    console.error('AI Studio restoreVersion error:', error.message);
+    res.status(500).json({ success: false, message: 'Failed to restore version' });
   }
 };
 
