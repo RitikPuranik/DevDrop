@@ -7,8 +7,12 @@ import {
   SandpackFileExplorer,
   useSandpack,
 } from '@codesandbox/sandpack-react';
+<<<<<<< HEAD
 import { Eye, Code2, AlertTriangle, Bot, Download, Loader2, RefreshCw, Monitor, Tablet, Smartphone, History, Rocket, GitBranch } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
+=======
+import { Eye, Code2, AlertTriangle, Bot, Download, Loader2, Monitor, Tablet, Smartphone, History, Rocket, Maximize2, Minimize2 } from 'lucide-react';
+>>>>>>> 5192edfd81c495d44386890998393732daa4c550
 import VersionHistoryPanel from './preview/VersionHistoryPanel';
 import ShipProjectModal from './ShipProjectModal';
 import Github from './GithubIcon';
@@ -159,6 +163,7 @@ const BASE_DEPENDENCIES = {
   'lucide-react': 'latest',
 };
 
+<<<<<<< HEAD
 // ── toolbar building blocks ──────────────────────────────────────────────
 const BTN_BASE = 'inline-flex items-center justify-center gap-2 rounded-full text-[12px] font-semibold transition-all duration-200 disabled:pointer-events-none disabled:opacity-40';
 const BTN_GHOST = `${BTN_BASE} h-9 border border-[var(--s-line)] bg-[var(--s-surface)] px-3.5 text-[var(--s-text)] hover:-translate-y-px hover:border-[var(--s-line-strong)] hover:bg-white/[0.06]`;
@@ -183,16 +188,88 @@ function Segmented({ id, value, onChange, options }) {
       })}
     </div>
   );
+=======
+function PipelineProgress({ steps, mode = 'generate', percent = 0 }) {
+  const title = PIPELINE_TITLES[mode] || PIPELINE_TITLES.generate;
+  const card = (
+    <div className="w-full max-w-md rounded-2xl border border-white/10 bg-neutral-900/95 p-5 shadow-2xl">
+      <div className="mb-4">
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <span className="flex items-center gap-2 text-sm font-semibold text-white"><Bot className="h-4 w-4 text-violet-400" /> {title}</span>
+          <span className="text-[11px] text-white/40">{percent}%</span>
+        </div>
+        <p className="text-xs text-white/35">Each stage is updated from the real {mode === 'generate' ? 'generation' : mode === 'edit' ? 'editing' : 'debug'} pipeline.</p>
+      </div>
+      <PipelineSteps steps={steps} variant="detailed" />
+    </div>
+  );
+  // A full generation has nothing to show yet, so it covers the preview. An
+  // edit/debug run already has a working site on screen -- keep it visible and
+  // show progress as a floating card instead of blanking it out.
+  if (mode === 'generate') {
+    return <div className="absolute inset-0 z-20 flex items-center justify-center bg-neutral-950/95 px-6 backdrop-blur-sm">{card}</div>;
+  }
+  return <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center px-4">{card}</div>;
+>>>>>>> 5192edfd81c495d44386890998393732daa4c550
 }
 
-function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiveTab, pipelineSteps, pipelineMode, percent, onHardReload, onDownload, device, setDevice, history = [], projectId, appTitle, onListVersions, onRestoreVersion, versionRefreshKey }) {
+// Toolbar buttons show only their icon; the text label slides out on hover
+// (the button needs the `group` class). Keeps the toolbar compact so the
+// preview gets more room.
+function HoverLabel({ children }) {
+  return (
+    <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 group-hover:ml-1.5 group-hover:max-w-[130px] group-hover:opacity-100 group-focus-visible:ml-1.5 group-focus-visible:max-w-[130px] group-focus-visible:opacity-100">
+      {children}
+    </span>
+  );
+}
+
+function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiveTab, pipelineSteps, pipelineMode, percent, onDownload, device, setDevice, projectId, appTitle, onListVersions, onRestoreVersion, versionRefreshKey }) {
   const { sandpack, listen } = useSandpack();
   const [shipMode, setShipMode] = useState(null); // 'github' | 'live' | null
   const canShip = Boolean(fileData && projectId && !isGenerating);
   const [previewError, setPreviewError] = useState(null);
   const [isExporting, setIsExporting] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
   const [showVersions, setShowVersions] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const usedNativeFullscreen = useRef(false);
+
+  // Full screen is a CSS overlay (position: fixed) on the SAME element tree,
+  // so the Sandpack iframe never unmounts/reloads when toggling. We also ask
+  // the browser for real fullscreen on a best-effort basis (hides browser UI).
+  const enterFullscreen = () => {
+    setIsFullscreen(true);
+    try {
+      if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
+        document.documentElement.requestFullscreen().then(() => { usedNativeFullscreen.current = true; }).catch(() => {});
+      }
+    } catch { /* overlay-only fullscreen is fine */ }
+  };
+  const exitFullscreen = () => {
+    setIsFullscreen(false);
+    try {
+      if (usedNativeFullscreen.current && document.fullscreenElement) document.exitFullscreen?.();
+    } catch { /* ignore */ }
+    usedNativeFullscreen.current = false;
+  };
+
+  useEffect(() => {
+    if (!isFullscreen) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') exitFullscreen(); };
+    // Browser's own Esc/exit gesture leaves native fullscreen -> leave overlay too.
+    const onFsChange = () => { if (!document.fullscreenElement && usedNativeFullscreen.current) { usedNativeFullscreen.current = false; setIsFullscreen(false); } };
+    window.addEventListener('keydown', onKey);
+    document.addEventListener('fullscreenchange', onFsChange);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.body.classList.add('devdrop-preview-fullscreen');
+    return () => {
+      document.body.classList.remove('devdrop-preview-fullscreen');
+      window.removeEventListener('keydown', onKey);
+      document.removeEventListener('fullscreenchange', onFsChange);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isFullscreen]);
   const prevFilesRef = useRef({});
 
   useEffect(() => {
@@ -259,6 +336,7 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
   };
 
   return (
+<<<<<<< HEAD
     <div className="flex h-full flex-col">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2.5 pb-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -300,12 +378,49 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
             <div className="relative">
               <button onClick={() => { setShowVersions((v) => !v); setShowHistory(false); }} disabled={!projectId} title="Version history" aria-label="Versions" aria-expanded={showVersions} className={`${BTN_ICON} ${showVersions ? '!border-[var(--s-line-strong)] !text-[var(--s-text)]' : ''}`}>
                 <GitBranch className="h-3.5 w-3.5" />
+=======
+    <div className={isFullscreen ? 'fixed inset-0 z-[200] flex flex-col bg-[#050506] p-4' : 'flex h-full flex-col'}>
+      <div className="mb-3 h-px w-full bg-white/[0.12]" aria-hidden="true" />
+      <div className="flex items-center justify-between gap-3 pb-2.5">
+        <div className="flex items-center gap-3">
+          <div className="flex rounded-lg border border-white/[0.12] bg-[#0b0b0c] p-0.5">
+            <button onClick={() => setActiveTab('preview')} title="Preview" aria-label="Preview" className={`group flex items-center rounded-md px-2.5 py-1 text-[11px] ${activeTab === 'preview' ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white'}`}>
+              <Eye className="h-3.5 w-3.5" /><HoverLabel>Preview</HoverLabel>
+            </button>
+            <button onClick={() => setActiveTab('code')} title="Code" aria-label="Code" className={`group flex items-center rounded-md px-2.5 py-1 text-[11px] ${activeTab === 'code' ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white'}`}>
+              <Code2 className="h-3.5 w-3.5" /><HoverLabel>Code</HoverLabel>
+            </button>
+          </div>
+          <div className="flex rounded-lg border border-white/[0.12] bg-[#0b0b0c] p-0.5">
+            {[['desktop', Monitor], ['tablet', Tablet], ['mobile', Smartphone]].map(([id, Icon]) => (
+              <button key={id} onClick={() => setDevice(id)} title={`${id[0].toUpperCase()}${id.slice(1)} view`} aria-label={`${id} preview`} className={`rounded-md px-2 py-1 ${device === id ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white'}`}>
+                <Icon className="h-3.5 w-3.5" />
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={handleExportZip} disabled={isExporting || !fileData} title="Download" aria-label="Download" className="group flex items-center rounded-lg bg-gradient-to-r from-violet-500 to-fuchsia-500 px-3 py-1.5 text-[12px] font-medium text-white hover:brightness-110 disabled:opacity-40">
+            {isExporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}<HoverLabel>Download</HoverLabel>
+          </button>
+          <button onClick={() => setShipMode('github')} disabled={!canShip} title={canShip ? 'Push this website to a new GitHub repository' : 'Available once generation is complete'} aria-label="Push to GitHub" className="group flex items-center rounded-lg border border-white/[0.12] bg-[#0b0b0c] px-3 py-1.5 text-[12px] text-white/80 hover:text-white disabled:cursor-not-allowed disabled:opacity-40">
+            <Github className="h-3.5 w-3.5" /><HoverLabel>Push to GitHub</HoverLabel>
+          </button>
+          <button onClick={() => setShipMode('live')} disabled={!canShip} title={canShip ? 'Deploy this website live on your Vercel account' : 'Available once generation is complete'} aria-label="Publish Live" className="group flex items-center rounded-lg border border-white/[0.12] bg-[#0b0b0c] px-3 py-1.5 text-[12px] text-white/80 hover:text-white disabled:cursor-not-allowed disabled:opacity-40">
+            <Rocket className="h-3.5 w-3.5" /><HoverLabel>Publish Live</HoverLabel>
+          </button>
+          {onListVersions && (
+            <div className="relative">
+              <button onClick={() => { setShowVersions((v) => !v); }} disabled={!projectId} title="History" aria-label="History" className="group flex items-center rounded-lg border border-white/[0.12] bg-[#0b0b0c] px-3 py-1.5 text-[12px] text-white/80 hover:text-white disabled:opacity-40">
+                <History className="h-3.5 w-3.5" /><HoverLabel>History</HoverLabel>
+>>>>>>> 5192edfd81c495d44386890998393732daa4c550
               </button>
               {showVersions && (
                 <VersionHistoryPanel projectId={projectId} refreshKey={versionRefreshKey} disabled={isGenerating} onList={onListVersions} onRestore={async (v) => { await onRestoreVersion(v); setShowVersions(false); }} />
               )}
             </div>
           )}
+<<<<<<< HEAD
 
           <span className="mx-0.5 hidden h-5 w-px bg-white/10 sm:block" aria-hidden="true" />
 
@@ -317,12 +432,17 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
           </button>
           <button onClick={() => setShipMode('live')} disabled={!canShip} title={canShip ? 'Deploy this website live on your Vercel account' : 'Available once generation is complete'} className={BTN_PRIMARY}>
             <Rocket className="h-3.5 w-3.5" /> Publish
+=======
+          <button onClick={isFullscreen ? exitFullscreen : enterFullscreen} title={isFullscreen ? 'Exit full screen (Esc)' : 'View the website full screen'} aria-label={isFullscreen ? 'Exit full screen' : 'Full screen'} className="group flex items-center rounded-lg border border-white/[0.12] bg-[#0b0b0c] px-2.5 py-1.5 text-[12px] text-white/80 hover:text-white">
+            {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}<HoverLabel>{isFullscreen ? 'Exit' : 'Full screen'}</HoverLabel>
+>>>>>>> 5192edfd81c495d44386890998393732daa4c550
           </button>
         </div>
       </div>
 
       <ShipProjectModal open={Boolean(shipMode)} mode={shipMode} onClose={() => setShipMode(null)} onModeChange={setShipMode} projectId={projectId} title={appTitle} />
 
+<<<<<<< HEAD
       <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-[var(--s-line)] bg-[var(--s-surface)] p-2.5">
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--s-line)]">
       <div className="flex items-center gap-3 border-b border-[var(--s-line)] px-3.5 py-2">
@@ -333,6 +453,10 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
         </div>
         <span className="hidden w-[38px] shrink-0 sm:block" aria-hidden="true" />
       </div>
+=======
+      <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-white/[0.12] bg-[#0b0b0c] p-3">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/[0.12]">
+>>>>>>> 5192edfd81c495d44386890998393732daa4c550
       <div className="relative flex-1 overflow-hidden">
         <SandpackLayout style={{ height: '100%', border: 'none', borderRadius: 0, background: 'transparent' }}>
           {/* Keep the preview iframe mounted at all times — unmounting/remounting
@@ -356,21 +480,21 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
       </div>
 
       {previewError && activeTab === 'preview' && !isGenerating && (
-        <div className="border-t border-[var(--s-line-strong)] bg-red-950/80 p-3">
+        <div className="border-t border-red-500/30 bg-red-950/80 p-3">
           <div className="flex items-start gap-2.5">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-[var(--s-err)]">Preview error</p>
-              <p className="break-all text-[11px] text-[var(--s-err)]/70">{previewError}</p>
+              <p className="text-xs font-medium text-red-300">Preview error</p>
+              <p className="break-all text-[11px] text-red-300/70">{previewError}</p>
               {/^\s*authentication error/i.test(previewError) && (
-                <p className="mt-1 text-[11px] text-[var(--s-err)]/50">
+                <p className="mt-1 text-[11px] text-red-300/50">
                   This comes from Sandpack's cloud bundler session, not your generated code.
                   Try "Reload preview" above, or allow third-party cookies for codesandbox.io / csb.app in this browser.
                 </p>
               )}
             </div>
             {!/^\s*authentication error/i.test(previewError) && (
-              <button onClick={() => onFixError(previewError)} className="flex shrink-0 items-center gap-1.5 rounded-md bg-red-600 px-2.5 py-1 text-xs text-[var(--s-text)] hover:bg-red-500">
+              <button onClick={() => onFixError(previewError)} className="flex shrink-0 items-center gap-1.5 rounded-md bg-red-600 px-2.5 py-1 text-xs text-white hover:bg-red-500">
                 <Bot className="h-3 w-3" /> Fix with AI
               </button>
             )}
@@ -381,9 +505,8 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
   );
 }
 
-export default function AppPreview({ fileData, isGenerating, onFixError, pipelineSteps = [], pipelineMode = 'generate', percent = 0, onDownload, history = [], projectId = null, appTitle = null, onListVersions, onRestoreVersion, versionRefreshKey = 0 }) {
+export default function AppPreview({ fileData, isGenerating, onFixError, pipelineSteps = [], pipelineMode = 'generate', percent = 0, onDownload, projectId = null, appTitle = null, onListVersions, onRestoreVersion, versionRefreshKey = 0 }) {
   const [activeTab, setActiveTab] = useState('preview');
-  const [sessionNonce, setSessionNonce] = useState(0);
   const [device, setDevice] = useState('desktop');
 
   useEffect(() => {
@@ -394,16 +517,11 @@ export default function AppPreview({ fileData, isGenerating, onFixError, pipelin
   const dependencies = { ...BASE_DEPENDENCIES, ...(fileData?.dependencies ?? {}) };
   const filePathKey = Object.keys(files).sort().join('|');
 
-  // A full remount (new SandpackProvider instance) opens a brand-new bundler
-  // session. That's the reliable recovery for Sandpack's cloud-bundler
-  // "Authentication error" / stuck-white-screen state — a CSS-hide/show
-  // toggle alone can't fix a broken bundler session, only a broken tab switch.
-  const handleHardReload = () => setSessionNonce((n) => n + 1);
 
   return (
     <div className="h-full" style={{ display: 'flex', flexDirection: 'column' }}>
       <SandpackProvider
-        key={`${filePathKey}::${sessionNonce}`}
+        key={filePathKey}
         template="react"
         theme="dark"
         files={files}
@@ -419,11 +537,9 @@ export default function AppPreview({ fileData, isGenerating, onFixError, pipelin
           pipelineSteps={pipelineSteps}
           pipelineMode={pipelineMode}
           percent={percent}
-          onHardReload={handleHardReload}
           onDownload={onDownload}
           device={device}
           setDevice={setDevice}
-          history={history}
           projectId={projectId}
           appTitle={appTitle}
           onListVersions={onListVersions}

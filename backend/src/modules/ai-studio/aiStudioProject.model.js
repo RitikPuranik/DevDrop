@@ -79,6 +79,13 @@ const aiStudioProjectSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // The version the project's current files correspond to. Selecting an
+    // older version moves this pointer WITHOUT creating a new version; the
+    // next edit then records "edited from vN" against it.
+    currentVersion: {
+      type: Number,
+      default: 0,
+    },
     status: {
       type: String,
       enum: Object.values(AI_STUDIO_PROJECT_STATUS),

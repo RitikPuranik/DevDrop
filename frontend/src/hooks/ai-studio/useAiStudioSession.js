@@ -44,6 +44,25 @@ export function useAiStudioSession() {
     }
   }, []);
 
+  // Re-attaches this tab to a project the user already owns (e.g. they
+  // navigated away and came back). Returns the project (files, title, ...) or
+  // null if it no longer exists -- the backend creates a throwaway project in
+  // that case, which we deliberately do NOT adopt.
+  const resume = useCallback(async (id) => {
+    const { data } = await aiStudioAPI.openSession(sessionIdRef.current, id);
+    const project = data?.data;
+    if (!project || String(project.projectId) !== String(id)) return null;
+    projectIdRef.current = id;
+    setProjectId(id);
+    return project;
+  }, []);
+
+  // Detaches from the current project so the next generation starts a new one.
+  const reset = useCallback(() => {
+    projectIdRef.current = null;
+    setProjectId(null);
+  }, []);
+
   const stopHeartbeat = useCallback(() => {
     if (heartbeatRef.current) {
       clearInterval(heartbeatRef.current);
@@ -144,5 +163,5 @@ export function useAiStudioSession() {
     aiStudioAPI.recordActivity(projectId).catch(() => {});
   }, [projectId]);
 
-  return { projectId, sessionId: sessionIdRef.current, open, getProjectId, syncFiles, uploadAsset, recordActivity, listVersions, restoreVersion };
+  return { projectId, sessionId: sessionIdRef.current, open, getProjectId, syncFiles, uploadAsset, recordActivity, listVersions, restoreVersion, resume, reset };
 }

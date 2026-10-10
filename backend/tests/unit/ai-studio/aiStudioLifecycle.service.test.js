@@ -220,23 +220,37 @@ describe('Version history + rollback', () => {
     const project = await lifecycle.openSession({ userId: USER_A, sessionId: 's' });
     await sync(project, { 'App.jsx': 'v1' });
     await sync(project, { 'App.jsx': 'v2' });
-    const versions = await lifecycle.listVersions({ projectId: project._id, userId: USER_A });
+    const { versions, currentVersion } = await lifecycle.listVersions({ projectId: project._id, userId: USER_A });
     expect(versions.map((v) => [v.version, v.source])).toEqual([[2, 'edit'], [1, 'generate']]);
+    expect(currentVersion).toBe(2);
   });
 
-  test('restoring an old version rewrites project files and ADDS a restore version (history preserved)', async () => {
+  test('selecting an older version restores its files WITHOUT creating a new version', async () => {
     const project = await lifecycle.openSession({ userId: USER_A, sessionId: 's' });
     await sync(project, { 'App.jsx': 'v1' });
     await sync(project, { 'App.jsx': 'v2' });
     const restored = await lifecycle.restoreVersion({ projectId: project._id, userId: USER_A, version: 1 });
     expect(JSON.stringify(restored.files)).toContain('v1');
     expect(JSON.stringify(restored.files)).not.toContain('v2');
-    const versions = await lifecycle.listVersions({ projectId: project._id, userId: USER_A });
-    expect(versions).toHaveLength(3);
-    expect(versions[0]).toMatchObject({ version: 3, source: 'restore', restoredFromVersion: 1 });
-    // the pre-rollback state is still recoverable
+    const { versions, currentVersion } = await lifecycle.listVersions({ projectId: project._id, userId: USER_A });
+    expect(versions).toHaveLength(2); // nothing added
+    expect(currentVersion).toBe(1); // v1 is now the selected one
+    // v2 is untouched and can be selected again
     const v2 = await lifecycle.getVersion({ projectId: project._id, userId: USER_A, version: 2 });
     expect(JSON.stringify(v2.files)).toContain('v2');
+  });
+
+  test('editing after selecting an older version records "edited from" that version', async () => {
+    const project = await lifecycle.openSession({ userId: USER_A, sessionId: 's' });
+    await sync(project, { 'App.jsx': 'v1' });
+    await sync(project, { 'App.jsx': 'v2' });
+    await lifecycle.restoreVersion({ projectId: project._id, userId: USER_A, version: 1 });
+    await sync(project, { 'App.jsx': 'v1-edited' });
+    const { versions, currentVersion } = await lifecycle.listVersions({ projectId: project._id, userId: USER_A });
+    expect(versions[0]).toMatchObject({ version: 3, basedOnVersion: 1 });
+    expect(versions.find((v) => v.version === 2).basedOnVersion).toBe(1); // linear: v2 came from v1
+    expect(versions.find((v) => v.version === 1).basedOnVersion).toBeNull();
+    expect(currentVersion).toBe(3);
   });
 
   test('snapshot zips go to Supabase under the project prefix; Mongo keeps only metadata', async () => {
@@ -261,7 +275,7 @@ describe('Version history + rollback', () => {
     const project = await lifecycle.openSession({ userId: USER_A, sessionId: 's' });
     for (let i = 0; i < 51; i += 1) await sync(project, { 'App.jsx': `v${i}` });
     expect(storage.deleteObjects).toHaveBeenCalledWith([`ai-studio/${project._id}/versions/v1.zip`]);
-    const versions = await lifecycle.listVersions({ projectId: project._id, userId: USER_A });
+    const { versions } = await lifecycle.listVersions({ projectId: project._id, userId: USER_A });
     expect(versions).toHaveLength(50);
     expect(versions[versions.length - 1].version).toBe(2);
   });

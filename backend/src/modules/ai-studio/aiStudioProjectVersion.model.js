@@ -15,7 +15,9 @@ const aiStudioProjectVersionSchema = new mongoose.Schema(
     version: { type: Number, required: true },
     label: { type: String, default: '' },
     source: { type: String, enum: ['generate', 'edit', 'restore', 'sync'], default: 'sync' },
-    restoredFromVersion: { type: Number, default: null },
+    // Which version the project was on when this one was created. Differs from
+    // version-1 when the user edited after selecting an older version.
+    basedOnVersion: { type: Number, default: null },
     title: { type: String, default: null },
     // The snapshot itself is a zip in Supabase (same bucket as the project's
     // assets, under ai-studio/{projectId}/versions/). Mongo keeps only the

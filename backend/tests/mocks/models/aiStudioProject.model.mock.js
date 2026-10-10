@@ -42,6 +42,7 @@ class FakeAIStudioProject {
     this.files = fields.files || {};
     this.dependencies = fields.dependencies || {};
     this.versionCounter = fields.versionCounter || 0;
+    this.currentVersion = fields.currentVersion || 0;
     this.status = fields.status || AI_STUDIO_PROJECT_STATUS.ACTIVE;
     this.lastActivityAt = fields.lastActivityAt || new Date();
     this.lastHeartbeatAt = fields.lastHeartbeatAt || new Date();
