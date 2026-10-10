@@ -1,0 +1,15 @@
+node_modules/
+
+# Test coverage
+coverage/
+
+# Environment
+.env
+.env.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
