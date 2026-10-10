@@ -124,10 +124,25 @@ export function useAiStudioSession() {
     [projectId]
   );
 
+  const listVersions = useCallback(() => {
+    const id = projectIdRef.current || projectId;
+    if (!id) return Promise.resolve({ data: { data: { versions: [] } } });
+    return aiStudioAPI.listVersions(id);
+  }, [projectId]);
+
+  const restoreVersion = useCallback(
+    (version) => {
+      const id = projectIdRef.current || projectId;
+      if (!id) return Promise.reject(new Error('AI Studio project is not initialized.'));
+      return aiStudioAPI.restoreVersion(id, version);
+    },
+    [projectId]
+  );
+
   const recordActivity = useCallback(() => {
     if (!projectId) return;
     aiStudioAPI.recordActivity(projectId).catch(() => {});
   }, [projectId]);
 
-  return { projectId, sessionId: sessionIdRef.current, open, getProjectId, syncFiles, uploadAsset, recordActivity };
+  return { projectId, sessionId: sessionIdRef.current, open, getProjectId, syncFiles, uploadAsset, recordActivity, listVersions, restoreVersion };
 }

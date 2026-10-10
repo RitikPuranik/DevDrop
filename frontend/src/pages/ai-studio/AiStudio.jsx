@@ -80,6 +80,17 @@ export default function AiStudio() {
     });
     armResync();
   });
+  const [versionRefreshKey,setVersionRefreshKey]=useState(0);
+  const toSandpackFiles=(files={})=>Object.fromEntries(Object.entries(files).map(([path,v])=>[path,typeof v==='string'?{code:v}:v]));
+  const handleRestoreVersion=async(version)=>{
+    const {data}=await aiStudioSession.restoreVersion(version);
+    const project=data?.data;
+    if(!project?.files)throw new Error('Restore returned no files.');
+    setFileData({files:toSandpackFiles(project.files),dependencies:project.dependencies||{}});
+    if(project.title)setAppTitle(project.title);
+    setMessages(prev=>[...prev,{role:'assistant',content:`↩️ Restored version ${version}. Your previous version is still in the Versions list.`}]);
+    setVersionRefreshKey(k=>k+1);
+  };
   const runGeneration=async(nextMessages,spec={})=>{setIsGenerating(true);setError(null);setFailedJobId(null);setDebugRetryAvailable(false);setPipeline({});setCurrentStage('queued');
     // Optimistic guess so the sidebar shows the right stage list immediately,
     // before the first poll response confirms the actual mode the backend
@@ -93,7 +104,7 @@ export default function AiStudio() {
       const {data}=await aiGenerateAPI.generate(nextMessages,fileData,{...spec,projectId});const {jobId}=data?.data||{};if(!jobId)throw new Error('No jobId returned from server.');const result=await waitForJob(jobId);setMessages(prev=>[...prev,{role:'assistant',content:result.assistantMessage||'Done.'}]);setFileData({files:result.files,dependencies:result.dependencies});if(result.title)setAppTitle(result.title);
       // Persist the latest generated state -- this is what makes the
       // project outlive an individual (30-minute-TTL'd) AI generation job.
-      await aiStudioSession.syncFiles({files:result.files,dependencies:result.dependencies,title:result.title});
+      await aiStudioSession.syncFiles({files:result.files,dependencies:result.dependencies,title:result.title,source:expectingEdit?'edit':'generate',label:expectingEdit?String(nextMessages?.[nextMessages.length-1]?.content||'').slice(0,120):''});setVersionRefreshKey(k=>k+1);
     }catch(err){const msg=err.response?.data?.message||err.message||'Something went wrong generating your app. Please try again.';if(err.jobId){setFailedJobId(err.jobId);setDebugRetryAvailable(Boolean(err.debugAvailable));}setError(msg);setMessages(prev=>[...prev,{role:'assistant',content:`⚠️ ${msg}`}]);}finally{if(pollTimeoutRef.current){clearTimeout(pollTimeoutRef.current);pollTimeoutRef.current=null;}setIsGenerating(false);}};
   const handlePortfolioGenerate=async(prompt,spec)=>{
     const nextMessages=[{role:'user',content:prompt}];
@@ -194,7 +205,7 @@ export default function AiStudio() {
       const result=await waitForJob(jobId);
       setFileData({files:result.files,dependencies:result.dependencies});
       if(result.title)setAppTitle(result.title);
-      await aiStudioSession.syncFiles({files:result.files,dependencies:result.dependencies,title:result.title});
+      await aiStudioSession.syncFiles({files:result.files,dependencies:result.dependencies,title:result.title,source:'edit',label:'Debug repair'});setVersionRefreshKey(k=>k+1);
       setMessages(prev=>[...prev,{role:'assistant',content:result.assistantMessage||'Debug repair completed.'}]);
       setError(null); setDebugRetryAvailable(false); setFailedJobId(null);
     }catch(err){
@@ -263,7 +274,7 @@ export default function AiStudio() {
           </div>
         </div>
       </div>
-      <div className="h-full min-h-0 min-w-0 flex-1 p-4"><AppPreview fileData={fileData} appTitle={appTitle} onFixError={handleFixError} isGenerating={isGenerating} pipeline={pipeline} currentStage={currentStage} onDownload={handleDownload} history={history} projectId={aiStudioSession.projectId} pipelineSteps={pipelineSteps} pipelineMode={pipelineMode} percent={percent}/></div>
+      <div className="h-full min-h-0 min-w-0 flex-1 p-4"><AppPreview fileData={fileData} appTitle={appTitle} onFixError={handleFixError} isGenerating={isGenerating} pipeline={pipeline} currentStage={currentStage} onDownload={handleDownload} history={history} projectId={aiStudioSession.projectId} onListVersions={aiStudioSession.listVersions} onRestoreVersion={handleRestoreVersion} versionRefreshKey={versionRefreshKey} pipelineSteps={pipelineSteps} pipelineMode={pipelineMode} percent={percent}/></div>
     </div>
   </div>;
 }

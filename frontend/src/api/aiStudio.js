@@ -6,8 +6,11 @@ export const aiStudioAPI = {
   heartbeat: (projectId, sessionId) =>
     api.post(`/ai-studio/${projectId}/heartbeat`, { sessionId }),
   recordActivity: (projectId) => api.post(`/ai-studio/${projectId}/activity`),
-  sync: (projectId, { files, dependencies, title }) =>
-    api.post(`/ai-studio/${projectId}/sync`, { files, dependencies, title }),
+  sync: (projectId, { files, dependencies, title, source, label }) =>
+    api.post(`/ai-studio/${projectId}/sync`, { files, dependencies, title, source, label }),
+  listVersions: (projectId) => api.get(`/ai-studio/${projectId}/versions`),
+  getVersion: (projectId, version) => api.get(`/ai-studio/${projectId}/versions/${version}`),
+  restoreVersion: (projectId, version) => api.post(`/ai-studio/${projectId}/versions/${version}/restore`),
   download: (projectId) => api.get(`/ai-studio/${projectId}/download`),
   uploadAsset: (projectId, file) => {
     const formData = new FormData();

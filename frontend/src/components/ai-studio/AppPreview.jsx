@@ -7,7 +7,8 @@ import {
   SandpackFileExplorer,
   useSandpack,
 } from '@codesandbox/sandpack-react';
-import { Eye, Code2, AlertTriangle, Bot, Download, Loader2, RefreshCw, Monitor, Tablet, Smartphone, History, Rocket } from 'lucide-react';
+import { Eye, Code2, AlertTriangle, Bot, Download, Loader2, RefreshCw, Monitor, Tablet, Smartphone, History, Rocket, GitBranch } from 'lucide-react';
+import VersionHistoryPanel from './preview/VersionHistoryPanel';
 import ShipProjectModal from './ShipProjectModal';
 import Github from './GithubIcon';
 import { PipelineSteps, PIPELINE_TITLES } from './pipelineSteps';
@@ -180,13 +181,14 @@ function PipelineProgress({ steps, mode = 'generate', percent = 0 }) {
   return <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center px-4">{card}</div>;
 }
 
-function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiveTab, pipelineSteps, pipelineMode, percent, onHardReload, onDownload, device, setDevice, history = [], projectId, appTitle }) {
+function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiveTab, pipelineSteps, pipelineMode, percent, onHardReload, onDownload, device, setDevice, history = [], projectId, appTitle, onListVersions, onRestoreVersion, versionRefreshKey }) {
   const { sandpack, listen } = useSandpack();
   const [shipMode, setShipMode] = useState(null); // 'github' | 'live' | null
   const canShip = Boolean(fileData && projectId && !isGenerating);
   const [previewError, setPreviewError] = useState(null);
   const [isExporting, setIsExporting] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showVersions, setShowVersions] = useState(false);
   const prevFilesRef = useRef({});
 
   useEffect(() => {
@@ -287,8 +289,18 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
           <button onClick={() => setShipMode('live')} disabled={!canShip} title={canShip ? 'Deploy this website live on your Vercel account' : 'Available once generation is complete'} className="flex items-center gap-2 rounded-lg border border-white/[0.12] bg-[#0b0b0c] px-3 py-1.5 text-[12px] text-white/80 hover:text-white disabled:cursor-not-allowed disabled:opacity-40">
             <Rocket className="h-3.5 w-3.5" /> Publish Live
           </button>
+          {onListVersions && (
+            <div className="relative">
+              <button onClick={() => { setShowVersions((v) => !v); setShowHistory(false); }} disabled={!projectId} className="flex items-center gap-2 rounded-lg border border-white/[0.12] bg-[#0b0b0c] px-3 py-1.5 text-[12px] text-white/80 hover:text-white disabled:opacity-40">
+                <GitBranch className="h-3.5 w-3.5" /> Versions
+              </button>
+              {showVersions && (
+                <VersionHistoryPanel projectId={projectId} refreshKey={versionRefreshKey} disabled={isGenerating} onList={onListVersions} onRestore={async (v) => { await onRestoreVersion(v); setShowVersions(false); }} />
+              )}
+            </div>
+          )}
           <div className="relative">
-            <button onClick={() => setShowHistory((v) => !v)} className="flex items-center gap-2 rounded-lg border border-white/[0.12] bg-[#0b0b0c] px-3 py-1.5 text-[12px] text-white/80 hover:text-white">
+            <button onClick={() => { setShowHistory((v) => !v); setShowVersions(false); }} className="flex items-center gap-2 rounded-lg border border-white/[0.12] bg-[#0b0b0c] px-3 py-1.5 text-[12px] text-white/80 hover:text-white">
               <History className="h-3.5 w-3.5" /> History
             </button>
             {showHistory && (
@@ -357,7 +369,7 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
   );
 }
 
-export default function AppPreview({ fileData, isGenerating, onFixError, pipelineSteps = [], pipelineMode = 'generate', percent = 0, onDownload, history = [], projectId = null, appTitle = null }) {
+export default function AppPreview({ fileData, isGenerating, onFixError, pipelineSteps = [], pipelineMode = 'generate', percent = 0, onDownload, history = [], projectId = null, appTitle = null, onListVersions, onRestoreVersion, versionRefreshKey = 0 }) {
   const [activeTab, setActiveTab] = useState('preview');
   const [sessionNonce, setSessionNonce] = useState(0);
   const [device, setDevice] = useState('desktop');
@@ -402,6 +414,9 @@ export default function AppPreview({ fileData, isGenerating, onFixError, pipelin
           history={history}
           projectId={projectId}
           appTitle={appTitle}
+          onListVersions={onListVersions}
+          onRestoreVersion={onRestoreVersion}
+          versionRefreshKey={versionRefreshKey}
         />
       </SandpackProvider>
     </div>
