@@ -353,8 +353,8 @@ function DetailsStep({ type, details, onChange, onBack, onNext }) {
         <SpecialRequestsCard className="lg:col-span-12" value={details.specialRequests || ''} onChange={(value) => update('specialRequests', value)} placeholder="Add any specific idea, section, behavior, animation, reference, wording, feature, constraint, or anything else you want the AI to know." />
       </div>
 
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-        <button type="button" onClick={onBack} className="inline-flex items-center gap-2 rounded-xl border border-[var(--s-line)] bg-[var(--s-surface)] px-5 py-3 text-[13px] font-semibold text-[var(--s-muted)] transition-colors hover:text-[var(--s-text)]"><ArrowLeft size={14} /> Previous Step</button>
+      <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between [&>button]:w-full sm:[&>button]:w-auto">
+        <button type="button" onClick={onBack} className="s-btn s-btn-ghost"><ArrowLeft size={14} /> Previous Step</button>
         <button type="button" onClick={onNext} className={GRAD}>Continue to Design <ArrowRight size={14} /></button>
       </div>
     </div>
@@ -389,7 +389,7 @@ export default function WebsiteBuilder({ type, onBack, onGenerate }) {
 
   return (
     <div className="studio min-h-full">
-      <div className={`mx-auto px-5 pb-12 pt-24 md:px-8 md:pt-28 ${step === 0 ? 'max-w-6xl' : 'max-w-4xl'}`}>
+      <div className={`mx-auto px-4 pb-28 pt-24 sm:px-5 sm:pb-16 md:px-8 md:pt-28 ${step === 0 ? 'max-w-6xl' : 'max-w-4xl'}`}>
         <div className="mb-8 flex items-center justify-between">
           <button type="button" onClick={onBack} disabled={generating} className="s-btn s-btn-ghost !px-4 !py-2 !text-[12px]"><ArrowLeft size={16} /> Website types</button>
           <div className="s-label">{schema?.title || 'AI Studio'}</div>
@@ -427,8 +427,8 @@ export default function WebsiteBuilder({ type, onBack, onGenerate }) {
                 <p className="text-xs font-semibold text-[var(--s-accent)]">Anything else you want?</p>
                 <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--s-muted)]">{details.specialRequests || 'Nothing extra provided.'}</p>
               </div>
-              <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-                <button type="button" onClick={() => setStep(1)} disabled={generating} className="inline-flex items-center gap-2 rounded-xl border border-[var(--s-line)] bg-[var(--s-surface)] px-5 py-3 text-[13px] font-semibold text-[var(--s-muted)] hover:text-[var(--s-text)] disabled:opacity-40"><ArrowLeft size={14} /> Previous Step</button>
+              <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between [&>button]:w-full sm:[&>button]:w-auto">
+                <button type="button" onClick={() => setStep(1)} disabled={generating} className="s-btn s-btn-ghost"><ArrowLeft size={14} /> Previous Step</button>
                 <button type="button" onClick={generate} disabled={generating} className={GRAD}>{generating ? 'Generating…' : `Generate ${schema?.title?.replace(/^Build your /, '') || 'Website'}`}</button>
               </div>
             </div>

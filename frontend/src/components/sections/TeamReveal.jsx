@@ -78,7 +78,7 @@ function GridCard({ m, isActive, onClick }) {
           opacity: 1,
         }}>
           <div style={{
-            fontFamily: "'Playfair Display', serif",
+            fontFamily: 'var(--font-napkin-display)', fontWeight: 700,
             fontSize: 'clamp(13px, 3vw, 18px)',
             color: '#e8d9b8',
             marginBottom: 3,
@@ -86,7 +86,7 @@ function GridCard({ m, isActive, onClick }) {
             {m.name}
           </div>
           <div style={{
-            fontFamily: "'Space Mono', monospace",
+            fontFamily: 'var(--font-napkin)',
             fontSize: 'clamp(7px, 1.8vw, 10px)',
             letterSpacing: '0.14em',
             color: '#c8903a',
@@ -107,7 +107,7 @@ function GridCard({ m, isActive, onClick }) {
         overflow: 'hidden',
       }}>
         <div style={{
-          fontFamily: "'Playfair Display', serif",
+          fontFamily: 'var(--font-napkin-display)', fontWeight: 700,
           fontSize: 'clamp(12px, 2.8vw, 17px)',
           color: '#e8d9b8',
           marginBottom: 3,
@@ -118,7 +118,7 @@ function GridCard({ m, isActive, onClick }) {
           {m.name}
         </div>
         <div style={{
-          fontFamily: "'Space Mono', monospace",
+          fontFamily: 'var(--font-napkin)',
           fontSize: 'clamp(6px, 1.5vw, 9px)',
           letterSpacing: '0.13em',
           color: '#c8903a',
@@ -212,8 +212,7 @@ function AccordionGallery() {
                 opacity: 0,
               }}>
                 <span style={{
-                  fontFamily: "'Playfair Display', serif",
-                  fontStyle: 'italic',
+                  fontFamily: 'var(--font-napkin-display)', fontWeight: 700,
                   fontSize: 'clamp(24px, 3vw, 50px)',
                   color: '#5a4a3a',
                 }}>
@@ -223,7 +222,7 @@ function AccordionGallery() {
             </div>
             <div style={{ textAlign: 'center', width: '100%', paddingBottom: '4px' }}>
               <div style={{
-                fontFamily: "'Playfair Display', serif",
+                fontFamily: 'var(--font-napkin-display)', fontWeight: 700,
                 fontSize: 'clamp(14px, 1.2vw, 20px)',
                 color: '#e8d9b8',
                 marginBottom: 8,
@@ -232,7 +231,7 @@ function AccordionGallery() {
                 {m.name}
               </div>
               <div style={{
-                fontFamily: "'Space Mono', monospace",
+                fontFamily: 'var(--font-napkin)',
                 fontSize: 'clamp(8px, 0.6vw, 11px)',
                 letterSpacing: '0.15em',
                 color: '#c8903a',
@@ -397,7 +396,7 @@ export function TeamReveal({ sp }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 12 }}>
               <div style={{ flex: 1, height: '1px', background: 'linear-gradient(to left, rgba(200,165,90,0.45), transparent)' }} />
               <span style={{
-                fontFamily: "'Space Mono',monospace",
+                fontFamily: 'var(--font-napkin)',
                 fontSize: 'clamp(7px, 1.8vw, 10px)',
                 letterSpacing: '0.4em',
                 color: '#c8a55a',
@@ -409,9 +408,7 @@ export function TeamReveal({ sp }) {
               <div style={{ flex: 1, height: '1px', background: 'linear-gradient(to right, rgba(200,165,90,0.45), transparent)' }} />
             </div>
             <h2 style={{
-              fontFamily: "'IM Fell English',serif",
-              fontStyle: 'italic',
-              fontWeight: 400,
+              fontFamily: 'var(--font-napkin-display)', fontStyle: 'normal', fontWeight: 700,
               fontSize: 'clamp(26px, 5vw, 70px)',
               color: '#f0e6cc',
               margin: 0,

@@ -14,11 +14,6 @@ const hexToRgb = (h) => {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 };
 const lum = (h) => { const [r, g, b] = hexToRgb(h).map((v) => v / 255); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
-const alpha = (h, a) => { const [r, g, b] = hexToRgb(h); return `rgba(${r},${g},${b},${a})`; };
-const shade = (h, amt) => {
-  const [r, g, b] = hexToRgb(h).map((v) => Math.max(0, Math.min(255, Math.round(amt > 0 ? v + (255 - v) * amt : v * (1 + amt)))));
-  return `rgb(${r},${g},${b})`;
-};
 
 const MOTION_ICONS = { none: Ban, subtle: Spline, scroll: ChevronsDown, interactive: MousePointerClick, parallax: Layers, kinetic: Type, dynamic: Sparkles };
 
@@ -368,11 +363,11 @@ export default function DesignPreferencesStep({ design, onChange, onBack, onNext
       </div>
 
       {/* Bottom action bar */}
-      <footer className="sticky bottom-0 z-20 flex shrink-0 items-center justify-between gap-3 border-t border-[var(--s-line)] bg-[var(--s-bg)] px-4 py-3">
-        <button type="button" onClick={onBack} className="s-btn s-btn-ghost"><ArrowLeft size={15} /> Back</button>
+      <footer className="sticky bottom-0 z-20 flex shrink-0 items-center justify-end gap-3 border-t border-[var(--s-line)] bg-[var(--s-bg)] px-4 py-3 sm:justify-between">
+        <button type="button" onClick={onBack} aria-label="Back" className="s-btn s-btn-ghost !px-3.5 sm:!px-6"><ArrowLeft size={15} /> <span className="hidden sm:inline">Back</span></button>
         <div className="flex items-center gap-4">
           <button type="button" onClick={handleContinue} disabled={capturing} className="s-btn s-btn-primary">
-            {capturing ? <><Loader2 size={16} className="animate-spin" /> Capturing full website…</> : <>Continue to Generate <ArrowRight size={16} /></>}
+            {capturing ? <><Loader2 size={16} className="animate-spin" /> <span className="hidden sm:inline">Capturing full website…</span><span className="sm:hidden">Capturing…</span></> : <>Continue<span className="hidden sm:inline"> to Generate</span> <ArrowRight size={16} /></>}
           </button>
         </div>
       </footer>

@@ -24,7 +24,7 @@ const attachKind = (f) => (f.type.startsWith('image/') ? 'image' : f.type.starts
 
 export default function AiStudio() {
   const navigate = useNavigate(); const posthog = usePostHog();
-  const [studioMode,setStudioMode]=useState('types'); const [failedJobId,setFailedJobId]=useState(null); const [debugRetryAvailable,setDebugRetryAvailable]=useState(false); const [messages,setMessages]=useState([]); const [fileData,setFileData]=useState(null); const [appTitle,setAppTitle]=useState(null); const [input,setInput]=useState(''); const [isGenerating,setIsGenerating]=useState(false); const [genStatusLabel,setGenStatusLabel]=useState('Generating…'); const [pipeline,setPipeline]=useState({}); const [genMode,setGenMode]=useState('generate'); const [currentStage,setCurrentStage]=useState(null); const [error,setError]=useState(null); const [showContract,setShowContract]=useState(false); const scrollRef=useRef(null); const pollTimeoutRef=useRef(null);
+  const [studioMode,setStudioMode]=useState('types'); const [mobileView,setMobileView]=useState('chat'); const [failedJobId,setFailedJobId]=useState(null); const [debugRetryAvailable,setDebugRetryAvailable]=useState(false); const [messages,setMessages]=useState([]); const [fileData,setFileData]=useState(null); const [appTitle,setAppTitle]=useState(null); const [input,setInput]=useState(''); const [isGenerating,setIsGenerating]=useState(false); const [genStatusLabel,setGenStatusLabel]=useState('Generating…'); const [pipeline,setPipeline]=useState({}); const [genMode,setGenMode]=useState('generate'); const [currentStage,setCurrentStage]=useState(null); const [error,setError]=useState(null); const [showContract,setShowContract]=useState(false); const scrollRef=useRef(null); const pollTimeoutRef=useRef(null);
   const [attachments,setAttachments]=useState([]); const [isUploadingAttachments,setIsUploadingAttachments]=useState(false); const [attachError,setAttachError]=useState(null); const fileInputRef=useRef(null); const uploadedAttachmentsRef=useRef(new Map());
   // Persists the generated project (zip + files) to the backend for as long
   // as this AI Studio tab stays open/active. Refresh or close naturally lets
@@ -91,7 +91,7 @@ export default function AiStudio() {
     try{
       const projectId=aiStudioSession.getProjectId()||await aiStudioSession.open(spec?.websiteType);
       if(!projectId)throw new Error('AI Studio project could not be initialized.');
-      const {data}=await aiGenerateAPI.generate(nextMessages,fileData,{...spec,projectId});const {jobId}=data?.data||{};if(!jobId)throw new Error('No jobId returned from server.');const result=await waitForJob(jobId);setMessages(prev=>[...prev,{role:'assistant',content:result.assistantMessage||'Done.'}]);setFileData({files:result.files,dependencies:result.dependencies});if(result.title)setAppTitle(result.title);
+      const {data}=await aiGenerateAPI.generate(nextMessages,fileData,{...spec,projectId});const {jobId}=data?.data||{};if(!jobId)throw new Error('No jobId returned from server.');const result=await waitForJob(jobId);setMessages(prev=>[...prev,{role:'assistant',content:result.assistantMessage||'Done.'}]);setFileData({files:result.files,dependencies:result.dependencies});setMobileView('preview');if(result.title)setAppTitle(result.title);
       // Persist the latest generated state -- this is what makes the
       // project outlive an individual (30-minute-TTL'd) AI generation job.
       await aiStudioSession.syncFiles({files:result.files,dependencies:result.dependencies,title:result.title});
@@ -205,7 +205,7 @@ export default function AiStudio() {
     }finally{setIsGenerating(false);}
   };
   const handleDownload=()=>{aiStudioSession.recordActivity();};
-  if(studioMode==='types')return <div className="studio fixed inset-0 z-40 overflow-y-auto">
+  if(studioMode==='types')return <div key="studio-types" className="studio fixed inset-0 z-40 overflow-y-auto">
   <div className="mx-auto max-w-[1300px] px-4 pb-24 pt-28 sm:px-6 md:px-10 md:pt-36">
     <header className="mb-14 space-y-4 text-center md:mb-16">
       <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider">AI Studio</span>
@@ -225,8 +225,8 @@ export default function AiStudio() {
 </motion.button>;})}</div>
   </div>
 </div>;
-  if(studioMode==='portfolio')return <div className="studio fixed inset-0 z-40 overflow-y-auto"><PortfolioBuilder onBack={()=>setStudioMode('types')} onGenerate={handlePortfolioGenerate}/></div>;
-  if(['ecommerce','blog','landing','cafe','hotel','studio','saas','event','education','custom'].includes(studioMode))return <div className="studio fixed inset-0 z-40 overflow-y-auto"><WebsiteBuilder type={studioMode} onBack={()=>setStudioMode('types')} onGenerate={handleWebsiteGenerate}/></div>;
+  if(studioMode==='portfolio')return <div key="studio-portfolio" className="studio fixed inset-0 z-40 overflow-y-auto"><PortfolioBuilder onBack={()=>setStudioMode('types')} onGenerate={handlePortfolioGenerate}/></div>;
+  if(['ecommerce','blog','landing','cafe','hotel','studio','saas','event','education','custom'].includes(studioMode))return <div key={`studio-${studioMode}`} className="studio fixed inset-0 z-40 overflow-y-auto"><WebsiteBuilder type={studioMode} onBack={()=>setStudioMode('types')} onGenerate={handleWebsiteGenerate}/></div>;
   const pipelineMode=genMode==='debug'?'debug':(genMode==='edit'?'edit':'generate');
   const {steps:pipelineSteps,percent,queued}=computePipeline({mode:pipelineMode,pipeline,isGenerating,complete:!isGenerating&&Boolean(fileData)&&!error,currentStage});
   const firstPrompt=messages[0]?.role==='user'?messages[0].content:'';
@@ -236,8 +236,11 @@ export default function AiStudio() {
   const history=messages.filter(m=>m.role==='user').map(m=>m.content);
   const card='s-card';
   return <div className="studio fixed inset-0 z-40 flex flex-col pt-[3.75rem]">
-    <div className="flex min-h-0 flex-1">
-      <div className="flex w-[360px] shrink-0 flex-col border-r border-[var(--s-line)]">
+    <div className="flex shrink-0 gap-2 border-b border-[var(--s-line)] p-2 lg:hidden" role="tablist" aria-label="Studio view">
+      {[['chat','Chat'],['preview','Preview']].map(([id,label])=><button key={id} type="button" role="tab" aria-selected={mobileView===id} onClick={()=>setMobileView(id)} className={`flex-1 rounded-full px-4 py-2 text-[12px] font-bold uppercase tracking-[0.12em] transition-colors ${mobileView===id?'bg-[var(--s-text)] text-[#050505]':'border border-white/10 text-[var(--s-muted)]'}`}>{label}</button>)}
+    </div>
+    <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+      <div className={`${mobileView==='chat'?'flex':'hidden'} min-h-0 w-full flex-1 flex-col lg:flex lg:w-[360px] lg:flex-none lg:shrink-0 lg:border-r lg:border-[var(--s-line)]`}>
         <div ref={scrollRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
           {firstPrompt&&<div className={`${card} p-4`}>
             <div className="mb-3 flex items-center gap-3 text-[14px] font-medium text-[var(--s-text)]"><CheckSquare className="h-5 w-5 text-[var(--s-muted)]"/>Instructions &amp; Rules</div>
@@ -248,11 +251,11 @@ export default function AiStudio() {
             <div className="mb-2.5 text-[14px] font-semibold text-[var(--s-text)]">Build Status: <span className={isGenerating?'text-[var(--s-accent)]':(error&&!fileData?'text-[var(--s-err)]':'text-[var(--s-ok)]')}>{isGenerating?(queued?'Queued':'In progress'):(error&&!fileData?'Failed':fileData?'Completed':'Idle')} ({percent}%)</span></div>
             <PipelineSteps steps={pipelineSteps} variant="compact"/>
           </div>
-          {chatMessages.length>0&&<div className="space-y-3">{chatMessages.map((m,i)=><div key={i} className={`flex gap-2 ${m.role==='user'?'justify-end':'justify-start'}`}>{m.role==='assistant'&&<Bot className="mt-1 h-4 w-4 shrink-0 text-[var(--s-accent)]"/>}<div className={`max-w-[88%] whitespace-pre-wrap rounded-lg px-3 py-2 text-[12px] ${m.role==='user'?'bg-[var(--s-accent)] text-[#f6f2ea]':'bg-[var(--s-surface)] text-[var(--s-muted)]'}`}>{m.content}</div>{m.role==='user'&&<User className="mt-1 h-4 w-4 shrink-0 text-[var(--s-faint)]"/>}</div>)}</div>}
+          {chatMessages.length>0&&<div className="space-y-3">{chatMessages.map((m,i)=><div key={i} className={`flex gap-2 ${m.role==='user'?'justify-end':'justify-start'}`}>{m.role==='assistant'&&<Bot className="mt-1 h-4 w-4 shrink-0 text-[var(--s-accent)]"/>}<div className={`max-w-[88%] whitespace-pre-wrap rounded-lg px-3 py-2 text-[12px] ${m.role==='user'?'bg-[var(--s-text)] text-[#050505]':'bg-[var(--s-surface)] text-[var(--s-muted)]'}`}>{m.content}</div>{m.role==='user'&&<User className="mt-1 h-4 w-4 shrink-0 text-[var(--s-faint)]"/>}</div>)}</div>}
         </div>
         <div className="shrink-0 p-5 pt-0">
           {error&&debugRetryAvailable&&!isGenerating&&<button type="button" onClick={handleDebugRetry} className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--s-line-strong)] bg-[var(--s-raised)] px-3 py-2 text-xs font-medium text-[var(--s-hi)] hover:bg-[var(--s-hi)]">Retry Debug Only</button>}
-          <div className={`${card} p-3`}>
+          <div className={`${card} p-3 mb-14 lg:mb-0`}>
             <div className="rounded-xl border border-[var(--s-line)] p-3">
               <div className="flex items-start gap-2"><textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSend();}}} placeholder="Describe a change to your website..." rows={2} className="flex-1 resize-none bg-transparent text-[13px] text-[var(--s-text)] placeholder:text-[var(--s-muted)] focus:outline-none"/><Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-[var(--s-text)]"/></div>
               {(attachments.length>0||attachError)&&<div className="mt-2 space-y-1.5">
@@ -271,7 +274,7 @@ export default function AiStudio() {
           </div>
         </div>
       </div>
-      <div className="h-full min-h-0 min-w-0 flex-1 p-4"><AppPreview fileData={fileData} appTitle={appTitle} onFixError={handleFixError} isGenerating={isGenerating} pipeline={pipeline} currentStage={currentStage} onDownload={handleDownload} history={history} projectId={aiStudioSession.projectId} pipelineSteps={pipelineSteps} pipelineMode={pipelineMode} percent={percent}/></div>
+      <div className={`${mobileView==="preview"?"block":"hidden"} h-full min-h-0 min-w-0 flex-1 p-2 sm:p-4 lg:block`}><AppPreview fileData={fileData} appTitle={appTitle} onFixError={handleFixError} isGenerating={isGenerating} pipeline={pipeline} currentStage={currentStage} onDownload={handleDownload} history={history} projectId={aiStudioSession.projectId} pipelineSteps={pipelineSteps} pipelineMode={pipelineMode} percent={percent}/></div>
     </div>
   </div>;
 }
