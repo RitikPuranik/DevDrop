@@ -132,7 +132,7 @@ async function syncGeneratedFiles({ projectId, userId, files, dependencies, titl
  * Supabase, the history row (metadata + storage path) goes to Mongo.
  * Best-effort: a failed snapshot is logged and never fails the user's edit.
  */
-async function recordVersion(project, { source = 'sync', label = '', restoredFromVersion = null } = {}) {
+async function recordVersion(project, { source = 'sync', label = '' } = {}) {
   try {
     const bumped = await AIStudioProject.findOneAndUpdate(
       { _id: project._id },
@@ -140,6 +140,7 @@ async function recordVersion(project, { source = 'sync', label = '', restoredFro
       { new: true, projection: { versionCounter: 1 } }
     );
     const version = bumped.versionCounter;
+    const basedOnVersion = project.currentVersion || null;
     const storagePath = await storage.uploadVersionZip(
       project._id,
       version,
@@ -153,7 +154,7 @@ async function recordVersion(project, { source = 'sync', label = '', restoredFro
         version,
         source,
         label: String(label || '').slice(0, 300),
-        restoredFromVersion,
+        basedOnVersion,
         title: project.title,
         storagePath,
         fileCount: Object.keys(project.files || {}).length,
@@ -163,12 +164,18 @@ async function recordVersion(project, { source = 'sync', label = '', restoredFro
       throw err;
     }
 
+    // The new version is now the one the project's files correspond to.
+    project.currentVersion = version;
+    await AIStudioProject.findOneAndUpdate({ _id: project._id }, { $set: { currentVersion: version } });
+
     // Prune oldest beyond the cap (version numbers are never reused).
-    const stale = await AIStudioProjectVersion.find({ projectId: project._id })
+    let stale = await AIStudioProjectVersion.find({ projectId: project._id })
       .sort({ version: -1 })
       .skip(MAX_VERSIONS_PER_PROJECT)
-      .select('_id storagePath')
+      .select('_id storagePath version')
       .lean();
+    // Never prune the version the project is currently on.
+    stale = stale.filter((v) => v.version !== project.currentVersion);
     if (stale.length) {
       await storage.deleteObjects(stale.map((v) => v.storagePath)).catch((e) =>
         logger.error('AI Studio version prune (storage) failed', { error: e.message }));
@@ -185,10 +192,11 @@ async function recordVersion(project, { source = 'sync', label = '', restoredFro
 async function listVersions({ projectId, userId }) {
   const project = await getOwnedProject(projectId, userId);
   if (!project) return null;
-  return AIStudioProjectVersion.find({ projectId: project._id })
+  const versions = await AIStudioProjectVersion.find({ projectId: project._id })
     .sort({ version: -1 })
-    .select('version label source restoredFromVersion title fileCount createdAt')
+    .select('version label source basedOnVersion title fileCount createdAt')
     .lean();
+  return { versions, currentVersion: project.currentVersion || (versions[0]?.version ?? 0) };
 }
 
 /** Full snapshot of one version (fetched from Supabase), e.g. to preview it. */
@@ -202,9 +210,10 @@ async function getVersion({ projectId, userId, version }) {
 }
 
 /**
- * Non-destructive rollback: loads the chosen snapshot zip from Supabase,
- * copies it onto the project, rebuilds project.zip, and records a new
- * "restore" version. Nothing is deleted.
+ * Selects an older version: loads its zip from Supabase, makes it the
+ * project's current files, rebuilds project.zip and moves the
+ * `currentVersion` pointer. It does NOT create a new version and deletes
+ * nothing. The next edit is recorded as "edited from vN".
  */
 async function restoreVersion({ projectId, userId, version }) {
   const project = await getOwnedProject(projectId, userId);
@@ -216,15 +225,10 @@ async function restoreVersion({ projectId, userId, version }) {
   project.files = normalizeProjectFiles(snapshot.files);
   project.dependencies = snapshot.dependencies;
   if (snapshot.title) project.title = snapshot.title;
+  project.currentVersion = version;
   project.touchActivity();
   project.zipPath = await storage.uploadProjectZip(project._id, buildProjectZip(project.files));
   await project.save();
-
-  await recordVersion(project, {
-    source: 'restore',
-    label: `Restored version ${version}`,
-    restoredFromVersion: version,
-  });
   return project;
 }
 

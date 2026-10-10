@@ -312,9 +312,6 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={isFullscreen ? exitFullscreen : enterFullscreen} title={isFullscreen ? 'Exit full screen (Esc)' : 'View the website full screen'} aria-label={isFullscreen ? 'Exit full screen' : 'Full screen'} className="flex items-center gap-1.5 rounded-lg border border-white/[0.12] bg-[#0b0b0c] px-2.5 py-1.5 text-[12px] text-white/80 hover:text-white">
-            {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />} {isFullscreen ? 'Exit' : 'Full screen'}
-          </button>
           <button onClick={handleExportZip} disabled={isExporting || !fileData} className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-violet-500 to-fuchsia-500 px-3.5 py-1.5 text-[12px] font-medium text-white hover:brightness-110 disabled:opacity-40">
             {isExporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} Download
           </button>
@@ -334,6 +331,9 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
               )}
             </div>
           )}
+          <button onClick={isFullscreen ? exitFullscreen : enterFullscreen} title={isFullscreen ? 'Exit full screen (Esc)' : 'View the website full screen'} aria-label={isFullscreen ? 'Exit full screen' : 'Full screen'} className="flex items-center gap-1.5 rounded-lg border border-white/[0.12] bg-[#0b0b0c] px-2.5 py-1.5 text-[12px] text-white/80 hover:text-white">
+            {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />} {isFullscreen ? 'Exit' : 'Full screen'}
+          </button>
         </div>
       </div>
 
@@ -341,7 +341,6 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
 
       <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-white/[0.12] bg-[#0b0b0c] p-3">
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/[0.12]">
-      <div className="border-b border-white/[0.12] px-3 py-1.5 text-[11px] text-white/70">{activeTab === 'preview' ? 'Live Preview' : 'Source Code'}</div>
       <div className="relative flex-1 overflow-hidden">
         <SandpackLayout style={{ height: '100%', border: 'none', borderRadius: 0, background: 'transparent' }}>
           {/* Keep the preview iframe mounted at all times — unmounting/remounting

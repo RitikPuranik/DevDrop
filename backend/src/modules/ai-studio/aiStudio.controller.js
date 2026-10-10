@@ -10,6 +10,7 @@ const serializeProject = (project) => ({
   files: project.files || {},
   dependencies: project.dependencies || {},
   hasZip: Boolean(project.zipPath),
+  currentVersion: project.currentVersion || 0,
   lastActivityAt: project.lastActivityAt,
 });
 
@@ -84,9 +85,9 @@ exports.syncFiles = async (req, res) => {
 // GET /api/ai-studio/:projectId/versions — newest first, without file contents
 exports.listVersions = async (req, res) => {
   try {
-    const versions = await lifecycle.listVersions({ projectId: req.params.projectId, userId: req.userId });
-    if (!versions) return res.status(404).json({ success: false, message: 'Project not found' });
-    res.status(200).json({ success: true, data: { versions } });
+    const result = await lifecycle.listVersions({ projectId: req.params.projectId, userId: req.userId });
+    if (!result) return res.status(404).json({ success: false, message: 'Project not found' });
+    res.status(200).json({ success: true, data: result });
   } catch (error) {
     console.error('AI Studio listVersions error:', error.message);
     res.status(500).json({ success: false, message: 'Failed to load version history' });

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { GitBranch, Loader2, RotateCcw } from 'lucide-react';
 
-const SOURCE_LABEL = { generate: 'Generated', edit: 'Edited', restore: 'Restored', sync: 'Saved' };
+const SOURCE_LABEL = { generate: 'Generated', edit: 'Edited', sync: 'Saved' };
 
 function formatWhen(iso) {
   try {
@@ -13,11 +13,13 @@ function formatWhen(iso) {
 
 /**
  * Lists every saved snapshot of the project (newest first) and lets the
- * user roll back to any of them. Restoring never deletes anything: it adds a
- * new "Restored" version on top, so a rollback can itself be undone.
+ * user select any of them. Selecting never creates or deletes a version; it
+ * just moves the "selected" marker. Editing from an older version records
+ * "Edited from vN" on the new version.
  */
 export default function VersionHistoryPanel({ projectId, refreshKey, disabled, onList, onRestore }) {
   const [versions, setVersions] = useState([]);
+  const [currentVersion, setCurrentVersion] = useState(null);
   const [loading, setLoading] = useState(false);
   const [busyVersion, setBusyVersion] = useState(null);
   const [error, setError] = useState(null);
@@ -29,6 +31,7 @@ export default function VersionHistoryPanel({ projectId, refreshKey, disabled, o
     try {
       const { data } = await onList();
       setVersions(data?.data?.versions || []);
+      setCurrentVersion(data?.data?.currentVersion ?? null);
     } catch (err) {
       setError(err?.response?.data?.message || 'Could not load version history.');
     } finally {
@@ -40,7 +43,6 @@ export default function VersionHistoryPanel({ projectId, refreshKey, disabled, o
 
   const handleRestore = async (v) => {
     if (disabled || busyVersion) return;
-    if (!window.confirm(`Restore version ${v.version}? Your current version stays in the history, so you can switch back.`)) return;
     setBusyVersion(v.version);
     setError(null);
     try {
@@ -62,25 +64,28 @@ export default function VersionHistoryPanel({ projectId, refreshKey, disabled, o
         <p className="px-2 py-1.5 text-xs text-white/40">No saved versions yet. One is saved after every generation or edit.</p>
       )}
       {error && <p className="px-2 py-1.5 text-xs text-red-300">{error}</p>}
-      {versions.map((v, i) => (
+      {versions.map((v) => (
         <div key={v.version} className="flex items-center justify-between gap-2 border-b border-white/[0.06] px-2 py-2 last:border-0">
           <div className="min-w-0">
             <p className="flex items-center gap-1.5 text-xs font-medium text-white/85">
               <GitBranch className="h-3 w-3 text-violet-300" /> v{v.version} · {SOURCE_LABEL[v.source] || 'Saved'}
-              {i === 0 && <span className="rounded bg-emerald-500/15 px-1.5 text-[10px] text-emerald-300">current</span>}
+              {v.version === currentVersion && <span className="rounded bg-emerald-500/15 px-1.5 text-[10px] text-emerald-300">selected</span>}
             </p>
+            {v.basedOnVersion && v.basedOnVersion !== v.version - 1 && (
+              <p className="text-[11px] text-violet-300/80">Edited from v{v.basedOnVersion}</p>
+            )}
             <p className="truncate text-[11px] text-white/45">
               {formatWhen(v.createdAt)} · {v.fileCount} files{v.label ? ` · ${v.label}` : ''}
             </p>
           </div>
-          {i !== 0 && (
+          {v.version !== currentVersion && (
             <button
               onClick={() => handleRestore(v)}
               disabled={disabled || busyVersion !== null}
-              title={disabled ? 'Wait for the current generation to finish' : `Roll back to version ${v.version}`}
+              title={disabled ? 'Wait for the current generation to finish' : `Switch to version ${v.version}`}
               className="flex shrink-0 items-center gap-1 rounded-md border border-white/[0.12] px-2 py-1 text-[11px] text-white/75 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {busyVersion === v.version ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />} Restore
+              {busyVersion === v.version ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />} Select
             </button>
           )}
         </div>

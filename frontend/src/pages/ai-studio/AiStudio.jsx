@@ -87,7 +87,7 @@ export default function AiStudio() {
     if(!project?.files)throw new Error('Restore returned no files.');
     setFileData({files:toSandpackFiles(project.files),dependencies:project.dependencies||{}});
     if(project.title)setAppTitle(project.title);
-    setMessages(prev=>[...prev,{role:'assistant',content:`↩️ Restored version ${version}. Your previous version is still in the Versions list.`}]);
+    setMessages(prev=>[...prev,{role:'assistant',content:`Switched to version ${version}. Edits from here are saved as a new version marked "Edited from v${version}".`}]);
     setVersionRefreshKey(k=>k+1);
   };
   const runGeneration=async(nextMessages,spec={})=>{setIsGenerating(true);setError(null);setFailedJobId(null);setDebugRetryAvailable(false);setPipeline({});setCurrentStage('queued');
