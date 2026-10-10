@@ -1,5 +1,6 @@
 import React from 'react';
-import { Check, Circle, Loader2 } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Check, Loader2 } from 'lucide-react';
 
 // ONE definition of the AI Studio progress steps, used by BOTH the left
 // sidebar and the preview overlay so they can never disagree. It is mode-aware:
@@ -111,30 +112,54 @@ export function computePipeline({ mode = 'generate', pipeline = {}, isGenerating
   return { steps, percent, queued };
 }
 
-/** Same markup in the sidebar ("compact") and the preview overlay ("detailed"). */
+/** Same data in the sidebar ("compact", a connected timeline) and elsewhere ("detailed"). */
 export function PipelineSteps({ steps, variant = 'compact' }) {
   const detailed = variant === 'detailed';
   return (
-    <div className={detailed ? 'space-y-3' : 'space-y-2'}>
-      {steps.map((step) => {
+    <ol className="relative">
+      {steps.map((step, idx) => {
         const { state } = step;
+        const last = idx === steps.length - 1;
         return (
-          <div key={step.id} className="flex items-start gap-2.5">
-            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center">
-              {state === 'done' ? <Check className="h-4 w-4 text-[var(--s-ok)]" />
-                : state === 'active' ? <Loader2 className="h-4 w-4 animate-spin text-[var(--s-accent)]" />
-                : <Circle className="h-3.5 w-3.5 text-[var(--s-faint)]" />}
+          <li key={step.id} className="relative flex gap-3 pb-4 last:pb-0">
+            {!last && (
+              <span className="absolute left-[11px] top-6 h-[calc(100%-1.25rem)] w-px overflow-hidden bg-white/10" aria-hidden="true">
+                <motion.span
+                  className="block w-full bg-gradient-to-b from-[var(--s-ok)] to-[var(--s-hi)]"
+                  initial={false}
+                  animate={{ height: state === 'done' ? '100%' : '0%' }}
+                  transition={{ duration: 0.6, ease: 'easeOut' }}
+                />
+              </span>
+            )}
+            <span className="relative z-10 flex h-6 w-6 shrink-0 items-center justify-center">
+              {state === 'active' && <span className="sg-orb-pulse !border-[var(--s-hi)]/60" />}
+              <AnimatePresence mode="wait" initial={false}>
+                {state === 'done' ? (
+                  <motion.span key="d" initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 420, damping: 18 }} className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--s-ok)]/15 ring-1 ring-[var(--s-ok)]/40">
+                    <Check className="h-3.5 w-3.5 text-[var(--s-ok)]" strokeWidth={3} />
+                  </motion.span>
+                ) : state === 'active' ? (
+                  <motion.span key="a" initial={{ scale: 0.6 }} animate={{ scale: 1 }} className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--s-hi)]/15 ring-1 ring-[var(--s-hi)]/50">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--s-hi)]" />
+                  </motion.span>
+                ) : (
+                  <motion.span key="p" className="flex h-6 w-6 items-center justify-center rounded-full ring-1 ring-white/10">
+                    <span className="h-1.5 w-1.5 rounded-full bg-white/20" />
+                  </motion.span>
+                )}
+              </AnimatePresence>
             </span>
-            <div className="min-w-0 flex-1">
-              <div className={`text-[12.5px] ${state === 'done' ? 'text-[var(--s-text)]' : state === 'active' ? 'text-[var(--s-text)]' : 'text-[var(--s-faint)]'}`}>
+            <div className="min-w-0 flex-1 pt-[3px]">
+              <div className={`text-[12.5px] font-medium leading-tight transition-colors ${state === 'pending' ? 'text-[var(--s-faint)]' : 'text-[var(--s-text)]'}`}>
                 {step.label}
-                {step.detail && <span className="ml-1.5 text-[11px] text-[var(--s-muted)]">{step.detail}</span>}
               </div>
+              {step.detail && <p className="mt-1 text-[11px] text-[var(--s-hi)]">{step.detail}</p>}
               {detailed && <p className="mt-0.5 text-[10px] text-[var(--s-faint)]">{step.description}</p>}
             </div>
-          </div>
+          </li>
         );
       })}
-    </div>
+    </ol>
   );
 }

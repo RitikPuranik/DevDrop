@@ -7,7 +7,9 @@ import { usePostHog } from '../../analytics/PostHogProvider';
 import { aiGenerateAPI } from '../../api/aiGenerate';
 import { subscribeToJob } from '../../api/socket';
 import AppPreview from '../../components/ai-studio/AppPreview';
-import { PipelineSteps, computePipeline } from '../../components/ai-studio/pipelineSteps';
+import { computePipeline } from '../../components/ai-studio/pipelineSteps';
+import TypeArt from '../../components/ai-studio/TypeArt';
+import BuildStatusCard from '../../components/ai-studio/BuildStatusCard';
 import PortfolioBuilder from '../../components/ai-studio/PortfolioBuilder';
 import { buildPortfolioPrompt } from '../../components/ai-studio/portfolioPrompt';
 import WebsiteBuilder, { buildWebsitePrompt } from '../../components/ai-studio/WebsiteBuilder';
@@ -224,10 +226,7 @@ export default function AiStudio() {
       <p className="mx-auto max-w-xl text-sm leading-7 text-[var(--s-muted)] md:text-base">Choose a website type. We&apos;ll ask only what matters for it, then turn your answers into a ready-to-ship build.</p>
     </header>
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-6 lg:grid-cols-3">{WEBSITE_TYPES.map((type,idx)=>{const Icon=type.icon;return <motion.button key={type.id} type="button" disabled={!type.enabled} onClick={()=>type.enabled&&setStudioMode(type.id)} initial={{opacity:0,y:14}} animate={{opacity:1,y:0}} transition={{duration:0.4,delay:idx*0.04}} className={`group s-card flex flex-col overflow-hidden text-left transition-all duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--s-text)] ${type.enabled?'hover:-translate-y-1 hover:border-white/25 hover:bg-white/[0.05]':'cursor-not-allowed opacity-45'}`}>
-<div className="relative flex h-44 items-center justify-center border-b border-[var(--s-line)] bg-[var(--s-surface)] p-6">
-{type.artImage?<img src={type.artImage} alt="" loading="lazy" className="max-h-full w-auto object-contain opacity-70 transition-opacity duration-500 group-hover:opacity-100"/>:<Icon size={44} strokeWidth={1.1} className="text-[var(--s-faint)]"/>}
-<span className="absolute left-4 top-4 flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5"><Icon size={15} className="text-[var(--s-text)]"/></span>
-</div>
+<div className="relative h-48 overflow-hidden border-b border-[var(--s-line)]"><div className={`h-full w-full ${type.enabled?'transition-transform duration-500 ease-out group-hover:scale-[1.06]':'grayscale'}`}><TypeArt id={type.id}/></div></div>
 <div className="flex flex-1 flex-col p-6">
 <h2 className="s-display text-[22px] leading-7">{type.title}</h2>
 <p className="mt-2 flex-1 text-sm leading-relaxed text-[var(--s-muted)]">{type.description}</p>
@@ -251,45 +250,43 @@ export default function AiStudio() {
       {[['chat','Chat'],['preview','Preview']].map(([id,label])=><button key={id} type="button" role="tab" aria-selected={mobileView===id} onClick={()=>setMobileView(id)} className={`flex-1 rounded-full px-4 py-2 text-[12px] font-bold uppercase tracking-[0.12em] transition-colors ${mobileView===id?'bg-[var(--s-text)] text-[#050505]':'border border-white/10 text-[var(--s-muted)]'}`}>{label}</button>)}
     </div>
     <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-      <div className={`${mobileView==='chat'?'flex':'hidden'} min-h-0 w-full flex-1 flex-col lg:flex lg:w-[360px] lg:flex-none lg:shrink-0 lg:border-r lg:border-[var(--s-line)]`}>
-        <div ref={scrollRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-          {firstPrompt&&<div className={`${card} p-4`}>
-            <div className="mb-3 flex items-center gap-3 text-[14px] font-medium text-[var(--s-text)]"><CheckSquare className="h-5 w-5 text-[var(--s-muted)]"/>Instructions &amp; Rules</div>
-            <ul className={`space-y-1.5 text-[12px] leading-5 text-[var(--s-text)] ${showContract?'max-h-72 overflow-y-auto pr-1':''}`}>{shownRules.map((r,i)=><li key={i} className="flex gap-2"><span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-[var(--s-muted)]"/><span className={showContract?'':'line-clamp-2'}>{r}</span></li>)}</ul>
-            <button type="button" onClick={()=>setShowContract(v=>!v)} className="mt-3 flex w-full items-center justify-center gap-1.5 border-t border-[var(--s-line)] pt-2.5 text-[12px] text-[var(--s-muted)] hover:text-[var(--s-text)]">[ <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showContract?'rotate-180':''}`}/> {showContract?'Hide':'View'} Contract ]</button>
+      <div className={`${mobileView==='chat'?'flex':'hidden'} min-h-0 w-full flex-1 flex-col lg:flex lg:w-[380px] lg:flex-none lg:shrink-0 lg:border-r lg:border-[var(--s-line)]`}>
+        <div ref={scrollRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-5">
+          {firstPrompt&&<div className="overflow-hidden rounded-2xl border border-[var(--s-line)]">
+            <button type="button" onClick={()=>setShowContract(v=>!v)} aria-expanded={showContract} className="flex w-full items-center gap-2.5 px-3.5 py-3 text-left">
+              <CheckSquare className="h-4 w-4 text-[var(--s-muted)]"/>
+              <span className="flex-1 text-[13px] font-medium text-[var(--s-text)]">Your brief</span>
+              <span className="text-[11px] text-[var(--s-faint)]">{ruleLines.length} points</span>
+              <ChevronDown className={`h-4 w-4 text-[var(--s-faint)] transition-transform ${showContract?'rotate-180':''}`}/>
+            </button>
+            {showContract&&<ul className="max-h-64 space-y-1.5 overflow-y-auto border-t border-[var(--s-line)] px-3.5 py-3 text-[12px] leading-5 text-[var(--s-muted)]">{ruleLines.map((r,i)=><li key={i} className="flex gap-2"><span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-[var(--s-faint)]"/><span>{r}</span></li>)}</ul>}
           </div>}
-          <div className="px-1 pt-2">
-            <div className="mb-2.5 text-[14px] font-semibold text-[var(--s-text)]">Build Status: <span className={isGenerating?'text-[var(--s-accent)]':(error&&!fileData?'text-[var(--s-err)]':'text-[var(--s-ok)]')}>{isGenerating?(queued?'Queued':'In progress'):(error&&!fileData?'Failed':fileData?'Completed':'Idle')} ({percent}%)</span></div>
-            <PipelineSteps steps={pipelineSteps} variant="compact"/>
-          </div>
-          {chatMessages.length>0&&<div className="space-y-3">{chatMessages.map((m,i)=><div key={i} className={`flex gap-2 ${m.role==='user'?'justify-end':'justify-start'}`}>{m.role==='assistant'&&<Bot className="mt-1 h-4 w-4 shrink-0 text-[var(--s-accent)]"/>}<div className={`max-w-[88%] whitespace-pre-wrap rounded-lg px-3 py-2 text-[12px] ${m.role==='user'?'bg-[var(--s-text)] text-[#050505]':'bg-[var(--s-surface)] text-[var(--s-muted)]'}`}>{m.content}</div>{m.role==='user'&&<User className="mt-1 h-4 w-4 shrink-0 text-[var(--s-faint)]"/>}</div>)}</div>}
+          {chatMessages.map((m,i)=>m.role==='user'
+            ?<div key={i} className="ml-auto max-w-[88%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-white/[0.07] px-3.5 py-2.5 text-[13px] leading-5 text-[var(--s-text)]">{m.content}</div>
+            :<div key={i} className="flex gap-2.5"><span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/[0.07]"><Sparkles className="h-3 w-3 text-[var(--s-text)]"/></span><div className="whitespace-pre-wrap text-[13px] leading-6 text-[var(--s-muted)]">{m.content}</div></div>)}
+          <BuildStatusCard steps={pipelineSteps} percent={percent} isGenerating={isGenerating} queued={queued} failed={Boolean(error&&!fileData)} completed={Boolean(fileData)&&!error}/>
         </div>
-        <div className="shrink-0 p-5 pt-0">
-          {error&&debugRetryAvailable&&!isGenerating&&<button type="button" onClick={handleDebugRetry} className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--s-line-strong)] bg-[var(--s-raised)] px-3 py-2 text-xs font-medium text-[var(--s-hi)] hover:bg-[var(--s-hi)]">Retry Debug Only</button>}
-          <div className={`${card} p-3 mb-14 lg:mb-0`}>
-            <div className="rounded-xl border border-[var(--s-line)] p-3">
-              <div className="flex items-start gap-2"><textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSend();}}} placeholder="Describe a change to your website..." rows={2} className="flex-1 resize-none bg-transparent text-[13px] text-[var(--s-text)] placeholder:text-[var(--s-muted)] focus:outline-none"/><Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-[var(--s-text)]"/></div>
-              {(attachments.length>0||attachError)&&<div className="mt-2 space-y-1.5">
-                {attachments.length>0&&<div className="flex flex-wrap gap-1.5">{attachments.map(a=><div key={a.id} className="group relative flex max-w-[150px] items-center gap-1.5 rounded-lg border border-[var(--s-line)] bg-[var(--s-surface)] py-1 pl-1 pr-6 text-[11px] text-[var(--s-muted)]">
-                  {a.previewUrl?<img src={a.previewUrl} alt="" className="h-6 w-6 shrink-0 rounded object-cover"/>:<span className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-[var(--s-surface)]">{a.kind==='video'?<Film className="h-3.5 w-3.5"/>:<FileText className="h-3.5 w-3.5"/>}</span>}
-                  <span className="truncate" title={a.file.name}>{a.file.name}</span>
-                  <button type="button" onClick={()=>removeAttachment(a.id)} disabled={isUploadingAttachments} aria-label={`Remove ${a.file.name}`} className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-0.5 text-[var(--s-faint)] hover:text-[var(--s-text)] disabled:opacity-40"><X className="h-3 w-3"/></button>
-                </div>)}</div>}
-                {attachError&&<p className="text-[11px] text-[var(--s-err)]">{attachError}</p>}
-              </div>}
-              <div className="mt-2 flex items-center justify-between">
-                <div className="flex items-center gap-3 text-[var(--s-faint)]"><input ref={fileInputRef} type="file" multiple accept={ATTACH_ACCEPT} onChange={handlePickFiles} className="hidden"/><button type="button" onClick={()=>fileInputRef.current?.click()} disabled={isUploadingAttachments||attachments.length>=MAX_ATTACHMENTS} title={isGenerating?"Attach now, send once generation finishes":"Attach images, videos or files to this change"} aria-label="Attach files" className="relative hover:text-[var(--s-text)] disabled:cursor-not-allowed disabled:opacity-40"><Paperclip className="h-5 w-5"/>{attachments.length>0&&<span className="absolute -right-1.5 -top-1.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-[var(--s-accent)] px-1 text-[9px] font-semibold text-[var(--s-text)]">{attachments.length}</span>}</button><button type="button" disabled title="Coming soon" className="cursor-not-allowed"><Mic className="h-5 w-5"/></button></div>
-                <button type="button" onClick={handleSend} disabled={!input.trim()||isGenerating||isUploadingAttachments} aria-label="Send" className="text-[var(--s-muted)] hover:text-[var(--s-text)] disabled:cursor-not-allowed disabled:opacity-40">{isGenerating||isUploadingAttachments?<Loader2 className="h-5 w-5 animate-spin"/>:<Send className="h-5 w-5"/>}</button>
-              </div>
+        <div className="mb-14 shrink-0 px-4 pb-4 lg:mb-0">
+          {error&&debugRetryAvailable&&!isGenerating&&<button type="button" onClick={handleDebugRetry} className="mb-2 flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--s-line-strong)] px-3 py-2 text-xs font-medium text-[var(--s-text)] transition-colors hover:bg-white/[0.06]">Retry with Debug Agent</button>}
+          <div className="rounded-2xl border border-[var(--s-line-strong)] bg-[var(--s-surface)] p-3 transition-colors focus-within:border-white/30">
+            <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSend();}}} placeholder="Describe a change to your website…" rows={2} className="w-full resize-none bg-transparent text-[13px] leading-5 text-[var(--s-text)] placeholder:text-[var(--s-faint)] focus:outline-none"/>
+            {(attachments.length>0||attachError)&&<div className="mt-2 space-y-1.5">
+              {attachments.length>0&&<div className="flex flex-wrap gap-1.5">{attachments.map(a=><div key={a.id} className="relative flex max-w-[150px] items-center gap-1.5 rounded-lg border border-[var(--s-line)] bg-white/[0.03] py-1 pl-1 pr-6 text-[11px] text-[var(--s-muted)]">
+                {a.previewUrl?<img src={a.previewUrl} alt="" className="h-6 w-6 shrink-0 rounded object-cover"/>:<span className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-white/[0.05]">{a.kind==='video'?<Film className="h-3.5 w-3.5"/>:<FileText className="h-3.5 w-3.5"/>}</span>}
+                <span className="truncate" title={a.file.name}>{a.file.name}</span>
+                <button type="button" onClick={()=>removeAttachment(a.id)} disabled={isUploadingAttachments} aria-label={`Remove ${a.file.name}`} className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-0.5 text-[var(--s-faint)] hover:text-[var(--s-text)] disabled:opacity-40"><X className="h-3 w-3"/></button>
+              </div>)}</div>}
+              {attachError&&<p className="text-[11px] text-[var(--s-err)]">{attachError}</p>}
+            </div>}
+            <div className="mt-2 flex items-center justify-between">
+              <input ref={fileInputRef} type="file" multiple accept={ATTACH_ACCEPT} onChange={handlePickFiles} className="hidden"/>
+              <button type="button" onClick={()=>fileInputRef.current?.click()} disabled={isUploadingAttachments||attachments.length>=MAX_ATTACHMENTS} title={isGenerating?"Attach now, send once generation finishes":"Attach images, videos or files to this change"} aria-label="Attach files" className="relative flex h-8 w-8 items-center justify-center rounded-full text-[var(--s-muted)] transition-colors hover:bg-white/[0.07] hover:text-[var(--s-text)] disabled:cursor-not-allowed disabled:opacity-40"><Paperclip className="h-4 w-4"/>{attachments.length>0&&<span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-[var(--s-text)] px-1 text-[9px] font-bold text-[#050505]">{attachments.length}</span>}</button>
+              <button type="button" onClick={handleSend} disabled={!input.trim()||isGenerating||isUploadingAttachments} aria-label="Send" className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--s-text)] text-[#050505] transition-colors hover:bg-white disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-[var(--s-faint)]">{isGenerating||isUploadingAttachments?<Loader2 className="h-4 w-4 animate-spin"/>:<ArrowUp className="h-4 w-4"/>}</button>
             </div>
           </div>
         </div>
       </div>
-<<<<<<< HEAD
-      <div className={`${mobileView==="preview"?"block":"hidden"} h-full min-h-0 min-w-0 flex-1 p-2 sm:p-4 lg:block`}><AppPreview fileData={fileData} appTitle={appTitle} onFixError={handleFixError} isGenerating={isGenerating} pipeline={pipeline} currentStage={currentStage} onDownload={handleDownload} history={history} projectId={aiStudioSession.projectId} pipelineSteps={pipelineSteps} pipelineMode={pipelineMode} percent={percent}/></div>
-=======
-      <div className="h-full min-h-0 min-w-0 flex-1 p-4"><AppPreview fileData={fileData} appTitle={appTitle} onFixError={handleFixError} isGenerating={isGenerating} pipeline={pipeline} currentStage={currentStage} onDownload={handleDownload} history={history} projectId={aiStudioSession.projectId} onListVersions={aiStudioSession.listVersions} onRestoreVersion={handleRestoreVersion} versionRefreshKey={versionRefreshKey} pipelineSteps={pipelineSteps} pipelineMode={pipelineMode} percent={percent}/></div>
->>>>>>> 2e56ae48f9bfa913fdfd8dd52aa79eb5f8a1a2d3
+      <div className={`${mobileView==="preview"?"block":"hidden"} h-full min-h-0 min-w-0 flex-1 p-2 sm:p-4 lg:block`}><AppPreview fileData={fileData} appTitle={appTitle} onFixError={handleFixError} isGenerating={isGenerating} pipeline={pipeline} currentStage={currentStage} onDownload={handleDownload} history={history} projectId={aiStudioSession.projectId} onListVersions={aiStudioSession.listVersions} onRestoreVersion={handleRestoreVersion} versionRefreshKey={versionRefreshKey} pipelineSteps={pipelineSteps} pipelineMode={pipelineMode} percent={percent}/></div>
     </div>
   </div>;
 }

@@ -8,10 +8,11 @@ import {
   useSandpack,
 } from '@codesandbox/sandpack-react';
 import { Eye, Code2, AlertTriangle, Bot, Download, Loader2, RefreshCw, Monitor, Tablet, Smartphone, History, Rocket, GitBranch } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import VersionHistoryPanel from './preview/VersionHistoryPanel';
 import ShipProjectModal from './ShipProjectModal';
 import Github from './GithubIcon';
-import { PipelineSteps, PIPELINE_TITLES } from './pipelineSteps';
+import GeneratingScreen from './GeneratingScreen';
 import JSZip from 'jszip';
 
 const PLACEHOLDER_FILES = {
@@ -158,27 +159,30 @@ const BASE_DEPENDENCIES = {
   'lucide-react': 'latest',
 };
 
-function PipelineProgress({ steps, mode = 'generate', percent = 0 }) {
-  const title = PIPELINE_TITLES[mode] || PIPELINE_TITLES.generate;
-  const card = (
-    <div className="w-full max-w-md rounded-xl border border-[var(--s-line)] bg-[var(--s-surface)] p-5 shadow-none">
-      <div className="mb-4">
-        <div className="mb-1 flex items-center justify-between gap-2">
-          <span className="flex items-center gap-2 text-sm font-semibold text-[var(--s-text)]"><Bot className="h-4 w-4 text-[var(--s-accent)]" /> {title}</span>
-          <span className="text-[11px] text-[var(--s-faint)]">{percent}%</span>
-        </div>
-        <p className="text-xs text-[var(--s-faint)]">Each stage is updated from the real {mode === 'generate' ? 'generation' : mode === 'edit' ? 'editing' : 'debug'} pipeline.</p>
-      </div>
-      <PipelineSteps steps={steps} variant="detailed" />
+// ── toolbar building blocks ──────────────────────────────────────────────
+const BTN_BASE = 'inline-flex items-center justify-center gap-2 rounded-full text-[12px] font-semibold transition-all duration-200 disabled:pointer-events-none disabled:opacity-40';
+const BTN_GHOST = `${BTN_BASE} h-9 border border-[var(--s-line)] bg-[var(--s-surface)] px-3.5 text-[var(--s-text)] hover:-translate-y-px hover:border-[var(--s-line-strong)] hover:bg-white/[0.06]`;
+const BTN_ICON = `${BTN_BASE} h-9 w-9 border border-[var(--s-line)] bg-[var(--s-surface)] text-[var(--s-muted)] hover:-translate-y-px hover:border-[var(--s-line-strong)] hover:text-[var(--s-text)]`;
+const BTN_PRIMARY = `${BTN_BASE} h-9 bg-[var(--s-text)] px-4 font-bold text-[#050505] hover:-translate-y-px hover:bg-white`;
+
+// A pill-shaped switch whose highlight slides to the chosen option.
+function Segmented({ id, value, onChange, options }) {
+  return (
+    <div className="flex items-center rounded-full border border-[var(--s-line)] bg-[var(--s-surface)] p-1">
+      {options.map(({ value: v, label, icon: Icon, aria }) => {
+        const on = value === v;
+        return (
+          <button
+            key={v} type="button" onClick={() => onChange(v)} aria-pressed={on} aria-label={aria || label} title={aria || label}
+            className={`relative flex h-7 items-center gap-1.5 rounded-full px-3 text-[12px] font-semibold transition-colors ${on ? 'text-[#050505]' : 'text-[var(--s-muted)] hover:text-[var(--s-text)]'}`}
+          >
+            {on && <motion.span layoutId={`seg-${id}`} className="absolute inset-0 rounded-full bg-[var(--s-text)]" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
+            <span className="relative z-10 flex items-center gap-1.5"><Icon className="h-3.5 w-3.5" />{label}</span>
+          </button>
+        );
+      })}
     </div>
   );
-  // A full generation has nothing to show yet, so it covers the preview. An
-  // edit/debug run already has a working site on screen -- keep it visible and
-  // show progress as a floating card instead of blanking it out.
-  if (mode === 'generate') {
-    return <div className="absolute inset-0 z-20 flex items-center justify-center bg-[var(--s-bg)]/95 px-6 ">{card}</div>;
-  }
-  return <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center px-4">{card}</div>;
 }
 
 function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiveTab, pipelineSteps, pipelineMode, percent, onHardReload, onDownload, device, setDevice, history = [], projectId, appTitle, onListVersions, onRestoreVersion, versionRefreshKey }) {
@@ -256,55 +260,34 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between gap-3 pb-2.5">
-        <div className="flex items-center gap-3">
-          <div className="flex rounded-lg border border-[var(--s-line)] bg-[var(--s-surface)] p-0.5">
-            <button onClick={() => setActiveTab('preview')} className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] ${activeTab === 'preview' ? 'bg-[var(--s-surface)] text-[var(--s-text)]' : 'text-[var(--s-faint)] hover:text-[var(--s-text)]'}`}>
-              <Eye className="h-3.5 w-3.5" /> Preview
-            </button>
-            <button onClick={() => setActiveTab('code')} className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] ${activeTab === 'code' ? 'bg-[var(--s-surface)] text-[var(--s-text)]' : 'text-[var(--s-faint)] hover:text-[var(--s-text)]'}`}>
-              <Code2 className="h-3.5 w-3.5" /> Code
-            </button>
-          </div>
-          <div className="flex rounded-lg border border-[var(--s-line)] bg-[var(--s-surface)] p-0.5">
-            {[['desktop', Monitor], ['tablet', Tablet], ['mobile', Smartphone]].map(([id, Icon]) => (
-              <button key={id} onClick={() => setDevice(id)} aria-label={`${id} preview`} className={`rounded-md px-2 py-1 ${device === id ? 'bg-[var(--s-surface)] text-[var(--s-text)]' : 'text-[var(--s-faint)] hover:text-[var(--s-text)]'}`}>
-                <Icon className="h-3.5 w-3.5" />
-              </button>
-            ))}
-          </div>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2.5 pb-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Segmented id="view" value={activeTab} onChange={setActiveTab} options={[{ value: 'preview', label: 'Preview', icon: Eye }, { value: 'code', label: 'Code', icon: Code2 }]} />
+          <Segmented id="device" value={device} onChange={setDevice} options={[{ value: 'desktop', icon: Monitor, aria: 'Desktop preview' }, { value: 'tablet', icon: Tablet, aria: 'Tablet preview' }, { value: 'mobile', icon: Smartphone, aria: 'Mobile preview' }].map((o) => ({ ...o, label: '' }))} />
+          <AnimatePresence initial={false}>
+            {isGenerating && (
+              <motion.span
+                key="building" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} transition={{ duration: 0.2 }}
+                className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--s-hi)]/40 bg-[var(--s-surface)] pl-3 pr-3.5 text-[12px] font-semibold tabular-nums text-[var(--s-hi)]"
+              >
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> {percent}%
+              </motion.span>
+            )}
+          </AnimatePresence>
         </div>
-        <div className="flex items-center gap-2">
+
+        <div className="flex flex-wrap items-center gap-2">
           {activeTab === 'preview' && (
-            <button onClick={onHardReload} title="Restart the preview session (fixes a stuck/blank preview)" aria-label="Reload preview" className="rounded-lg border border-[var(--s-line)] bg-[var(--s-surface)] p-1.5 text-[var(--s-muted)] hover:text-[var(--s-text)]">
+            <button onClick={onHardReload} title="Restart the preview session (fixes a stuck/blank preview)" aria-label="Reload preview" className={BTN_ICON}>
               <RefreshCw className="h-3.5 w-3.5" />
             </button>
           )}
-          <button onClick={handleExportZip} disabled={isExporting || !fileData} className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-[var(--s-accent)] to-[var(--s-accent)] px-3.5 py-1.5 text-[12px] font-medium text-[var(--s-text)] hover:brightness-110 disabled:opacity-40">
-            {isExporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} {fileData && !isGenerating ? 'Download ZIP (Complete)' : 'Download ZIP'}
-          </button>
-          <button onClick={() => setShipMode('github')} disabled={!canShip} title={canShip ? 'Push this website to a new GitHub repository' : 'Available once generation is complete'} className="flex items-center gap-2 rounded-lg border border-[var(--s-line)] bg-[var(--s-surface)] px-3 py-1.5 text-[12px] text-[var(--s-text)] hover:text-[var(--s-text)] disabled:cursor-not-allowed disabled:opacity-40">
-            <Github className="h-3.5 w-3.5" /> Push to GitHub
-          </button>
-          <button onClick={() => setShipMode('live')} disabled={!canShip} title={canShip ? 'Deploy this website live on your Vercel account' : 'Available once generation is complete'} className="flex items-center gap-2 rounded-lg border border-[var(--s-line)] bg-[var(--s-surface)] px-3 py-1.5 text-[12px] text-[var(--s-text)] hover:text-[var(--s-text)] disabled:cursor-not-allowed disabled:opacity-40">
-            <Rocket className="h-3.5 w-3.5" /> Publish Live
-          </button>
-          {onListVersions && (
-            <div className="relative">
-              <button onClick={() => { setShowVersions((v) => !v); setShowHistory(false); }} disabled={!projectId} className="flex items-center gap-2 rounded-lg border border-white/[0.12] bg-[#0b0b0c] px-3 py-1.5 text-[12px] text-white/80 hover:text-white disabled:opacity-40">
-                <GitBranch className="h-3.5 w-3.5" /> Versions
-              </button>
-              {showVersions && (
-                <VersionHistoryPanel projectId={projectId} refreshKey={versionRefreshKey} disabled={isGenerating} onList={onListVersions} onRestore={async (v) => { await onRestoreVersion(v); setShowVersions(false); }} />
-              )}
-            </div>
-          )}
           <div className="relative">
-            <button onClick={() => setShowHistory((v) => !v)} className="flex items-center gap-2 rounded-lg border border-[var(--s-line)] bg-[var(--s-surface)] px-3 py-1.5 text-[12px] text-[var(--s-text)] hover:text-[var(--s-text)]">
-              <History className="h-3.5 w-3.5" /> History
+            <button onClick={() => setShowHistory((v) => !v)} title="Your requests" aria-label="History" aria-expanded={showHistory} className={`${BTN_ICON} ${showHistory ? '!border-[var(--s-line-strong)] !text-[var(--s-text)]' : ''}`}>
+              <History className="h-3.5 w-3.5" />
             </button>
             {showHistory && (
-              <div className="absolute right-0 z-30 mt-2 max-h-72 w-72 overflow-y-auto rounded-xl border border-[var(--s-line)] bg-[var(--s-surface)] p-2 shadow-none">
+              <div className="absolute right-0 z-30 mt-2 max-h-72 w-72 overflow-y-auto rounded-2xl border border-[var(--s-line-strong)] bg-[var(--s-surface)] p-2 shadow-none">
                 {history.length === 0 ? (
                   <p className="px-2 py-1.5 text-xs text-[var(--s-faint)]">No requests yet.</p>
                 ) : history.map((h, i) => (
@@ -313,14 +296,43 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
               </div>
             )}
           </div>
+          {onListVersions && (
+            <div className="relative">
+              <button onClick={() => { setShowVersions((v) => !v); setShowHistory(false); }} disabled={!projectId} title="Version history" aria-label="Versions" aria-expanded={showVersions} className={`${BTN_ICON} ${showVersions ? '!border-[var(--s-line-strong)] !text-[var(--s-text)]' : ''}`}>
+                <GitBranch className="h-3.5 w-3.5" />
+              </button>
+              {showVersions && (
+                <VersionHistoryPanel projectId={projectId} refreshKey={versionRefreshKey} disabled={isGenerating} onList={onListVersions} onRestore={async (v) => { await onRestoreVersion(v); setShowVersions(false); }} />
+              )}
+            </div>
+          )}
+
+          <span className="mx-0.5 hidden h-5 w-px bg-white/10 sm:block" aria-hidden="true" />
+
+          <button onClick={handleExportZip} disabled={isExporting || !fileData} title="Download the project as a ZIP" className={BTN_GHOST}>
+            {isExporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} Download
+          </button>
+          <button onClick={() => setShipMode('github')} disabled={!canShip} title={canShip ? 'Push this website to a new GitHub repository' : 'Available once generation is complete'} className={BTN_GHOST}>
+            <Github className="h-3.5 w-3.5" /> GitHub
+          </button>
+          <button onClick={() => setShipMode('live')} disabled={!canShip} title={canShip ? 'Deploy this website live on your Vercel account' : 'Available once generation is complete'} className={BTN_PRIMARY}>
+            <Rocket className="h-3.5 w-3.5" /> Publish
+          </button>
         </div>
       </div>
 
       <ShipProjectModal open={Boolean(shipMode)} mode={shipMode} onClose={() => setShipMode(null)} onModeChange={setShipMode} projectId={projectId} title={appTitle} />
 
-      <div className="flex min-h-0 flex-1 flex-col rounded-xl border border-[var(--s-line)] bg-[var(--s-surface)] p-3">
+      <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-[var(--s-line)] bg-[var(--s-surface)] p-2.5">
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--s-line)]">
-      <div className="border-b border-[var(--s-line)] px-3 py-1.5 text-[11px] text-[var(--s-muted)]">{activeTab === 'preview' ? 'Live Preview' : 'Source Code'}</div>
+      <div className="flex items-center gap-3 border-b border-[var(--s-line)] px-3.5 py-2">
+        <span className="flex gap-1.5" aria-hidden="true"><i className="h-2 w-2 rounded-full bg-white/15" /><i className="h-2 w-2 rounded-full bg-white/15" /><i className="h-2 w-2 rounded-full bg-white/15" /></span>
+        <div className="mx-auto flex max-w-[260px] flex-1 items-center justify-center gap-2 rounded-full bg-white/[0.04] px-3 py-1 text-[11px] text-[var(--s-muted)]">
+          <span className={`h-1.5 w-1.5 rounded-full ${isGenerating ? 'animate-pulse bg-[var(--s-hi)]' : fileData ? 'bg-[var(--s-ok)]' : 'bg-white/25'}`} />
+          {activeTab === 'preview' ? 'Live preview' : 'Source code'}
+        </div>
+        <span className="hidden w-[38px] shrink-0 sm:block" aria-hidden="true" />
+      </div>
       <div className="relative flex-1 overflow-hidden">
         <SandpackLayout style={{ height: '100%', border: 'none', borderRadius: 0, background: 'transparent' }}>
           {/* Keep the preview iframe mounted at all times — unmounting/remounting
@@ -337,7 +349,7 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
           )}
         </SandpackLayout>
         {isGenerating && activeTab === 'preview' && (
-          <PipelineProgress steps={pipelineSteps} mode={pipelineMode} percent={percent} />
+          <GeneratingScreen steps={pipelineSteps} mode={pipelineMode} percent={percent} />
         )}
       </div>
       </div>
