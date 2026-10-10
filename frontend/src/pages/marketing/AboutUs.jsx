@@ -92,7 +92,7 @@ export default function About() {
         height: '1000vh',
         background: '#060606',
         color: '#e8e2d6',
-        fontFamily: "'Space Mono', monospace",
+        fontFamily: 'var(--font-napkin)',
       }}
     >
       <div
@@ -317,9 +317,9 @@ function HorizontalNode({ bogie, index, isMobile }) {
           </span>
         </div>
         <h3 style={{
-          fontFamily: "'Playfair Display', serif", fontStyle: 'italic',
+          fontFamily: 'var(--font-napkin-display)', fontWeight: 700,
           fontSize: isMobile ? '36px' : 'clamp(48px, 6.5vw, 100px)',
-          lineHeight: 0.85, marginBottom: isMobile ? 18 : 36,
+          lineHeight: 0.95, marginBottom: isMobile ? 18 : 36,
         }}>
           {bogie.head[0]} <br />
           <span style={{ color: bogie.accent }}>{bogie.head[1]}</span> <br />

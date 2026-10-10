@@ -430,13 +430,13 @@ export default function PortfolioDetailsStep({ details, onChange, onBack, onNext
         </>} />
       </div>
 
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-        <button type="button" onClick={onBack} className="inline-flex items-center gap-2 rounded-xl border border-[var(--s-line)] bg-[var(--s-surface)] px-5 py-3 text-[13px] font-semibold text-[var(--s-muted)] transition-colors hover:text-[var(--s-text)]">
+      <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between [&>button]:w-full sm:[&>button]:w-auto">
+        <button type="button" onClick={onBack} className="s-btn s-btn-ghost">
           <ArrowLeft size={14} /> Previous Step
         </button>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col-reverse items-stretch gap-3 sm:flex-row sm:items-center [&>button]:w-full sm:[&>button]:w-auto">
           {Object.keys(errors).length > 0 && <span className="text-xs text-red-400">Fix the highlighted fields to continue.</span>}
-          <button type="button" onClick={handleNext} className={`inline-flex items-center gap-2 rounded-xl px-6 py-3 text-[13px] font-semibold  transition-opacity hover:opacity-90 ${GRAD}`}>
+          <button type="button" onClick={handleNext} className={GRAD}>
             Continue to Design <ArrowRight size={14} />
           </button>
         </div>

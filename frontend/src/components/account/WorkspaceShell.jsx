@@ -86,7 +86,7 @@ export default function WorkspaceShell({
         </AnimatePresence>
 
         {/* MAIN CONTENT */}
-        <main className="flex-1 min-w-0 pt-14 lg:pt-6">
+        <main className="flex-1 min-w-0 overflow-x-clip pt-[10rem] lg:pt-6">
   <div className="max-w-6xl mx-auto px-5 sm:px-8 py-5 lg:py-6">
     {(pageTitle || headerAction) && (
       <div className="flex flex-wrap items-end justify-between gap-4 mb-8 pb-6 border-b border-white/[0.08]">

@@ -184,7 +184,7 @@ export default function SmoothEliteGallery() {
                   key={filter}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => setActiveFilter(filter)}
-                  className={`relative flex-1 md:flex-none px-4 md:px-6 py-2 text-[11px] md:text-xs font-bold uppercase tracking-[0.16em] transition-colors duration-300 z-10 ${activeFilter === filter ? 'text-[#050505]' : 'text-white/55 hover:text-white'
+                  className={`relative flex-1 md:flex-none px-2 sm:px-4 md:px-6 py-2 text-[10.5px] sm:text-[11px] md:text-xs font-bold uppercase tracking-[0.08em] sm:tracking-[0.16em] transition-colors duration-300 z-10 ${activeFilter === filter ? 'text-[#050505]' : 'text-white/55 hover:text-white'
                     }`}
                 >
                   {activeFilter === filter && (
