@@ -1,11 +1,12 @@
 // Real controller logic under test; the orchestrator it calls into is
 // mocked so no real Mongo/Supabase operations occur.
 jest.mock('../../../src/services/backup/backup.orchestrator');
-jest.mock('../../../src/services/worker.client');
+jest.mock('../../../src/infrastructure/jobs', () => ({ enqueueBackup: jest.fn() }));
+jest.mock('../../../src/infrastructure/queue', () => ({ QueueJob: { findOne: jest.fn() } }));
 
 const orchestrator = require('../../../src/services/backup/backup.orchestrator');
-const workerClient = require('../../../src/services/worker.client');
-const taskRegistry = require('../../../src/services/taskRegistry.service');
+const jobs = require('../../../src/infrastructure/jobs');
+const { QueueJob } = require('../../../src/infrastructure/queue');
 const { getStatus, getHistory, backupMongo, backupSupabase, backupFull, getTaskStatus } = require('../../../src/modules/backup/backup.controller');
 const { mockReq, mockRes } = require('../../helpers/mockQuery');
 
@@ -101,7 +102,7 @@ describe('backup.controller', () => {
   // dispatches a RUN_BACKUP task to the Worker and answers 202 immediately.
   describe('dispatching to the worker', () => {
     beforeEach(() => {
-      workerClient.dispatchTask.mockResolvedValue({ taskId: 'task-1' });
+      jobs.enqueueBackup.mockResolvedValue({ taskId: 'task-1', accepted: true });
     });
 
     it('backupMongo dispatches a mongo task with defaults and returns 202 with the taskId', async () => {
@@ -109,9 +110,9 @@ describe('backup.controller', () => {
       const res = mockRes();
       await backupMongo(req, res);
 
-      expect(workerClient.dispatchTask).toHaveBeenCalledWith('RUN_BACKUP', {
+      expect(jobs.enqueueBackup).toHaveBeenCalledWith({
         kind: 'mongo', direction: 'main_to_backup', mode: 'replace', triggeredBy: 'admin1',
-      });
+      }, 'admin1');
       expect(res.status).toHaveBeenCalledWith(202);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
         success: true,
@@ -122,16 +123,16 @@ describe('backup.controller', () => {
     it('backupMongo passes an explicit merge mode and backup_to_main direction', async () => {
       const req = mockReq({ body: { direction: 'backup_to_main', mode: 'merge' }, userId: 'admin1' });
       await backupMongo(req, mockRes());
-      expect(workerClient.dispatchTask).toHaveBeenCalledWith('RUN_BACKUP', expect.objectContaining({ kind: 'mongo', direction: 'backup_to_main', mode: 'merge' }));
+      expect(jobs.enqueueBackup).toHaveBeenCalledWith(expect.objectContaining({ kind: 'mongo', direction: 'backup_to_main', mode: 'merge' }), 'admin1');
     });
 
     it('backupSupabase dispatches a supabase task defaulting to mirror', async () => {
       const req = mockReq({ body: {}, userId: 'admin1' });
       const res = mockRes();
       await backupSupabase(req, res);
-      expect(workerClient.dispatchTask).toHaveBeenCalledWith('RUN_BACKUP', {
+      expect(jobs.enqueueBackup).toHaveBeenCalledWith({
         kind: 'supabase', direction: 'main_to_backup', supabaseMode: 'mirror', triggeredBy: 'admin1',
-      });
+      }, 'admin1');
       expect(res.status).toHaveBeenCalledWith(202);
     });
 
@@ -139,10 +140,10 @@ describe('backup.controller', () => {
       const req = mockReq({ body: { direction: 'backup_to_main' }, userId: 'admin1' });
       const res = mockRes();
       await backupFull(req, res);
-      expect(workerClient.dispatchTask).toHaveBeenCalledWith('RUN_BACKUP', {
+      expect(jobs.enqueueBackup).toHaveBeenCalledWith({
         kind: 'full', direction: 'backup_to_main', mode: 'replace', supabaseMode: 'mirror', triggeredBy: 'admin1',
-      });
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining('Restore from backup started') }));
+      }, 'admin1');
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining('Restore from backup queued') }));
     });
 
     it('rejects an invalid direction / supabaseMode with 400 and never dispatches', async () => {
@@ -151,32 +152,30 @@ describe('backup.controller', () => {
         await fn(mockReq({ body }), res);
         expect(res.status).toHaveBeenCalledWith(400);
       }
-      expect(workerClient.dispatchTask).not.toHaveBeenCalled();
+      expect(jobs.enqueueBackup).not.toHaveBeenCalled();
     });
 
     it('returns 503 when the worker cannot be reached', async () => {
-      workerClient.dispatchTask.mockRejectedValue(new Error('Worker dispatch failed: ECONNREFUSED'));
+      jobs.enqueueBackup.mockRejectedValue(new Error('queue down'));
       const res = mockRes();
       await backupFull(mockReq({ body: {} }), res);
       expect(res.status).toHaveBeenCalledWith(503);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: false, message: expect.stringContaining('Worker unavailable') }));
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: false, message: expect.stringContaining('Job queue unavailable') }));
     });
   });
 
   describe('getTaskStatus', () => {
-    beforeEach(() => taskRegistry.clear());
-
-    it('returns the current task state', () => {
-      taskRegistry.create('t1', 'RUN_BACKUP');
-      taskRegistry.update('t1', { status: 'running' });
+    it('returns the current task state from the durable job record', async () => {
+      QueueJob.findOne.mockResolvedValue({ jobKey: 't1', type: 'RUN_BACKUP', status: 'active', result: null, error: undefined, createdAt: 1, updatedAt: 2 });
       const res = mockRes();
-      getTaskStatus(mockReq({ params: { taskId: 't1' } }), res);
+      await getTaskStatus(mockReq({ params: { taskId: 't1' } }), res);
       expect(res.json).toHaveBeenCalledWith({ success: true, data: expect.objectContaining({ taskId: 't1', status: 'running' }) });
     });
 
-    it('returns 404 for an unknown task', () => {
+    it('returns 404 for an unknown task', async () => {
+      QueueJob.findOne.mockResolvedValue(null);
       const res = mockRes();
-      getTaskStatus(mockReq({ params: { taskId: 'missing' } }), res);
+      await getTaskStatus(mockReq({ params: { taskId: 'missing' } }), res);
       expect(res.status).toHaveBeenCalledWith(404);
     });
   });

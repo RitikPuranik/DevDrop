@@ -16,34 +16,22 @@ describe('email.service', () => {
   });
 
   describe('sendVerificationEmail', () => {
-    it('generates a token, saves the user, sends the email, and returns true', async () => {
+    it('sends the email containing the token it is given and returns the provider response', async () => {
       apiInstance.sendTransacEmail.mockResolvedValue({ messageId: 'm1' });
-      const user = {
-        email: 'buyer@example.com',
-        name: 'Buyer',
-        generateVerificationToken: jest.fn().mockReturnValue('tok123'),
-        save: jest.fn().mockResolvedValue(true),
-      };
+      const user = { email: 'buyer@example.com', name: 'Buyer' };
 
-      const result = await emailService.sendVerificationEmail(user);
+      const result = await emailService.sendVerificationEmail(user, 'tok123');
 
-      expect(user.save).toHaveBeenCalled();
       expect(apiInstance.sendTransacEmail).toHaveBeenCalled();
       const sentEmail = apiInstance.sendTransacEmail.mock.calls[0][0];
       expect(sentEmail.to).toEqual([{ email: 'buyer@example.com' }]);
       expect(sentEmail.htmlContent).toContain('tok123');
-      expect(result).toBe(true);
+      expect(result).toEqual({ messageId: 'm1' });
     });
 
-    it('propagates the error when the send fails (verification is not best-effort)', async () => {
+    it('propagates the error when the send fails', async () => {
       apiInstance.sendTransacEmail.mockRejectedValue(new Error('brevo down'));
-      const user = {
-        email: 'buyer@example.com',
-        generateVerificationToken: jest.fn().mockReturnValue('tok'),
-        save: jest.fn().mockResolvedValue(true),
-      };
-
-      await expect(emailService.sendVerificationEmail(user)).rejects.toThrow('brevo down');
+      await expect(emailService.sendVerificationEmail({ email: 'buyer@example.com' }, 'tok')).rejects.toThrow('brevo down');
     });
   });
 
@@ -55,9 +43,9 @@ describe('email.service', () => {
       expect(apiInstance.sendTransacEmail).toHaveBeenCalled();
     });
 
-    it('swallows send failures instead of throwing (best-effort)', async () => {
+    it('propagates send failures so the events worker can retry or record the failure', async () => {
       apiInstance.sendTransacEmail.mockRejectedValue(new Error('down'));
-      await expect(emailService.sendWelcomeEmail({ email: 'a@example.com' })).resolves.toBeUndefined();
+      await expect(emailService.sendWelcomeEmail({ email: 'a@example.com' })).rejects.toThrow('down');
     });
   });
 
@@ -87,9 +75,9 @@ describe('email.service', () => {
       expect(html).not.toContain('Amount Paid');
     });
 
-    it('is best-effort and does not throw on failure', async () => {
+    it('propagates send failures so the events worker can retry or record the failure', async () => {
       apiInstance.sendTransacEmail.mockRejectedValue(new Error('down'));
-      await expect(emailService.sendPurchaseConfirmation({ email: 'b@x.com' }, { name: 'x' }, { totalPaid: 0 })).resolves.toBeUndefined();
+      await expect(emailService.sendPurchaseConfirmation({ email: 'b@x.com' }, { name: 'x' }, { totalPaid: 0 })).rejects.toThrow('down');
     });
   });
 
@@ -212,9 +200,9 @@ describe('email.service', () => {
       expect(html).toContain('stack trace here');
     });
 
-    it('is best-effort and swallows send failures', async () => {
+    it('propagates send failures so the events worker can retry or record the failure', async () => {
       apiInstance.sendTransacEmail.mockRejectedValue(new Error('down'));
-      await expect(emailService.sendAdminAlert({ subject: 'x', message: 'y' })).resolves.toBeUndefined();
+      await expect(emailService.sendAdminAlert({ subject: 'x', message: 'y' })).rejects.toThrow('down');
     });
   });
 
@@ -228,9 +216,9 @@ describe('email.service', () => {
       expect(html).toContain('/exclusive/w1');
     });
 
-    it('is best-effort and swallows send failures', async () => {
+    it('propagates send failures so the events worker can retry or record the failure', async () => {
       apiInstance.sendTransacEmail.mockRejectedValue(new Error('down'));
-      await expect(emailService.sendOutbidNotification({ email: 'x@x.com' }, { _id: 'w1', name: 'App' }, 100)).resolves.toBeUndefined();
+      await expect(emailService.sendOutbidNotification({ email: 'x@x.com' }, { _id: 'w1', name: 'App' }, 100)).rejects.toThrow('down');
     });
   });
 

@@ -30,7 +30,7 @@ jest.mock('../../../src/modules/deployment/deploymentProviderConnection.model', 
 jest.mock('../../../src/modules/github/githubConnection.model', () => ({ findOne: () => ({ select: async () => ({ accessTokenEncrypted: 'y' }) }) }));
 jest.mock('../../../src/shared/utils/crypto', () => ({ decrypt: (v) => `dec-${v}` }));
 const mockDispatchTask = jest.fn();
-jest.mock('../../../src/services/worker.client', () => ({ dispatchTask: (...args) => mockDispatchTask(...args) }));
+jest.mock('../../../src/infrastructure/jobs', () => ({ enqueueKashiFix: (...args) => mockDispatchTask(...args) }));
 
 const mockGithub = {
   getRepoTree: jest.fn(async () => [{ path: 'package.json', type: 'blob', size: 100 }, { path: 'src/App.jsx', type: 'blob', size: 100 }, { path: 'src/components/Header.jsx', type: 'blob', size: 100 }]),
@@ -64,7 +64,11 @@ beforeEach(() => {
   mockAi.proposeFix.mockReset();
   mockAi.runtimeCheck.mockReset().mockResolvedValue({ ok: true, errors: [] });
   mockGithub.commitFilesToBranch.mockResolvedValue('abcdef1234567');
-  mockDispatchTask.mockReset();
+  // Stand-in for the deployment-queue worker: the enqueued run is executed by runLoop, exactly as the worker would.
+  mockDispatchTask.mockReset().mockImplementation(async (runId) => {
+    setImmediate(() => runLoop(runId).catch(() => {}));
+    return { accepted: true };
+  });
 });
 
 describe('pickFilesFromLog', () => {
@@ -82,15 +86,16 @@ describe('pickFilesFromLog', () => {
   });
 });
 
-describe('worker dispatch', () => {
-  test('queues Kashi on the Worker when worker configuration is present', async () => {
-    process.env.WORKER_URL = 'http://localhost:4000';
-    process.env.INTERNAL_WEBHOOK_SECRET = 'secret';
-    mockDispatchTask.mockResolvedValue({ taskId: 'task-1' });
+describe('queue dispatch', () => {
+  test('enqueues the Kashi run on deployment-queue', async () => {
+    mockDispatchTask.mockReset().mockResolvedValue({ accepted: true });
     const { run } = await startFixRun({ userId: 'u1', deploymentId: 'dep1' });
-    expect(mockDispatchTask).toHaveBeenCalledWith('KASHI_FIX', { runId: String(run._id) });
-    delete process.env.WORKER_URL;
-    delete process.env.INTERNAL_WEBHOOK_SECRET;
+    expect(mockDispatchTask).toHaveBeenCalledWith(String(run._id), 'u1');
+  });
+
+  test('fails the run with a 503 when the queue is unavailable', async () => {
+    mockDispatchTask.mockRejectedValue(Object.assign(new Error('down'), { code: 'QUEUE_UNAVAILABLE' }));
+    await expect(startFixRun({ userId: 'u1', deploymentId: 'dep1' })).rejects.toMatchObject({ statusCode: 503 });
   });
 });
 

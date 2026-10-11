@@ -2,10 +2,10 @@ jest.mock('../../../src/modules/payout/payout.model');
 jest.mock('../../../src/modules/payment/purchase.model');
 jest.mock('../../../src/modules/website/website.model');
 jest.mock('../../../src/modules/user/user.model');
-jest.mock('../../../src/services/email.service');
+jest.mock('../../../src/infrastructure/events', () => require('../../mocks/services/events.mock'));
 
 const Payout = require('../../../src/modules/payout/payout.model');
-const emailService = require('../../../src/services/email.service');
+const events = require('../../../src/infrastructure/events');
 const payoutController = require('../../../src/modules/payout/payout.controller');
 const { createQueryMock, mockReq, mockRes } = require('../../helpers/mockQuery');
 
@@ -106,7 +106,7 @@ describe('payout.controller', () => {
     it('marks a pending payout completed and emails the seller', async () => {
       const payout = { status: 'pending', sellerId: { name: 'Sam' }, save: jest.fn().mockResolvedValue(true) };
       Payout.findById.mockReturnValue(createQueryMock(payout));
-      emailService.sendPayoutNotification.mockResolvedValue(true);
+      events.enqueuePayoutNotification.mockResolvedValue(true);
 
       const req = mockReq({ params: { id: 'p1' }, body: { utr: 'UTR123', notes: 'paid via NEFT' } });
       const res = mockRes();
@@ -116,14 +116,14 @@ describe('payout.controller', () => {
       expect(payout.status).toBe('completed');
       expect(payout.utr).toBe('UTR123');
       expect(payout.save).toHaveBeenCalled();
-      expect(emailService.sendPayoutNotification).toHaveBeenCalledWith(payout.sellerId, payout);
+      expect(events.enqueuePayoutNotification).toHaveBeenCalled();
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
     });
 
     it('still succeeds when the notification email fails', async () => {
       const payout = { status: 'pending', sellerId: {}, save: jest.fn().mockResolvedValue(true) };
       Payout.findById.mockReturnValue(createQueryMock(payout));
-      emailService.sendPayoutNotification.mockRejectedValue(new Error('smtp down'));
+      events.enqueuePayoutNotification.mockRejectedValue(new Error('smtp down'));
 
       const req = mockReq({ params: { id: 'p1' }, body: { utr: 'UTR123' } });
       const res = mockRes();

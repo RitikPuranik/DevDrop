@@ -1,7 +1,7 @@
 jest.mock('../../../backend/src/services/backup/backup.orchestrator');
 
 const orchestrator = require('../../../backend/src/services/backup/backup.orchestrator');
-const { runScheduledBackup, startBackupCron } = require('../../src/jobs/backup.cron.service');
+const { runScheduledBackup } = require('../../src/jobs/backup.cron.service');
 
 const ORIGINAL_ENV = process.env;
 
@@ -92,97 +92,6 @@ describe('backup.cron.service', () => {
       await runScheduledBackup();
 
       expect(orchestrator.runFullBackup).toHaveBeenCalledTimes(2);
-    });
-  });
-
-  describe('startBackupCron', () => {
-    it('uses setInterval on BACKUP_INTERVAL_HOURS when configured, without running immediately', () => {
-      jest.useFakeTimers();
-      const setIntervalSpy = jest.spyOn(global, 'setInterval');
-      process.env.BACKUP_INTERVAL_HOURS = '6';
-      orchestrator.isBackupTargetConfigured.mockReturnValue({ mongoConfigured: true, supabaseConfigured: false });
-      orchestrator.runFullBackup.mockResolvedValue({ status: 'success' });
-
-      startBackupCron();
-
-      expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 6 * 60 * 60 * 1000);
-      expect(orchestrator.runFullBackup).not.toHaveBeenCalled();
-      jest.clearAllTimers();
-    });
-
-    it('accepts a fractional BACKUP_INTERVAL_HOURS (e.g. every 30 minutes)', () => {
-      jest.useFakeTimers();
-      const setIntervalSpy = jest.spyOn(global, 'setInterval');
-      process.env.BACKUP_INTERVAL_HOURS = '0.5';
-
-      startBackupCron();
-
-      expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 0.5 * 60 * 60 * 1000);
-      jest.clearAllTimers();
-    });
-
-    it('caps BACKUP_INTERVAL_HOURS if it exceeds the 32-bit signed integer limit', () => {
-      jest.useFakeTimers();
-      const setIntervalSpy = jest.spyOn(global, 'setInterval');
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-      process.env.BACKUP_INTERVAL_HOURS = '1000';
-
-      startBackupCron();
-
-      expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 2147483647);
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('exceeds the 32-bit signed integer limit'));
-
-      jest.clearAllTimers();
-      warnSpy.mockRestore();
-    });
-
-    it('falls back to BACKUP_CRON_SCHEDULE (exact cron syntax) when no interval hours is set', () => {
-      const cron = require('node-cron');
-      const scheduleSpy = jest.spyOn(cron, 'schedule').mockImplementation(() => ({ stop: jest.fn() }));
-      process.env.BACKUP_CRON_SCHEDULE = '0 2 * * *';
-      process.env.CRON_TIMEZONE = 'America/New_York';
-
-      startBackupCron();
-
-      expect(scheduleSpy).toHaveBeenCalledWith('0 2 * * *', expect.any(Function), { timezone: 'America/New_York' });
-      scheduleSpy.mockRestore();
-    });
-
-    it('prioritizes BACKUP_INTERVAL_HOURS over BACKUP_CRON_SCHEDULE when both are set', () => {
-      jest.useFakeTimers();
-      const setIntervalSpy = jest.spyOn(global, 'setInterval');
-      const cron = require('node-cron');
-      const scheduleSpy = jest.spyOn(cron, 'schedule');
-      process.env.BACKUP_INTERVAL_HOURS = '12';
-      process.env.BACKUP_CRON_SCHEDULE = '0 2 * * *';
-
-      startBackupCron();
-
-      expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 12 * 60 * 60 * 1000);
-      expect(scheduleSpy).not.toHaveBeenCalled();
-      jest.clearAllTimers();
-      scheduleSpy.mockRestore();
-    });
-
-    it('defaults to a 24-hour interval when nothing is configured', () => {
-      jest.useFakeTimers();
-      const setIntervalSpy = jest.spyOn(global, 'setInterval');
-
-      startBackupCron();
-
-      expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 24 * 60 * 60 * 1000);
-      jest.clearAllTimers();
-    });
-
-    it('ignores a non-numeric BACKUP_INTERVAL_HOURS and falls through to the default', () => {
-      jest.useFakeTimers();
-      const setIntervalSpy = jest.spyOn(global, 'setInterval');
-      process.env.BACKUP_INTERVAL_HOURS = 'not-a-number';
-
-      startBackupCron();
-
-      expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 24 * 60 * 60 * 1000);
-      jest.clearAllTimers();
     });
   });
 });

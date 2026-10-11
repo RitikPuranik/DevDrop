@@ -101,11 +101,11 @@ long that takes, and is only cleaned up once it's actually abandoned.
   (`AIStudioProject.sessions[]`); it's only considered abandoned once every
   session's heartbeat is stale *and* the project-level activity is stale —
   closing one tab never deletes a project still open in another.
-- **Completely separate from `AI_JOB_TTL_MS`.** `AI_JOB_TTL_MS` (in
-  `ai-service/.env`) only bounds how long an individual Gemini generation
-  *job result* is cached — it has nothing to do with how long an AI Studio
-  *project* is allowed to live. A user can spend hours editing a project
-  well after any individual generation job's TTL has expired.
+- **Completely separate from generation-job retention.** A generation job's
+  result is kept in MongoDB (`QueueJob`) for about 30 minutes after it
+  finishes — that has nothing to do with how long an AI Studio *project* is
+  allowed to live. A user can spend hours editing a project well after any
+  individual generation job's result has expired.
 
 API surface (`backend/src/modules/ai-studio/`, mounted at `/api/ai-studio`,
 all routes behind the existing `auth` middleware and ownership-checked

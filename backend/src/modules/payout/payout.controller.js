@@ -5,7 +5,7 @@ const User = require('../user/user.model');
 const mongoose = require('mongoose');
 const { PAYOUT_STATUS } = require('../../shared/utils/constants');
 const { getPaginationMetadata } = require('../../shared/utils/helpers');
-const emailService = require('../../services/email.service');
+const events = require('../../infrastructure/events');
 
 /**
  * @route   GET /api/payout/pending
@@ -130,9 +130,9 @@ const processPayout = async (req, res) => {
 
     // Send notification email to seller
     try {
-      await emailService.sendPayoutNotification(payout.sellerId, payout);
+      await events.enqueuePayoutNotification(payout._id, payout.sellerId && (payout.sellerId._id || payout.sellerId));
     } catch (emailError) {
-      console.error('Failed to send payout notification:', emailError);
+      console.error('Failed to queue payout notification:', emailError.message);
       // Don't fail the request if email fails
     }
 

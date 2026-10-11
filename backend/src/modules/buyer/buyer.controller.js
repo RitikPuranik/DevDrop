@@ -1,8 +1,7 @@
 const Website = require('../website/website.model');
 const Purchase = require('../payment/purchase.model');
-const User = require('../user/user.model');
 const { WEBSITE_STATUS, PAYMENT_STATUS } = require('../../shared/utils/constants');
-const emailService = require('../../services/email.service');
+const events = require('../../infrastructure/events');
 const { getPaginationMetadata } = require('../../shared/utils/helpers');
 const supabaseService = require('../../services/supabase.service');
 
@@ -70,11 +69,10 @@ const purchaseFreeWebsite = async (req, res) => {
     const purchase = new Purchase({ websiteId, buyerId, sellerId: website.sellerId._id, category: website.category, sellerPrice: 0, platformFee: 0, tax: 0, totalPaid: 0, paymentStatus: PAYMENT_STATUS.COMPLETED, purchaseDate: new Date() });
     await purchase.save();
 
-    const buyer = await User.findById(buyerId);
     try {
-      await emailService.sendPurchaseConfirmation(buyer, website, purchase);
-      await emailService.sendSellerNotification(website.sellerId, website, purchase);
-    } catch (e) { console.error('Email error:', e); }
+      await events.enqueuePurchaseConfirmation(purchase._id, buyerId);
+      await events.enqueueSellerNotification(purchase._id, website.sellerId._id);
+    } catch (e) { console.error('Purchase emails could not be queued:', e.message); }
 
     res.status(201).json({ success: true, message: 'Website purchased successfully', data: { purchase, website: { id: website._id, name: website.name, category: website.category } } });
   } catch (error) {

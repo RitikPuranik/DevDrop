@@ -73,6 +73,7 @@ const generalLimiter = rateLimit({
   skip: (req) =>
     req.path.startsWith('/ai-generate/jobs/') ||
     req.path === '/ai-generate/webhook' ||
+    req.path.startsWith('/ai-generate/internal/') ||
     /^\/ai-studio\/[^/]+\/heartbeat$/.test(req.path),
 });
 

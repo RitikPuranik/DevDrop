@@ -3,7 +3,7 @@ jest.mock('../../../backend/src/modules/auction/bid.model');
 
 const Auction = require('../../../backend/src/modules/auction/auction.model');
 const Bid = require('../../../backend/src/modules/auction/bid.model');
-const { processEndedAuctions, startAuctionCron } = require('../../src/jobs/auction.cron.service');
+const { processEndedAuctions } = require('../../src/jobs/auction.cron.service');
 
 // Builds a chainable populate().populate() query mock resolving to `result`.
 const populateChain = (result) => {
@@ -98,35 +98,6 @@ describe('auction.cron.service', () => {
 
       await expect(processEndedAuctions()).resolves.toBeUndefined();
       expect(consoleErrorSpy).toHaveBeenCalledWith('Process ended auctions error:', expect.any(Error));
-    });
-  });
-
-  describe('startAuctionCron', () => {
-    it('registers a recurring check every 60 seconds without executing it immediately', () => {
-      jest.useFakeTimers();
-      const setIntervalSpy = jest.spyOn(global, 'setInterval');
-      Auction.find = jest.fn(() => populateChain([]));
-
-      startAuctionCron();
-
-      expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 60 * 1000);
-      expect(Auction.find).not.toHaveBeenCalled();
-
-      clearInterval(setIntervalSpy.mock.results[0].value);
-    });
-
-    it('invokes processEndedAuctions on each tick and leaves no open handle after clearing', () => {
-      jest.useFakeTimers();
-      Auction.find = jest.fn(() => populateChain([]));
-
-      startAuctionCron();
-      jest.advanceTimersByTime(60 * 1000);
-
-      expect(Auction.find).toHaveBeenCalledTimes(1);
-
-      // Clean up the interval registered by startAuctionCron so no timer
-      // leaks past this test (detectOpenHandles safety).
-      jest.clearAllTimers();
     });
   });
 });

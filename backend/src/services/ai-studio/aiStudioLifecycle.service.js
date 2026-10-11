@@ -10,8 +10,8 @@ const { AI_STUDIO_PROJECT_STATUS } = AIStudioProject;
 
 // Inactivity DETECTION threshold — NOT a maximum project lifetime. A
 // project with continuing activity/heartbeats never hits this, no matter
-// how old it is. Deliberately separate from AI_JOB_TTL_MS (Section 15),
-// which only bounds an individual Gemini generation job result.
+// how old it is. Deliberately separate from the short retention of a finished
+// generation job's result (QueueJob), which only bounds that single result.
 const INACTIVITY_THRESHOLD_MS = Number.parseInt(
   process.env.AI_STUDIO_INACTIVITY_THRESHOLD_MS || String(20 * 60 * 1000),
   10

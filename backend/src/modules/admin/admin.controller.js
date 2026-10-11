@@ -10,7 +10,7 @@ const Bid = require('../auction/bid.model');
 const { WEBSITE_STATUS, WEBSITE_CATEGORIES, PAYOUT_STATUS } = require('../../shared/utils/constants');
 const { getPaginationMetadata, generateUpiPayoutLink } = require('../../shared/utils/helpers');
 const supabaseService = require('../../services/supabase.service');
-const emailService = require('../../services/email.service');
+const events = require('../../infrastructure/events');
 
 const isGitHubUrl = (value) => /^https?:\/\/(www\.)?github\.com\/.+/.test(value || '');
 const isHttpUrl = (value) => /^https?:\/\/.+/.test(value || '');
@@ -204,8 +204,8 @@ const createWebsite = async (req, res) => {
       }
     }
 
-    emailService.sendStatusUpdateEmail(resolvedSeller, website, WEBSITE_STATUS.APPROVED)
-      .catch(emailError => console.error('Failed to send email:', emailError));
+    events.enqueueStatusUpdateEmail({ sellerId: resolvedSeller._id || resolvedSeller, websiteId: website._id, status: WEBSITE_STATUS.APPROVED })
+      .catch(emailError => console.error('Failed to queue status email:', emailError.message));
 
     res.status(201).json({ success: true, message: 'Website created and published successfully', data: website });
   } catch (error) {
@@ -246,12 +246,8 @@ const requestChanges = async (req, res) => {
     await website.save();
 
     // Send email to seller
-    emailService.sendStatusUpdateEmail(
-      website.sellerId,
-      website,
-      WEBSITE_STATUS.CHANGES_REQUESTED,
-      comment
-    ).catch(emailError => console.error('Failed to send email:', emailError));
+    events.enqueueStatusUpdateEmail({ sellerId: website.sellerId._id || website.sellerId, websiteId: website._id, status: WEBSITE_STATUS.CHANGES_REQUESTED, comment: comment })
+      .catch(emailError => console.error('Failed to queue status email:', emailError.message));
 
     res.json({
       success: true,
@@ -300,12 +296,8 @@ const rejectWebsite = async (req, res) => {
     await website.save();
 
     // Send email to seller
-    emailService.sendStatusUpdateEmail(
-      website.sellerId,
-      website,
-      WEBSITE_STATUS.REJECTED,
-      reason
-    ).catch(emailError => console.error('Failed to send email:', emailError));
+    events.enqueueStatusUpdateEmail({ sellerId: website.sellerId._id || website.sellerId, websiteId: website._id, status: WEBSITE_STATUS.REJECTED, comment: reason })
+      .catch(emailError => console.error('Failed to queue status email:', emailError.message));
 
     res.json({
       success: true,
@@ -496,11 +488,8 @@ const approveWebsite = async (req, res) => {
     }
 
     // Send email to seller
-    emailService.sendStatusUpdateEmail(
-      website.sellerId,
-      website,
-      WEBSITE_STATUS.APPROVED
-    ).catch(emailError => console.error('Failed to send email:', emailError));
+    events.enqueueStatusUpdateEmail({ sellerId: website.sellerId._id || website.sellerId, websiteId: website._id, status: WEBSITE_STATUS.APPROVED })
+      .catch(emailError => console.error('Failed to queue status email:', emailError.message));
 
     res.json({
       success: true,
@@ -587,13 +576,13 @@ const relistWebsite = async (req, res) => {
     const relistedAuction = auction || await createExclusiveAuctionIfNeeded(website);
 
     try {
-      await emailService.sendStatusUpdateEmail(
-        website.sellerId,
-        website,
-        WEBSITE_STATUS.APPROVED
-      );
+      await events.enqueueStatusUpdateEmail({
+        sellerId: website.sellerId._id || website.sellerId,
+        websiteId: website._id,
+        status: WEBSITE_STATUS.APPROVED,
+      });
     } catch (emailError) {
-      console.error('Failed to send relist email:', emailError);
+      console.error('Failed to queue relist email:', emailError.message);
     }
 
     res.json({
@@ -876,9 +865,9 @@ const processPayout = async (req, res) => {
 
     // Send email to seller
     try {
-      await emailService.sendPayoutNotification(payout.sellerId, payout);
+      await events.enqueuePayoutNotification(payout._id, payout.sellerId && (payout.sellerId._id || payout.sellerId));
     } catch (emailError) {
-      console.error('Failed to send email:', emailError);
+      console.error('Failed to queue payout notification:', emailError.message);
     }
 
     res.json({

@@ -34,13 +34,10 @@ const sendEmail = async ({ to, subject, html, from }) => {
   }
 };
 
-const sendVerificationEmail = async (user) => {
-  try {
-    const verificationToken = user.generateVerificationToken();
-    await user.save();
+const sendVerificationEmail = async (user, verificationToken) => {
     const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
 
-    await sendEmail({
+    const info = await sendEmail({
       to: user.email,
       from: 'accounts',
       subject: EMAIL_SUBJECTS.VERIFICATION,
@@ -61,16 +58,11 @@ const sendVerificationEmail = async (user) => {
       `,
     });
     console.log(`✅ Verification email sent to ${user.email}`);
-    return true;
-  } catch (error) {
-    console.error('Error sending verification email:', error);
-    throw error;
-  }
+  return info;
 };
 
 const sendWelcomeEmail = async (user) => {
-  try {
-    await sendEmail({
+    const info = await sendEmail({
       to: user.email,
       from: 'hello',
       subject: EMAIL_SUBJECTS.WELCOME,
@@ -93,14 +85,11 @@ const sendWelcomeEmail = async (user) => {
       `,
     });
     console.log(`✅ Welcome email sent to ${user.email}`);
-  } catch (error) {
-    console.error('Error sending welcome email:', error);
-  }
+  return info;
 };
 
 const sendPurchaseConfirmation = async (buyer, website, purchase) => {
-  try {
-    await sendEmail({
+    const info = await sendEmail({
       to: buyer.email,
       from: 'receipts',
       subject: EMAIL_SUBJECTS.PURCHASE_CONFIRMATION,
@@ -125,14 +114,11 @@ const sendPurchaseConfirmation = async (buyer, website, purchase) => {
       `,
     });
     console.log(`✅ Purchase confirmation sent to ${buyer.email}`);
-  } catch (error) {
-    console.error('Error sending purchase confirmation:', error);
-  }
+  return info;
 };
 
 const sendSellerNotification = async (seller, website, purchase) => {
-  try {
-    await sendEmail({
+    const info = await sendEmail({
       to: seller.email,
       from: 'sales',
       subject: EMAIL_SUBJECTS.SELLER_NOTIFICATION,
@@ -156,13 +142,10 @@ const sendSellerNotification = async (seller, website, purchase) => {
       `,
     });
     console.log(`✅ Seller notification sent to ${seller.email}`);
-  } catch (error) {
-    console.error('Error sending seller notification:', error);
-  }
+  return info;
 };
 
 const sendStatusUpdateEmail = async (seller, website, status, comment = '') => {
-  try {
     const statusMessages = {
       approved: { title: 'Your Website Has Been Approved! ✅', message: 'Congratulations! Your website is now live on our platform.' },
       changes_requested: { title: 'Changes Requested for Your Website', message: 'Our team reviewed your website and requested some changes.' },
@@ -177,7 +160,7 @@ const sendStatusUpdateEmail = async (seller, website, status, comment = '') => {
       ? `${process.env.FRONTEND_URL}/website/${website._id}`
       : `${process.env.FRONTEND_URL}/profile`;
 
-    await sendEmail({
+    const info = await sendEmail({
       to: seller.email,
       from: 'review',
       subject: EMAIL_SUBJECTS.STATUS_UPDATE,
@@ -200,14 +183,11 @@ const sendStatusUpdateEmail = async (seller, website, status, comment = '') => {
       `,
     });
     console.log(`✅ Status update email sent to ${seller.email}`);
-  } catch (error) {
-    console.error('Error sending status update email:', error);
-  }
+  return info;
 };
 
 const sendPayoutNotification = async (seller, payout) => {
-  try {
-    await sendEmail({
+    const info = await sendEmail({
       to: seller.email,
       from: 'finance',
       subject: EMAIL_SUBJECTS.PAYOUT_NOTIFICATION,
@@ -229,15 +209,12 @@ const sendPayoutNotification = async (seller, payout) => {
       `,
     });
     console.log(`✅ Payout notification sent to ${seller.email}`);
-  } catch (error) {
-    console.error('Error sending payout notification:', error);
-  }
+  return info;
 };
 
 const sendPasswordResetEmail = async (user, token) => {
-  try {
     const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
-    await sendEmail({
+    const info = await sendEmail({
       to: user.email,
       from: 'security',
       subject: EMAIL_SUBJECTS.PASSWORD_RESET,
@@ -257,19 +234,15 @@ const sendPasswordResetEmail = async (user, token) => {
       `,
     });
     console.log(`✅ Password reset email sent to ${user.email}`);
-  } catch (error) {
-    console.error('Error sending password reset email:', error);
-    throw error;
-  }
+  return info;
 };
 
 const sendAdminAlert = async ({ subject, message, error, details }) => {
-  try {
     const adminEmails = process.env.ADMIN_EMAILS
       ? process.env.ADMIN_EMAILS.split(',').map((e) => e.trim())
       : ['admin@devdrop.com'];
 
-    await sendEmail({
+    const info = await sendEmail({
       to: adminEmails,
       from: 'system',
       subject: `🚨 ${subject}`,
@@ -286,14 +259,11 @@ const sendAdminAlert = async ({ subject, message, error, details }) => {
       `,
     });
     console.log(`✅ Admin alert sent: ${subject}`);
-  } catch (err) {
-    console.error('Error sending admin alert:', err);
-  }
+  return info;
 };
 
 const sendOutbidNotification = async (previousBidder, website, newBidAmount) => {
-  try {
-    await sendEmail({
+    const info = await sendEmail({
       to: previousBidder.email,
       from: 'auctions',
       subject: EMAIL_SUBJECTS.OUTBID_NOTIFICATION,
@@ -317,9 +287,7 @@ const sendOutbidNotification = async (previousBidder, website, newBidAmount) => 
       `,
     });
     console.log(`✅ Outbid notification sent to ${previousBidder.email}`);
-  } catch (error) {
-    console.error('Error sending outbid notification:', error);
-  }
+  return info;
 };
 
 module.exports = {

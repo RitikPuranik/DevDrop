@@ -8,7 +8,7 @@ jest.mock('../../../src/modules/user/user.model');
 jest.mock('../../../src/modules/auction/auction.model');
 jest.mock('../../../src/modules/auction/bid.model');
 jest.mock('../../../src/services/supabase.service');
-jest.mock('../../../src/services/email.service');
+jest.mock('../../../src/infrastructure/events', () => require('../../mocks/services/events.mock'));
 jest.mock('../../../src/shared/utils/envHelper');
 
 const Website = require('../../../src/modules/website/website.model');
@@ -20,15 +20,15 @@ const User = require('../../../src/modules/user/user.model');
 const Auction = require('../../../src/modules/auction/auction.model');
 const Bid = require('../../../src/modules/auction/bid.model');
 const supabaseService = require('../../../src/services/supabase.service');
-const emailService = require('../../../src/services/email.service');
+const events = require('../../../src/infrastructure/events');
 const { getAuctionTimings } = require('../../../src/shared/utils/envHelper');
 const adminController = require('../../../src/modules/admin/admin.controller');
 const { createQueryMock, mockReq, mockRes } = require('../../helpers/mockQuery');
 
 beforeEach(() => {
   getAuctionTimings.mockReturnValue({ bidWaitHours: 72, paymentHours: 72 });
-  emailService.sendStatusUpdateEmail.mockResolvedValue(true);
-  emailService.sendPayoutNotification.mockResolvedValue(true);
+  events.enqueueStatusUpdateEmail.mockResolvedValue(true);
+  events.enqueuePayoutNotification.mockResolvedValue(true);
 });
 
 const filesWithSourceAndDocs = () => ({
@@ -238,7 +238,7 @@ describe('admin.controller', () => {
       expect(saved.save).toHaveBeenCalled();
       expect(saved.status).toBe('approved');
       expect(saved.sourceCodeUrl).toBe('src/path.zip');
-      expect(emailService.sendStatusUpdateEmail).toHaveBeenCalled();
+      expect(events.enqueueStatusUpdateEmail).toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(201);
     });
 
@@ -488,7 +488,7 @@ describe('admin.controller', () => {
       expect(website.status).toBe('approved');
       expect(website.name).toBe('New Name');
       expect(website.save).toHaveBeenCalled();
-      expect(emailService.sendStatusUpdateEmail).toHaveBeenCalled();
+      expect(events.enqueueStatusUpdateEmail).toHaveBeenCalled();
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
     });
 
@@ -603,7 +603,7 @@ describe('admin.controller', () => {
       Bid.updateMany.mockResolvedValue({ modifiedCount: 0 });
       const newAuction = { save: jest.fn().mockResolvedValue(true) };
       Auction.mockImplementation(() => newAuction);
-      emailService.sendStatusUpdateEmail.mockRejectedValue(new Error('smtp down'));
+      events.enqueueStatusUpdateEmail.mockRejectedValue(new Error('smtp down'));
 
       const req = mockReq({ params: { id: 'w1' } });
       const res = mockRes();
@@ -829,14 +829,14 @@ describe('admin.controller', () => {
       expect(payout.utr).toBe('UTR1');
       expect(payout.processedBy).toBe('admin-1');
       expect(payout.adminNotes).toBe('paid manually');
-      expect(emailService.sendPayoutNotification).toHaveBeenCalledWith(payout.sellerId, payout);
+      expect(events.enqueuePayoutNotification).toHaveBeenCalled();
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
     });
 
     it('still succeeds when the payout notification email fails', async () => {
       const payout = { status: 'pending', sellerId: {}, save: jest.fn().mockResolvedValue(true) };
       Payout.findById.mockReturnValue(createQueryMock(payout));
-      emailService.sendPayoutNotification.mockRejectedValue(new Error('smtp down'));
+      events.enqueuePayoutNotification.mockRejectedValue(new Error('smtp down'));
       const req = mockReq({ params: { id: 'p1' }, body: { utr: 'UTR1' } });
       const res = mockRes();
 

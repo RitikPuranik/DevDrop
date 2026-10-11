@@ -8,7 +8,7 @@
 jest.mock('../../../src/modules/user/user.model', () => require('../../mocks/models/user.model.mock'));
 jest.mock('../../../src/modules/website/website.model');
 jest.mock('../../../src/services/supabase.service');
-jest.mock('../../../src/services/email.service');
+jest.mock('../../../src/infrastructure/events', () => require('../../mocks/services/events.mock'));
 
 const express = require('express');
 const request = require('supertest');

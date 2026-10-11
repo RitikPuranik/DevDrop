@@ -1,39 +1,18 @@
 const request = require('supertest');
 const { createApp } = require('../../src/app');
-const { buildHeaders } = require('../../../backend/src/shared/utils/internalSignature');
 
-const SECRET = process.env.INTERNAL_WEBHOOK_SECRET;
-const post = (app, body, headers) =>
-  request(app).post('/internal/webhooks/tasks').set(headers || buildHeaders(SECRET, JSON.stringify(body))).send(JSON.stringify(body));
-
-describe('worker app', () => {
-  const runner = { enqueue: jest.fn(), stats: () => ({ running: 0, queued: 0 }) };
-  const app = createApp({ runner });
-
-  it('GET /health works without auth', async () => {
+describe('worker health endpoint', () => {
+  it('200 with queue details when healthy', async () => {
+    const app = createApp({ getHealth: async () => ({ ok: true, details: { queues: { 'events-queue': { waiting: 0 } } } }) });
     const res = await request(app).get('/health');
     expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
+    expect(res.body.queues['events-queue']).toBeDefined();
   });
-
-  it('rejects unsigned and wrongly-signed task webhooks', async () => {
-    const body = { taskId: 't', type: 'X' };
-    expect((await request(app).post('/internal/webhooks/tasks').send(body)).status).toBe(401);
-    const bad = buildHeaders('wrong-secret', JSON.stringify(body));
-    expect((await post(app, body, bad)).status).toBe(401);
-    expect(runner.enqueue).not.toHaveBeenCalled();
+  it('503 when degraded or when Redis cannot be queried', async () => {
+    expect((await request(createApp({ getHealth: async () => ({ ok: false, details: {} }) })).get('/health')).status).toBe(503);
+    expect((await request(createApp({ getHealth: async () => { throw new Error('redis'); } })).get('/health')).status).toBe(503);
   });
-
-  it('acknowledges a signed task with 202 and enqueues it', async () => {
-    runner.enqueue.mockReturnValue({ accepted: true });
-    const res = await post(app, { taskId: 't1', type: 'RUN_BACKUP', payload: { a: 1 } });
-    expect(res.status).toBe(202);
-    expect(runner.enqueue).toHaveBeenCalledWith({ taskId: 't1', type: 'RUN_BACKUP', payload: { a: 1 } });
-  });
-
-  it('maps runner rejections to status codes and validates the body', async () => {
-    runner.enqueue.mockReturnValue({ accepted: false, reason: 'queue_full' });
-    expect((await post(app, { taskId: 't2', type: 'X' })).status).toBe(429);
-    expect((await post(app, { type: 'X' })).status).toBe(400);
+  it('no longer exposes the internal task webhook (work arrives through BullMQ)', async () => {
+    expect((await request(createApp({ getHealth: async () => ({ ok: true, details: {} }) })).post('/internal/webhooks/tasks').send({})).status).toBe(404);
   });
 });

@@ -2,7 +2,7 @@ jest.mock('../../../backend/src/services/backup/backup.orchestrator');
 
 const orchestrator = require('../../../backend/src/services/backup/backup.orchestrator');
 const { runManualBackup, runScheduledBackup } = require('../../src/jobs/backup.cron.service');
-const { handlers } = require('../../src/handlers');
+const { processEventsJob } = require('../../src/processors/events');
 
 describe('runManualBackup (worker)', () => {
   let logSpy;
@@ -64,9 +64,9 @@ describe('runManualBackup (worker)', () => {
     await expect(runManualBackup({ kind: 'full' })).resolves.toBeDefined();
   });
 
-  it('RUN_BACKUP handler uses the manual path when payload.kind is present', async () => {
+  it('RUN_BACKUP job uses the manual path when params.kind is present', async () => {
     orchestrator.runMongoBackup.mockResolvedValue({ success: true });
-    await handlers.RUN_BACKUP({ kind: 'mongo' });
+    await processEventsJob({ name: 'RUN_BACKUP', data: { params: { kind: 'mongo' } } }, { jobKey: 'k' });
     expect(orchestrator.runMongoBackup).toHaveBeenCalled();
   });
 });

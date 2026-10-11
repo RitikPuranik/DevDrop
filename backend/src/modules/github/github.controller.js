@@ -1,3 +1,4 @@
+const jobs = require('../../infrastructure/jobs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 
@@ -217,13 +218,9 @@ const createExport = async (req, res) => {
       status: EXPORT_STATUS.PENDING,
     });
 
-    // Fire-and-forget: the HTTP response returns immediately with the
-    // exportId; the frontend polls GET /exports/:exportId for progress.
-    setImmediate(() => {
-      projectExportService.runExport(exportDoc._id).catch((err) => {
-        console.error(`Unhandled error running export ${exportDoc._id}:`, err);
-      });
-    });
+    // Queued on deployment-queue: the response returns immediately with the exportId;
+    // the frontend polls GET /exports/:exportId for progress.
+    await jobs.enqueueProjectExport(exportDoc._id, { source: 'purchase', userId: req.userId });
 
     res.status(202).json({ success: true, data: { exportId: exportDoc._id, status: exportDoc.status } });
   } catch (error) {
@@ -345,11 +342,7 @@ const createAiStudioExport = async (req, res) => {
       status: EXPORT_STATUS.PENDING,
     });
 
-    setImmediate(() => {
-      projectExportService.runAiStudioExport(exportDoc._id).catch((err) => {
-        console.error(`Unhandled error running AI Studio export ${exportDoc._id}:`, err);
-      });
-    });
+    await jobs.enqueueProjectExport(exportDoc._id, { source: 'ai-studio', userId: req.userId });
 
     res.status(202).json({ success: true, data: { exportId: exportDoc._id, status: exportDoc.status } });
   } catch (error) {

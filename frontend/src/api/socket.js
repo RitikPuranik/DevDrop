@@ -11,7 +11,13 @@ const subscribedKashiRuns = new Set();
 function getSocket() {
   if (!socket) {
     const base = import.meta.env.VITE_API_URL || '';
-    socket = io(base, { withCredentials: true, autoConnect: true, transports: ['websocket'] });
+    // The JWT lets the backend verify that you own a job before joining its private room.
+    socket = io(base, {
+      withCredentials: true,
+      autoConnect: true,
+      transports: ['websocket'],
+      auth: (cb) => cb({ token: localStorage.getItem('token') }),
+    });
     socket.on('connect', () => {
       for (const jobId of subscribedJobs) socket.emit('ai-job:subscribe', jobId);
       for (const runId of subscribedKashiRuns) socket.emit('kashi-fix:subscribe', runId);

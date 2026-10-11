@@ -1,5 +1,5 @@
 jest.mock('../../../src/modules/user/user.model', () => require('../../mocks/models/user.model.mock'));
-jest.mock('../../../src/services/email.service', () => require('../../mocks/services/email.service.mock'));
+jest.mock('../../../src/infrastructure/events', () => require('../../mocks/services/events.mock'));
 jest.mock('../../../src/services/supabase.service', () => require('../../mocks/services/supabase.service.mock'));
 jest.mock('../../../src/services/github.service', () => require('../../mocks/services/github.service.mock'));
 jest.mock('google-auth-library');
@@ -17,7 +17,7 @@ const request = require('supertest');
 const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
 const User = require('../../../src/modules/user/user.model');
-const emailService = require('../../../src/services/email.service');
+const events = require('../../../src/infrastructure/events');
 const supabaseService = require('../../../src/services/supabase.service');
 const githubService = require('../../../src/services/github.service');
 const authRoutes = require('../../../src/modules/auth/auth.routes');
@@ -35,9 +35,9 @@ beforeEach(() => {
   User.__reset();
   app = buildApp();
   supabaseService.createSignedUrl.mockResolvedValue('https://signed.example.com/avatar.png');
-  emailService.sendVerificationEmail.mockResolvedValue(true);
-  emailService.sendWelcomeEmail.mockResolvedValue(true);
-  emailService.sendPasswordResetEmail.mockResolvedValue(true);
+  events.requestVerificationEmail.mockResolvedValue(true);
+  events.enqueueWelcomeEmail.mockResolvedValue(true);
+  events.requestPasswordResetEmail.mockResolvedValue(true);
 });
 
 describe('POST /api/auth/signup', () => {
@@ -165,7 +165,7 @@ describe('POST /api/auth/google', () => {
       }),
     })) }));
     jest.doMock('../../../src/modules/user/user.model', () => require('../../mocks/models/user.model.mock'));
-    jest.doMock('../../../src/services/email.service', () => require('../../mocks/services/email.service.mock'));
+    jest.doMock('../../../src/infrastructure/events', () => require('../../mocks/services/events.mock'));
     jest.doMock('../../../src/services/supabase.service', () => require('../../mocks/services/supabase.service.mock'));
     const freshRoutes = require('../../../src/modules/auth/auth.routes');
     const freshApp = express();
@@ -217,7 +217,7 @@ describe('POST /api/auth/forgot-password', () => {
     await User.__seed({ name: 'Jane', email: 'reset@example.com', password: 'password123' });
     const res = await request(app).post('/api/auth/forgot-password').send({ email: 'reset@example.com' });
     expect(res.status).toBe(200);
-    expect(emailService.sendPasswordResetEmail).toHaveBeenCalled();
+    expect(events.requestPasswordResetEmail).toHaveBeenCalled();
   });
 
   it('refuses password reset for a Google-only account', async () => {

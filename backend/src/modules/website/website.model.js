@@ -137,4 +137,24 @@ websiteSchema.pre('save', function (next) {
   next();
 });
 
+// Public listings are cached (CACHE_REDIS_URL). Any real change to a website drops that cache;
+// pure counter bumps (views / wishlists / downloads) are ignored so they don't thrash it.
+const COUNTER_FIELDS = new Set(['viewCount', 'wishlistCount', 'downloadCount']);
+const isCounterOnlyUpdate = (update = {}) => {
+  const ops = Object.keys(update);
+  if (ops.length !== 1 || ops[0] !== '$inc') return false;
+  return Object.keys(update.$inc || {}).every((k) => COUNTER_FIELDS.has(k));
+};
+const invalidatePublicListings = () => {
+  require('../../infrastructure/cache').invalidateNamespace('websites').catch(() => {});
+};
+websiteSchema.post('save', invalidatePublicListings);
+websiteSchema.post('deleteOne', { document: true, query: false }, invalidatePublicListings);
+['findOneAndUpdate', 'updateOne', 'updateMany', 'findOneAndDelete', 'deleteOne', 'deleteMany'].forEach((op) => {
+  websiteSchema.post(op, function afterWrite() {
+    if (typeof this.getUpdate === 'function' && isCounterOnlyUpdate(this.getUpdate())) return;
+    invalidatePublicListings();
+  });
+});
+
 module.exports = mongoose.model('Website', websiteSchema);

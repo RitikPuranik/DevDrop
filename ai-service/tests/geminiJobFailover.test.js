@@ -1,6 +1,6 @@
 /**
- * End-to-end-ish tests through callGemini() and the in-memory job queue with
- * a mocked HTTP layer. No network, no Mongo, no real Gemini quota.
+ * End-to-end-ish tests through callGemini() and the ai-queue job processor with
+ * a mocked HTTP layer and a mocked backend. No network, no Redis, no Mongo, no real Gemini quota.
  */
 jest.mock('axios');
 jest.mock('../src/orchestrator/websiteGeneration.orchestrator', () => ({ generateWebsite: jest.fn(), debugWebsite: jest.fn() }));
@@ -40,9 +40,21 @@ function load(env = {}) {
   axios.post = jest.fn();
   const pool = require('../src/geminiPool.service');
   const { callGemini } = require('../src/services/llm.service');
-  const jobs = require('../src/jobs.service');
+  const { createAiProcessor } = require('../src/queue/worker');
   const orchestrator = require('../src/orchestrator/websiteGeneration.orchestrator');
-  return { axios, pool, callGemini, jobs, orchestrator };
+  // Stand-in for the backend the worker reports to; records what the user would see.
+  const events = [];
+  const backend = {
+    fetchPayload: jest.fn(async () => ({ mode: 'generate', payload: { mode: 'generate', ...(load.payload || {}) } })),
+    sendEvent: jest.fn(async (event, jobId, body) => { events.push({ event, ...body }); return {}; }),
+    deliverTerminal: jest.fn(async (event, jobId, body) => { events.push({ event, ...body }); return {}; }),
+  };
+  const runJob = (payload = {}) => {
+    load.payload = payload;
+    const job = { data: { jobKey: 'job-1' }, attemptsMade: 0, updateProgress: jest.fn().mockResolvedValue(), updateData: jest.fn(), moveToDelayed: jest.fn() };
+    return createAiProcessor({ backend })(job, 'tok');
+  };
+  return { axios, pool, callGemini, runJob, events, backend, orchestrator };
 }
 
 beforeEach(() => {
@@ -105,7 +117,7 @@ describe('callGemini failover', () => {
 
 describe('job continuity (Test 7)', () => {
   test('fallback project succeeds and the original job continues; completed stages are not re-run', async () => {
-    const { axios, callGemini, jobs, orchestrator } = load();
+    const { axios, callGemini, runJob, events, orchestrator } = load();
     let blockedKey = null;
     axios.post.mockImplementation(async (url) => {
       const key = keyOf(url);
@@ -125,19 +137,16 @@ describe('job continuity (Test 7)', () => {
       return { files: { '/a.js': { code: 'x' } }, req: req.value, code: code.value };
     });
 
-    const id = jobs.createJob({ mode: 'generate' });
-    await until(() => jobs.getJob(id).status === 'completed' || jobs.getJob(id).status === 'failed');
-    const job = jobs.getJob(id);
-    expect(job.status).toBe('completed');
-    expect(job.id).toBe(id); // same job id
+    await runJob();
     expect(stageRuns).toEqual({ requirements: 1, code: 1 }); // nothing restarted
     expect(orchestrator.generateWebsite).toHaveBeenCalledTimes(1);
     expect(axios.post).toHaveBeenCalledTimes(3); // 1 (stage 1) + 1 failed + 1 fallback project
+    expect(events.filter((e) => e.event === 'completed')).toHaveLength(1);
+    expect(events.some((e) => e.event === 'failed')).toBe(false);
   });
 
-  test('temporary exhaustion: job shows "Waiting for Gemini capacity", frees its slot, then resumes and completes', async () => {
-    process.env.AI_CONCURRENCY = '1';
-    const { axios, callGemini, jobs, orchestrator } = load();
+  test('temporary exhaustion: job reports "Waiting for Gemini capacity", then resumes and completes', async () => {
+    const { axios, callGemini, runJob, events, orchestrator } = load();
     let calls = 0;
     axios.post.mockImplementation(async () => {
       calls += 1;
@@ -145,44 +154,38 @@ describe('job continuity (Test 7)', () => {
       return OK_BODY;
     });
 
-    let firstStages = 0;
-    orchestrator.generateWebsite.mockImplementation(async (payload) => {
-      if (payload.tag === 'slow') {
-        firstStages += 1;
-        const r = await callGemini({ system: 's', input: {} });
-        return { tag: 'slow', value: r.value, attempt: r.attempt };
-      }
-      return { tag: 'fast' };
+    let stages = 0;
+    orchestrator.generateWebsite.mockImplementation(async () => {
+      stages += 1;
+      const r = await callGemini({ system: 's', input: {} });
+      return { value: r.value, attempt: r.attempt };
     });
 
-    const slow = jobs.createJob({ mode: 'generate', tag: 'slow' });
-    const fast = jobs.createJob({ mode: 'generate', tag: 'fast' }); // queued behind the slow job (AI_CONCURRENCY=1)
-
-    await until(() => jobs.getJob(slow).stageStatus === 'waiting_for_capacity');
-    expect(jobs.getJob(slow).statusMessage).toBe('Waiting for Gemini capacity');
-    expect(jobs.getJob(slow).waitingUntil).toBeTruthy();
-
-    // The waiting job gave its worker slot away, so the queued job completes first.
-    await until(() => jobs.getJob(fast).status === 'completed');
-    expect(jobs.getJob(slow).status).toBe('processing');
-
-    await until(() => jobs.getJob(slow).status === 'completed');
-    const done = jobs.getJob(slow);
+    await runJob();
+    const waiting = events.find((e) => e.status === 'waiting_for_capacity');
+    expect(waiting).toBeTruthy();
+    expect(waiting.details.message).toBe('Waiting for Gemini capacity');
+    expect(waiting.details.retryAt).toBeTruthy();
+    // After the wait the job reports it is processing again, then completes.
+    const idxWaiting = events.indexOf(waiting);
+    expect(events.slice(idxWaiting + 1).some((e) => e.status === 'processing')).toBe(true);
+    const done = events.find((e) => e.event === 'completed');
     expect(done.result.attempt).toBe(1); // the wait did not consume the agent-retry budget
-    expect(firstStages).toBe(1); // pipeline not restarted
+    expect(stages).toBe(1); // pipeline not restarted
     expect(calls).toBe(4); // 3 failed projects, then 1 success after the wait
   });
 
   test('capacity that never returns ends as a distinguishable temporary failure, not a generic build failure', async () => {
-    const { axios, callGemini, jobs, orchestrator } = load({ GEMINI_CAPACITY_WAIT_MAX_MS: '0' });
+    const { axios, callGemini, runJob, events, orchestrator } = load({ GEMINI_CAPACITY_WAIT_MAX_MS: '0' });
     axios.post.mockRejectedValue(rateLimit('60s'));
     orchestrator.generateWebsite.mockImplementation(async () => { await callGemini({ system: 's', input: {} }); });
 
-    const id = jobs.createJob({ mode: 'generate' });
-    await until(() => jobs.getJob(id).status === 'failed');
-    const job = jobs.getJob(id);
-    expect(job.errorType).toBe('capacity_exhausted');
-    expect(job.error).toMatch(/temporarily exhausted/i);
-    expect(job.error).not.toMatch(/build/i);
+    // The processor surfaces an unrecoverable error; the worker's 'failed' handler reports it with errorType.
+    const err = await runJob().catch((e) => e);
+    expect(err.name).toBe('UnrecoverableError');
+    expect(err.errorType).toBe('capacity_exhausted');
+    expect(err.message).toMatch(/temporarily exhausted/i);
+    expect(err.message).not.toMatch(/build/i);
+    expect(events.some((e) => e.event === 'completed')).toBe(false);
   });
 });

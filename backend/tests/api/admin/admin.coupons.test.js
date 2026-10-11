@@ -15,7 +15,7 @@
 jest.mock('../../../src/modules/coupons/coupon.model', () => require('../../mocks/models/coupon.model.mock'));
 jest.mock('../../../src/modules/user/user.model', () => require('../../mocks/models/user.model.mock'));
 jest.mock('../../../src/services/supabase.service', () => require('../../mocks/services/supabase.service.mock'));
-jest.mock('../../../src/services/email.service', () => require('../../mocks/services/email.service.mock'));
+jest.mock('../../../src/infrastructure/events', () => require('../../mocks/services/events.mock'));
 
 const express = require('express');
 const request = require('supertest');

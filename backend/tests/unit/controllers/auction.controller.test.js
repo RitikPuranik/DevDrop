@@ -2,7 +2,7 @@ jest.mock('../../../src/modules/auction/auction.model');
 jest.mock('../../../src/modules/auction/bid.model');
 jest.mock('../../../src/modules/website/website.model');
 jest.mock('../../../src/modules/user/user.model');
-jest.mock('../../../src/services/email.service');
+jest.mock('../../../src/infrastructure/events', () => require('../../mocks/services/events.mock'));
 jest.mock('../../../src/services/supabase.service');
 jest.mock('../../../src/shared/utils/envHelper');
 
@@ -10,7 +10,7 @@ const Auction = require('../../../src/modules/auction/auction.model');
 const Bid = require('../../../src/modules/auction/bid.model');
 const Website = require('../../../src/modules/website/website.model');
 const User = require('../../../src/modules/user/user.model');
-const emailService = require('../../../src/services/email.service');
+const events = require('../../../src/infrastructure/events');
 const { getAuctionTimings } = require('../../../src/shared/utils/envHelper');
 const auctionController = require('../../../src/modules/auction/auction.controller');
 const { createQueryMock, mockReq, mockRes } = require('../../helpers/mockQuery');
@@ -205,7 +205,7 @@ describe('auction.controller', () => {
       const savedBid = { _id: 'bid2', save: jest.fn().mockResolvedValue(true), populate: jest.fn().mockResolvedValue(true) };
       Bid.mockImplementation(() => savedBid);
       User.findById.mockResolvedValue({ _id: 'previous-bidder', email: 'prev@example.com' });
-      emailService.sendOutbidNotification.mockResolvedValue(true);
+      events.enqueueOutbidNotification.mockResolvedValue(true);
 
       const req = mockReq({ params: { websiteId: 'w1' }, body: { bidAmount: 1600 }, userId: 'new-bidder' });
       const res = mockRes();

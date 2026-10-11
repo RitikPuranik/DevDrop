@@ -1,44 +1,46 @@
 const request = require('supertest');
+
+jest.mock('../../src/modules/kashi/kashiFixRun.model', () => ({ exists: jest.fn() }));
+jest.mock('../../src/shared/realtime/socket', () => ({ emitToKashiRun: jest.fn(), emitToJob: jest.fn(), init: jest.fn() }));
+
 const app = require('../../src/app');
-const registry = require('../../src/services/taskRegistry.service');
+const KashiFixRun = require('../../src/modules/kashi/kashiFixRun.model');
+const realtime = require('../../src/shared/realtime/socket');
 const { buildHeaders } = require('../../src/shared/utils/internalSignature');
 
 const SECRET = 'test-internal-webhook-secret';
-const send = (body, headers) =>
-  request(app).post('/internal/webhooks/task-result').set(headers || buildHeaders(SECRET, JSON.stringify(body))).send(JSON.stringify(body));
+const send = (path, body, headers) =>
+  request(app).post(`/internal/webhooks/${path}`).set(headers || buildHeaders(SECRET, JSON.stringify(body))).send(JSON.stringify(body));
 
-describe('POST /internal/webhooks/task-result', () => {
+describe('internal webhooks', () => {
   beforeEach(() => {
     process.env.INTERNAL_WEBHOOK_SECRET = SECRET;
-    registry.clear();
-    jest.spyOn(console, 'log').mockImplementation(() => {});
   });
-  afterEach(() => jest.restoreAllMocks());
 
-  it('rejects requests without a valid signature', async () => {
-    registry.create('t1', 'RUN_BACKUP');
+  it('no longer exposes the old task-result callback (job status lives in MongoDB/BullMQ)', async () => {
     const body = { taskId: 't1', status: 'completed' };
-    expect((await request(app).post('/internal/webhooks/task-result').send(body)).status).toBe(401);
-    expect((await send(body, buildHeaders('wrong', JSON.stringify(body)))).status).toBe(401);
-    expect(registry.get('t1').status).toBe('queued');
+    expect((await send('task-result', body)).status).toBe(404);
   });
 
-  it('records running then completed with a result', async () => {
-    registry.create('t1', 'RUN_BACKUP');
-    expect((await send({ taskId: 't1', status: 'running' })).status).toBe(200);
-    expect((await send({ taskId: 't1', status: 'completed', result: { ok: true } })).status).toBe(200);
-    expect(registry.get('t1')).toMatchObject({ status: 'completed', result: { ok: true } });
-  });
+  describe('POST /internal/webhooks/task-progress', () => {
+    const body = { taskId: 'j1', runId: 'run1', event: { type: 'step', step: { kind: 'info' } } };
 
-  it('does not let a late "running" overwrite a terminal state', async () => {
-    registry.create('t1', 'X');
-    await send({ taskId: 't1', status: 'failed', error: 'boom' });
-    await send({ taskId: 't1', status: 'running' });
-    expect(registry.get('t1')).toMatchObject({ status: 'failed', error: 'boom' });
-  });
+    it('rejects requests without a valid signature', async () => {
+      expect((await request(app).post('/internal/webhooks/task-progress').send(body)).status).toBe(401);
+      expect((await send('task-progress', body, buildHeaders('wrong', JSON.stringify(body)))).status).toBe(401);
+      expect(realtime.emitToKashiRun).not.toHaveBeenCalled();
+    });
 
-  it('validates status and unknown tasks', async () => {
-    expect((await send({ taskId: 't9', status: 'completed' })).status).toBe(404);
-    expect((await send({ taskId: 't9', status: 'nope' })).status).toBe(400);
+    it('forwards a step event to the Kashi run room', async () => {
+      KashiFixRun.exists.mockResolvedValue({ _id: 'run1' });
+      expect((await send('task-progress', body)).status).toBe(200);
+      expect(realtime.emitToKashiRun).toHaveBeenCalledWith('run1', 'kashi-fix:step', { runId: 'run1', step: { kind: 'info' } });
+    });
+
+    it('404s for an unknown run and 400s for a malformed event', async () => {
+      KashiFixRun.exists.mockResolvedValue(null);
+      expect((await send('task-progress', body)).status).toBe(404);
+      expect((await send('task-progress', { taskId: 'j1' })).status).toBe(400);
+    });
   });
 });

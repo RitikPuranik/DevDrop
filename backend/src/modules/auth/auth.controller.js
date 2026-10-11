@@ -4,7 +4,7 @@ const { OAuth2Client } = require('google-auth-library');
 const User = require('../user/user.model');
 const { generateAccessToken } = require('../../shared/utils/jwt');
 const { hashToken } = require('../../shared/utils/helpers');
-const emailService = require('../../services/email.service');
+const events = require('../../infrastructure/events');
 const supabaseService = require('../../services/supabase.service');
 const githubService = require('../../services/github.service');
 
@@ -452,9 +452,10 @@ const sendVerificationEmail = async (req, res) => {
   try {
     const user = req.user;
     if (user.isVerified) return res.status(400).json({ success: false, message: 'Email is already verified' });
-    await emailService.sendVerificationEmail(user);
-    res.json({ success: true, message: 'Verification email sent successfully' });
+    const outcome = await events.requestVerificationEmail(user);
+    res.json({ success: true, message: outcome.throttled ? 'A verification email was requested moments ago. Please check your inbox.' : 'Verification email queued. It should arrive shortly.' });
   } catch (error) {
+    if (events.isQueueUnavailable(error)) return res.status(503).json({ success: false, message: 'Email service is temporarily unavailable. Please try again shortly.' });
     res.status(500).json({ success: false, message: 'Failed to send verification email', error: error.message });
   }
 };
@@ -478,7 +479,8 @@ const verifyEmail = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid or expired verification token' });
     }
 
-    try { await emailService.sendWelcomeEmail(user); } catch (e) { console.error('Welcome email failed:', e); }
+    // Queued after the user record is saved; the request never waits for delivery.
+    try { await events.enqueueWelcomeEmail(user._id); } catch (e) { console.error('Welcome email could not be queued:', e.message); }
     res.json({ success: true, message: 'Email verified successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error verifying email', error: error.message });
@@ -489,9 +491,10 @@ const resendVerification = async (req, res) => {
   try {
     const user = req.user;
     if (user.isVerified) return res.status(400).json({ success: false, message: 'Email is already verified' });
-    await emailService.sendVerificationEmail(user);
-    res.json({ success: true, message: 'Verification email sent' });
+    const outcome = await events.requestVerificationEmail(user);
+    res.json({ success: true, message: outcome.throttled ? 'A verification email was requested moments ago. Please check your inbox.' : 'Verification email queued. It should arrive shortly.' });
   } catch (error) {
+    if (events.isQueueUnavailable(error)) return res.status(503).json({ success: false, message: 'Email service is temporarily unavailable. Please try again shortly.' });
     res.status(500).json({ success: false, message: 'Error sending verification email', error: error.message });
   }
 };
@@ -521,12 +524,11 @@ const forgotPassword = async (req, res) => {
       return res.status(400).json({ success: false, message: `This account uses ${providerLabel} Sign-In. Password reset is not available.` });
     }
 
-    const resetToken = user.generateResetPasswordToken();
-    await user.save();
-    await emailService.sendPasswordResetEmail(user, resetToken);
+    await events.requestPasswordResetEmail(user);
 
-    res.json({ success: true, message: 'Password reset link sent to email' });
+    res.json({ success: true, message: 'Password reset link will be sent to your email shortly' });
   } catch (error) {
+    if (events.isQueueUnavailable(error)) return res.status(503).json({ success: false, message: 'Email service is temporarily unavailable. Please try again shortly.' });
     res.status(500).json({ success: false, message: 'Error sending reset email', error: error.message });
   }
 };
