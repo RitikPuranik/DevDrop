@@ -56,6 +56,13 @@ function getPerKeyConcurrency() {
 const getRequestDeadlineMs = () => envMs('GEMINI_POOL_REQUEST_DEADLINE_MS', 0);
 // Unusable-JSON (HTTP 200) answers tried across projects before giving up.
 const getMaxBadOutputAttempts = () => Math.max(1, envMs('GEMINI_POOL_MAX_BAD_OUTPUT_ATTEMPTS', 10));
+// A per-minute (non-daily) 429 that several DIFFERENT projects return for the same model in a row is a
+// model-wide limit, not a project one: trying the remaining projects only burns more requests. After this
+// many in a row the model is skipped for the rest of the request (default 4; 0 disables).
+const getModelRateLimitStreak = () => {
+  const raw = Number.parseInt(process.env.GEMINI_POOL_MODEL_RATE_LIMIT_STREAK || '', 10);
+  return Number.isFinite(raw) && raw >= 0 ? raw : 4;
+};
 const getStateSyncMs = () => envMs('GEMINI_POOL_STATE_SYNC_MS', 1000);
 
 /** @type {Map<string, object>} keyId -> runtime+config state */
@@ -701,6 +708,7 @@ function newRequestContext(modelList, options, requestId) {
     blockedPairs: new Set(), // project+model unusable for the rest of this request
     failures: {},
     badOutputs: 0,
+    rateLimitStreaks: {}, // model -> consecutive non-daily 429s from different projects
     lastFailedEntry: null,
   };
 }
@@ -832,6 +840,26 @@ function handleAttemptFailure(entry, model, error, ctx, startedAt) {
         excludedForMs: cooldownMs,
         until: cooldownMs > 0 ? new Date(untilMs).toISOString() : null,
       });
+
+      // Per-minute 429 from several projects in a row on the same model: it is the model, not the project.
+      const streakLimit = getModelRateLimitStreak();
+      if (!ctx.legacy && streakLimit > 0 && scope === 'model') {
+        const key = mk(model);
+        if (info.classification === 'rate_limit') {
+          ctx.rateLimitStreaks[key] = (ctx.rateLimitStreaks[key] || 0) + 1;
+          if (ctx.rateLimitStreaks[key] >= streakLimit && !ctx.blockedModels.has(key)) {
+            ctx.blockedModels.add(key);
+            markGlobalModelCapacity(model, Math.max(cooldownMs, 5000));
+            plog('warn', 'MODEL RATE LIMITED ACROSS PROJECTS - moving to the next model', {
+              ...base,
+              projectsInARow: ctx.rateLimitStreaks[key],
+              nextModel: ctx.models.find((m) => !ctx.blockedModels.has(mk(m))) || null,
+            });
+          }
+        } else {
+          ctx.rateLimitStreaks[key] = 0;
+        }
+      }
       break;
     }
   }

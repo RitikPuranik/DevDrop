@@ -37,3 +37,20 @@ describe('multi-agent contracts', () => {
     expect(errors).toEqual([]);
   });
 });
+
+describe('architecture validator tolerates sloppy model output', () => {
+  const base = { project: { framework: 'react-vite', language: 'javascript' }, dependencies: {}, routes: [], dataModel: {} };
+  it('recovers a path from an alternate key and skips entries with no path at all', () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const out = validateArchitecture({ ...base, files: [
+      { filePath: 'src/components/Hero.jsx', type: 'component' },
+      { type: 'component', responsibility: 'no path anywhere' },
+      { path: '/App.js', type: 'entry' },
+    ] });
+    expect(out.files.map((f) => f.path)).toEqual(['/src/components/Hero.jsx', '/App.js']);
+  });
+  it('still fails when no entry has a usable path', () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(() => validateArchitecture({ ...base, files: [{ type: 'component' }] })).toThrow(/Architecture files are required/);
+  });
+});

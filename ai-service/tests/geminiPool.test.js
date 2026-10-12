@@ -277,3 +277,20 @@ describe('execute()', () => {
     });
   });
 });
+
+describe('model-wide per-minute rate limit', () => {
+  test('stops after a few projects in a row and moves to the next model instead of trying every project', async () => {
+    process.env.GEMINI_API_KEYS = Array.from({ length: 10 }, (_, i) => `RL_KEY_${i}_0000`).join(',');
+    _internal.pool.clear();
+    _internal.globalModelCooldowns.clear();
+    _internal.bootstrapFromEnv();
+    const calls = [];
+    const requestFn = jest.fn((rawKey, model) => {
+      calls.push(model);
+      return model === 'model-a' ? Promise.reject(httpError(429, 'rate limit exceeded')) : Promise.resolve({ ok: true });
+    });
+    const out = await geminiPool.executeModels(['model-a', 'model-b'], requestFn);
+    expect(out.model).toBe('model-b');
+    expect(calls.filter((m) => m === 'model-a').length).toBeLessThanOrEqual(4);
+  });
+});
