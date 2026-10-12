@@ -7,7 +7,7 @@ import {
  SandpackFileExplorer,
  useSandpack,
 } from '@codesandbox/sandpack-react';
-import { Eye, Code2, AlertTriangle, Bot, Download, Loader2, RefreshCw, Monitor, Tablet, Smartphone, History, Rocket } from 'lucide-react';
+import { Eye, Code2, AlertTriangle, Bot, Download, Loader2, RefreshCw, Monitor, Tablet, Smartphone, History, Rocket, Maximize2, Minimize2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import VersionHistoryPanel from './preview/VersionHistoryPanel';
 import ShipProjectModal from './ShipProjectModal';
@@ -179,6 +179,17 @@ const BTN_GHOST = `${BTN_BASE} h-9 border border-[var(--s-line)] bg-[var(--s-sur
 const BTN_ICON = `${BTN_BASE} h-9 w-9 border border-[var(--s-line)] bg-[var(--s-surface)] text-[var(--s-muted)] hover:-translate-y-px hover:border-[var(--s-line-strong)] hover:text-[var(--s-text)]`;
 const BTN_PRIMARY = `${BTN_BASE} h-9 bg-[var(--s-text)] px-4 font-bold text-[#050505] hover:-translate-y-px hover:bg-white`;
 
+// Icon button that slides its text label out on hover.
+const HOVER_LABEL = 'max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 group-hover:ml-2 group-hover:max-w-[110px] group-hover:opacity-100';
+function HoverLabelButton({ icon: Icon, label, active = false, className = '', ...rest }) {
+  return (
+    <button type="button" title={label} aria-label={label} {...rest} className={`${BTN_BASE} group h-9 min-w-9 !gap-0 overflow-hidden border border-[var(--s-line)] bg-[var(--s-surface)] px-[11px] text-[var(--s-muted)] hover:border-[var(--s-line-strong)] hover:text-[var(--s-text)] ${active ? '!border-[var(--s-line-strong)] !text-[var(--s-text)]' : ''} ${className}`}>
+      <Icon className="h-3.5 w-3.5 shrink-0" />
+      <span className={HOVER_LABEL}>{label}</span>
+    </button>
+  );
+}
+
 // A pill-shaped switch whose highlight slides to the chosen option.
 function Segmented({ id, value, onChange, options }) {
  return (
@@ -199,6 +210,43 @@ function Segmented({ id, value, onChange, options }) {
  );
 }
 
+const SpinIcon = (props) => <Loader2 {...props} className={`${props.className || ''} animate-spin`} />;
+
+const DEVICE_OPTIONS = [
+  { value: 'desktop', icon: Monitor, label: 'Desktop preview' },
+  { value: 'tablet', icon: Tablet, label: 'Tablet preview' },
+  { value: 'mobile', icon: Smartphone, label: 'Mobile preview' },
+];
+
+// Shows only the selected device. Hover (or focus, or tap) the pill and the other
+// devices slide out so another one can be picked.
+function DeviceSwitcher({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div
+      className="group flex items-center rounded-full border border-[var(--s-line)] bg-[var(--s-surface)] p-1 transition-colors hover:border-[var(--s-line-strong)]"
+      onMouseLeave={() => setOpen(false)}
+    >
+      {DEVICE_OPTIONS.map(({ value: v, icon: Icon, label }) => {
+        const on = value === v;
+        const reveal = open ? 'max-w-[44px] opacity-100' : 'max-w-0 opacity-0 group-hover:max-w-[44px] group-hover:opacity-100 group-focus-within:max-w-[44px] group-focus-within:opacity-100';
+        return (
+          <span key={v} className={`overflow-hidden transition-all duration-200 ${on ? 'max-w-[44px] opacity-100' : reveal}`}>
+            <button
+              type="button"
+              onClick={() => { if (on) setOpen((o) => !o); else { onChange(v); setOpen(false); } }}
+              aria-pressed={on} aria-label={label} title={label}
+              className={`flex h-7 w-9 items-center justify-center rounded-full transition-colors ${on ? 'bg-[var(--s-text)] text-[#050505]' : 'text-[var(--s-muted)] hover:text-[var(--s-text)]'}`}
+            >
+              <Icon className="h-3.5 w-3.5" />
+            </button>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiveTab, pipelineSteps, pipelineMode, percent, onHardReload, onDownload, device, setDevice, history = [], projectId, appTitle, onListVersions, onRestoreVersion, versionRefreshKey }) {
  const { sandpack, listen } = useSandpack();
  const [shipMode, setShipMode] = useState(null); // 'github' | 'live' | null
@@ -207,6 +255,23 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
  const [isExporting, setIsExporting] = useState(false);
  const [showVersions, setShowVersions] = useState(false);
  const prevFilesRef = useRef({});
+  const frameRef = useRef(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(document.fullscreenElement === frameRef.current);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    try {
+      if (document.fullscreenElement) document.exitFullscreen?.();
+      else frameRef.current?.requestFullscreen?.();
+    } catch (err) {
+      console.error('Fullscreen failed:', err);
+    }
+  };
 
  useEffect(() => {
   if (!fileData?.files) return;
@@ -276,7 +341,7 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2.5 pb-3">
     <div className="flex flex-wrap items-center gap-2">
      <Segmented id="view" value={activeTab} onChange={setActiveTab} options={[{ value: 'preview', label: 'Preview', icon: Eye }, { value: 'code', label: 'Code', icon: Code2 }]} />
-     <Segmented id="device" value={device} onChange={setDevice} options={[{ value: 'desktop', icon: Monitor, aria: 'Desktop preview' }, { value: 'tablet', icon: Tablet, aria: 'Tablet preview' }, { value: 'mobile', icon: Smartphone, aria: 'Mobile preview' }].map((o) => ({ ...o, label: '' }))} />
+     <DeviceSwitcher value={device} onChange={setDevice} />
      <AnimatePresence initial={false}>
       {isGenerating && (
        <motion.span
@@ -299,23 +364,19 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
       <div className="flex flex-wrap items-center gap-2">
      {onListVersions && (
         <div className="relative">
-          <button onClick={() => setShowVersions((v) => !v)} disabled={!projectId} title="Version history" aria-label="History" aria-expanded={showVersions} className={`${BTN_ICON} ${showVersions ? '!border-[var(--s-line-strong)] !text-[var(--s-text)]' : ''}`}>
-            <History className="h-3.5 w-3.5" />
-          </button>
+          <HoverLabelButton icon={History} label="History" onClick={() => setShowVersions((v) => !v)} disabled={!projectId} aria-expanded={showVersions} active={showVersions} />
           {showVersions && (
             <VersionHistoryPanel projectId={projectId} refreshKey={versionRefreshKey} disabled={isGenerating} onList={onListVersions} onRestore={async (v) => { await onRestoreVersion(v); setShowVersions(false); }} />
           )}
         </div>
       )}
 
+      <HoverLabelButton icon={isFullscreen ? Minimize2 : Maximize2} label={isFullscreen ? 'Exit full screen' : 'Full screen'} onClick={toggleFullscreen} active={isFullscreen} />
+
       <span className="mx-0.5 hidden h-5 w-px bg-white/10 sm:block" aria-hidden="true" />
 
-     <button onClick={handleExportZip} disabled={isExporting || !fileData} title="Download the project as a ZIP" className={BTN_GHOST}>
-      {isExporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} Download
-     </button>
-     <button onClick={() => setShipMode('github')} disabled={!canShip} title={canShip ? 'Push this website to a new GitHub repository' : 'Available once generation is complete'} className={BTN_GHOST}>
-      <Github className="h-3.5 w-3.5" /> GitHub
-     </button>
+     <HoverLabelButton icon={isExporting ? SpinIcon : Download} label="Download" title="Download the project as a ZIP" onClick={handleExportZip} disabled={isExporting || !fileData} />
+     <HoverLabelButton icon={Github} label="GitHub" title={canShip ? 'Push this website to a new GitHub repository' : 'Available once generation is complete'} onClick={() => setShipMode('github')} disabled={!canShip} />
      <button onClick={() => setShipMode('live')} disabled={!canShip} title={canShip ? 'Deploy this website live on your Vercel account' : 'Available once generation is complete'} className={BTN_PRIMARY}>
       <Rocket className="h-3.5 w-3.5" /> Publish
      </button>
@@ -325,7 +386,7 @@ function SandpackInner({ fileData, isGenerating, onFixError, activeTab, setActiv
    <ShipProjectModal open={Boolean(shipMode)} mode={shipMode} onClose={() => setShipMode(null)} onModeChange={setShipMode} projectId={projectId} title={appTitle} />
 
    <div className="flex min-h-0 flex-1 flex-col">
-<div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[var(--s-line)] bg-[var(--s-surface)]">
+<div ref={frameRef} className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[var(--s-line)] bg-[var(--s-surface)]">
    <div className="flex items-center gap-3 border-b border-[var(--s-line)] px-3.5 py-2">
     <span className="flex gap-1.5" aria-hidden="true"><i className="h-2 w-2 rounded-full bg-white/15" /><i className="h-2 w-2 rounded-full bg-white/15" /><i className="h-2 w-2 rounded-full bg-white/15" /></span>
     

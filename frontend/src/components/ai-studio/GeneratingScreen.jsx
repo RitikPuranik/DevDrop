@@ -21,6 +21,10 @@ const STEP_META = {
   design: { icon: Palette, short: 'Designing the layout' },
   code: { icon: Code2, short: 'Writing the code' },
   validation: { icon: ShieldCheck, short: 'Checking everything' },
+  'relevant-files': { icon: FileText, short: 'Finding the files to change' },
+  edit: { icon: Code2, short: 'Applying your change' },
+  'edit-validate': { icon: ShieldCheck, short: 'Checking the result' },
+  'debug-only': { icon: Code2, short: 'Repairing the code' },
 };
 const MESSAGES = {
   edit: ['Finding the files your change touches', 'Making the smallest safe edit', 'Double-checking it still builds'],
@@ -316,7 +320,7 @@ function SceneValidate() {
   );
 }
 
-const SCENES = { requirements: SceneRequirements, design: SceneDesign, code: SceneCode, validation: SceneValidate };
+const SCENES = { requirements: SceneRequirements, design: SceneDesign, code: SceneCode, validation: SceneValidate, 'relevant-files': SceneRequirements, edit: SceneCode, 'edit-validate': SceneValidate, 'debug-only': SceneCode };
 const SCENE_ORDER = [SceneRequirements, SceneDesign, SceneCode, SceneValidate];
 
 /* ───────────── icon stepper (no words — hover/tap any step to preview it) ───────────── */
@@ -326,7 +330,7 @@ function StepIcons({ steps, shownIdx, liveIdx, allDone, onPeek }) {
   const fill = allDone ? 100 : n > 1 ? (liveIdx / (n - 1)) * 100 : 0;
   return (
     <div className="relative w-full max-w-[300px]">
-      <div className="absolute left-[12.5%] right-[12.5%] top-5 h-px bg-white/10" aria-hidden="true">
+      <div className="absolute top-5 h-px bg-white/10" style={{ left: `${50 / n}%`, right: `${50 / n}%` }} aria-hidden="true">
         <motion.div className="h-full bg-[var(--s-hi)]" initial={false} animate={{ width: `${fill}%` }} transition={{ duration: 0.7, ease: 'easeOut' }} />
       </div>
       <div className="relative grid" style={{ gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))` }}>
@@ -476,8 +480,6 @@ function FloatingCard({ steps, percent, mode }) {
 }
 
 export default function GeneratingScreen({ steps, mode = 'generate', percent = 0 }) {
-  // 'generate' and 'debug' both trigger the full scene animation view
-  return mode === 'generate' || mode === 'debug'
-    ? <FullScreen steps={steps} percent={percent} mode={mode} />
-    : <FloatingCard steps={steps} percent={percent} mode={mode} />;
+  // generate, edit and debug all use the same full-pane scene view
+  return <FullScreen steps={steps} percent={percent} mode={mode} />;
 }

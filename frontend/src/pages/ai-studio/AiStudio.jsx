@@ -44,8 +44,11 @@ export default function AiStudio() {
   useEffect(()=>{if(!aiStudioEnabled)navigate('/workspace',{replace:true});},[aiStudioEnabled,navigate]);
   useEffect(()=>{try{posthog?.capture('ai_studio_opened');}catch{}},[posthog]);
   const workspaceActive=isGenerating||Boolean(fileData)||messages.length>0;
-  useEffect(()=>{window.dispatchEvent(new CustomEvent('navbar-compact',{detail:workspaceActive}));},[workspaceActive]);
-  useEffect(()=>()=>{window.dispatchEvent(new CustomEvent('navbar-compact',{detail:false}));},[]);
+  useEffect(()=>{window.__devdropStudioWorkspace=workspaceActive;window.dispatchEvent(new CustomEvent('navbar-compact',{detail:workspaceActive}));},[workspaceActive]);
+  useEffect(()=>()=>{window.__devdropStudioWorkspace=false;window.dispatchEvent(new CustomEvent('navbar-compact',{detail:false}));},[]);
+  // The message box grows with what is typed (like WhatsApp) up to a limit, then scrolls inside itself.
+  const composerRef=useRef(null);
+  useEffect(()=>{const el=composerRef.current;if(!el)return;const MAX=176;el.style.height='auto';el.style.height=`${Math.min(el.scrollHeight,MAX)}px`;el.style.overflowY=el.scrollHeight>MAX?'auto':'hidden';},[input]);
   useEffect(()=>{scrollRef.current?.scrollTo({top:scrollRef.current.scrollHeight,behavior:'smooth'});},[messages,isGenerating]);
   if(!aiStudioEnabled)return null;
   const stageLabel=(stage)=>{if(stage.startsWith('code:'))return `Generating ${stage.slice(5)}…`;if(stage==='build-validator')return 'Validating build…';if(stage.startsWith('deployment-readiness'))return 'Checking Vercel readiness…';if(stage==='relevant-files')return 'Finding affected files…';if(stage==='edit')return 'Applying edit…';if(stage.startsWith('edit-debug'))return 'Fixing an issue…';return `${stage.charAt(0).toUpperCase()+stage.slice(1)}…`;};
@@ -352,7 +355,7 @@ export default function AiStudio() {
           {!isGenerating&&!stopped&&messages.length>0&&<button type="button" onClick={handleNewGeneration} className="mb-2 inline-flex items-center gap-1.5 text-[11px] text-[var(--s-faint)] transition-colors hover:text-[var(--s-text)]"><RotateCcw className="h-3 w-3"/>New generation</button>}
           {error&&debugRetryAvailable&&!isGenerating&&<button type="button" onClick={handleDebugRetry} className="mb-2 flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--s-line-strong)] px-3 py-2 text-xs font-medium text-[var(--s-text)] transition-colors hover:bg-white/[0.06]">Retry with Debug Agent</button>}
           <div className="rounded-2xl border border-[var(--s-line-strong)] bg-[var(--s-surface)] p-3 transition-colors focus-within:border-white/30">
-            <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSend();}}} placeholder={stopped?"Tell me what to change, or start a new generation…":"Describe a change to your website…"} rows={2} className="w-full resize-none bg-transparent text-[13px] leading-5 text-[var(--s-text)] placeholder:text-[var(--s-faint)] focus:outline-none"/>
+            <textarea ref={composerRef} style={{outline:'none',boxShadow:'none'}} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSend();}}} placeholder={stopped?"Tell me what to change, or start a new generation…":"Describe a change to your website…"} rows={2} className="w-full resize-none bg-transparent text-[13px] leading-5 text-[var(--s-text)] placeholder:text-[var(--s-faint)] focus:outline-none"/>
             {(attachments.length>0||attachError)&&<div className="mt-2 space-y-1.5">
               {attachments.length>0&&<div className="flex flex-wrap gap-1.5">{attachments.map(a=><div key={a.id} className="relative flex max-w-[150px] items-center gap-1.5 rounded-lg border border-[var(--s-line)] bg-white/[0.03] py-1 pl-1 pr-6 text-[11px] text-[var(--s-muted)]">
                 {a.previewUrl?<img src={a.previewUrl} alt="" className="h-6 w-6 shrink-0 rounded object-cover"/>:<span className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-white/[0.05]">{a.kind==='video'?<Film className="h-3.5 w-3.5"/>:<FileText className="h-3.5 w-3.5"/>}</span>}
