@@ -174,7 +174,8 @@ exports.cancel = async (req, res) => {
     const job = await findOwnedJob(req.params.id, req.userId);
     if (!job) return res.status(404).json({ success:false, message:'Job not found' });
     if (QueueJob.TERMINAL.includes(job.status)) return res.status(409).json({ success:false, message:`Job already ${job.status}` });
-    await queue.removeWaitingJob(QUEUE_NAMES.AI, job.jobKey);
+    await queue.removeWaitingJob(QUEUE_NAMES.AI, job.jobKey, 'cancelled by user');
+    console.log('[queue] CANCEL REQUESTED by user', { queue: QUEUE_NAMES.AI, jobKey: job.jobKey, previousStatus: job.status });
     await jobStore.markCancelled(job.jobKey, { queue: QUEUE_NAMES.AI });
     emitToJob(job.jobKey, 'ai-job:failed', { jobId: job.jobKey, error: 'Generation was cancelled.' });
     res.status(200).json({ success:true, data:{ jobId: job.jobKey, status:'cancelled' } });

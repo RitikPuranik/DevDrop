@@ -7,7 +7,7 @@
     "start": "node server.js",
     "dev": "nodemon --ext js,json,env server.js",
     "test": "jest",
-    "postinstall": "npm --prefix ../backend install --omit=dev --no-audit --no-fund"
+    "postinstall": "node scripts/install-backend.js"
   },
   "dependencies": {
     "axios": "^1.6.0",

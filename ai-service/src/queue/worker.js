@@ -36,6 +36,9 @@ const withTimeout = (promise, ms) => {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 };
 
+// One readable line per queue lifecycle event. Never logs payloads or secrets.
+const qlog = (event, fields = {}) => console.log(`[ai-queue] ${event}`, fields);
+
 const pickRunner = (mode) => (mode === 'debug' ? debugWebsite : mode === 'edit' ? editWebsite : generateWebsite);
 
 // Quota exhaustion: wait for the provider cooldown (bounded) instead of retrying immediately.
@@ -54,10 +57,15 @@ function createAiProcessor(overrides = {}) {
     if (!jobKey) throw new UnrecoverableError('AI job is missing jobKey');
 
     let input;
+    const fetchStarted = Date.now();
     try {
       input = await deps.backend.fetchPayload(jobKey);
     } catch (error) {
-      if (error.skipJob) return { skipped: true, reason: error.message };
+      if (error.skipJob) {
+        qlog('SKIPPED (not runnable)', { jobKey, reason: error.message });
+        return { skipped: true, reason: error.message };
+      }
+      qlog('PAYLOAD FETCH FAILED', { jobKey, ms: Date.now() - fetchStarted, error: String(error.message).slice(0, 200) });
       throw error;
     }
     const payload = input.payload;
@@ -88,8 +96,12 @@ function createAiProcessor(overrides = {}) {
       },
     };
     const onStage = (stage, status, details) => {
-      if (cancelled) throw Object.assign(new Error('Job cancelled'), { cancelled: true });
+      if (cancelled) {
+        qlog('STOPPED (cancelled by user)', { jobKey, stage: currentStage });
+        throw Object.assign(new Error('Job cancelled'), { cancelled: true });
+      }
       currentStage = stage;
+      qlog('STAGE', { jobKey, stage, status });
       if (details) {
         const i = agents.findIndex((a) => a.name === stage);
         if (i >= 0) agents.splice(i, 1);
@@ -108,7 +120,10 @@ function createAiProcessor(overrides = {}) {
       await deps.backend.deliverTerminal('completed', jobKey, { result, generationMeta: { agents } });
       return { ok: true };
     } catch (error) {
-      if (error.cancelled || cancelled) return { cancelled: true };
+      if (error.cancelled || cancelled) {
+        qlog('REMOVED from processing (cancelled by user)', { jobKey, stage: currentStage });
+        return { cancelled: true };
+      }
       if (error.code === 'RESULT_DELIVERY_FAILED') throw error; // transient: BullMQ retries
 
       const klass = classifyError(error);
@@ -154,6 +169,24 @@ function createAiWorker({ connection, processor } = {}) {
     maxStalledCount: cfg.maxStalledCount,
     lockDuration: 60000,
   });
+
+  // Queue lifecycle: waiting -> TAKEN (active) -> completed / failed / stalled / drained.
+  worker.on('ready', () => qlog('WORKER READY, waiting for jobs', { queue: QUEUE_NAMES.AI, concurrency: cfg.concurrency }));
+  worker.on('active', (job) => {
+    qlog('TAKEN from queue', {
+      jobKey: job?.data?.jobKey,
+      attempt: (job?.attemptsMade || 0) + 1,
+      waitedMs: job?.processedOn && job?.timestamp ? job.processedOn - job.timestamp : null,
+    });
+  });
+  worker.on('completed', (job, result) => {
+    qlog(result?.cancelled ? 'FINISHED (cancelled)' : result?.skipped ? 'FINISHED (skipped)' : 'COMPLETED', {
+      jobKey: job?.data?.jobKey,
+      durationMs: job?.finishedOn && job?.processedOn ? job.finishedOn - job.processedOn : null,
+    });
+  });
+  worker.on('stalled', (jobId) => qlog('STALLED (lock lost - worker died, restarted or event loop blocked)', { jobId }));
+  worker.on('drained', () => qlog('QUEUE EMPTY (nothing left to take)', { queue: QUEUE_NAMES.AI }));
 
   worker.on('failed', async (job, error) => {
     try {

@@ -44,6 +44,9 @@ const getQueue = (name) => {
   return queues.get(name);
 };
 
+// One readable line per queue lifecycle event (ADDED / REMOVED / DUPLICATE ...). Never logs payloads or secrets.
+const qlog = (event, fields = {}) => console.log(`[queue] ${event}`, fields);
+
 // BullMQ forbids ":" and purely numeric custom ids; keep ids opaque and URL-safe.
 const toBullJobId = (jobKey) => {
   const id = String(jobKey).replace(/[^A-Za-z0-9_-]/g, '-');
@@ -79,7 +82,10 @@ const enqueueJob = async ({
   const existing = await QueueJob.findOne({ jobKey }).select('status publishPending');
   if (existing) {
     const inFlight = jobStore.ACTIVE.includes(existing.status);
-    if (inFlight || !rerun) return { jobKey, duplicate: true, status: existing.status, pending: Boolean(existing.publishPending) };
+    if (inFlight || !rerun) {
+      qlog('DUPLICATE IGNORED (already known)', { queue, type, jobKey, status: existing.status });
+      return { jobKey, duplicate: true, status: existing.status, pending: Boolean(existing.publishPending) };
+    }
     await QueueJob.deleteOne({ jobKey });
   }
 
@@ -109,6 +115,10 @@ const enqueueJob = async ({
 
   try {
     await getQueue(queue).add(type, publishData, { ...opts, jobId: toBullJobId(jobKey) });
+    // Fire-and-forget so a slow Redis never delays the HTTP response.
+    getQueue(queue).getJobCounts('waiting', 'active', 'delayed')
+      .then((c) => qlog('ADDED to queue', { queue, type, jobKey, priority, delayMs: delayMs || 0, ahead: { waiting: c.waiting, active: c.active, delayed: c.delayed } }))
+      .catch(() => qlog('ADDED to queue', { queue, type, jobKey, priority }));
     if (durable) {
       await QueueJob.updateOne({ jobKey }, { $set: { publishPending: false }, $unset: { publishData: '', publishOpts: '' } }).catch(() => {});
     }
@@ -163,15 +173,23 @@ const upsertSchedule = (queueName, schedulerId, repeat, { type, data = {} } = {}
 
 const removeSchedule = (queueName, schedulerId) => getQueue(queueName).removeJobScheduler(schedulerId);
 
-const removeWaitingJob = async (queueName, jobKey) => {
+// Removes a queued/delayed job. `reason` is logged so it is always clear WHY a job left the queue
+// (e.g. "cancelled by user"). A job that is already running cannot be removed here: it is told to stop
+// through the webhook reply and ends at its next stage boundary (see the ai-service worker).
+const removeWaitingJob = async (queueName, jobKey, reason = 'removed') => {
   try {
     const job = await getQueue(queueName).getJob(toBullJobId(jobKey));
-    if (!job) return false;
+    if (!job) {
+      qlog('REMOVE SKIPPED (not in queue)', { queue: queueName, jobKey, reason });
+      return false;
+    }
     const state = await job.getState();
     if (['waiting', 'delayed', 'prioritized'].includes(state)) {
       await job.remove();
+      qlog('REMOVED from queue', { queue: queueName, jobKey, state, reason });
       return true;
     }
+    qlog('NOT REMOVED (already running or finished)', { queue: queueName, jobKey, state, reason, note: state === 'active' ? 'will stop at next stage boundary' : undefined });
   } catch (error) {
     console.warn(`[queue] could not remove job ${jobKey}: ${error.message}`);
   }
