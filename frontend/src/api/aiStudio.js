@@ -3,6 +3,8 @@ import api from "./axios";
 export const aiStudioAPI = {
   openSession: (sessionId, projectId, websiteType) =>
     api.post("/ai-studio/session", { sessionId, projectId, websiteType }),
+  resume: (projectId, sessionId) =>
+    api.get(`/ai-studio/${projectId}/resume`, { params: { sessionId } }),
   heartbeat: (projectId, sessionId) =>
     api.post(`/ai-studio/${projectId}/heartbeat`, { sessionId }),
   recordActivity: (projectId) => api.post(`/ai-studio/${projectId}/activity`),

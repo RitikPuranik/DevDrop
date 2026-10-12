@@ -13,5 +13,6 @@ export const aiGenerateAPI = {
       conversation: spec.conversation,
     }),
   getJob: (jobId) => api.get(`/ai-generate/jobs/${jobId}`),
+  cancel: (jobId) => api.delete(`/ai-generate/jobs/${jobId}`),
   debugRetry: (jobId) => api.post(`/ai-generate/jobs/${jobId}/debug-retry`),
 };

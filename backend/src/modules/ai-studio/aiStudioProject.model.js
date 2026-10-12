@@ -110,6 +110,24 @@ const aiStudioProjectSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+    // Chat history shown when the page is refreshed / reopened in another tab
+    // ([{ role, content, notice? }]); the backend appends results as jobs finish.
+    conversation: {
+      type: [mongoose.Schema.Types.Mixed],
+      default: [],
+    },
+    // What the user chose in the builder (type, details, design, assets) so a stopped
+    // generation can be continued with the same inputs. Never contains the reference screenshot.
+    spec: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    // Key of the AI job currently queued/running for this project. Cleanup never reclaims a
+    // project while this job is still alive.
+    activeJobKey: {
+      type: String,
+      default: null,
+    },
     // Set once cleanup starts actually deleting things, so a crashed/retried
     // cleanup run knows this project was already mid-flight rather than
     // silently orphaning storage.

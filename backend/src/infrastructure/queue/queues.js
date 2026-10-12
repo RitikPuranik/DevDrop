@@ -2,7 +2,7 @@
 
 const { Queue } = require('bullmq');
 const { createQueueRedisConnection } = require('./connection');
-const { QUEUE_NAMES, PRIORITY } = require('./names');
+const { QUEUE_NAMES, PRIORITY, AI_CANCEL_CHANNEL } = require('./names');
 const { getQueueConfig } = require('./config');
 const jobStore = require('./jobStore');
 const QueueJob = require('./queueJob.model');
@@ -70,6 +70,7 @@ const enqueueJob = async ({
   refType,
   refId,
   mode,
+  projectId,
   payload, // large input persisted in Mongo only
   priority = PRIORITY.NOTIFICATION,
   delayMs,
@@ -103,6 +104,7 @@ const enqueueJob = async ({
       refType,
       refId,
       mode,
+      ...(projectId ? { projectId: String(projectId) } : {}),
       status: 'queued',
       enqueuedAt: new Date(),
       ...(payload !== undefined ? { payload } : {}),
@@ -176,6 +178,31 @@ const removeSchedule = (queueName, schedulerId) => getQueue(queueName).removeJob
 // Removes a queued/delayed job. `reason` is logged so it is always clear WHY a job left the queue
 // (e.g. "cancelled by user"). A job that is already running cannot be removed here: it is told to stop
 // through the webhook reply and ends at its next stage boundary (see the ai-service worker).
+// True when BullMQ still holds this job (waiting/active/delayed). A Mongo record that says "queued" while
+// Redis has no such job (queue flushed, job lost, worker never saw it) is a dead job nobody will ever run.
+const isJobLive = async (queueName, jobKey) => {
+  try {
+    const job = await getQueue(queueName).getJob(toBullJobId(jobKey));
+    if (!job) return false;
+    const state = await job.getState();
+    return ['waiting', 'active', 'delayed', 'prioritized', 'waiting-children'].includes(state);
+  } catch {
+    return true; // Redis unreachable: cannot tell, so do not declare the job dead
+  }
+};
+
+// Push (no polling): tells the ai-service worker to stop a job that is already running.
+// Best-effort: if it is not delivered, the worker still stops at its next stage boundary via the webhook reply.
+const publishCancel = async (jobKey) => {
+  try {
+    await getConnection().publish(AI_CANCEL_CHANNEL, String(jobKey));
+    return true;
+  } catch (error) {
+    console.warn(`[queue] could not publish cancel for ${jobKey}: ${error.message}`);
+    return false;
+  }
+};
+
 const removeWaitingJob = async (queueName, jobKey, reason = 'removed') => {
   try {
     const job = await getQueue(queueName).getJob(toBullJobId(jobKey));
@@ -214,6 +241,8 @@ module.exports = {
   upsertSchedule,
   removeSchedule,
   removeWaitingJob,
+  publishCancel,
+  isJobLive,
   closeQueues,
   toBullJobId,
 };

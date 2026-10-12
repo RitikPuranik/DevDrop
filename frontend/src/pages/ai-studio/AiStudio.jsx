@@ -2,9 +2,10 @@ import {buildAssetContract} from '../../components/ai-studio/assetContract';
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, ArrowUp, Loader2, Bot, User, CheckSquare, ChevronDown, Paperclip, Mic, Sparkles, Send, X, Film, FileText } from 'lucide-react';
+import { ArrowLeft, ArrowUp, Loader2, Square, RotateCcw, Bot, User, CheckSquare, ChevronDown, Paperclip, Mic, Sparkles, Send, X, Film, FileText } from 'lucide-react';
 import { usePostHog } from '../../analytics/PostHogProvider';
 import { aiGenerateAPI } from '../../api/aiGenerate';
+import { aiStudioAPI } from '../../api/aiStudio';
 import { subscribeToJob } from '../../api/socket';
 import AppPreview from '../../components/ai-studio/AppPreview';
 import { computePipeline } from '../../components/ai-studio/pipelineSteps';
@@ -24,9 +25,15 @@ const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024; // matches the backend asset uplo
 const ATTACH_ACCEPT = 'image/*,video/*,.pdf,.doc,.docx';
 const attachKind = (f) => (f.type.startsWith('image/') ? 'image' : f.type.startsWith('video/') ? 'video' : 'file');
 
+const readSavedId=()=>{try{return localStorage.getItem('devdrop.aiStudio.projectId')||null;}catch{return null;}};
+const STOP_NOTICE='Generation stopped. Tell me what to change, or start a new generation.';
+
 export default function AiStudio() {
   const navigate = useNavigate(); const posthog = usePostHog();
-  const [studioMode,setStudioMode]=useState('types'); const [mobileView,setMobileView]=useState('chat'); const [failedJobId,setFailedJobId]=useState(null); const [debugRetryAvailable,setDebugRetryAvailable]=useState(false); const [messages,setMessages]=useState([]); const [fileData,setFileData]=useState(null); const [appTitle,setAppTitle]=useState(null); const [input,setInput]=useState(''); const [isGenerating,setIsGenerating]=useState(false); const [genStatusLabel,setGenStatusLabel]=useState('Generating…'); const [pipeline,setPipeline]=useState({}); const [genMode,setGenMode]=useState('generate'); const [currentStage,setCurrentStage]=useState(null); const [error,setError]=useState(null); const [showContract,setShowContract]=useState(false); const scrollRef=useRef(null); const pollTimeoutRef=useRef(null);
+  const [studioMode,setStudioMode]=useState('types'); const [mobileView,setMobileView]=useState('chat'); const [failedJobId,setFailedJobId]=useState(null); const [debugRetryAvailable,setDebugRetryAvailable]=useState(false); const [messages,setMessages]=useState([]); const [fileData,setFileData]=useState(null); const [appTitle,setAppTitle]=useState(null); const [input,setInput]=useState(''); const [isGenerating,setIsGenerating]=useState(false); const [genStatusLabel,setGenStatusLabel]=useState('Generating…'); const [pipeline,setPipeline]=useState({}); const [genMode,setGenMode]=useState('generate'); const [currentStage,setCurrentStage]=useState(null); const [error,setError]=useState(null); const [showContract,setShowContract]=useState(false); const scrollRef=useRef(null);
+  // stopped: the user pressed Stop (or it was stopped from another tab). resuming: restoring a saved project after a refresh.
+  const [stopped,setStopped]=useState(false); const [stopping,setStopping]=useState(false); const [resuming,setResuming]=useState(()=>Boolean(readSavedId()));
+  const currentJobRef=useRef(null); const cancelWaitRef=useRef(null); const syncNowRef=useRef(null); const specRef=useRef(null);
   const [attachments,setAttachments]=useState([]); const [isUploadingAttachments,setIsUploadingAttachments]=useState(false); const [attachError,setAttachError]=useState(null); const fileInputRef=useRef(null); const uploadedAttachmentsRef=useRef(new Map());
   // Persists the generated project (zip + files) to the backend for as long
   // as this AI Studio tab stays open/active. Refresh or close naturally lets
@@ -37,51 +44,43 @@ export default function AiStudio() {
   useEffect(()=>{if(!aiStudioEnabled)navigate('/workspace',{replace:true});},[aiStudioEnabled,navigate]);
   useEffect(()=>{try{posthog?.capture('ai_studio_opened');}catch{}},[posthog]);
   useEffect(()=>{scrollRef.current?.scrollTo({top:scrollRef.current.scrollHeight,behavior:'smooth'});},[messages,isGenerating]);
-  useEffect(()=>()=>{if(pollTimeoutRef.current)clearTimeout(pollTimeoutRef.current);},[]);
   if(!aiStudioEnabled)return null;
-  // Safety-net resync only — NOT a poll loop. If the socket silently missed
-  // an event (brief disconnect, etc.) this checks in once, well after the
-  // job should have produced *some* stage event, rather than re-hitting the
-  // backend/ai-service every couple of seconds for the whole run.
-  const RESYNC_AFTER_MS=20000;
   const stageLabel=(stage)=>{if(stage.startsWith('code:'))return `Generating ${stage.slice(5)}…`;if(stage==='build-validator')return 'Validating build…';if(stage.startsWith('deployment-readiness'))return 'Checking Vercel readiness…';if(stage==='relevant-files')return 'Finding affected files…';if(stage==='edit')return 'Applying edit…';if(stage.startsWith('edit-debug'))return 'Fixing an issue…';return `${stage.charAt(0).toUpperCase()+stage.slice(1)}…`;};
   const updateProgress=(job)=>{const agents=job?.generationMeta?.agents||[]; const next={}; for(const a of agents)next[a.name]=a.status; setPipeline(next); if(job?.mode)setGenMode(job.mode); setCurrentStage(job?.currentStage||null); if(job?.currentStage)setGenStatusLabel(stageLabel(job.currentStage));};
-  // Waits for a job's result over its ai-job:<jobId> socket room. Each agent
-  // completion (onStage in ai-service) arrives here the moment it happens,
-  // pushed via ai-service -> backend webhook -> this socket event, instead
-  // of the frontend asking "done yet?" on a timer.
+  // Waits for a job's result over its ai-job:<jobId> socket room. Each stage arrives the moment the
+  // ai-service reports it (webhook -> backend -> socket). There is no timer: one status fetch happens when
+  // the subscription goes live and again after a reconnect, which is how a refreshed or re-opened page
+  // catches up on a generation that kept running without it.
   const waitForJob=(jobId)=>new Promise((resolve,reject)=>{
-    let lastEventAt=Date.now();
-    const armResync=()=>{
-      if(pollTimeoutRef.current)clearTimeout(pollTimeoutRef.current);
-      pollTimeoutRef.current=setTimeout(async()=>{
-        if(Date.now()-lastEventAt<RESYNC_AFTER_MS)return; // an event arrived meanwhile
-        try{
-          const {data}=await aiGenerateAPI.getJob(jobId);
-          const job=data?.data;
-          if(job)updateProgress(job);
-          if(job?.status==='failed'){setFailedJobId(jobId);setDebugRetryAvailable(Boolean(job.debugAvailable));}
-          if(job?.status==='completed'){cleanup();resolve(job.result);return;}
-          if(job?.status==='failed'){cleanup();const failure=new Error(job.error||'AI generation failed.');failure.jobId=jobId;failure.debugAvailable=Boolean(job.debugAvailable);reject(failure);return;}
-        }catch(err){
-          const status=err?.response?.status;
-          if(status===401||status===403||status===404){cleanup();reject(err);return;}
-        }
-        lastEventAt=Date.now();
-        armResync();
-      },RESYNC_AFTER_MS);
+    let done=false; let unsubscribe=()=>{};
+    const finish=(fn,value)=>{if(done)return;done=true;unsubscribe();cancelWaitRef.current=null;syncNowRef.current=null;fn(value);};
+    const failWith=(message,{debugAvailable=false,cancelled=false}={})=>{const failure=new Error(message||'AI generation failed.');failure.jobId=jobId;failure.debugAvailable=Boolean(debugAvailable);failure.cancelled=cancelled;finish(reject,failure);};
+    const sync=async()=>{
+      if(done)return;
+      try{
+        const {data}=await aiGenerateAPI.getJob(jobId); const job=data?.data; if(!job||done)return;
+        updateProgress(job);
+        if(job.status==='completed')finish(resolve,job.result);
+        else if(job.status==='failed')failWith(job.error,{debugAvailable:job.debugAvailable,cancelled:Boolean(job.cancelled)});
+      }catch(err){const status=err?.response?.status;if(status===401||status===403||status===404)finish(reject,err);}
     };
-    const cleanup=()=>{unsubscribe();if(pollTimeoutRef.current){clearTimeout(pollTimeoutRef.current);pollTimeoutRef.current=null;}};
-    const unsubscribe=subscribeToJob(jobId,{
+    syncNowRef.current=sync;
+    cancelWaitRef.current=()=>failWith(STOP_NOTICE,{cancelled:true});
+    unsubscribe=subscribeToJob(jobId,{
       onStage:({stage,status,details})=>{
-        lastEventAt=Date.now();
         if(details)setPipeline(prev=>({...prev,[stage]:status}));
         setCurrentStage(stage); setGenStatusLabel(stageLabel(stage));
       },
-      onCompleted:({result})=>{cleanup();resolve(result);},
-      onFailed:async({error})=>{cleanup();const failure=new Error(error||'AI generation failed.');failure.jobId=jobId;try{const {data}=await aiGenerateAPI.getJob(jobId);failure.debugAvailable=Boolean(data?.data?.debugAvailable);}catch{}reject(failure);},
+      onCompleted:({result})=>finish(resolve,result),
+      onFailed:async({error})=>{
+        if(done)return;
+        if(/cancelled/i.test(error||'')){failWith(STOP_NOTICE,{cancelled:true});return;}
+        let debugAvailable=false;try{const {data}=await aiGenerateAPI.getJob(jobId);debugAvailable=Boolean(data?.data?.debugAvailable);}catch{}
+        failWith(error,{debugAvailable});
+      },
+      onSync:sync,
     });
-    armResync();
+    if(done)unsubscribe();
   });
   const [versionRefreshKey,setVersionRefreshKey]=useState(0);
   const toSandpackFiles=(files={})=>Object.fromEntries(Object.entries(files).map(([path,v])=>[path,typeof v==='string'?{code:v}:v]));
@@ -94,7 +93,29 @@ export default function AiStudio() {
     setMessages(prev=>[...prev,{role:'assistant',content:`↩️ Restored version ${version}. Your previous version is still in the Versions list.`}]);
     setVersionRefreshKey(k=>k+1);
   };
-  const runGeneration=async(nextMessages,spec={})=>{setIsGenerating(true);setError(null);setFailedJobId(null);setDebugRetryAvailable(false);setPipeline({});setCurrentStage('queued');
+  const applyResult=(result)=>{
+    setMessages(prev=>[...prev,{role:'assistant',content:result.assistantMessage||'Done.'}]);
+    setFileData({files:result.files,dependencies:result.dependencies});
+    setMobileView('preview'); if(result.title)setAppTitle(result.title);
+    setError(null); setDebugRetryAvailable(false); setFailedJobId(null); setStopped(false);
+    // The backend has already saved the project and its new version (it does that when the job finishes,
+    // even if this tab was closed), so the version list just needs a refresh.
+    setVersionRefreshKey(k=>k+1);
+  };
+  const handleJobError=(err)=>{
+    if(err?.cancelled){setError(null);setStopped(true);setMessages(prev=>prev.some(m=>m.notice)&&prev[prev.length-1]?.notice?prev:[...prev,{role:'assistant',notice:true,content:STOP_NOTICE}]);return;}
+    const msg=err?.response?.data?.message||err?.message||'Something went wrong generating your app. Please try again.';
+    if(err?.jobId){setFailedJobId(err.jobId);setDebugRetryAvailable(Boolean(err.debugAvailable));}
+    setError(msg); setMessages(prev=>[...prev,{role:'assistant',content:`⚠️ ${msg}`}]);
+  };
+  // Follows one job to its end. Used for a new request, a debug retry, and a run found again after a refresh.
+  const trackJob=async(jobId)=>{
+    currentJobRef.current=jobId;
+    try{applyResult(await waitForJob(jobId));}
+    catch(err){handleJobError(err);}
+    finally{currentJobRef.current=null;setStopping(false);setIsGenerating(false);}
+  };
+  const runGeneration=async(nextMessages,spec={})=>{setIsGenerating(true);setError(null);setStopped(false);setFailedJobId(null);setDebugRetryAvailable(false);setPipeline({});setCurrentStage('queued');
     // Optimistic guess so the sidebar shows the right stage list immediately,
     // before the first poll response confirms the actual mode the backend
     // picked (based on whether we're sending existing project files back).
@@ -104,11 +125,61 @@ export default function AiStudio() {
     try{
       const projectId=aiStudioSession.getProjectId()||await aiStudioSession.open(spec?.websiteType);
       if(!projectId)throw new Error('AI Studio project could not be initialized.');
-      const {data}=await aiGenerateAPI.generate(nextMessages,fileData,{...spec,projectId});const {jobId}=data?.data||{};if(!jobId)throw new Error('No jobId returned from server.');const result=await waitForJob(jobId);setMessages(prev=>[...prev,{role:'assistant',content:result.assistantMessage||'Done.'}]);setFileData({files:result.files,dependencies:result.dependencies});setMobileView('preview');if(result.title)setAppTitle(result.title);
-      // Persist the latest generated state -- this is what makes the
-      // project outlive an individual (30-minute-TTL'd) AI generation job.
-      await aiStudioSession.syncFiles({files:result.files,dependencies:result.dependencies,title:result.title,source:expectingEdit?'edit':'generate',label:expectingEdit?String(nextMessages?.[nextMessages.length-1]?.content||'').slice(0,120):''});setVersionRefreshKey(k=>k+1);
-    }catch(err){const msg=err.response?.data?.message||err.message||'Something went wrong generating your app. Please try again.';if(err.jobId){setFailedJobId(err.jobId);setDebugRetryAvailable(Boolean(err.debugAvailable));}setError(msg);setMessages(prev=>[...prev,{role:'assistant',content:`⚠️ ${msg}`}]);}finally{if(pollTimeoutRef.current){clearTimeout(pollTimeoutRef.current);pollTimeoutRef.current=null;}setIsGenerating(false);}};
+      if(!expectingEdit&&spec?.websiteType)specRef.current={websiteType:spec.websiteType,userData:spec.userData,preferences:spec.preferences,assets:spec.assets};
+      const {data}=await aiGenerateAPI.generate(nextMessages,fileData,{...spec,projectId});const {jobId}=data?.data||{};if(!jobId)throw new Error('No jobId returned from server.');
+      await trackJob(jobId);
+    }catch(err){
+      // Another tab already started a run on this project: follow that one instead of failing.
+      const runningId=err?.response?.status===409?err.response.data?.data?.jobId:null;
+      if(runningId)await trackJob(runningId); else handleJobError(err);
+    }finally{setIsGenerating(false);}
+  };
+  // Stop: removes a queued request from the queue, or stops the running one (the next queued job then starts).
+  const handleStop=async()=>{
+    const jobId=currentJobRef.current; if(!jobId||stopping)return;
+    setStopping(true);
+    try{
+      await aiGenerateAPI.cancel(jobId);
+      cancelWaitRef.current?.();
+    }catch(err){
+      if(err?.response?.status===409||err?.response?.status===404){syncNowRef.current?.();} // it had just finished: show the result
+      else{setStopping(false);setMessages(prev=>[...prev,{role:'assistant',content:'⚠️ Could not stop the generation. Please try again.'}]);}
+    }
+  };
+  // Back to the "choose a website type" screen with a clean slate.
+  const handleNewGeneration=()=>{
+    if(isGenerating)return;
+    aiStudioSession.forget(); specRef.current=null;
+    setMessages([]); setFileData(null); setAppTitle(null); setInput(''); setError(null); setStopped(false);
+    setPipeline({}); setCurrentStage(null); setFailedJobId(null); setDebugRetryAvailable(false); setMobileView('chat');
+    setStudioMode('types');
+  };
+  // Refresh / second tab: come back to the same project, chat and (still running) generation.
+  useEffect(()=>{
+    let alive=true; const saved=aiStudioSession.savedProjectId();
+    if(!aiStudioEnabled||!saved){setResuming(false);return undefined;}
+    (async()=>{
+      try{
+        const {data}=await aiStudioAPI.resume(saved,aiStudioSession.sessionId); const p=data?.data;
+        if(!alive||!p)return;
+        const hasFiles=p.files&&Object.keys(p.files).length>0;
+        if(!p.job&&!hasFiles&&!(p.conversation||[]).length){aiStudioSession.forget();return;}
+        aiStudioSession.attach(p.projectId);
+        specRef.current=p.spec||null;
+        setMessages(Array.isArray(p.conversation)?p.conversation:[]);
+        if(hasFiles)setFileData({files:p.files,dependencies:p.dependencies||{}});
+        if(p.title)setAppTitle(p.title);
+        setStudioMode('chat');
+        setMobileView(p.job||!hasFiles?'chat':'preview');
+        if(!p.job&&(p.conversation||[]).slice(-1)[0]?.notice)setStopped(true);
+        if(p.job){setIsGenerating(true);setError(null);setGenMode(p.job.mode||'generate');updateProgress(p.job);trackJob(p.job.jobId);}
+      }catch(err){
+        const status=err?.response?.status; if(status===404||status===403)aiStudioSession.forget();
+      }finally{if(alive)setResuming(false);}
+    })();
+    return()=>{alive=false;};
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
   const handlePortfolioGenerate=async(prompt,spec)=>{
     const nextMessages=[{role:'user',content:prompt}];
     setStudioMode('chat');
@@ -168,6 +239,13 @@ export default function AiStudio() {
     setAttachments(next); setAttachError(problem);
   };
   const removeAttachment=(id)=>{setAttachments(prev=>{const gone=prev.find(a=>a.id===id);if(gone?.previewUrl)URL.revokeObjectURL(gone.previewUrl);return prev.filter(a=>a.id!==id);});uploadedAttachmentsRef.current.delete(id);setAttachError(null);};
+  // Follow-ups on an existing site keep the original behaviour. If nothing was generated yet (e.g. the run
+  // was stopped), the request is a fresh generation, so it reuses what the user chose in the builder.
+  const followUpSpec=(conversation)=>{
+    const saved=specRef.current;
+    if(fileData?.files&&Object.keys(fileData.files).length||!saved)return{websiteType:'portfolio',userData:{},preferences:{},conversation};
+    return{websiteType:saved.websiteType||'portfolio',userData:saved.userData||{},preferences:saved.preferences||{},assets:saved.assets,conversation};
+  };
   const handleSend=async()=>{
     const trimmed=input.trim(); if(!trimmed||isGenerating||isUploadingAttachments)return;
     let content=trimmed; const pending=attachments;
@@ -195,29 +273,22 @@ export default function AiStudio() {
       setAttachments([]);
     }
     setInput(''); const nextMessages=[...messages,{role:'user',content}]; setMessages(nextMessages);
-    runGeneration(nextMessages,{websiteType:'portfolio',userData:{},preferences:{},conversation:nextMessages});
+    runGeneration(nextMessages,followUpSpec(nextMessages));
   };
-  const handleFixError=(previewError)=>{if(isGenerating)return;const prompt=`The preview threw this error, please fix it:\n\n${previewError}`;const nextMessages=[...messages,{role:'user',content:prompt}];setMessages(nextMessages);runGeneration(nextMessages,{websiteType:'portfolio',userData:{},preferences:{},conversation:nextMessages});};
+  const handleFixError=(previewError)=>{if(isGenerating)return;const prompt=`The preview threw this error, please fix it:\n\n${previewError}`;const nextMessages=[...messages,{role:'user',content:prompt}];setMessages(nextMessages);runGeneration(nextMessages,followUpSpec(nextMessages));};
   const handleDebugRetry=async()=>{
     if(!failedJobId||isGenerating)return;
-    setIsGenerating(true); setError(null); setPipeline({}); setCurrentStage('queued'); setGenMode('debug'); setGenStatusLabel('Retrying with Debug Agent…');
+    setIsGenerating(true); setError(null); setStopped(false); setPipeline({}); setCurrentStage('queued'); setGenMode('debug'); setGenStatusLabel('Retrying with Debug Agent…');
     try{
       const {data}=await aiGenerateAPI.debugRetry(failedJobId);
       const jobId=data?.data?.jobId;
       if(!jobId)throw new Error('No debug retry jobId returned.');
-      const result=await waitForJob(jobId);
-      setFileData({files:result.files,dependencies:result.dependencies});
-      if(result.title)setAppTitle(result.title);
-      await aiStudioSession.syncFiles({files:result.files,dependencies:result.dependencies,title:result.title,source:'edit',label:'Debug repair'});setVersionRefreshKey(k=>k+1);
-      setMessages(prev=>[...prev,{role:'assistant',content:result.assistantMessage||'Debug repair completed.'}]);
-      setError(null); setDebugRetryAvailable(false); setFailedJobId(null);
-    }catch(err){
-      const msg=err.response?.data?.message||err.message||'Debug retry failed.';
-      if(err.jobId){setFailedJobId(err.jobId);setDebugRetryAvailable(Boolean(err.debugAvailable));}
-      setError(msg); setMessages(prev=>[...prev,{role:'assistant',content:`⚠️ ${msg}`}]);
-    }finally{setIsGenerating(false);}
+      await trackJob(jobId);
+    }catch(err){handleJobError(err);}
+    finally{setIsGenerating(false);}
   };
   const handleDownload=()=>{aiStudioSession.recordActivity();};
+  if(resuming)return <div className="studio fixed inset-0 z-40 flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-[var(--s-muted)]" aria-label="Restoring your project"/></div>;
   if(studioMode==='types')return <div key="studio-types" className="studio fixed inset-0 z-40 overflow-y-auto">
   <div className="mx-auto max-w-[1300px] px-4 pb-24 pt-28 sm:px-6 md:px-10 md:pt-36">
     <header className="mb-14 space-y-4 text-center md:mb-16">
@@ -267,9 +338,18 @@ export default function AiStudio() {
           <BuildStatusCard steps={pipelineSteps} percent={percent} isGenerating={isGenerating} queued={queued} failed={Boolean(error&&!fileData)} completed={Boolean(fileData)&&!error}/>
         </div>
         <div className="mb-14 shrink-0 px-4 pb-4 lg:mb-0">
+          {isGenerating&&<div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-[var(--s-line)] px-3 py-2">
+            <p className="text-[11px] leading-4 text-[var(--s-muted)]">Generating in the background. You can refresh or close this tab and come back to it.</p>
+            <button type="button" onClick={handleStop} disabled={stopping} className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--s-line-strong)] px-3 py-1.5 text-[11px] font-semibold text-[var(--s-text)] transition-colors hover:bg-white/[0.08] disabled:opacity-50">{stopping?<Loader2 className="h-3 w-3 animate-spin"/>:<Square className="h-3 w-3 fill-current"/>}{stopping?'Stopping…':'Stop generation'}</button>
+          </div>}
+          {stopped&&!isGenerating&&<div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-[var(--s-line)] px-3 py-2">
+            <p className="text-[11px] leading-4 text-[var(--s-muted)]">Stopped. Type below to give new instructions.</p>
+            <button type="button" onClick={handleNewGeneration} className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--s-text)] px-3 py-1.5 text-[11px] font-semibold text-[#050505] transition-colors hover:bg-white"><RotateCcw className="h-3 w-3"/>Start new generation</button>
+          </div>}
+          {!isGenerating&&!stopped&&messages.length>0&&<button type="button" onClick={handleNewGeneration} className="mb-2 inline-flex items-center gap-1.5 text-[11px] text-[var(--s-faint)] transition-colors hover:text-[var(--s-text)]"><RotateCcw className="h-3 w-3"/>New generation</button>}
           {error&&debugRetryAvailable&&!isGenerating&&<button type="button" onClick={handleDebugRetry} className="mb-2 flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--s-line-strong)] px-3 py-2 text-xs font-medium text-[var(--s-text)] transition-colors hover:bg-white/[0.06]">Retry with Debug Agent</button>}
           <div className="rounded-2xl border border-[var(--s-line-strong)] bg-[var(--s-surface)] p-3 transition-colors focus-within:border-white/30">
-            <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSend();}}} placeholder="Describe a change to your website…" rows={2} className="w-full resize-none bg-transparent text-[13px] leading-5 text-[var(--s-text)] placeholder:text-[var(--s-faint)] focus:outline-none"/>
+            <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSend();}}} placeholder={stopped?"Tell me what to change, or start a new generation…":"Describe a change to your website…"} rows={2} className="w-full resize-none bg-transparent text-[13px] leading-5 text-[var(--s-text)] placeholder:text-[var(--s-faint)] focus:outline-none"/>
             {(attachments.length>0||attachError)&&<div className="mt-2 space-y-1.5">
               {attachments.length>0&&<div className="flex flex-wrap gap-1.5">{attachments.map(a=><div key={a.id} className="relative flex max-w-[150px] items-center gap-1.5 rounded-lg border border-[var(--s-line)] bg-white/[0.03] py-1 pl-1 pr-6 text-[11px] text-[var(--s-muted)]">
                 {a.previewUrl?<img src={a.previewUrl} alt="" className="h-6 w-6 shrink-0 rounded object-cover"/>:<span className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-white/[0.05]">{a.kind==='video'?<Film className="h-3.5 w-3.5"/>:<FileText className="h-3.5 w-3.5"/>}</span>}

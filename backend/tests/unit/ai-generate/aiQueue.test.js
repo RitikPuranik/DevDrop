@@ -1,9 +1,11 @@
 const mockEnqueue = jest.fn();
 const mockRemove = jest.fn();
+const mockLive = jest.fn().mockResolvedValue(true);
 jest.mock('../../../src/infrastructure/queue/queueJob.model', () => require('../infrastructure/mockQueueJob'));
 jest.mock('../../../src/infrastructure/queue/queues', () => ({
   enqueueJob: (...a) => mockEnqueue(...a),
   removeWaitingJob: (...a) => mockRemove(...a),
+  isJobLive: (...a) => mockLive(...a),
   QueueUnavailableError: class extends Error {},
 }));
 jest.mock('../../../src/services/ai-studio/aiStudioAssetPipeline.service', () => ({
@@ -50,6 +52,19 @@ describe('POST /api/ai-generate', () => {
     await controller.generate(mockReq({ body, userId: 'u1' }), second);
     expect(mockEnqueue).not.toHaveBeenCalled();
     expect(second.json.mock.calls[0][0].data).toMatchObject({ resumed: true, status: 'processing' });
+  });
+
+  it('a job the database calls running but the queue lost is failed, not handed back as a duplicate', async () => {
+    const first = mockRes();
+    await controller.generate(mockReq({ body, userId: 'u1' }), first);
+    const deadKey = first.json.mock.calls[0][0].data.jobId;
+    seedJob({ jobKey: deadKey, refId: mockEnqueue.mock.calls[0][0].refId, status: 'queued', createdAt: new Date(Date.now() - 60000) });
+    mockEnqueue.mockClear(); mockLive.mockResolvedValueOnce(false);
+    const second = mockRes();
+    await controller.generate(mockReq({ body, userId: 'u1' }), second);
+    expect(QueueJob.__docs.get(deadKey).status).toBe('failed');
+    expect(mockEnqueue).toHaveBeenCalledTimes(1);
+    expect(second.json.mock.calls[0][0].data.jobId).not.toBe(deadKey);
   });
 
   it('rejects an empty conversation and answers 503 when the queue is down', async () => {

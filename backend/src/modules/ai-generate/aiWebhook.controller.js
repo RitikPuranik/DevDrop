@@ -3,6 +3,8 @@ const { emitToJob } = require('../../shared/realtime/socket');
 
 const { QUEUE_NAMES, JOB_TYPES, QueueJob, jobStore } = queue;
 
+const lifecycle = () => require('../../services/ai-studio/aiStudioLifecycle.service');
+
 const MAX_RESULT_BYTES = Number.parseInt(process.env.AI_MAX_RESULT_BYTES || String(12 * 1024 * 1024), 10);
 
 /**
@@ -75,15 +77,22 @@ exports.receive = async (req, res) => {
       const { result, generationMeta } = req.body;
       if (Buffer.byteLength(JSON.stringify(result ?? null)) > MAX_RESULT_BYTES) {
         await jobStore.markFailed(jobId, { code: 'RESULT_TOO_LARGE', message: 'The generated project is too large to store.', class: 'permanent' }, { queue: QUEUE_NAMES.AI });
+        if (job.projectId) await lifecycle().finishJob({ projectId: job.projectId, userId: job.userId, jobKey: jobId, outcome: 'failed', message: 'The generated project is too large to store.' }).catch(() => {});
         emitToJob(jobId, 'ai-job:failed', { jobId, error: 'The generated project is too large to store.' });
       } else {
         await jobStore.markCompleted(jobId, { queue: QUEUE_NAMES.AI, result, generationMeta });
+        // Saved to the project here (not by the browser) so it survives a closed or refreshed tab.
+        if (job.projectId) {
+          await lifecycle().finishJob({ projectId: job.projectId, userId: job.userId, jobKey: jobId, outcome: 'completed', result, mode: job.mode })
+            .catch((e) => console.error('AI Studio could not save the generated project:', e.message));
+        }
         emitToJob(jobId, 'ai-job:completed', { jobId, result, generationMeta });
       }
     } else if (event === 'failed') {
       const { error, failureClass, debugContext, errorType } = req.body;
       const message = String(error || 'AI generation failed').slice(0, 500);
       await jobStore.markFailed(jobId, { message, class: failureClass || 'permanent' }, { queue: QUEUE_NAMES.AI, debugContext, errorType: errorType === 'capacity_exhausted' ? 'capacity_exhausted' : 'failed' });
+      if (job.projectId) await lifecycle().finishJob({ projectId: job.projectId, userId: job.userId, jobKey: jobId, outcome: 'failed', message }).catch(() => {});
       emitToJob(jobId, 'ai-job:failed', { jobId, error: message });
     }
     return res.status(200).json({ success: true });

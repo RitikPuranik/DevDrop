@@ -423,6 +423,8 @@ async function callGemini({ system, input, timeout = DEFAULT_TIMEOUT_MS }) {
 
   for (let attempt = 1; attempt <= MAX_AGENT_RETRIES;) {
     const startedAt = Date.now();
+    // The user pressed Stop: do not spend another provider call on this job.
+    if (getJobContext().isCancelled?.()) throw Object.assign(new Error('Job cancelled'), { cancelled: true });
 
     try {
       // ALL provider failover (project rate limits, model capacity, invalid

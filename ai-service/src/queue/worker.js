@@ -2,7 +2,7 @@
 
 const { Worker, DelayedError, UnrecoverableError } = require('bullmq');
 const { createQueueRedisConnection } = require('./connection');
-const { QUEUE_NAMES } = require('./names');
+const { QUEUE_NAMES, AI_CANCEL_CHANNEL } = require('./names');
 const { classifyError, FAILURE } = require('./errors');
 const backend = require('./backendClient');
 const { generateWebsite, debugWebsite } = require('../orchestrator/websiteGeneration.orchestrator');
@@ -35,6 +35,31 @@ const withTimeout = (promise, ms) => {
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 };
+
+// Jobs running in this process, so a cancel pushed by the backend can stop one immediately
+// (no polling: the backend publishes on a Redis channel when the user presses Stop).
+const runningJobs = new Map(); // jobKey -> () => void
+
+function cancelRunningJob(jobKey) {
+  const stop = runningJobs.get(jobKey);
+  if (!stop) return false;
+  stop();
+  return true;
+}
+
+function startCancelListener(subscriberFactory = () => createQueueRedisConnection('ai-cancel')) {
+  let subscriber;
+  try {
+    subscriber = subscriberFactory();
+    subscriber.subscribe(AI_CANCEL_CHANNEL).catch((e) => console.error(`[ai-queue] cancel channel subscribe failed: ${e.message}`));
+    subscriber.on('message', (channel, jobKey) => {
+      if (channel === AI_CANCEL_CHANNEL && cancelRunningJob(jobKey)) qlog('CANCEL PUSHED by backend', { jobKey });
+    });
+  } catch (e) {
+    console.error(`[ai-queue] cancel listener not started: ${e.message}`);
+  }
+  return subscriber;
+}
 
 // One readable line per queue lifecycle event. Never logs payloads or secrets.
 const qlog = (event, fields = {}) => console.log(`[ai-queue] ${event}`, fields);
@@ -114,9 +139,20 @@ function createAiProcessor(overrides = {}) {
         .catch(() => {});
     };
 
+    // Pressing Stop frees this worker slot at once (the next queued job starts) instead of waiting for the
+    // current model call to return; the abandoned run then ends at its next stage / LLM call boundary.
+    let stopNow;
+    const stopped = new Promise((_, reject) => {
+      stopNow = () => { cancelled = true; reject(Object.assign(new Error('Job cancelled'), { cancelled: true })); };
+    });
+    stopped.catch(() => {});
+    runningJobs.set(jobKey, stopNow);
+
     try {
       const run = deps.pickRunner(mode);
-      const result = await withTimeout(runWithJob(jobContext, () => run(payload, { onStage })), cfg.timeoutMs);
+      const running = withTimeout(runWithJob(jobContext, () => run(payload, { onStage })), cfg.timeoutMs);
+      running.catch(() => {}); // an abandoned run must never become an unhandled rejection
+      const result = await Promise.race([running, stopped]);
       await deps.backend.deliverTerminal('completed', jobKey, { result, generationMeta: { agents } });
       return { ok: true };
     } catch (error) {
@@ -155,6 +191,8 @@ function createAiProcessor(overrides = {}) {
       permanent.failureClass = FAILURE.PERMANENT;
       permanent.debugContext = error.debugContext || null;
       throw permanent;
+    } finally {
+      runningJobs.delete(jobKey);
     }
   };
 }
@@ -211,8 +249,12 @@ function createAiWorker({ connection, processor } = {}) {
       console.error(`[ai-queue] failed-handler error: ${e.message}`);
     }
   });
+  if (!connection) {
+    const subscriber = startCancelListener();
+    worker.on('closing', () => { subscriber?.quit?.().catch(() => subscriber.disconnect?.()); });
+  }
   worker.on('error', (error) => console.error(`[ai-queue] worker error: ${error.code || error.message}`));
   return worker;
 }
 
-module.exports = { createAiWorker, createAiProcessor, settings };
+module.exports = { createAiWorker, createAiProcessor, settings, cancelRunningJob, startCancelListener };

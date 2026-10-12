@@ -15,6 +15,7 @@ const uploadAsset = multer({
 // specific :projectId is additionally enforced inside the controller/
 // lifecycle service (a user may only ever touch req.userId's own projects).
 router.post('/session', auth, controller.openSession);
+router.get('/:projectId/resume', auth, controller.resume);
 router.post('/:projectId/heartbeat', auth, aiStudioHeartbeatLimiter, controller.heartbeat);
 router.post('/:projectId/activity', auth, controller.recordActivity);
 router.post('/:projectId/sync', auth, controller.syncFiles);

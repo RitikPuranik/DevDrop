@@ -21,6 +21,8 @@ const queueJobSchema = new mongoose.Schema(
     currentStage: { type: String, default: 'queued' },
     stageStatus: { type: String, default: 'queued' },
     mode: { type: String },
+    // AI Studio project this job belongs to (so the result is saved to the project even if the tab is gone).
+    projectId: { type: String, index: true },
     // "Waiting for Gemini capacity" state reported by the ai-service worker, and failure kind.
     statusMessage: { type: String },
     waitingUntil: { type: String },

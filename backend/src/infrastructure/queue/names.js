@@ -10,6 +10,10 @@ const QUEUE_NAMES = Object.freeze({
   EVENTS: 'events-queue',
 });
 
+// Redis pub/sub channel the backend uses to tell the ai-service worker to stop a RUNNING job immediately.
+// ai-service keeps an identical copy in ai-service/src/queue/names.js.
+const AI_CANCEL_CHANNEL = 'ai-queue:cancel';
+
 const JOB_TYPES = Object.freeze({
   // ai-queue
   AI_GENERATE: 'AI_GENERATE', // covers generate | edit | debug (payload.mode)
@@ -50,4 +54,4 @@ const EMAIL_JOB_TYPES = new Set([
 // BullMQ priority: lower number = processed first.
 const PRIORITY = Object.freeze({ SECURITY: 1, TRANSACTIONAL: 5, NOTIFICATION: 10, MAINTENANCE: 20 });
 
-module.exports = { QUEUE_NAMES, JOB_TYPES, EMAIL_JOB_TYPES, PRIORITY };
+module.exports = { AI_CANCEL_CHANNEL, QUEUE_NAMES, JOB_TYPES, EMAIL_JOB_TYPES, PRIORITY };
