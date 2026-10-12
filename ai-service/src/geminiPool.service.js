@@ -46,6 +46,14 @@ function getMaxKeyAttempts() {
   const raw = Number.parseInt(process.env.GEMINI_POOL_MAX_KEY_ATTEMPTS || '', 10);
   return Number.isFinite(raw) && raw > 0 ? raw : pool.size || 1;
 }
+function getPoolStrategy() {
+  // 'project-first' (default): select a key, use all models on it, then next key.
+  // 'model-first': legacy behaviour (one model across all keys, then next model).
+  return String(process.env.GEMINI_POOL_STRATEGY || 'project-first').toLowerCase() === 'model-first'
+    ? 'model-first'
+    : 'project-first';
+}
+
 function getPerKeyConcurrency() {
   const raw = Number.parseInt(process.env.GEMINI_PER_KEY_CONCURRENCY || '', 10);
   return Number.isFinite(raw) && raw > 0 ? raw : Infinity;
@@ -488,15 +496,35 @@ function pickPair(models, ctx, allowNewProject) {
     byGroup.get(g).push(e);
   }
 
-  for (const model of models) {
-    const candidates = all.filter((entry) => {
-      const group = groupOf(entry);
-      if (!allowNewProject && !ctx.attemptedGroups.has(group)) return false;
-      return evaluatePair(entry, model, ctx, now, byGroup.get(group)).ok;
-    });
-    if (candidates.length) {
-      candidates.sort(compareEntries);
-      return { entry: candidates[0], model };
+  const usable = (entry, model) => {
+    const group = groupOf(entry);
+    if (!allowNewProject && !ctx.attemptedGroups.has(group)) return false;
+    return evaluatePair(entry, model, ctx, now, byGroup.get(group)).ok;
+  };
+
+  if (getPoolStrategy() === 'model-first') {
+    // Legacy: fix a model, sweep every project for it, then move to the next model.
+    for (const model of models) {
+      const candidates = all.filter((entry) => usable(entry, model));
+      if (candidates.length) {
+        candidates.sort(compareEntries);
+        return { entry: candidates[0], model };
+      }
+    }
+    return { entry: null, model: null };
+  }
+
+  // Project-first (default): pick ONE project, then walk ALL models on it in
+  // preference order. Only when the project has no usable model left do we move
+  // on to the next project. The project already in use for this request is
+  // preferred so we stay on it (LRU would otherwise rotate away after one try).
+  const ordered = all.slice().sort(compareEntries);
+  if (ctx.currentGroup) {
+    ordered.sort((a, b) => Number(groupOf(b) === ctx.currentGroup) - Number(groupOf(a) === ctx.currentGroup));
+  }
+  for (const entry of ordered) {
+    for (const model of models) {
+      if (usable(entry, model)) return { entry, model };
     }
   }
   return { entry: null, model: null };
@@ -710,6 +738,7 @@ function newRequestContext(modelList, options, requestId) {
     badOutputs: 0,
     rateLimitStreaks: {}, // model -> consecutive non-daily 429s from different projects
     lastFailedEntry: null,
+    currentGroup: null,
   };
 }
 
@@ -843,7 +872,7 @@ function handleAttemptFailure(entry, model, error, ctx, startedAt) {
 
       // Per-minute 429 from several projects in a row on the same model: it is the model, not the project.
       const streakLimit = getModelRateLimitStreak();
-      if (!ctx.legacy && streakLimit > 0 && scope === 'model') {
+      if (!ctx.legacy && streakLimit > 0 && scope === 'model' && getPoolStrategy() === 'model-first') {
         const key = mk(model);
         if (info.classification === 'rate_limit') {
           ctx.rateLimitStreaks[key] = (ctx.rateLimitStreaks[key] || 0) + 1;
@@ -1005,6 +1034,7 @@ async function executeModels(models, requestFn, options = {}) {
 
     ctx.attempts += 1;
     ctx.attemptedGroups.add(groupOf(entry));
+    ctx.currentGroup = groupOf(entry);
     if (!ctx.attemptedKeyIds.includes(entry.id)) ctx.attemptedKeyIds.push(entry.id);
     markAcquired(entry);
     const startedAt = Date.now();

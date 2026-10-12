@@ -1,4 +1,4 @@
- import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import LinkTransition from '../navigation/TransitionLink';
 import AuthModal from '../auth/AuthModal';
@@ -14,7 +14,9 @@ const Navbar = () => {
   const [websitesExpanded, setWebsitesExpanded] = useState(false);
   const [hoveredSubIndex, setHoveredSubIndex] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
-  const [isScrolled, setIsScrolled] = useState(false);
+  const [scrolledByPage, setScrolledByPage] = useState(false);
+  const [studioCompact, setStudioCompact] = useState(false);
+  const isScrolled = scrolledByPage || studioCompact;
 
   const navigate = useNavigate();
 
@@ -29,10 +31,18 @@ const Navbar = () => {
   // Sheryians-style scroll navbar: stays put, but its height shrinks and it
   // gains a dark, glassy background once the page has scrolled a bit.
   useEffect(() => {
-    const handleScroll = () => setIsScrolled(window.scrollY > 40);
+    const handleScroll = () => setScrolledByPage(window.scrollY > 40);
     handleScroll();
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // AI Studio is a fixed full-height workspace (the window never scrolls), so it
+  // asks for the compact navbar explicitly while a generation is running.
+  useEffect(() => {
+    const onCompact = (e) => setStudioCompact(Boolean(e.detail));
+    window.addEventListener('navbar-compact', onCompact);
+    return () => window.removeEventListener('navbar-compact', onCompact);
   }, []);
 
   const syncFromStorage = () => {

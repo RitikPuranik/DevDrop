@@ -43,6 +43,8 @@ export default function AiStudio() {
   const aiStudioEnabled=import.meta.env.VITE_AI_STUDIO_ENABLED!=='false';
   useEffect(()=>{if(!aiStudioEnabled)navigate('/workspace',{replace:true});},[aiStudioEnabled,navigate]);
   useEffect(()=>{try{posthog?.capture('ai_studio_opened');}catch{}},[posthog]);
+  useEffect(()=>{window.dispatchEvent(new CustomEvent('navbar-compact',{detail:isGenerating}));},[isGenerating]);
+  useEffect(()=>()=>{window.dispatchEvent(new CustomEvent('navbar-compact',{detail:false}));},[]);
   useEffect(()=>{scrollRef.current?.scrollTo({top:scrollRef.current.scrollHeight,behavior:'smooth'});},[messages,isGenerating]);
   if(!aiStudioEnabled)return null;
   const stageLabel=(stage)=>{if(stage.startsWith('code:'))return `Generating ${stage.slice(5)}…`;if(stage==='build-validator')return 'Validating build…';if(stage.startsWith('deployment-readiness'))return 'Checking Vercel readiness…';if(stage==='relevant-files')return 'Finding affected files…';if(stage==='edit')return 'Applying edit…';if(stage.startsWith('edit-debug'))return 'Fixing an issue…';return `${stage.charAt(0).toUpperCase()+stage.slice(1)}…`;};
@@ -316,7 +318,7 @@ export default function AiStudio() {
   const shownRules=showContract?ruleLines:ruleLines.slice(0,3);
   const history=messages.filter(m=>m.role==='user').map(m=>m.content);
   const card='s-card';
-  return <div className="studio fixed inset-0 z-40 flex flex-col pt-[3.75rem]">
+  return <div className={`studio fixed inset-0 z-40 flex flex-col transition-[padding] duration-500 ease-out ${isGenerating?'pt-9':'pt-[3.75rem]'}`}>
     <div className="flex shrink-0 gap-2 border-b border-[var(--s-line)] p-2 lg:hidden" role="tablist" aria-label="Studio view">
       {[['chat','Chat'],['preview','Preview']].map(([id,label])=><button key={id} type="button" role="tab" aria-selected={mobileView===id} onClick={()=>setMobileView(id)} className={`flex-1 rounded-full px-4 py-2 text-[12px] font-bold uppercase tracking-[0.12em] transition-colors ${mobileView===id?'bg-[var(--s-text)] text-[#050505]':'border border-white/10 text-[var(--s-muted)]'}`}>{label}</button>)}
     </div>
