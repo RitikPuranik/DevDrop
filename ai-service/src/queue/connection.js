@@ -23,7 +23,11 @@ function createQueueRedisConnection(name = 'ai-worker') {
     retryStrategy: (times) => Math.min(times * 500, 10000),
     connectionName: `devdrop:${name}`,
   };
-  if (url.startsWith('rediss://')) options.tls = { servername: new URL(url).hostname };
+  // Upstash only accepts TLS. A plain redis:// URL pointing at *.upstash.io is reset by the server
+// (ECONNRESET), so enable TLS for it too instead of requiring everyone to remember "rediss://".
+  if (url.startsWith('rediss://') || /\.upstash\.io$/i.test(new URL(url).hostname)) {
+    options.tls = { servername: new URL(url).hostname };
+  }
   const connection = new IORedis(url, options);
   connection.on('error', (err) => console.error(`[queue-redis:${name}] ${maskRedisUrl(url)} error: ${err.code || err.message}`));
   return connection;

@@ -35,7 +35,11 @@ const getCacheClient = () => {
     retryStrategy: (times) => Math.min(times * 1000, 15000),
     connectionName: 'devdrop:cache',
   };
-  if (url.startsWith('rediss://')) options.tls = { servername: new URL(url).hostname };
+  // Upstash only accepts TLS. A plain redis:// URL pointing at *.upstash.io is reset by the server
+// (ECONNRESET), so enable TLS for it too instead of requiring everyone to remember "rediss://".
+  if (url.startsWith('rediss://') || /\.upstash\.io$/i.test(new URL(url).hostname)) {
+    options.tls = { servername: new URL(url).hostname };
+  }
   client = new IORedis(url, options);
   let lastLogged = 0;
   client.on('error', (err) => {
