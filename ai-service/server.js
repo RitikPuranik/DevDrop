@@ -56,6 +56,22 @@ if (require.main === module) {
 
   httpServer = app.listen(PORT, () => {
     console.log(`ai-service listening on port ${PORT}`);
+
+    // Keep-alive: ping self every 4 minutes to prevent Render free tier from sleeping
+    const serviceUrl = process.env.AI_SERVICE_URL;
+    if (serviceUrl && process.env.NODE_ENV === 'production') {
+      const PING_INTERVAL = 4 * 60 * 1000; // 4 minutes
+      setInterval(async () => {
+        try {
+          const pingUrl = serviceUrl.endsWith('/') ? `${serviceUrl}health` : `${serviceUrl}/health`;
+          const res = await fetch(pingUrl);
+          console.log(`🏓 [ai-service] Keep-alive ping: ${res.status}`);
+        } catch (err) {
+          console.warn('⚠️  [ai-service] Keep-alive ping failed:', err.message);
+        }
+      }, PING_INTERVAL);
+      console.log(`✅ [ai-service] Keep-alive started: pinging ${serviceUrl} every 4 minutes`);
+    }
   });
 
   // Fire-and-forget: the Gemini pool falls back to GEMINI_API_KEY/GEMINI_API_KEYS from the

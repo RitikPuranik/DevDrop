@@ -93,6 +93,22 @@ const start = async () => {
 
   server = createApp({ getHealth }).listen(PORT, () => {
     console.log(`🚀 Worker running on port ${PORT} in ${process.env.NODE_ENV} mode (deployment x${cfg.concurrency.deployment}, events x${cfg.concurrency.events})`);
+
+    // Keep-alive: ping self every 4 minutes to prevent Render free tier from sleeping
+    const workerUrl = process.env.WORKER_URL;
+    if (workerUrl && process.env.NODE_ENV === 'production') {
+      const PING_INTERVAL = 4 * 60 * 1000; // 4 minutes
+      setInterval(async () => {
+        try {
+          const pingUrl = workerUrl.endsWith('/') ? `${workerUrl}health` : `${workerUrl}/health`;
+          const res = await fetch(pingUrl);
+          console.log(`🏓 [worker] Keep-alive ping: ${res.status}`);
+        } catch (err) {
+          console.warn('⚠️  [worker] Keep-alive ping failed:', err.message);
+        }
+      }, PING_INTERVAL);
+      console.log(`✅ [worker] Keep-alive started: pinging ${workerUrl} every 4 minutes`);
+    }
   });
 };
 
