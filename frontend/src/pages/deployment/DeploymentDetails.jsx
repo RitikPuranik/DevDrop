@@ -269,13 +269,126 @@ function ProgressView({ deployment }) {
         {next ? <span>Next — {next.label}</span> : <span>Almost there</span>}
       </div>
 
+      <div className="mt-12 space-y-4">
+        <ServiceStatus services={serviceStates(steps, currentIndex)} />
+        <ActivityLog steps={steps} currentIndex={currentIndex} />
+      </div>
+
       {deployment.render?.url && (
-        <p className="mt-12 text-[11px] text-white/15 font-mono truncate">{deployment.render.url}</p>
+        <p className="mt-8 text-[11px] text-white/15 font-mono truncate">{deployment.render.url}</p>
       )}
       <p className="mt-3 text-[11px] text-white/20 tracking-wide">
         Builds can take a few minutes, especially the first time.
       </p>
     </section>
+  );
+}
+
+/* ─────────────────────────────  "Everything is working" pieces  ───────────────────────────── */
+
+const STATE_META = {
+  live: { label: 'Live', dot: 'bg-[#5eead4]', glow: '0 0 12px 2px rgba(94,234,212,0.7)', text: 'text-[#5eead4]' },
+  building: { label: 'Building', dot: 'bg-[#ffb457]', glow: '0 0 12px 2px rgba(255,180,87,0.8)', text: 'text-[#ffb457]' },
+  waiting: { label: 'Waiting', dot: 'bg-white/20', glow: 'none', text: 'text-white/30' },
+};
+
+function serviceStates(steps, currentIndex, allLive = false) {
+  const idx = (st) => steps.findIndex((x) => x.status === st);
+  const out = [];
+  const pick = (build, done, extraBuilding) => {
+    if (allLive) return 'live';
+    if (extraBuilding) return 'building';
+    if (currentIndex >= done) return 'live';
+    if (currentIndex >= build) return 'building';
+    return 'waiting';
+  };
+  if (idx('DEPLOYING_BACKEND') !== -1) {
+    const redeploy = idx('REDEPLOYING_BACKEND');
+    out.push({ name: 'Backend', host: 'Render', state: pick(idx('DEPLOYING_BACKEND'), idx('BACKEND_DEPLOYED'), redeploy !== -1 && currentIndex === redeploy) });
+  }
+  if (idx('DEPLOYING_FRONTEND') !== -1) {
+    out.push({ name: 'Frontend', host: 'Vercel', state: pick(idx('DEPLOYING_FRONTEND'), idx('FRONTEND_DEPLOYED'), false) });
+  }
+  return out;
+}
+
+function ServiceStatus({ services, headline }) {
+  if (!services.length) return null;
+  return (
+    <div>
+      {headline && (
+        <div className="mb-4 flex items-center gap-2.5 text-[11px] font-semibold uppercase tracking-[0.25em] text-[#5eead4]">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inset-0 animate-ping rounded-full bg-[#5eead4] opacity-60" />
+            <span className="relative h-2 w-2 rounded-full bg-[#5eead4]" />
+          </span>
+          {headline}
+        </div>
+      )}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {services.map((svc) => {
+          const m = STATE_META[svc.state];
+          return (
+            <div key={svc.name} className="flex items-center gap-4 rounded-2xl border border-white/[0.1] bg-white/[0.04] px-5 py-4 backdrop-blur-xl">
+              <span className="relative flex h-2.5 w-2.5 shrink-0">
+                {svc.state !== 'waiting' && (
+                  <span className={`absolute inset-0 animate-ping rounded-full ${m.dot} opacity-50`} />
+                )}
+                <span className={`relative h-2.5 w-2.5 rounded-full ${m.dot}`} style={{ boxShadow: m.glow }} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-medium text-white/85">{svc.name}</p>
+                <p className="text-[10px] uppercase tracking-[0.2em] text-white/30">{svc.host}</p>
+              </div>
+              <span className={`text-[10px] font-bold uppercase tracking-[0.2em] ${m.text}`}>{m.label}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ActivityLog({ steps, currentIndex }) {
+  const lines = steps.slice(0, currentIndex + 1).slice(-4);
+  const firstShown = Math.max(0, currentIndex + 1 - 4);
+  return (
+    <div className="rounded-2xl border border-white/[0.1] bg-black/30 p-5 backdrop-blur-xl">
+      <div className="mb-4 flex items-center gap-2.5 text-[10px] font-semibold uppercase tracking-[0.25em] text-white/35">
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#ffb457] shadow-[0_0_8px_rgba(255,180,87,0.9)]" />
+        Live activity
+      </div>
+      <ul className="space-y-2.5 font-mono text-[12.5px]">
+        {lines.map((st, i) => {
+          const isCurrent = firstShown + i === currentIndex;
+          return (
+            <motion.li
+              key={st.status}
+              initial={{ opacity: 0, x: -6 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.5, ease: EASE }}
+              className="flex items-center gap-3"
+            >
+              {isCurrent ? (
+                <Loader2 size={12} className="shrink-0 animate-spin text-[#ffb457]" />
+              ) : (
+                <span className="w-3 shrink-0 text-center text-[#5eead4]">✓</span>
+              )}
+              <span className={isCurrent ? 'text-white/90' : 'text-white/40'}>
+                {st.label}
+                {isCurrent && (
+                  <motion.span
+                    className="ml-1 inline-block h-[13px] w-[7px] translate-y-[2px] bg-[#ffb457]/80"
+                    animate={{ opacity: [1, 0, 1] }}
+                    transition={{ duration: 1, repeat: Infinity }}
+                  />
+                )}
+              </span>
+            </motion.li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
@@ -369,7 +482,14 @@ function SuccessView({ deployment, onRedeploy, redeploying }) {
         </h2>
       </div>
 
-      <div className="mt-12 space-y-3">
+      <div className="mt-12">
+        <ServiceStatus
+          headline="All systems operational"
+          services={serviceStates(stepsFor(deployment.architecture), 0, true)}
+        />
+      </div>
+
+      <div className="mt-6 space-y-3">
         {frontend && <LinkCard label="Frontend" sub="Vercel" url={frontend} />}
         {backend && <LinkCard label="Backend" sub="Render" url={backend} />}
       </div>
