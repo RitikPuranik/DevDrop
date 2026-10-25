@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import LinkTransition from '../navigation/TransitionLink';
 import AuthModal from '../auth/AuthModal';
 import { LogOut } from "lucide-react";
-import { useNavigate,useLocation} from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -18,9 +18,7 @@ const Navbar = () => {
   const [studioCompact, setStudioCompact] = useState(false);
 
   const navigate = useNavigate();
-  const location = useLocation();
-  const isAiStudioPage = location.pathname.startsWith('/ai-studio');
-  const isScrolled = scrolledByPage || studioCompact || isAiStudioPage;
+  const isScrolled = scrolledByPage || studioCompact;
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 1023px)');
