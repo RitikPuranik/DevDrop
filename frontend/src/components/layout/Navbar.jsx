@@ -28,10 +28,21 @@ const Navbar = () => {
     return () => mq.removeEventListener('change', checkMobile);
   }, []);
 
-  // Sheryians-style scroll navbar: stays put, but its height shrinks and it
-  // gains a dark, glassy background once the page has scrolled a bit.
+  // Collapse while scrolling down; restore the full navbar as soon as the
+  // user scrolls upward. At the top, always use the expanded presentation.
   useEffect(() => {
-    const handleScroll = () => setScrolledByPage(window.scrollY > 40);
+    let previousY = window.scrollY;
+    const handleScroll = () => {
+      const currentY = window.scrollY;
+      if (currentY <= 40) {
+        setScrolledByPage(false);
+      } else if (currentY > previousY + 1) {
+        setScrolledByPage(true);
+      } else if (currentY < previousY - 1) {
+        setScrolledByPage(false);
+      }
+      previousY = currentY;
+    };
     handleScroll();
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
