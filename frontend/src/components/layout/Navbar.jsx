@@ -16,9 +16,11 @@ const Navbar = () => {
   const [isMobile, setIsMobile] = useState(false);
   const [scrolledByPage, setScrolledByPage] = useState(false);
   const [studioCompact, setStudioCompact] = useState(false);
-  const isScrolled = scrolledByPage || studioCompact;
+  const isScrolled = scrolledByPage || studioCompact || isAiStudioPage;
 
   const navigate = useNavigate();
+  const location = useLocation();
+  const isAiStudioPage = location.pathname.startsWith('/ai-studio');
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 1023px)');
