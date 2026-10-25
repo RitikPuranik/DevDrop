@@ -1096,7 +1096,6 @@ export default function ReferenceDrivenLivePreview({
         {viewportMode === 'mobile' ? (
           <div className="rdp-mobile-device-shell">
             <div className="rdp-mobile-screen">
-              <BrowserChrome styleLabel={styleLabel} websiteLabel={websiteLabel} accent={accent} viewportMode={viewportMode}/>
               <div
                 className="min-h-0 flex-1 overflow-y-auto overscroll-contain rdp-device-scroll"
                 style={{ scrollbarWidth:'none', scrollbarColor:'transparent transparent' }}
@@ -1118,7 +1117,6 @@ export default function ReferenceDrivenLivePreview({
           </div>
         ) : (
           <>
-            <BrowserChrome styleLabel={styleLabel} websiteLabel={websiteLabel} accent={accent} viewportMode={viewportMode}/>
             <div
               className="min-h-0 flex-1 overflow-y-auto overscroll-contain rdp-device-scroll"
               style={{ scrollbarWidth:'thin', scrollbarColor:`${alpha(accent,.78)} transparent` }}
