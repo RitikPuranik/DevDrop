@@ -40,7 +40,7 @@ export default function KashiAssistant({ side = 'right' }) {
     window.addEventListener('navbar-compact', onChange);
     return () => window.removeEventListener('navbar-compact', onChange);
   }, []);
-  const tucked = side === 'left' && studioWorkspace;
+  const tucked = side === 'left' && (studioWorkspace || location.pathname.startsWith('/ai-studio'));
   const [messages, setMessages] = useState(readSaved);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
