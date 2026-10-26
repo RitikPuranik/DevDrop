@@ -862,14 +862,28 @@ const refreshAnalysisForRedeploy = async (deployment) => {
     throw err;
   }
 
-  let analysis = await analyzeRepository({
-    accessToken,
-    owner: repository.owner,
-    repo: repository.name,
-    branch: repository.defaultBranch,
-  });
-
-  analysis = await completeVercelAnalysis({ analysis, deployment, accessToken, repository });
+  let analysis;
+  try {
+    analysis = await analyzeRepository({
+      accessToken,
+      owner: repository.owner,
+      repo: repository.name,
+      branch: repository.defaultBranch,
+    });
+    analysis = await completeVercelAnalysis({ analysis, deployment, accessToken, repository });
+  } catch (error) {
+    // A 401/403 here comes from GitHub (or a provider), not from the
+    // DevDrop session. Forwarding it as-is makes the browser think the
+    // user's login failed, so surface it as an actionable 409 instead.
+    const upstream = error?.response?.status || error?.status;
+    if (upstream === 401 || upstream === 403) {
+      const err = new Error('GitHub rejected the saved connection (the token is expired or revoked). Reconnect GitHub under Connected Accounts and try Redeploy again.');
+      err.status = 409;
+      err.code = 'GITHUB_RECONNECT_REQUIRED';
+      throw err;
+    }
+    throw error;
+  }
 
   if (analysis.frontend && deployment.frontendProvider && analysis.frontend.provider !== deployment.frontendProvider) {
     const err = new Error(
@@ -942,7 +956,9 @@ const redeploy = async (req, res) => {
 
     res.status(202).json({ success: true, data: { deploymentId: deployment._id, status: deployment.status } });
   } catch (error) {
-    res.status(error.status || 500).json({ success: false, message: error.message || 'Error starting redeploy', error: error.message });
+    // Never leak an upstream 401/403 as our own: the frontend treats 401 as a session problem.
+    const status = error.status === 401 || error.status === 403 ? 502 : (error.status || 500);
+    res.status(status).json({ success: false, message: error.message || 'Error starting redeploy', code: error.code, error: error.message });
   }
 };
 
