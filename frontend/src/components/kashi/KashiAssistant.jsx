@@ -31,6 +31,16 @@ export default function KashiAssistant({ side = 'right' }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [open, setOpen] = useState(false);
+  // True while the AI Studio workspace is active (a generation has started): Kashi
+  // then tucks away into a small half-circle at the top-middle instead of floating
+  // over the chat box. AiStudio announces this with the 'navbar-compact' event.
+  const [studioWorkspace, setStudioWorkspace] = useState(() => Boolean(typeof window !== 'undefined' && window.__devdropStudioWorkspace));
+  useEffect(() => {
+    const onChange = (e) => setStudioWorkspace(Boolean(e.detail));
+    window.addEventListener('navbar-compact', onChange);
+    return () => window.removeEventListener('navbar-compact', onChange);
+  }, []);
+  const tucked = side === 'left' && (studioWorkspace || location.pathname.startsWith('/ai-studio'));
   const [messages, setMessages] = useState(readSaved);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -88,10 +98,23 @@ export default function KashiAssistant({ side = 'right' }) {
   };
 
   const pos = side === 'left' ? 'left-4 md:left-6' : 'right-4 md:right-6';
+  const panelPos = tucked ? 'top-14 left-1/2 -translate-x-1/2' : `bottom-4 md:bottom-6 ${pos}`;
 
   return (
     <>
-      {!open && (
+      {!open && tucked && (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label="Open Kashi assistant"
+          title="Kashi"
+          className="group fixed left-1/2 top-0 z-[60] flex h-9 w-16 -translate-x-1/2 -translate-y-[18px] items-end justify-center rounded-b-full border border-t-0 border-white/10 bg-[#8b7355] pb-1.5 text-white shadow-[0_6px_20px_rgba(0,0,0,0.5)] transition-transform duration-300 ease-out hover:translate-y-0 focus-visible:translate-y-0"
+        >
+          <Sparkles size={14} />
+        </button>
+      )}
+
+      {!open && !tucked && (
         <button
           type="button"
           onClick={() => setOpen(true)}
@@ -106,7 +129,7 @@ export default function KashiAssistant({ side = 'right' }) {
         <div
           role="dialog"
           aria-label="Kashi assistant"
-          className={`fixed bottom-4 md:bottom-6 ${pos} z-[60] w-[calc(100vw-2rem)] max-w-[380px] h-[min(560px,calc(100vh-2rem))] rounded-[24px] border border-white/10 bg-[#0b0b0b]/95 backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.6)] flex flex-col overflow-hidden`}
+          className={`fixed ${panelPos} z-[60] w-[calc(100vw-2rem)] max-w-[380px] h-[min(560px,calc(100vh-2rem))] rounded-[24px] border border-white/10 bg-[#0b0b0b]/95 backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.6)] flex flex-col overflow-hidden`}
         >
           <div className="flex items-center justify-between px-5 py-4 border-b border-white/8">
             <div className="flex items-center gap-2.5">

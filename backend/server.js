@@ -17,10 +17,23 @@ const allowedOrigins = [
 ].filter(Boolean);
 socket.init(httpServer, { allowedOrigins });
 
+// Close BullMQ producer + cache connections cleanly (the backend only enqueues; workers run elsewhere).
+const shutdown = async (signal) => {
+  console.log(`🛑 ${signal} received — closing backend`);
+  const force = setTimeout(() => process.exit(1), 10000);
+  force.unref();
+  httpServer.close();
+  await require('./src/infrastructure/queue/queues').closeQueues().catch(() => {});
+  await require('./src/infrastructure/cache').closeCacheClient().catch(() => {});
+  process.exit(0);
+};
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
 const startServer = async () => {
   await connectDB();
 
-  // Background/scheduled jobs (auctions, backups, cleanups) run in the Worker service (../worker).
+  // Background work is enqueued to BullMQ (QUEUE_REDIS_URL); workers run in ../worker (deployment/events) and ../ai-service (ai).
 
   httpServer.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);

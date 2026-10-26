@@ -3,6 +3,13 @@ const Wishlist = require('../wishlist/wishlist.model');
 const supabaseService = require('../../services/supabase.service');
 const { getPaginationMetadata } = require('../../shared/utils/helpers');
 const { PAGINATION, WEBSITE_STATUS } = require('../../shared/utils/constants');
+const cache = require('../../infrastructure/cache');
+
+// Public marketplace listings are identical for every visitor (the per-user wishlist flag is overlaid
+// after the cache), so they are cached briefly. TTL stays below the 2h signed-URL lifetime.
+const LISTING_TTL_SEC = Number.parseInt(process.env.CACHE_LISTING_TTL_SEC || '60', 10);
+const cacheableListing = ({ page, limit, sortBy }) =>
+  /^\d{1,4}$/.test(String(page)) && /^\d{1,2}$/.test(String(limit)) && /^[A-Za-z]{1,30}$/.test(String(sortBy || 'createdAt'));
 
 const hydrateWebsitePreviewsAsync = async (websites) => {
   const result = websites.map(w => (w.toObject ? w.toObject() : w));
@@ -64,20 +71,26 @@ const browseWebsites = async (req, res) => {
     if (category) query.category = category;
     if (minPrice || maxPrice) { query.price = {}; if (minPrice) query.price.$gte = parseFloat(minPrice); if (maxPrice) query.price.$lte = parseFloat(maxPrice); }
 
-    // Run find + count in parallel — saves one full DB round trip
-    const [websites, total] = await Promise.all([
-      Website.find(query).select('-adminComment -isDeleted -githubUrl').populate('sellerId', 'name email avatar').sort({ [sortBy]: order === 'asc' ? 1 : -1 }).skip(skip).limit(parseInt(limit)),
-      Website.countDocuments(query),
-    ]);
+    const load = async () => {
+      // Run find + count in parallel — saves one full DB round trip
+      const [websites, total] = await Promise.all([
+        Website.find(query).select('-adminComment -isDeleted -githubUrl').populate('sellerId', 'name email avatar').sort({ [sortBy]: order === 'asc' ? 1 : -1 }).skip(skip).limit(parseInt(limit)),
+        Website.countDocuments(query),
+      ]);
+      return { data: await hydrateWebsitePreviewsAsync(websites), pagination: getPaginationMetadata(parseInt(page), parseInt(limit), total) };
+    };
+    const listing = cacheableListing({ page, limit, sortBy })
+      ? await cache.wrap(cache.key('websites', 'browse', JSON.stringify({ page, limit, category, minPrice, maxPrice, sortBy, order })), LISTING_TTL_SEC, load)
+      : await load();
 
-    let result = await hydrateWebsitePreviewsAsync(websites);
+    let result = listing.data;
 
     if (req.userId) {
-      const wishlistSet = new Set((await Wishlist.find({ userId: req.userId, websiteId: { $in: websites.map(w => w._id) } })).map(w => w.websiteId.toString()));
+      const wishlistSet = new Set((await Wishlist.find({ userId: req.userId, websiteId: { $in: result.map(w => w._id) } })).map(w => w.websiteId.toString()));
       result = result.map(w => ({ ...w, isWishlisted: wishlistSet.has(w._id.toString()) }));
     }
 
-    res.json({ success: true, data: result, pagination: getPaginationMetadata(parseInt(page), parseInt(limit), total) });
+    res.json({ success: true, data: result, pagination: listing.pagination });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error fetching websites', error: error.message });
   }
@@ -121,13 +134,17 @@ const getByCategory = async (req, res) => {
     const query = { category, status: { $in: [WEBSITE_STATUS.APPROVED, WEBSITE_STATUS.IN_AUCTION] }, isDeleted: false };
     if (category === 'exclusive') query.status = { $ne: WEBSITE_STATUS.SOLD };
 
-    const [websites, total] = await Promise.all([
-      Website.find(query).select('-adminComment -isDeleted -githubUrl').populate('sellerId', 'name email avatar').sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit)),
-      Website.countDocuments(query),
-    ]);
-
-    const result = await hydrateWebsitePreviewsAsync(websites);
-    res.json({ success: true, data: result, pagination: getPaginationMetadata(parseInt(page), parseInt(limit), total) });
+    const load = async () => {
+      const [websites, total] = await Promise.all([
+        Website.find(query).select('-adminComment -isDeleted -githubUrl').populate('sellerId', 'name email avatar').sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit)),
+        Website.countDocuments(query),
+      ]);
+      return { data: await hydrateWebsitePreviewsAsync(websites), pagination: getPaginationMetadata(parseInt(page), parseInt(limit), total) };
+    };
+    const listing = cacheableListing({ page, limit, sortBy: 'createdAt' })
+      ? await cache.wrap(cache.key('websites', 'category', category, page, limit), LISTING_TTL_SEC, load)
+      : await load();
+    res.json({ success: true, data: listing.data, pagination: listing.pagination });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error fetching category', error: error.message });
   }

@@ -7,7 +7,7 @@ const vercel = require('../../services/deployment/providers/vercel.provider');
 const cryptoUtil = require('../../shared/utils/crypto');
 const aiClient = require('./kashiAiClient');
 const { DEPLOYMENT_STATUS, DEPLOYMENT_ACTIVE_STATUSES, DEPLOYMENT_PROVIDERS } = require('../../shared/utils/constants');
-const { dispatchTask } = require('../../services/worker.client');
+const jobs = require('../../infrastructure/jobs');
 
 /**
  * Kashi's deployment doctor.
@@ -407,19 +407,11 @@ async function startFixRun({ userId, deploymentId }) {
   if (active) return { run: active, alreadyRunning: true };
 
   const run = await KashiFixRun.create({ userId, deploymentId, maxRounds: MAX_ROUNDS(), steps: [{ kind: 'info', message: 'Kashi is on it.' }] });
-  const workerEnabled = String(process.env.KASHI_USE_WORKER ?? 'true').toLowerCase() !== 'false';
-  const workerConfigured = Boolean(process.env.WORKER_URL && process.env.INTERNAL_WEBHOOK_SECRET);
-
-  if (workerEnabled && workerConfigured) {
-    try {
-      await dispatchTask('KASHI_FIX', { runId: String(run._id) });
-    } catch (error) {
-      await finish(run._id, 'failed', `Could not start the Kashi Worker: ${error.message}`).catch(() => {});
-      throw Object.assign(new Error('Kashi Worker unavailable.'), { userMessage: 'Kashi Worker is unavailable. Start the Worker and try again.', statusCode: 503 });
-    }
-  } else {
-    // Development fallback when no Worker is configured. Production should use the Worker.
-    setImmediate(() => runLoop(run._id).catch((e) => console.error('[Kashi] unhandled:', e)));
+  try {
+    await jobs.enqueueKashiFix(run._id, userId);
+  } catch (error) {
+    await finish(run._id, 'failed', `Could not queue the Kashi run: ${error.message}`).catch(() => {});
+    throw Object.assign(new Error('Kashi queue unavailable.'), { userMessage: 'Kashi is unavailable right now. Please try again shortly.', statusCode: 503 });
   }
   return { run, alreadyRunning: false };
 }

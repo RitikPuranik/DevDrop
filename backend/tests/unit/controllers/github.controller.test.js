@@ -5,6 +5,7 @@ jest.mock('../../../src/modules/github/projectExport.model');
 jest.mock('../../../src/services/github.service');
 jest.mock('../../../src/services/projectExport.service');
 jest.mock('../../../src/shared/utils/crypto');
+jest.mock('../../../src/infrastructure/jobs', () => ({ enqueueProjectExport: jest.fn(), enqueueDeployment: jest.fn() }));
 
 const jwt = require('jsonwebtoken');
 const Website = require('../../../src/modules/website/website.model');
@@ -14,6 +15,7 @@ const ProjectExport = require('../../../src/modules/github/projectExport.model')
 const githubService = require('../../../src/services/github.service');
 const projectExportService = require('../../../src/services/projectExport.service');
 const cryptoUtil = require('../../../src/shared/utils/crypto');
+const jobs = require('../../../src/infrastructure/jobs');
 const githubController = require('../../../src/modules/github/github.controller');
 const { createQueryMock, mockReq, mockRes } = require('../../helpers/mockQuery');
 
@@ -328,7 +330,7 @@ describe('github.controller', () => {
       projectExportService.sanitizeRepoName.mockReturnValue('my-repo');
       projectExportService.isValidRepoName.mockReturnValue(true);
       ProjectExport.create.mockResolvedValue({ _id: 'export-1', status: 'pending' });
-      projectExportService.runExport.mockResolvedValue(undefined);
+      jobs.enqueueProjectExport.mockResolvedValue({ accepted: true });
 
       const req = validReq();
       const res = mockRes();
@@ -347,31 +349,25 @@ describe('github.controller', () => {
         data: { exportId: 'export-1', status: 'pending' },
       }));
 
-      // Fire-and-forget job is scheduled via setImmediate; flush the
-      // microtask/macrotask queue and confirm it actually gets invoked.
-      await new Promise((resolve) => setImmediate(resolve));
-      expect(projectExportService.runExport).toHaveBeenCalledWith('export-1');
+      // The export is handed to deployment-queue (processed by the worker), not run in-process.
+      expect(jobs.enqueueProjectExport).toHaveBeenCalledWith('export-1', { source: 'purchase', userId: 'user-1' });
     });
 
-    it('does not crash the request when the fire-and-forget export job rejects', async () => {
+    it('returns 500 when the export job cannot be queued', async () => {
       Purchase.findOne.mockResolvedValue({ _id: 'purchase-1' });
       Website.findById.mockResolvedValue({ name: 'Site', sourceCodeUrl: 'path.zip' });
       GithubConnection.findOne.mockResolvedValue({ userId: 'user-1' });
       projectExportService.sanitizeRepoName.mockReturnValue('my-repo');
       projectExportService.isValidRepoName.mockReturnValue(true);
       ProjectExport.create.mockResolvedValue({ _id: 'export-1', status: 'pending' });
-      projectExportService.runExport.mockRejectedValue(new Error('export failed'));
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      jobs.enqueueProjectExport.mockRejectedValue(new Error('queue down'));
 
       const req = validReq();
       const res = mockRes();
 
       await githubController.createExport(req, res);
-      await new Promise((resolve) => setImmediate(resolve));
-      await new Promise((resolve) => setImmediate(resolve));
 
-      expect(res.status).toHaveBeenCalledWith(202);
-      consoleSpy.mockRestore();
+      expect(res.status).toHaveBeenCalledWith(500);
     });
 
     it('returns 500 on unexpected failure', async () => {

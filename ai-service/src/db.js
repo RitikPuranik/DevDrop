@@ -9,7 +9,7 @@ const mongoose = require('mongoose');
  * collection directly; every read/write goes through ai-service's HTTP
  * API (see routes.js) instead.
  *
- * The in-memory job queue (jobs.service.js) is unaffected either way.
+ * Job state lives in BullMQ (QUEUE_REDIS_URL) and the backend, not here.
  *
  * Deliberately non-fatal: if GEMINI_MONGODB_URI isn't set (or the
  * connection fails), ai-service still boots and generateApp() falls back

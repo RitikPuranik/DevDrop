@@ -15,6 +15,7 @@
 const jwt = require('jsonwebtoken');
 const { Server } = require('socket.io');
 const User = require('../../modules/user/user.model');
+const QueueJob = require('../../infrastructure/queue/queueJob.model');
 const geminiPoolClient = require('../../modules/gemini-pool/geminiPoolServiceClient');
 const groqPoolClient = require('../../modules/groq-pool/groqPoolServiceClient');
 
@@ -126,9 +127,30 @@ function init(httpServer, { allowedOrigins } = {}) {
     cors: { origin: allowedOrigins || '*', credentials: true },
   });
 
+  // Optional identity: browsers send the JWT in the handshake. A socket without a valid token can
+  // connect (public channels) but can never join a private job room.
+  if (typeof io.use === 'function') {
+    io.use((socket, next) => {
+      try {
+        const token = getBearerToken(socket);
+        if (token) socket.userId = String(jwt.verify(token, process.env.JWT_SECRET).userId);
+      } catch {
+        socket.userId = undefined;
+      }
+      next();
+    });
+  }
+
   io.on('connection', (socket) => {
-    socket.on('ai-job:subscribe', (jobId) => {
-      if (typeof jobId === 'string' && jobId) socket.join(`ai-job:${jobId}`);
+    socket.on('ai-job:subscribe', async (jobId) => {
+      if (typeof jobId !== 'string' || !jobId || !socket.userId) return;
+      try {
+        // Only the job's owner may listen to its progress/result.
+        const owned = await QueueJob.exists({ jobKey: jobId, userId: socket.userId, type: 'AI_GENERATE' });
+        if (owned) socket.join(`ai-job:${jobId}`);
+      } catch (error) {
+        console.warn('[socket] ai-job subscribe check failed:', error.message);
+      }
     });
     socket.on('ai-job:unsubscribe', (jobId) => {
       if (typeof jobId === 'string' && jobId) socket.leave(`ai-job:${jobId}`);

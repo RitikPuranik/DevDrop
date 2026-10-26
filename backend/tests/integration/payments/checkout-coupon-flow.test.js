@@ -30,7 +30,7 @@ jest.mock('../../../src/modules/payout/payout.model', () => require('../../mocks
 jest.mock('../../../src/modules/coupons/coupon.model', () => require('../../mocks/models/coupon.model.mock'));
 jest.mock('../../../src/modules/user/user.model', () => require('../../mocks/models/user.model.mock'));
 jest.mock('../../../src/modules/user/bankDetails.model', () => require('../../mocks/models/bankDetails.model.mock'));
-jest.mock('../../../src/services/email.service', () => require('../../mocks/services/email.service.mock'));
+jest.mock('../../../src/infrastructure/events', () => require('../../mocks/services/events.mock'));
 
 // Only the third-party SDK is mocked — razorpay.service.js's own logic
 // (order-amount clamping, signature HMACs) all runs for real.
@@ -56,7 +56,7 @@ const Payment = require('../../../src/modules/payment/payment.model');
 const Payout = require('../../../src/modules/payout/payout.model');
 const Coupon = require('../../../src/modules/coupons/coupon.model');
 const User = require('../../../src/modules/user/user.model');
-const emailService = require('../../../src/services/email.service');
+const events = require('../../../src/infrastructure/events');
 const paymentRoutes = require('../../../src/modules/payment/payment.routes');
 const { generateAccessToken } = require('../../../src/shared/utils/jwt');
 
@@ -196,8 +196,8 @@ describe('Checkout coupon reservation → payment verification → purchase/payo
     // flag this rather than silently drop it is part of the integration.
     expect(payouts[0].failureReason).toMatch(/no bank details/i);
 
-    expect(emailService.sendPurchaseConfirmation).toHaveBeenCalled();
-    expect(emailService.sendSellerNotification).toHaveBeenCalled();
+    expect(events.enqueuePurchaseConfirmation).toHaveBeenCalled();
+    expect(events.enqueueSellerNotification).toHaveBeenCalled();
   });
 
   it('prevents two concurrent checkouts from both reserving the same single_global coupon', async () => {

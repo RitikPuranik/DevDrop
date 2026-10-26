@@ -1,24 +1,9 @@
 const axios = require('axios');
 const { buildHeaders } = require('../../backend/src/shared/utils/internalSignature');
 
-// Worker -> Backend: POST /internal/webhooks/task-result (HMAC signed).
-const sendTaskResult = async (task, status, extra = {}) => {
-  const backendUrl = process.env.BACKEND_URL;
-  const secret = process.env.INTERNAL_WEBHOOK_SECRET;
-  if (!backendUrl || !secret) return;
-
-  const body = JSON.stringify({ taskId: task.taskId, status, ...extra });
-  await axios.post(`${backendUrl.replace(/\/+$/, '')}/internal/webhooks/task-result`, body, {
-    headers: buildHeaders(secret, body),
-    timeout: 10000,
-    transformRequest: [(d) => d],
-  });
-};
-
-module.exports = { sendTaskResult };
-
-
-// Worker -> Backend: low-frequency progress event for long-running Kashi runs.
+// Worker -> Backend: low-frequency progress event for long-running Kashi runs
+// (POST /internal/webhooks/task-progress, HMAC signed). The backend only forwards it to Socket.IO.
+// Job status itself is stored in MongoDB by the queue workers; there is no task-result callback.
 const sendTaskProgress = async (task, event) => {
   const backendUrl = process.env.BACKEND_URL;
   const secret = process.env.INTERNAL_WEBHOOK_SECRET;
@@ -38,4 +23,4 @@ const sendTaskProgress = async (task, event) => {
   }
 };
 
-module.exports.sendTaskProgress = sendTaskProgress;
+module.exports = { sendTaskProgress };

@@ -2,14 +2,13 @@ const Website = require('../website/website.model');
 const Purchase = require('./purchase.model');
 const Payment = require('./payment.model');
 const Payout = require('../payout/payout.model');
-const User = require('../user/user.model');
 const BankDetails = require('../user/bankDetails.model');
 const Auction = require('../auction/auction.model');
 const Coupon = require('../coupons/coupon.model');
 const razorpayService = require('../../services/razorpay.service');
 const { calculatePricing, applyCouponToPricing } = require('../../shared/utils/helpers');
 const { WEBSITE_STATUS, PAYMENT_STATUS, PAYOUT_STATUS } = require('../../shared/utils/constants');
-const emailService = require('../../services/email.service');
+const events = require('../../infrastructure/events');
 
 const COUPON_RESERVATION_MS = 15 * 60 * 1000;
 
@@ -370,7 +369,7 @@ const createPendingPayout = async (website, purchase) => {
 
   try {
     const sellerEmail = website.sellerId ? website.sellerId.email : 'Unknown/Deleted';
-    await emailService.sendAdminAlert({
+    await events.enqueueAdminAlert({
       subject: `New Payout Pending — ${website.name}`,
       message: 'A new purchase was made. Please process the seller payout manually.',
       details: `Seller: ${sellerEmail}\nWebsite: ${website.name}\nAmount: ₹${purchase.sellerPrice}\nPurchase ID: ${purchase._id}\nPayout ID: ${payoutRecord._id}${!sellerBankDetails ? '\n\n⚠️ WARNING: Seller has no bank details saved!' : ''}`,
@@ -384,10 +383,10 @@ const createPendingPayout = async (website, purchase) => {
 
 const sendPurchaseEmails = async (buyerId, website, purchase) => {
   try {
-    const buyer = await User.findById(buyerId);
-    await emailService.sendPurchaseConfirmation(buyer, website, purchase);
+    // Queued by reference; the worker loads current records and sends.
+    await events.enqueuePurchaseConfirmation(purchase._id, buyerId);
     if (website.sellerId) {
-      await emailService.sendSellerNotification(website.sellerId, website, purchase);
+      await events.enqueueSellerNotification(purchase._id, website.sellerId._id || website.sellerId);
     }
   } catch (error) {
     console.error('Confirmation email error:', error);

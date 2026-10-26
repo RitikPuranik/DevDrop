@@ -1,4 +1,3 @@
-const cron = require('node-cron');
 const {
   runFullBackup,
   runMongoBackup,
@@ -106,46 +105,5 @@ const runManualBackup = async (payload = {}) => {
   }
 };
 
-/**
- * Reads the backup schedule from .env at server startup.
- *
- * Two ways to configure it (pick one):
- *  - BACKUP_INTERVAL_HOURS=6   -> simplest option: "run every N hours".
- *    Accepts decimals too (e.g. 0.5 for every 30 minutes).
- *  - BACKUP_CRON_SCHEDULE="0 2 * * *" -> exact cron syntax, for people
- *    who want a specific time of day rather than a fixed interval.
- *
- * If both are set, BACKUP_INTERVAL_HOURS takes priority since it's the
- * simpler, more commonly requested option.
- * If neither is set, defaults to every 24 hours.
- */
-const startBackupCron = () => {
-  const intervalHoursRaw = process.env.BACKUP_INTERVAL_HOURS;
-  const intervalHours = parseFloat(intervalHoursRaw);
 
-  if (intervalHoursRaw && !isNaN(intervalHours) && intervalHours > 0) {
-    let intervalMs = intervalHours * 60 * 60 * 1000;
-    if (intervalMs > 2147483647) {
-      console.warn(`⚠️  BACKUP_INTERVAL_HOURS of ${intervalHours} (${intervalMs}ms) exceeds the 32-bit signed integer limit. Capping to 24.8 days (2147483647ms).`);
-      intervalMs = 2147483647;
-    }
-    const timer = setInterval(runScheduledBackup, intervalMs);
-    console.log(`✅ Backup cron started — runs every ${intervalHours} hour(s) (BACKUP_INTERVAL_HOURS)`);
-    return { stop: () => clearInterval(timer) };
-  }
-
-  if (process.env.BACKUP_CRON_SCHEDULE) {
-    const schedule = process.env.BACKUP_CRON_SCHEDULE;
-    const task = cron.schedule(schedule, runScheduledBackup, { timezone: process.env.CRON_TIMEZONE || 'UTC' });
-    console.log(`✅ Backup cron started (cron schedule: ${schedule})`);
-    return { stop: () => task.stop() };
-  }
-
-  // Default: once every 24 hours if nothing is configured
-  const defaultHours = 24;
-  const timer = setInterval(runScheduledBackup, defaultHours * 60 * 60 * 1000);
-  console.log(`✅ Backup cron started — runs every ${defaultHours} hour(s) (default, set BACKUP_INTERVAL_HOURS to change)`);
-  return { stop: () => clearInterval(timer) };
-};
-
-module.exports = { startBackupCron, runScheduledBackup, runManualBackup };
+module.exports = { runScheduledBackup, runManualBackup };

@@ -11,7 +11,13 @@ const subscribedKashiRuns = new Set();
 function getSocket() {
   if (!socket) {
     const base = import.meta.env.VITE_API_URL || '';
-    socket = io(base, { withCredentials: true, autoConnect: true, transports: ['websocket'] });
+    // The JWT lets the backend verify that you own a job before joining its private room.
+    socket = io(base, {
+      withCredentials: true,
+      autoConnect: true,
+      transports: ['websocket'],
+      auth: (cb) => cb({ token: localStorage.getItem('token') }),
+    });
     socket.on('connect', () => {
       for (const jobId of subscribedJobs) socket.emit('ai-job:subscribe', jobId);
       for (const runId of subscribedKashiRuns) socket.emit('kashi-fix:subscribe', runId);
@@ -22,7 +28,9 @@ function getSocket() {
 
 // Subscribes to one AI generation job's progress. Returns an unsubscribe
 // function — call it once the job resolves/rejects or the component unmounts.
-export function subscribeToJob(jobId, { onStage, onCompleted, onFailed }) {
+// onSync runs once the subscription is live and again after every reconnect, so anything missed while
+// the page was closed, refreshed or offline is fetched once (event-driven; there is no timer).
+export function subscribeToJob(jobId, { onStage, onCompleted, onFailed, onSync }) {
   const s = getSocket();
   subscribedJobs.add(jobId);
   if (s.connected) s.emit('ai-job:subscribe', jobId);
@@ -34,8 +42,12 @@ export function subscribeToJob(jobId, { onStage, onCompleted, onFailed }) {
   s.on('ai-job:stage', handleStage);
   s.on('ai-job:completed', handleCompleted);
   s.on('ai-job:failed', handleFailed);
+  const handleSync = () => onSync?.();
+  s.on('connect', handleSync);
+  if (s.connected) handleSync();
 
   return () => {
+    s.off('connect', handleSync);
     s.off('ai-job:stage', handleStage);
     s.off('ai-job:completed', handleCompleted);
     s.off('ai-job:failed', handleFailed);

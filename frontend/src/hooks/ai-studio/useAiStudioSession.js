@@ -11,13 +11,16 @@ import { aiStudioAPI } from '../../api/aiStudio';
 // -- but it is the one the system can always rely on.
 const HEARTBEAT_INTERVAL_MS = 60 * 1000;
 
+// The current project id is remembered in localStorage so a refresh, or a second tab, comes back to the
+// SAME project (and its running generation) instead of starting a new one. The sessionId stays per-tab.
+// Starting a new generation forgets it; the abandoned project is reclaimed by the backend's inactivity
+// cleanup (never while one of its generation jobs is still queued/running).
+const PROJECT_KEY = 'devdrop.aiStudio.projectId';
+const readSavedProjectId = () => { try { return localStorage.getItem(PROJECT_KEY) || null; } catch { return null; } };
+const writeSavedProjectId = (id) => { try { if (id) localStorage.setItem(PROJECT_KEY, id); else localStorage.removeItem(PROJECT_KEY); } catch { /* storage unavailable */ } };
+
 /**
  * Manages one AI Studio project/session for the lifetime of this component.
- * Deliberately keeps projectId/sessionId in React state only (not
- * localStorage/sessionStorage): a full page refresh clears them, the old
- * session's heartbeat stops, and the next call to `open()` starts a fresh
- * project. The old project is then reclaimed by the backend's inactivity
- * cleanup rather than anything client-side trying to delete it directly.
  */
 export function useAiStudioSession() {
   const [projectId, setProjectId] = useState(null);
@@ -35,6 +38,7 @@ export function useAiStudioSession() {
       const id = data?.data?.projectId;
       if (!id) throw new Error(data?.message || 'AI Studio session was created without a project ID.');
       projectIdRef.current = id;
+      writeSavedProjectId(id);
       setProjectId(id);
       return id;
     } catch (err) {
@@ -42,6 +46,20 @@ export function useAiStudioSession() {
       console.error('AI Studio session open failed:', err);
       throw new Error(message);
     }
+  }, []);
+
+  // Re-attach this tab to a project restored from the server (after refresh / in another tab).
+  const attach = useCallback((id) => {
+    projectIdRef.current = id;
+    writeSavedProjectId(id);
+    setProjectId(id);
+  }, []);
+
+  // Detach from the project (starting a new generation, or the saved one no longer exists).
+  const forget = useCallback(() => {
+    projectIdRef.current = null;
+    writeSavedProjectId(null);
+    setProjectId(null);
   }, []);
 
   const stopHeartbeat = useCallback(() => {
@@ -144,5 +162,5 @@ export function useAiStudioSession() {
     aiStudioAPI.recordActivity(projectId).catch(() => {});
   }, [projectId]);
 
-  return { projectId, sessionId: sessionIdRef.current, open, getProjectId, syncFiles, uploadAsset, recordActivity, listVersions, restoreVersion };
+  return { projectId, sessionId: sessionIdRef.current, open, attach, forget, savedProjectId: readSavedProjectId, getProjectId, syncFiles, uploadAsset, recordActivity, listVersions, restoreVersion };
 }

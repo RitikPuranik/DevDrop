@@ -26,11 +26,5 @@ const processEndedAuctions = async () => {
   }
 };
 
-const startAuctionCron = () => {
-  // Check every minute
-  const timer = setInterval(processEndedAuctions, 60 * 1000);
-  console.log('✅ Auction cron started');
-  return { stop: () => clearInterval(timer) };
-};
 
-module.exports = { startAuctionCron, processEndedAuctions };
+module.exports = { processEndedAuctions };

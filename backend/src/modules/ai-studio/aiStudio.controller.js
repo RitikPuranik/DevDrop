@@ -31,6 +31,41 @@ exports.openSession = async (req, res) => {
   }
 };
 
+// GET /api/ai-studio/:projectId/resume
+// Restores the page after a refresh / when opened in another tab: the saved chat, the current
+// files, and the generation that is still queued or running (if any). One call, no polling.
+exports.resume = async (req, res) => {
+  try {
+    const project = await lifecycle.getResumeState({
+      projectId: req.params.projectId,
+      userId: req.userId,
+      sessionId: typeof req.query.sessionId === 'string' ? req.query.sessionId : null,
+    });
+    if (!project) return res.status(404).json({ success: false, message: 'Project not found' });
+
+    let job = null;
+    if (project.activeJobKey) {
+      const { QueueJob, JOB_TYPES, jobStore } = require('../../infrastructure/queue');
+      const { serializeJob } = require('../ai-generate/ai-generate.controller');
+      const doc = await QueueJob.findOne({ jobKey: project.activeJobKey, userId: req.userId, type: JOB_TYPES.AI_GENERATE });
+      const { reconcileJob } = require('../ai-generate/ai-generate.controller');
+      if (doc && jobStore.ACTIVE.includes(doc.status) && await reconcileJob(doc)) job = serializeJob(doc, false);
+    }
+    res.status(200).json({
+      success: true,
+      data: {
+        ...serializeProject(project),
+        conversation: Array.isArray(project.conversation) ? project.conversation : [],
+        spec: project.spec || null,
+        job,
+      },
+    });
+  } catch (error) {
+    console.error('AI Studio resume error:', error.message);
+    res.status(500).json({ success: false, message: 'Failed to restore AI Studio project' });
+  }
+};
+
 // POST /api/ai-studio/:projectId/heartbeat
 exports.heartbeat = async (req, res) => {
   try {

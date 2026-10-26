@@ -1,10 +1,10 @@
 jest.mock('../../../src/modules/contact/contact.model', () => require('../../mocks/models/contact.model.mock'));
-jest.mock('../../../src/services/email.service', () => require('../../mocks/services/email.service.mock'));
+jest.mock('../../../src/infrastructure/events', () => require('../../mocks/services/events.mock'));
 
 const express = require('express');
 const request = require('supertest');
 const Contact = require('../../../src/modules/contact/contact.model');
-const emailService = require('../../../src/services/email.service');
+const events = require('../../../src/infrastructure/events');
 const contactRoutes = require('../../../src/modules/contact/contact.routes');
 
 const buildApp = () => {
@@ -36,7 +36,7 @@ describe('POST /api/contact', () => {
 
   it('fires an admin alert email on submission without blocking the response', async () => {
     await request(app).post('/api/contact').send(validBody);
-    expect(emailService.sendAdminAlert).toHaveBeenCalledWith(
+    expect(events.enqueueAdminAlert).toHaveBeenCalledWith(
       expect.objectContaining({ subject: 'New Contact Us Enquiry' })
     );
   });

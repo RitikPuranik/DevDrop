@@ -26,10 +26,13 @@ small async job API.
   runs one minimal `generateContent` call against that key only (never
   accepts a plaintext key and never touches the job queue).
 
-Jobs live in an in-memory `Map` with a simple concurrency-limited
-in-process queue (`AI_CONCURRENCY`, default 2) — no Redis/BullMQ. The
-queue/store sits behind `createJob`/`getJob` in `src/jobs.service.js` so a
-Redis-backed version can replace it later without changing callers.
+Generation jobs arrive through the BullMQ `ai-queue` (Upstash queue database,
+`QUEUE_REDIS_URL`); this process is the worker (`src/queue/worker.js`,
+concurrency `AI_QUEUE_CONCURRENCY`, default 1). There are no `/jobs` HTTP
+endpoints and no in-memory job store: the worker fetches each job's input from
+the backend, runs the orchestrator, and reports `started | stage | delayed |
+retrying | completed | failed` back by webhook. Quota exhaustion delays a job
+(`AI_QUOTA_*`) rather than retrying it immediately.
 
 ## Gemini API Key Pool
 
@@ -47,30 +50,53 @@ Gemini call goes through `src/geminiPool.service.js`, which:
   applying exponential backoff with jitter to the failed key.
 - Marks a key `invalid` (and stops selecting it) on auth/permission
   errors, without touching other keys.
-- Is capped independently by `AI_CONCURRENCY` (global) and the optional
+- Is capped independently by `AI_CONCURRENCY` (pool-level) and the optional
   `GEMINI_PER_KEY_CONCURRENCY` (per credential) — key count and process
   concurrency are separate knobs.
 - Falls back to `GEMINI_API_KEY` / `GEMINI_API_KEYS` (comma-separated) from
   the environment when no key exists yet in Mongo, or when `MONGODB_URI`
   isn't set at all — existing single-key installs need no changes.
 
-Website generation now uses **credential-first fallback**: one credential
-tries every configured Gemini model in order before the pool moves to the next
-credential. For example: `Key A -> 3.8 -> 3.7 -> 3.6 -> 3.5-lite -> Key B -> ...`.
-This keeps model fallback on the same project/key before spending another
-project, while separate single-model calls (such as repair/recovery) can still
-use the normal `execute()` path.
+### Failover behavior
 
-**Multi-instance note:** the job queue in `jobs.service.js` is
-process-local — `AI_CONCURRENCY` limits *one* ai-service process, and
-running N instances multiplies available concurrency rather than sharing
-a single limit. A distributed queue (e.g. Redis/BullMQ) would be needed
-for a strict global cap across instances. The Gemini pool's *config* is
-already shared safely via Mongo; its *live* in-memory health/cooldown
-state is per-process (each instance reads/writes the same Mongo
-document, so state converges but isn't instantly consistent across
-instances — acceptable for cooldown/health tracking, not something to
-rely on for hard concurrency limits).
+One `executeModels()` call is one logical AI operation. When a project hits a
+project/model rate limit, that project+model is marked unavailable and the
+**same call immediately continues with the next eligible project** (same model
+first); nothing waits for the failed project's cooldown. Each project/model is
+tried at most once per call (bounded by project count, `GEMINI_POOL_MAX_KEY_ATTEMPTS`
+and `GEMINI_POOL_REQUEST_DEADLINE_MS`). This applies to every stage, including
+the Debug Agent / repair loop, since all agents go through `callGemini`.
+
+| Failure | Handling |
+| --- | --- |
+| 429 per-minute quota | cool that project+model (provider Retry-After if given, else jittered backoff), switch project now |
+| 429 daily quota | unavailable until the reported reset (or midnight Pacific), never a short retry |
+| 503 / "overloaded" | shared *model* capacity: model avoided pool-wide (persisted), projects untouched, next model tried |
+| 401/403/invalid key | credential marked `invalid`, never rotated back |
+| 500/502/timeout/network | bounded backoff with jitter, another project tried first |
+| 400/unsupported model | surfaced immediately, not rotated |
+| unusable JSON (HTTP 200) | tried on a few other projects, no cooldown |
+
+Keys that report the same Google Cloud project share cooldowns; identical
+credentials are de-duplicated. Cooldowns are written to Mongo with atomic
+`$max` and re-read before each attempt, so several workers converge quickly.
+
+If no project is eligible the pool throws `PoolExhaustedError` with
+`reason`, `attemptedProjects`, `failureCategories`, `retryAfterMs`/`retryAt`,
+`temporary` and `shouldRetry`. `callGemini` then waits (async) and runs a fresh
+failover cycle for the same call; the job reports `waiting_for_capacity`
+("Waiting for Gemini capacity"), releases its worker slot while waiting, and
+resumes the same stage. A job that finally gives up for lack of capacity has
+`errorType: "capacity_exhausted"` instead of a generic failure. Note: this
+service uses an in-process queue (no BullMQ), so the delayed retry is an async
+timer inside the job, not a BullMQ delayed job.
+
+**Multi-instance note:** the queue itself is shared through Redis, so N ai-service
+instances process up to N x `AI_QUEUE_CONCURRENCY` jobs in total (the limit is per
+process, not global). The Gemini pool's *config* is shared safely via Mongo; its
+*live* in-memory health/cooldown state is per-process (instances read/write the same
+Mongo document, so state converges but isn't instantly consistent — fine for
+cooldown/health tracking, not for hard concurrency limits).
 
 ## Local setup
 

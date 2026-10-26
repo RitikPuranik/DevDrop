@@ -30,7 +30,7 @@ jest.mock('../../../src/modules/website/website.model', () => require('../../moc
 jest.mock('../../../src/modules/payment/purchase.model', () => require('../../mocks/models/purchase.model.mock'));
 jest.mock('../../../src/modules/asset/downloadLog.model', () => require('../../mocks/models/downloadLog.model.mock'));
 jest.mock('../../../src/services/supabase.service', () => require('../../mocks/services/supabase.service.mock'));
-jest.mock('../../../src/services/email.service', () => require('../../mocks/services/email.service.mock'));
+jest.mock('../../../src/infrastructure/events', () => require('../../mocks/services/events.mock'));
 
 const express = require('express');
 const request = require('supertest');

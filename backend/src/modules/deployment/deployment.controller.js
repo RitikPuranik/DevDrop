@@ -7,7 +7,7 @@ const DeploymentProviderConnection = require('./deploymentProviderConnection.mod
 
 const githubService = require('../../services/github.service');
 const { analyzeRepository } = require('../../services/deployment/analyzer');
-const { runDeployment } = require('../../services/deployment/orchestrator');
+const jobs = require('../../infrastructure/jobs');
 const { resolveVercelFrontendConfig } = require('../../services/deployment/vercelConfigResolver');
 const vercelProvider = require('../../services/deployment/providers/vercel.provider');
 const renderProvider = require('../../services/deployment/providers/render.provider');
@@ -553,11 +553,7 @@ const createDeployment = async (req, res) => {
       pendingSecretsEncrypted: Object.keys(secretsToStore).length > 0 ? cryptoUtil.encrypt(JSON.stringify(secretsToStore)) : null,
     });
 
-    setImmediate(() => {
-      runDeployment(deployment._id).catch((err) => {
-        console.error(`Unhandled error running deployment ${deployment._id}:`, err);
-      });
-    });
+    await jobs.enqueueDeployment(deployment._id, userId);
 
     res.status(202).json({ success: true, data: { deploymentId: deployment._id, status: deployment.status } });
   } catch (error) {
@@ -738,11 +734,7 @@ const createPersonalDeployment = async (req, res) => {
       pendingSecretsEncrypted: Object.keys(secretsToStore).length > 0 ? cryptoUtil.encrypt(JSON.stringify(secretsToStore)) : null,
     });
 
-    setImmediate(() => {
-      runDeployment(deployment._id).catch((err) => {
-        console.error(`Unhandled error running personal deployment ${deployment._id}:`, err);
-      });
-    });
+    await jobs.enqueueDeployment(deployment._id, req.userId);
 
     res.status(202).json({ success: true, data: { deploymentId: deployment._id, status: deployment.status } });
   } catch (error) {
@@ -946,11 +938,7 @@ const redeploy = async (req, res) => {
     deployment.errorStep = undefined;
     await deployment.save();
 
-    setImmediate(() => {
-      runDeployment(deployment._id).catch((err) => {
-        console.error(`Unhandled error redeploying ${deployment._id}:`, err);
-      });
-    });
+    await jobs.enqueueDeployment(deployment._id, req.userId);
 
     res.status(202).json({ success: true, data: { deploymentId: deployment._id, status: deployment.status } });
   } catch (error) {

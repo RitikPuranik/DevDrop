@@ -1,13 +1,13 @@
 jest.mock('../../../src/modules/website/website.model');
 jest.mock('../../../src/modules/payment/purchase.model');
 jest.mock('../../../src/modules/user/user.model');
-jest.mock('../../../src/services/email.service');
+jest.mock('../../../src/infrastructure/events', () => require('../../mocks/services/events.mock'));
 jest.mock('../../../src/services/supabase.service');
 
 const Website = require('../../../src/modules/website/website.model');
 const Purchase = require('../../../src/modules/payment/purchase.model');
 const User = require('../../../src/modules/user/user.model');
-const emailService = require('../../../src/services/email.service');
+const events = require('../../../src/infrastructure/events');
 const supabaseService = require('../../../src/services/supabase.service');
 const buyerController = require('../../../src/modules/buyer/buyer.controller');
 const { createQueryMock, mockReq, mockRes } = require('../../helpers/mockQuery');
@@ -72,8 +72,8 @@ describe('buyer.controller', () => {
       const saved = { save: jest.fn().mockResolvedValue(true) };
       Purchase.mockImplementation(() => saved);
       User.findById.mockResolvedValue({ _id: 'u1', email: 'buyer@example.com' });
-      emailService.sendPurchaseConfirmation.mockResolvedValue(true);
-      emailService.sendSellerNotification.mockResolvedValue(true);
+      events.enqueuePurchaseConfirmation.mockResolvedValue(true);
+      events.enqueueSellerNotification.mockResolvedValue(true);
 
       const req = mockReq({ params: { websiteId: 'w1' } });
       const res = mockRes();
@@ -81,8 +81,8 @@ describe('buyer.controller', () => {
       await buyerController.purchaseFreeWebsite(req, res);
 
       expect(saved.save).toHaveBeenCalled();
-      expect(emailService.sendPurchaseConfirmation).toHaveBeenCalled();
-      expect(emailService.sendSellerNotification).toHaveBeenCalled();
+      expect(events.enqueuePurchaseConfirmation).toHaveBeenCalled();
+      expect(events.enqueueSellerNotification).toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(201);
     });
 
@@ -92,7 +92,7 @@ describe('buyer.controller', () => {
       const saved = { save: jest.fn().mockResolvedValue(true) };
       Purchase.mockImplementation(() => saved);
       User.findById.mockResolvedValue({ _id: 'u1' });
-      emailService.sendPurchaseConfirmation.mockRejectedValue(new Error('smtp down'));
+      events.enqueuePurchaseConfirmation.mockRejectedValue(new Error('smtp down'));
 
       const req = mockReq({ params: { websiteId: 'w1' } });
       const res = mockRes();

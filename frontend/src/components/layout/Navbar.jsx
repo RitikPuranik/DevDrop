@@ -1,9 +1,9 @@
- import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import LinkTransition from '../navigation/TransitionLink';
 import AuthModal from '../auth/AuthModal';
 import { LogOut } from "lucide-react";
-import { useNavigate,useLocation} from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -14,9 +14,11 @@ const Navbar = () => {
   const [websitesExpanded, setWebsitesExpanded] = useState(false);
   const [hoveredSubIndex, setHoveredSubIndex] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
-  const [isScrolled, setIsScrolled] = useState(false);
+  const [scrolledByPage, setScrolledByPage] = useState(false);
+  const [studioCompact, setStudioCompact] = useState(false);
 
   const navigate = useNavigate();
+  const isScrolled = scrolledByPage || studioCompact;
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 1023px)');
@@ -26,13 +28,32 @@ const Navbar = () => {
     return () => mq.removeEventListener('change', checkMobile);
   }, []);
 
-  // Sheryians-style scroll navbar: stays put, but its height shrinks and it
-  // gains a dark, glassy background once the page has scrolled a bit.
+  // Collapse while scrolling down; restore the full navbar as soon as the
+  // user scrolls upward. At the top, always use the expanded presentation.
   useEffect(() => {
-    const handleScroll = () => setIsScrolled(window.scrollY > 40);
+    let previousY = window.scrollY;
+    const handleScroll = () => {
+      const currentY = window.scrollY;
+      if (currentY <= 40) {
+        setScrolledByPage(false);
+      } else if (currentY > previousY + 1) {
+        setScrolledByPage(true);
+      } else if (currentY < previousY - 1) {
+        setScrolledByPage(false);
+      }
+      previousY = currentY;
+    };
     handleScroll();
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // AI Studio is a fixed full-height workspace (the window never scrolls), so it
+  // asks for the compact navbar explicitly while a generation is running.
+  useEffect(() => {
+    const onCompact = (e) => setStudioCompact(Boolean(e.detail));
+    window.addEventListener('navbar-compact', onCompact);
+    return () => window.removeEventListener('navbar-compact', onCompact);
   }, []);
 
   const syncFromStorage = () => {

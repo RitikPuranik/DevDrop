@@ -1,6 +1,5 @@
 const express = require('express');
 const axios = require('axios');
-const { createJob, createDebugJob, getJob } = require('./jobs.service');
 const geminiPool = require('./geminiPool.service');
 const GeminiApiKey = require('./models/geminiApiKey.model');
 const groqPool = require('./groqPool.service');
@@ -19,57 +18,8 @@ function requireServiceKey(req, res, next) {
   if (!provided || provided !== expected) return res.status(401).json({ success: false, message: 'Invalid or missing service key.' });
   next();
 }
-router.get('/health', (req, res) => res.status(200).json({ success: true, status: 'ok' }));
-router.post('/jobs', requireServiceKey, (req, res) => {
-  const body = req.body || {};
-  if (!Array.isArray(body.messages) || body.messages.length === 0) return res.status(400).json({ success: false, message: 'No messages provided' });
-  // An existing project's files travel along with every follow-up request
-  // (the frontend keeps them in `fileData` after the first generation). Their
-  // presence is what distinguishes "edit an existing site" from "generate a
-  // new one" -- a brand-new request never has them.
-  const existingFiles = body.fileData && typeof body.fileData.files === 'object' && body.fileData.files ? body.fileData.files : null;
-  const mode = existingFiles && Object.keys(existingFiles).length > 0 ? 'edit' : 'generate';
-  const jobId = createJob({
-    messages: body.messages,
-    fileData: body.fileData || null,
-    websiteType: body.websiteType || body.type || 'portfolio',
-    userData: body.userData || body.portfolioData || {},
-    preferences: body.preferences || {},
-    assets: body.assets || [],
-    media: body.media || [],
-    conversation: body.conversation || body.messages,
-    mode,
-    existingFiles,
-    existingDependencies: (existingFiles && body.fileData?.dependencies) || {},
-  });
-  res.status(202).json({ success: true, data: { jobId, status: 'queued', mode } });
-});
-router.post('/jobs/:id/debug-retry', requireServiceKey, (req, res) => {
-  const original = getJob(req.params.id);
-  if (!original || original.status !== 'failed' || !original.debugContext) {
-    return res.status(404).json({ success: false, message: 'No debug context is available for this job.' });
-  }
-  const debugJobId = createDebugJob({
-    files: original.debugContext.files,
-    dependencies: original.debugContext.dependencies,
-    architecture: original.debugContext.architecture,
-    requirements: original.debugContext.requirements,
-    design: original.debugContext.design,
-    errors: original.debugContext.errors,
-    buildOutput: original.debugContext.buildOutput,
-    mediaManifest: original.debugContext.mediaManifest || [],
-    mediaPlan: original.debugContext.mediaPlan || [],
-  });
-  res.status(202).json({ success: true, data: { jobId: debugJobId, status: 'queued', mode: 'debug' } });
-});
-
-router.get('/jobs/:id', requireServiceKey, (req, res) => {
-  const job = getJob(req.params.id); if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
-  const progress = { currentStage: job.currentStage, stageStatus: job.stageStatus, generationMeta: job.generationMeta, mode: job.mode, debugAvailable: Boolean(job.debugContext) };
-  if (job.status === 'completed') return res.status(200).json({ success: true, data: { jobId: job.id, status: job.status, ...progress, result: job.result } });
-  if (job.status === 'failed') return res.status(200).json({ success: true, data: { jobId: job.id, status: job.status, ...progress, error: job.error } });
-  return res.status(200).json({ success: true, data: { jobId: job.id, status: job.status, ...progress } });
-});
+router.get('/health', (req, res) => res.status(200).json({ success: true, status: 'ok', queueWorker: Boolean(req.app.locals.aiWorker?.isRunning?.()) }));
+// Generation jobs are consumed from the BullMQ `ai-queue` (see src/queue/worker.js); there are no /jobs HTTP endpoints.
 
 function maskKey(doc) { return `${doc.keyPrefix || 'AIza'}...${doc.keySuffix || '????'}`; }
 function isCoolingDown(doc) { return Boolean(doc.cooldownUntil && new Date(doc.cooldownUntil).getTime() > Date.now()); }

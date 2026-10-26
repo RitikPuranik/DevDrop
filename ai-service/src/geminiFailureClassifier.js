@@ -1,15 +1,33 @@
 /**
- * Classifies Gemini provider failures and derives the cooldown for a key/model.
+ * Classifies Gemini provider failures and derives cooldowns.
  *
- * Environment variables honored here:
- *   GEMINI_RATE_LIMIT_COOLDOWN_MS       base backoff for 429s
- *   GEMINI_RATE_LIMIT_COOLDOWN_MAX_MS   cap for generic 429 backoff
- *   GEMINI_POOL_MAX_COOLDOWN_MS         cap for capacity/transient backoff
+ * Environment variables honored here (all parsed with envMs(): an unset or
+ * invalid value keeps the default, an explicit 0 is honored as 0):
+ *   GEMINI_RATE_LIMIT_COOLDOWN_MS        (default 5000)   base of the internal
+ *       exponential backoff used for a 429 when Google gave no retry guidance
+ *       (and for repeated 429s on the same quota).
+ *       0 disables the internal backoff (the project/model is still skipped
+ *       for the rest of the current request, and any provider-supplied wait
+ *       is still honored).
+ *   GEMINI_RATE_LIMIT_COOLDOWN_MAX_MS    (default 60000)  cap for that internal
+ *       backoff ONLY. It never shortens a provider Retry-After / quota reset.
+ *   GEMINI_POOL_MAX_COOLDOWN_MS          (default 300000) cap for the internal
+ *       backoff used for transient/timeout/unknown failures. Same rule.
+ *   GEMINI_MODEL_CAPACITY_COOLDOWN_MS    (default 30000)  how long a model that
+ *       reported shared capacity exhaustion (503/overloaded) is avoided by the
+ *       whole pool. 0 = only skip it for the current request.
  *
- * When Google supplies a quota reset timestamp/delay, that exact reset is used
- * instead of the generic caps. Daily/RPD quotas fall back to the documented
- * midnight-Pacific reset when no exact reset hint is present.
+ * Provider guidance (RetryInfo, quota reset metadata, Retry-After header) is
+ * always used as-is. Daily quotas wait for the reported reset, or the
+ * documented midnight-Pacific reset, never for an arbitrary short backoff.
  */
+
+function envMs(name, fallback) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === null || String(raw).trim() === '') return fallback;
+  const value = Number(String(raw).trim());
+  return Number.isFinite(value) && value >= 0 ? Math.floor(value) : fallback;
+}
 
 const isTimeoutError = (error) =>
   error.code === 'ECONNABORTED' ||
@@ -50,6 +68,49 @@ function getErrorDetails(error) {
 function getErrorInfoMetadata(error) {
   const info = getErrorDetails(error).find((d) => String(d?.['@type'] || '').includes('ErrorInfo'));
   return info?.metadata && typeof info.metadata === 'object' ? info.metadata : {};
+}
+
+function getQuotaViolations(error) {
+  const failure = getErrorDetails(error).find((d) => String(d?.['@type'] || '').includes('QuotaFailure'));
+  return Array.isArray(failure?.violations) ? failure.violations : [];
+}
+
+/** Identifiers describing the quota that was hit (never contains credentials). */
+function getQuotaInfo(error) {
+  const metadata = getErrorInfoMetadata(error);
+  const violation = getQuotaViolations(error)[0] || {};
+  const dimensions = {
+    ...(metadata.quotaDimensions && typeof metadata.quotaDimensions === 'object' ? metadata.quotaDimensions : {}),
+    ...(violation.quotaDimensions && typeof violation.quotaDimensions === 'object' ? violation.quotaDimensions : {}),
+  };
+  return {
+    quotaId: String(violation.quotaId || metadata.quotaId || ''),
+    quotaMetric: String(violation.quotaMetric || metadata.quotaMetric || ''),
+    dimensions,
+  };
+}
+
+/** Google Cloud project number, when the provider reports it (e.g. "projects/123"). */
+function extractProjectKey(error) {
+  const metadata = getErrorInfoMetadata(error);
+  const consumer = String(metadata.consumer || '').trim();
+  const match = consumer.match(/^projects\/([\w.-]+)$/i);
+  return match ? match[1] : null;
+}
+
+/**
+ * Which quota dimension a 429 applies to. Gemini quotas are normally
+ * per-project-per-model, so the default is "model": one exhausted model must
+ * not poison the project's other models. Only a quota that clearly is not
+ * model-scoped (an id/metric without "model" and no model dimension) is
+ * treated as project-wide.
+ */
+function quotaScope(error) {
+  const { quotaId, quotaMetric, dimensions } = getQuotaInfo(error);
+  const identifier = `${quotaId} ${quotaMetric}`.toLowerCase();
+  if (dimensions.model || /model/.test(identifier)) return 'model';
+  if (identifier.trim()) return 'project';
+  return 'model';
 }
 
 function extractQuotaResetAt(error) {
@@ -94,7 +155,10 @@ function extractRetryDelayMs(error) {
 
 function quotaLooksDaily(error) {
   const metadata = getErrorInfoMetadata(error);
+  const quota = getQuotaInfo(error);
   const identifiers = [
+    quota.quotaId,
+    quota.quotaMetric,
     metadata.quotaId,
     metadata.quotaMetric,
     metadata.quotaLimit,
@@ -145,28 +209,57 @@ function nextMidnightPacificMs() {
 }
 
 
+/**
+ * Failure categories:
+ *   rate_limit     project/model quota (RPM/TPM) hit  -> cool that quota, switch project now
+ *   quota_exceeded daily quota (RPD/TPD) hit          -> unavailable until the reset time
+ *   capacity       shared model capacity (503, "overloaded") -> avoid the MODEL, not the project
+ *   invalid        401/403/API key invalid/service disabled  -> credential unusable
+ *   timeout / transient / unknown                       -> bounded backoff, try another project
+ *   bad_output     HTTP 200 with unusable generated JSON -> try another project/model, no cooldown
+ *   permanent      400/unsupported model/validation     -> surface the error, never rotate
+ */
 function classify(error) {
   const status = error.response?.status;
   const apiMessage = String(error.response?.data?.error?.message || error.message || '');
   const lowerMessage = apiMessage.toLowerCase();
   const details = getErrorDetails(error);
   const metadata = getErrorInfoMetadata(error);
+  const projectKey = extractProjectKey(error);
+
+  if (error.retryableOutput || error.code === 'GEMINI_INVALID_GENERATED_JSON') {
+    return { classification: 'bad_output', retryable: true, failoverKey: true };
+  }
 
   if (isTimeoutError(error)) {
-    return { classification: 'timeout', retryable: true, failoverKey: true };
+    return { classification: 'timeout', retryable: true, failoverKey: true, projectKey };
   }
 
-  if (status === 401 || status === 403 || /api key not valid|invalid api key|permission denied/i.test(lowerMessage)) {
-    return { classification: 'invalid', retryable: false, failoverKey: true, permanentForKey: true };
+  if (
+    status === 401 ||
+    status === 403 ||
+    /api key not valid|invalid api key|api key expired|permission denied|has not been used in project|service_disabled|api_key_invalid/i.test(lowerMessage)
+  ) {
+    return { classification: 'invalid', retryable: false, failoverKey: true, permanentForKey: true, projectKey };
   }
 
-  if (status === 429 || /quota exceeded|rate limit exceeded|resource exhausted|too many requests/i.test(lowerMessage)) {
+  const quota = getQuotaInfo(error);
+  const hasQuotaInfo = Boolean(quota.quotaId || quota.quotaMetric);
+  const looksLikeCapacity = /overloaded|high demand|model is currently unavailable|capacity/i.test(lowerMessage);
+
+  // A 429 that says the model is overloaded (and carries no quota metadata)
+  // is shared model capacity, not this project's quota.
+  if (status === 429 && looksLikeCapacity && !hasQuotaInfo) {
+    return { classification: 'capacity', retryable: true, failoverKey: true, retryAfterMs: extractRetryDelayMs(error), projectKey };
+  }
+
+  if (status === 429 || /quota exceeded|rate limit exceeded|resource exhausted|resource_exhausted|too many requests/i.test(lowerMessage)) {
     const daily = quotaLooksDaily(error);
     const quotaResetAt = extractQuotaResetAt(error);
     const retryAfterMs = extractRetryDelayMs(error);
-    const resetAt = daily
-      ? (quotaResetAt || (retryAfterMs > 0 ? Date.now() + retryAfterMs : nextMidnightPacificMs()))
-      : quotaResetAt;
+    // Daily quotas do not come back after a short RetryInfo delay: wait for
+    // the reported reset or the documented midnight-Pacific reset.
+    const resetAt = daily ? (quotaResetAt || nextMidnightPacificMs()) : quotaResetAt;
 
     return {
       classification: daily ? 'quota_exceeded' : 'rate_limit',
@@ -174,61 +267,115 @@ function classify(error) {
       failoverKey: true,
       retryAfterMs,
       quotaResetAt: resetAt || 0,
+      scope: quotaScope(error),
+      quotaId: quota.quotaId || null,
+      projectKey,
       quotaMetadata: metadata,
       rawDetails: details,
     };
   }
 
-  if (status === 503 || /overloaded|high demand|temporarily unavailable|model is currently unavailable/i.test(lowerMessage)) {
-    return { classification: 'capacity', retryable: true, failoverKey: true };
+  if (status === 503 || looksLikeCapacity) {
+    return { classification: 'capacity', retryable: true, failoverKey: true, retryAfterMs: extractRetryDelayMs(error), projectKey };
   }
 
   if (status === 500 || status === 502) {
-    return { classification: 'transient', retryable: true, failoverKey: true };
+    return { classification: 'transient', retryable: true, failoverKey: true, retryAfterMs: extractRetryDelayMs(error), projectKey };
   }
 
   if (status === 408 || status === 504) {
-    return { classification: 'timeout', retryable: true, failoverKey: true };
+    return { classification: 'timeout', retryable: true, failoverKey: true, projectKey };
   }
 
   if (isNetworkResetError(error) || /econnreset|network error|socket hang up|broken pipe/i.test(lowerMessage)) {
-    return { classification: 'transient', retryable: true, failoverKey: true };
+    return { classification: 'transient', retryable: true, failoverKey: true, projectKey };
   }
 
-  if (status === 400 || /invalid argument|malformed request|unsupported model|not found/i.test(lowerMessage)) {
+  if (status === 400 || status === 404 || status === 413 || status === 422 ||
+      /invalid argument|malformed request|unsupported model|not found/i.test(lowerMessage)) {
     return { classification: 'permanent', retryable: false, failoverKey: false };
   }
 
-  return { classification: 'unknown', retryable: true, failoverKey: true };
+  return { classification: 'unknown', retryable: true, failoverKey: true, projectKey };
 }
 
 const COOLDOWN_STEPS_MS = [2000, 5000, 15000, 30000, 60000];
 
-function cooldownForFailure(consecutiveFailures, classification, retryAfterMs = 0) {
-  if (classification === 'invalid' || classification === 'permanent' || classification === 'quota_exceeded') return 0;
+function withJitter(ms, ratio = 0.2) {
+  if (ms <= 0) return 0;
+  return Math.max(0, Math.round(ms * (1 - ratio + 2 * ratio * Math.random())));
+}
 
-  if (classification === 'rate_limit') {
-    const baseRaw = Number.parseInt(process.env.GEMINI_RATE_LIMIT_COOLDOWN_MS || '5000', 10);
-    const maxRaw = Number.parseInt(process.env.GEMINI_RATE_LIMIT_COOLDOWN_MAX_MS || '60000', 10);
-    const base = Number.isFinite(baseRaw) && baseRaw > 0 ? baseRaw : 5000;
-    const max = Number.isFinite(maxRaw) && maxRaw > 0 ? maxRaw : 60000;
-    const exponential = base * (2 ** Math.max(0, consecutiveFailures - 1));
-    return Math.min(Math.max(exponential, retryAfterMs || 0), max);
+/**
+ * Internal backoff (used only when the provider gave no usable guidance).
+ * Exponential in the failure streak, jittered, never above `maxMs`.
+ */
+function internalBackoffMs(failures, baseMs, maxMs) {
+  if (baseMs <= 0 || maxMs <= 0) return 0;
+  const exponential = baseMs * (2 ** Math.max(0, failures - 1));
+  return Math.min(maxMs, withJitter(Math.min(exponential, maxMs)));
+}
+
+/**
+ * How long a failed quota/model should stay unavailable. Provider guidance is
+ * never capped: only the internally computed part is bounded by the env caps.
+ * Returns milliseconds; 0 means "no cooldown beyond the current request".
+ *
+ * @param {object} info   result of classify()
+ * @param {number} failures consecutive failures for this project/model
+ */
+function cooldownMsFor(info, failures = 1) {
+  const now = Date.now();
+  const providerWait = Math.max(0, Number(info?.retryAfterMs) || 0);
+
+  switch (info?.classification) {
+    case 'quota_exceeded':
+      return Math.max(0, (Number(info.quotaResetAt) || 0) - now);
+    case 'rate_limit': {
+      const reset = Math.max(0, (Number(info.quotaResetAt) || 0) - now);
+      // Provider guidance wins on the first failure. The internal backoff
+      // applies when there is no guidance, or when the same quota keeps
+      // failing (so repeated failures never become a rapid retry loop).
+      const hasGuidance = reset > 0 || providerWait > 0;
+      const internal = hasGuidance && failures <= 1
+        ? 0
+        : internalBackoffMs(
+          failures,
+          envMs('GEMINI_RATE_LIMIT_COOLDOWN_MS', 5000),
+          envMs('GEMINI_RATE_LIMIT_COOLDOWN_MAX_MS', 60000)
+        );
+      return Math.max(reset, providerWait, internal);
+    }
+    case 'capacity': {
+      const base = envMs('GEMINI_MODEL_CAPACITY_COOLDOWN_MS', 30000);
+      return Math.max(providerWait, withJitter(base));
+    }
+    case 'timeout':
+    case 'transient':
+    case 'unknown': {
+      const max = envMs('GEMINI_POOL_MAX_COOLDOWN_MS', 300000);
+      const step = COOLDOWN_STEPS_MS[Math.min(Math.max(failures - 1, 0), COOLDOWN_STEPS_MS.length - 1)];
+      return Math.max(providerWait, Math.min(withJitter(step), max));
+    }
+    default:
+      return 0; // invalid / permanent / bad_output never earn a timed cooldown
   }
+}
 
-  const maxRaw = Number.parseInt(process.env.GEMINI_POOL_MAX_COOLDOWN_MS || '300000', 10);
-  const max = Number.isFinite(maxRaw) && maxRaw > 0 ? maxRaw : 300000;
-  const stepIndex = Math.min(Math.max(consecutiveFailures - 1, 0), COOLDOWN_STEPS_MS.length - 1);
-  const base = COOLDOWN_STEPS_MS[stepIndex];
-  const jitter = Math.floor(base * 0.2 * Math.random());
-  return Math.min(base + jitter, max);
+/** Backwards-compatible wrapper (classification string form). */
+function cooldownForFailure(consecutiveFailures, classification, retryAfterMs = 0) {
+  return cooldownMsFor({ classification, retryAfterMs }, consecutiveFailures);
 }
 
 module.exports = {
   classify,
   cooldownForFailure,
+  cooldownMsFor,
+  envMs,
   isTimeoutError,
   extractRetryDelayMs,
   extractQuotaResetAt,
+  extractProjectKey,
   quotaLooksDaily,
+  nextMidnightPacificMs,
 };

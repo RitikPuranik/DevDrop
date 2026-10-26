@@ -29,6 +29,10 @@ const schema = new mongoose.Schema(
     lastSuccessAt: { type: Date, default: null },
     lastFailureAt: { type: Date, default: null },
     cooldownUntil: { type: Date, default: null },
+
+    // Google Cloud project number learned by ai-service from provider errors.
+    // Keys of the same project share quota, so they share cooldown state.
+    projectId: { type: String, default: null },
     lastErrorCode: { type: String, default: null },
     lastErrorMessage: { type: String, default: null },
 

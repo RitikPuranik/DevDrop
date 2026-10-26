@@ -5,20 +5,19 @@ const { aiJobPollingLimiter } = require('../../shared/middleware/rateLimit');
 const aiGenerateController = require('./ai-generate.controller');
 const aiWebhookController = require('./aiWebhook.controller');
 
-// POST /api/ai-generate — requires a logged-in DevDrop user. Returns a
-// jobId immediately; the actual Gemini generation runs in ai-service, and
-// progress arrives over the ai-job:<jobId> socket room (see socket.js /
-// aiWebhook.controller.js) instead of the client polling for it.
+// POST /api/ai-generate — requires a logged-in DevDrop user. Persists the job in MongoDB, enqueues it on
+// the BullMQ `ai-queue` and returns a jobId immediately. The generation itself runs in the ai-service
+// worker; progress arrives over the ai-job:<jobId> socket room instead of client polling.
 router.post('/', auth, aiGenerateController.generate);
 
-// GET /api/ai-generate/jobs/:id — resync fallback only (page refresh,
-// missed socket events, socket.io unreachable). Not meant to be polled on
-// an interval anymore — the frontend now listens on sockets for updates.
+// GET /api/ai-generate/jobs/:id — status/result recovery (page refresh, reconnect, missed socket events).
+// Served from MongoDB, so it keeps working across ai-service restarts.
 router.post('/jobs/:id/debug-retry', auth, aiGenerateController.debugRetry);
 router.get('/jobs/:id', auth, aiJobPollingLimiter, aiGenerateController.getJob);
+router.delete('/jobs/:id', auth, aiGenerateController.cancel);
 
-// POST /api/ai-generate/webhook — internal, called by ai-service (not by
-// browsers). Secured by shared secret, not user auth — see controller.
+// Internal — called by the ai-service worker (service key, not user auth).
+router.get('/internal/:id/payload', aiWebhookController.getPayload);
 router.post('/webhook', aiWebhookController.receive);
 
 module.exports = router;

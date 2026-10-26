@@ -10,8 +10,8 @@ const { AI_STUDIO_PROJECT_STATUS } = AIStudioProject;
 
 // Inactivity DETECTION threshold — NOT a maximum project lifetime. A
 // project with continuing activity/heartbeats never hits this, no matter
-// how old it is. Deliberately separate from AI_JOB_TTL_MS (Section 15),
-// which only bounds an individual Gemini generation job result.
+// how old it is. Deliberately separate from the short retention of a finished
+// generation job's result (QueueJob), which only bounds that single result.
 const INACTIVITY_THRESHOLD_MS = Number.parseInt(
   process.env.AI_STUDIO_INACTIVITY_THRESHOLD_MS || String(20 * 60 * 1000),
   10
@@ -296,6 +296,18 @@ async function markInactiveProjects(threshold = INACTIVITY_THRESHOLD_MS) {
   });
   let marked = 0;
   for (const project of candidates) {
+    if (project.activeJobKey) {
+      if (await hasLiveJob(project)) {
+        // A generation is still queued/running: the project is alive even with every tab closed.
+        if (project.status === AI_STUDIO_PROJECT_STATUS.INACTIVE) {
+          project.status = AI_STUDIO_PROJECT_STATUS.ACTIVE;
+          await project.save();
+        }
+        continue;
+      }
+      project.activeJobKey = null; // the job ended without telling us; stop protecting the project
+      await project.save();
+    }
     if (isAbandoned(project, threshold)) {
       if (project.status !== AI_STUDIO_PROJECT_STATUS.INACTIVE) {
         project.status = AI_STUDIO_PROJECT_STATUS.INACTIVE;
@@ -367,12 +379,130 @@ async function runCleanupSweep({ threshold = INACTIVITY_THRESHOLD_MS } = {}) {
 
   const results = { checked: toClean.length, deleted: 0, retried: 0, skipped: 0, failed: 0 };
   for (const project of toClean) {
+    if (project.activeJobKey && (await hasLiveJob(project))) {
+      results.skipped += 1;
+      continue;
+    }
     const result = await cleanupProject(project._id, { threshold });
     if (result.deleted) results.deleted += 1;
     else if (result.skipped) results.skipped += 1;
     else if (result.error) results.failed += 1;
   }
   return results;
+}
+
+
+// ---------------------------------------------------------------------------
+// Background generation: the project (not the browser tab) owns the job outcome.
+// ---------------------------------------------------------------------------
+
+const LIVE_JOB_STATUSES = ['queued', 'active', 'delayed'];
+const MAX_CONVERSATION_MESSAGES = 100;
+const MAX_MESSAGE_CHARS = 20000;
+const MAX_SPEC_BYTES = 1024 * 1024;
+
+function sanitizeConversation(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+    .slice(-MAX_CONVERSATION_MESSAGES)
+    .map((m) => ({ role: m.role, content: m.content.slice(0, MAX_MESSAGE_CHARS), ...(m.notice ? { notice: true } : {}) }));
+}
+
+function sanitizeSpec(spec) {
+  if (!spec || typeof spec !== 'object') return null;
+  const { websiteType, userData, preferences, assets } = spec;
+  const prefs = preferences && typeof preferences === 'object' ? { ...preferences } : {};
+  delete prefs.referenceImage;
+  const clean = { websiteType, userData: userData || {}, preferences: prefs, assets: assets || {} };
+  try {
+    if (Buffer.byteLength(JSON.stringify(clean)) > MAX_SPEC_BYTES) return { websiteType };
+  } catch {
+    return { websiteType };
+  }
+  return clean;
+}
+
+function liveJobModel() {
+  // Registered once the queue module is loaded (always true in the running app).
+  return mongoose.models.QueueJob || null;
+}
+
+/** True when this project has a queued/running generation job. */
+async function hasLiveJob(project) {
+  if (!project?.activeJobKey) return false;
+  const QueueJob = liveJobModel();
+  if (!QueueJob) return true; // cannot tell: never reclaim a project that claims a live job
+  const job = await QueueJob.findOne({ jobKey: project.activeJobKey, status: { $in: LIVE_JOB_STATUSES } }).select('jobKey');
+  return Boolean(job);
+}
+
+/** Records the request on the project the moment it is queued (chat history, inputs, the live job). */
+async function attachJob({ projectId, userId, jobKey, conversation, spec }) {
+  const project = await getOwnedProject(projectId, userId);
+  if (!project) return null;
+  project.conversation = sanitizeConversation(conversation);
+  if (spec) project.spec = sanitizeSpec(spec);
+  if (spec?.websiteType) project.websiteType = spec.websiteType;
+  project.activeJobKey = jobKey;
+  project.touchActivity();
+  project.markModified?.('conversation');
+  project.markModified?.('spec');
+  await project.save();
+  return project;
+}
+
+/**
+ * Called by the AI webhook (and cancel) when a job ends, whether or not any browser is still open.
+ * outcome: 'completed' | 'failed' | 'cancelled'
+ */
+async function finishJob({ projectId, userId, jobKey, outcome, result, mode, message }) {
+  const project = await getOwnedProject(projectId, userId);
+  if (!project) return null;
+
+  const conversation = sanitizeConversation(project.conversation);
+  if (outcome === 'completed' && result?.files) {
+    const lastUser = [...conversation].reverse().find((m) => m.role === 'user' && !m.notice);
+    const source = mode === 'generate' ? 'generate' : 'edit';
+    const label = mode === 'debug' ? 'Debug repair' : source === 'edit' ? String(lastUser?.content || '').slice(0, 120) : '';
+    await syncGeneratedFiles({
+      projectId,
+      userId,
+      files: result.files,
+      dependencies: result.dependencies,
+      title: result.title,
+      source,
+      label,
+    });
+    conversation.push({ role: 'assistant', content: String(result.assistantMessage || (mode === 'debug' ? 'Debug repair completed.' : 'Done.')).slice(0, MAX_MESSAGE_CHARS) });
+  } else if (outcome === 'failed') {
+    conversation.push({ role: 'assistant', content: `⚠️ ${String(message || 'AI generation failed').slice(0, 500)}` });
+  } else if (outcome === 'cancelled') {
+    conversation.push({ role: 'assistant', content: String(message || 'Generation stopped.'), notice: true });
+  }
+
+  // Re-read: syncGeneratedFiles saved the same document.
+  const fresh = (await getOwnedProject(projectId, userId)) || project;
+  fresh.conversation = conversation.slice(-MAX_CONVERSATION_MESSAGES);
+  if (fresh.activeJobKey === jobKey) fresh.activeJobKey = null;
+  fresh.touchActivity();
+  fresh.markModified?.('conversation');
+  await fresh.save();
+  return fresh;
+}
+
+/** Everything the page needs to restore itself after a refresh / in another tab. */
+async function getResumeState({ projectId, userId, sessionId }) {
+  const project = await getOwnedProject(projectId, userId);
+  if (!project) return null;
+  if (sessionId) {
+    project.sessions = (project.sessions || []).filter((s) => s.sessionId !== sessionId);
+    project.sessions.push({ sessionId, lastHeartbeatAt: now() });
+  }
+  project.touchActivity();
+  project.lastVisibleAt = now();
+  await project.save();
+  return project;
 }
 
 async function deleteSessionTab({ projectId, userId, sessionId }) {
@@ -400,4 +530,8 @@ module.exports = {
   cleanupProject,
   runCleanupSweep,
   deleteSessionTab,
+  hasLiveJob,
+  attachJob,
+  finishJob,
+  getResumeState,
 };

@@ -111,8 +111,15 @@ function validateArchitecture(value) {
       throw new Error('Architecture contains an invalid file contract');
     }
 
-    const originalPath = file.path;
-    const path = normalizeArchitecturePath(originalPath);
+    // Smaller fallback models sometimes name the key differently (filePath/file/name/...).
+    const originalPath = [file.path, file.filePath, file.filepath, file.file, file.fileName, file.filename, file.name]
+      .find((candidate) => typeof candidate === 'string' && candidate.trim());
+    if (!originalPath) {
+      // One malformed entry must not throw away an otherwise usable architecture.
+      console.warn('[VALIDATOR] Ignoring architecture file entry without a path', { keys: Object.keys(file).slice(0, 8) });
+      continue;
+    }
+    const path = normalizeArchitecturePath(originalPath.trim());
 
     if (!path || typeof path !== 'string' || !path.startsWith('/')) {
       throw new Error(`Invalid architecture path: ${originalPath}`);
@@ -130,10 +137,13 @@ function validateArchitecture(value) {
     }
 
     const normalizedFile = { ...file, path };
+    for (const alias of ['filePath', 'filepath', 'file', 'fileName', 'filename']) delete normalizedFile[alias];
     paths.add(path);
     originalPaths.set(originalPath, path);
     files.push(normalizedFile);
   }
+
+  if (!files.length) throw new Error('Architecture files are required');
 
   // Keep architecture imports consistent if Gemini used a non-canonical App path.
   for (const file of files) {

@@ -4,8 +4,8 @@ const {
   getScheduleInfo,
   getRecentLogs,
 } = require('../../services/backup/backup.orchestrator');
-const { dispatchTask } = require('../../services/worker.client');
-const taskRegistry = require('../../services/taskRegistry.service');
+const jobs = require('../../infrastructure/jobs');
+const { QueueJob } = require('../../infrastructure/queue');
 
 const VALID_DIRECTIONS = ['main_to_backup', 'backup_to_main'];
 const VALID_SUPABASE_MODES = ['mirror', 'add-only'];
@@ -69,15 +69,15 @@ const getHistory = async (req, res) => {
  */
 const dispatchBackup = async (res, { kind, label, params }) => {
   try {
-    const { taskId } = await dispatchTask('RUN_BACKUP', { kind, ...params });
+    const { taskId } = await jobs.enqueueBackup({ kind, ...params }, params.triggeredBy);
     res.status(202).json({
       success: true,
-      message: `${label} started in the background worker. Check backup history for the result.`,
+      message: `${label} queued for the background worker. Check backup history for the result.`,
       data: { taskId, status: 'queued' },
     });
   } catch (error) {
-    console.error(`❌ Could not hand ${label.toLowerCase()} to the worker: ${error.message}`);
-    res.status(503).json({ success: false, message: `Worker unavailable — ${label.toLowerCase()} was not started (${error.message})` });
+    console.error(`❌ Could not queue ${label.toLowerCase()}: ${error.message}`);
+    res.status(503).json({ success: false, message: `Job queue unavailable — ${label.toLowerCase()} was not queued.` });
   }
 };
 
@@ -145,13 +145,13 @@ const backupFull = async (req, res) => {
  * GET /api/admin/backup/task/:taskId
  * Live status of a dispatched backup (queued | running | completed | failed).
  */
-const getTaskStatus = (req, res) => {
-  const task = taskRegistry.get(req.params.taskId);
+const getTaskStatus = async (req, res) => {
+  const task = await QueueJob.findOne({ jobKey: req.params.taskId, type: 'RUN_BACKUP' });
   if (!task) {
-    return res.status(404).json({ success: false, message: 'Task not found (it may have expired or the backend restarted)' });
+    return res.status(404).json({ success: false, message: 'Task not found (it may have expired)' });
   }
-  const { taskId, type, status, result, error, createdAt, updatedAt } = task;
-  res.json({ success: true, data: { taskId, type, status, result, error, createdAt, updatedAt } });
+  const status = { active: 'running', delayed: 'queued', cancelled: 'failed' }[task.status] || task.status;
+  res.json({ success: true, data: { taskId: task.jobKey, type: task.type, status, result: task.result ?? null, error: task.error?.message ?? null, createdAt: task.createdAt, updatedAt: task.updatedAt } });
 };
 
 module.exports = { getStatus, getHistory, backupMongo, backupSupabase, backupFull, getTaskStatus };

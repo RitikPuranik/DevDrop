@@ -1,8 +1,7 @@
 const Auction = require('./auction.model');
 const Bid = require('./bid.model');
 const Website = require('../website/website.model');
-const User = require('../user/user.model');
-const emailService = require('../../services/email.service');
+const events = require('../../infrastructure/events');
 const { WEBSITE_STATUS } = require('../../shared/utils/constants');
 const supabaseService = require('../../services/supabase.service');
 const { getAuctionTimings } = require('../../shared/utils/envHelper');
@@ -213,19 +212,13 @@ const placeBid = async (req, res) => {
     // Populate bidder info
     await bid.populate('bidderId', 'name email');
 
-    // Send email to previous bidder (they've been outbid)
+    // Outbid notification: only after the bid and auction writes above are committed.
+    // Delivery happens in the events worker; the bid response never waits for email.
     if (previousBidderId && previousBidderId.toString() !== bidderId.toString()) {
       try {
-        const previousBidder = await User.findById(previousBidderId);
-        if (previousBidder) {
-          const websiteData = auction.websiteId; // already populated above
-          console.log(`📧 Sending outbid notification to ${previousBidder.email}`);
-          // Fire-and-forget: don't block bid response on email delivery
-          emailService.sendOutbidNotification(previousBidder, websiteData, bidAmount)
-            .catch(err => console.error('Failed to send outbid email:', err));
-        }
-      } catch (emailError) {
-        console.error('Failed to send outbid email:', emailError);
+        await events.enqueueOutbidNotification({ bidId: bid._id, websiteId, previousBidderId, bidAmount });
+      } catch (queueError) {
+        console.error('Outbid notification could not be queued:', queueError.message);
       }
     }
 
