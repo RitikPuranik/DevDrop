@@ -1,0 +1,42 @@
+/* A quiet, solid-black heatmap. Hover states never add borders or panels. */
+.activity-map {
+  position: relative;
+  isolation: isolate;
+  background: #000;
+  border-color: rgba(255,255,255,.09);
+  box-shadow: none;
+  animation: heatmap-enter .42s ease-out both;
+  transition: none;
+}
+.activity-map::before { content: none; }
+.activity-map:hover {
+  border-color: rgba(255,255,255,.09);
+  box-shadow: none;
+}
+.activity-map button, .activity-map select {
+  transition: color .18s ease, background-color .18s ease, transform .18s ease;
+}
+.activity-map button:focus-visible, .activity-map select:focus-visible {
+  outline: 1px solid rgba(235,235,235,.75);
+  outline-offset: 2px;
+}
+.activity-map .heatmap-cell {
+  transform-origin: center;
+  animation: cell-appear .3s ease-out both;
+}
+.activity-map .heatmap-cell:hover:not(:disabled) {
+  z-index: 2;
+  transform: scale(1.18);
+  border-color: transparent !important;
+  box-shadow: none !important;
+  outline: none;
+}
+.activity-map [aria-pressed="true"] { box-shadow: none; }
+.activity-map .rounded-xl button[aria-pressed="true"] { box-shadow: none; }
+.activity-map select:hover, .activity-map button:hover { border-color: inherit; }
+.activity-map .rounded-xl button:hover { background-color: rgba(255,255,255,.055); }
+@keyframes heatmap-enter { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes cell-appear { from { opacity: .35; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .activity-map, .activity-map *, .activity-map::before { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}

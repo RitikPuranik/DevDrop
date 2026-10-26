@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, LogOut, Menu, X, Settings, Boxes } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import './WorkspaceShell.css';
 
 export default function WorkspaceShell({
   profile,
@@ -23,7 +24,7 @@ export default function WorkspaceShell({
     <div className="ws min-h-screen">
       <div className="flex">
         {/* DESKTOP SIDEBAR */}
-        <aside className="hidden lg:flex lg:flex-col w-[272px] shrink-0 h-screen sticky top-0 border-r border-white/[0.08] bg-[#050505]">
+        <aside className="hidden lg:flex lg:flex-col w-[260px] shrink-0 h-screen sticky top-0 border-r border-white/[0.08] bg-[#080808]">
           <SidebarInner
             profile={profile}
             navItems={navItems}
@@ -87,7 +88,7 @@ export default function WorkspaceShell({
 
         {/* MAIN CONTENT */}
         <main className="flex-1 min-w-0 overflow-x-clip pt-[10rem] lg:pt-6">
-  <div className="max-w-6xl mx-auto px-5 sm:px-8 py-5 lg:py-6">
+  <div className="max-w-[1440px] mx-auto px-5 sm:px-8 xl:px-10 py-5 lg:py-8">
     {(pageTitle || headerAction) && (
       <div className="flex flex-wrap items-end justify-between gap-4 mb-8 pb-6 border-b border-white/[0.08]">
         <div>

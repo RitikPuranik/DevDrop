@@ -1,0 +1,109 @@
+/* DevDrop workspace — restrained studio-inspired dark design */
+.ws {
+  --ws-bg: #080808;
+  --ws-panel: #080808;
+  --ws-line: #28251f;
+  --ws-text: #f4f1eb;
+  --ws-muted: #a19a90;
+  --ws-accent: #c7ad88;
+  --ws-accent-bright: #dfc8a6;
+  background: var(--ws-bg) !important;
+  color: var(--ws-text);
+  min-height: 100vh;
+  isolation: isolate;
+}
+.ws, .ws * { box-sizing: border-box; }
+.ws main { background: var(--ws-bg) !important; }
+.ws aside { background: var(--ws-bg) !important; border-color: var(--ws-line) !important; }
+.ws button, .ws a, .ws input, .ws select, .ws textarea {
+  transition: color .22s ease, border-color .22s ease, background-color .22s ease, box-shadow .22s ease, transform .22s ease;
+}
+.ws h1, .ws h2, .ws h3, .ws .ws-display {
+  letter-spacing: -.035em;
+  text-wrap: balance;
+}
+.ws h1 { font-weight: 560; }
+.ws p { line-height: 1.65; }
+.ws button:focus-visible, .ws a:focus-visible, .ws input:focus-visible, .ws select:focus-visible, .ws textarea:focus-visible {
+  outline: 2px solid var(--ws-accent) !important;
+  outline-offset: 3px;
+}
+/* Main title area */
+.ws main > div > div:first-child:has(h1) {
+  border-color: var(--ws-line) !important;
+  padding-bottom: 26px;
+  margin-bottom: 30px;
+}
+.ws main h1 {
+  font-size: clamp(2rem, 3.1vw, 2.85rem) !important;
+  line-height: 1.08 !important;
+  color: #f4f1eb !important;
+}
+.ws main h1 + p { color: var(--ws-muted) !important; max-width: 660px; font-size: 14px !important; }
+/* Navigation: subtle, editorial, warm active state */
+.ws aside nav { padding: 20px 13px; }
+.ws aside nav button {
+  min-height: 44px;
+  border: 1px solid transparent;
+  border-radius: 12px !important;
+  letter-spacing: -.01em;
+}
+.ws aside nav button:not([class*="bg-[#e8e2d6]"]):hover {
+  background: #11100e !important;
+  border-color: #2d2922 !important;
+  transform: translateX(2px);
+}
+.ws aside nav button[class*="bg-[#e8e2d6]"] {
+  background: #c7ad88 !important;
+  color: #15120e !important;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.13), 0 5px 18px rgba(0,0,0,.18);
+}
+.ws aside nav button[class*="bg-[#e8e2d6]"] svg { color: #15120e !important; }
+/* Unified canvas: avoid stacked charcoal/beige background blocks */
+.ws [class*="bg-[#050505]"],
+.ws [class*="bg-[#0a0a0a]"],
+.ws [class*="bg-[#0b0b0b]"],
+.ws [class*="bg-[#101010]"] { background-color: var(--ws-bg) !important; }
+.ws [class*="border-white/"] { border-color: var(--ws-line) !important; }
+/* Studio-like cards: same canvas, crisp outline and hover detail */
+.ws main [class*="rounded-2xl"][class*="border"],
+.ws main [class*="rounded-xl"][class*="border"] {
+  border-color: #2a2721 !important;
+  box-shadow: 0 1px 0 rgba(255,255,255,.018);
+}
+.ws main [class*="rounded-2xl"][class*="border"]:hover,
+.ws main [class*="rounded-xl"][class*="border"]:hover {
+  border-color: #61513c !important;
+}
+.ws main [class*="bg-white/[0.03]"],
+.ws main [class*="bg-white/[0.04]"],
+.ws main [class*="bg-white/[0.05]"] { background-color: #080808 !important; }
+/* Warm accent only on interface elements, never large background surfaces */
+.ws [class*="text-[#cbb392]"],
+.ws [class*="text-[#c7ad88]"] { color: var(--ws-accent) !important; }
+.ws [class*="bg-[#e8e2d6]"] { background-color: var(--ws-accent) !important; }
+.ws input, .ws select, .ws textarea {
+  background-color: #0b0b0b !important;
+  border: 1px solid #353027 !important;
+  border-radius: 10px;
+  color: var(--ws-text) !important;
+}
+.ws input::placeholder, .ws textarea::placeholder { color: #777168 !important; }
+.ws input:hover, .ws select:hover, .ws textarea:hover { border-color: #6a5942 !important; }
+/* Buttons get deliberate shape and microinteraction */
+.ws main button[class*="rounded-full"],
+.ws main button[class*="rounded-xl"] { font-weight: 600; }
+.ws main button:hover { filter: brightness(1.08); }
+.ws main button:active { transform: translateY(1px) scale(.99); }
+/* Status chips and badges */
+.ws [class*="rounded-full"][class*="text-[9px]"],
+.ws [class*="rounded-full"][class*="text-[10px]"] { letter-spacing: .08em; }
+/* Loading / mobile sheet */
+.ws .animate-spin { color: var(--ws-accent) !important; }
+@media (max-width: 1023px) {
+  .ws main { padding-top: 9.5rem !important; }
+  .ws main > div { padding-left: 18px !important; padding-right: 18px !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ws *, .ws *::before, .ws *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; scroll-behavior: auto !important; }
+}

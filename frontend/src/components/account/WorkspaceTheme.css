@@ -1,0 +1,57 @@
+/* DevDrop workspace: one uninterrupted charcoal canvas; accents live in text, borders and icons. */
+.ws {
+  --ws-bg: #0b0b0c;
+  --ws-white: #f7f5f2;
+  --ws-brown: #c4a484;
+  --ws-muted: #a6a19b;
+  background: var(--ws-bg) !important;
+  color: var(--ws-white);
+}
+.ws main,
+.ws aside,
+.ws nav,
+.ws section,
+.ws article,
+.ws [role="dialog"] {
+  background-color: var(--ws-bg) !important;
+  background-image: none !important;
+}
+/* Keep the workspace background consistent instead of mixing charcoal panels and pale fills. */
+.ws :where([class*="bg-"]):not(.heatmap-cell):not(.heatmap-cell *) {
+  background-color: transparent !important;
+  background-image: none !important;
+}
+.ws :where([class*="border-"]) {
+  border-color: rgba(196, 164, 132, .2) !important;
+}
+.ws :where([class*="text-white"], [class*="text-gray-"]) {
+  color: var(--ws-white);
+}
+.ws :where([class*="text-white/"], [class*="text-gray-"]) {
+  color: var(--ws-muted) !important;
+}
+.ws :where(button, a, input, textarea, select) {
+  transition: color .2s ease, border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+.ws button:hover,
+.ws a:hover {
+  color: var(--ws-brown);
+}
+.ws input,
+.ws textarea,
+.ws select {
+  background: #0b0b0c !important;
+  color: var(--ws-white) !important;
+  border-color: rgba(196, 164, 132, .3) !important;
+}
+.ws input:focus,
+.ws textarea:focus,
+.ws select:focus {
+  border-color: var(--ws-brown) !important;
+  box-shadow: 0 0 0 2px rgba(196, 164, 132, .12) !important;
+}
+.ws .ws-display { color: var(--ws-white); letter-spacing: -.025em; }
+.ws .heatmap-cell { /* Preserve the activity intensity colors in the GitHub-style chart. */ }
+@media (prefers-reduced-motion: reduce) {
+  .ws *, .ws *::before, .ws *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+}

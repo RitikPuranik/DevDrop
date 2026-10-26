@@ -38,6 +38,8 @@ import DeploymentCard from '../../components/deployment/DeploymentCard';
 import WorkspaceShell, {
   WorkspaceLoading,
 } from '../../components/account/WorkspaceShell';
+import ActivityHeatmap from '../../components/account/ActivityHeatMap';
+import { analyticsAPI } from '../../api/analytics';
 
 import { useAccentTheme } from '../../hooks/useAccentTheme';
 
@@ -190,6 +192,28 @@ export default function Workspace() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSection]);
 
+
+  // Track time spent in buying and selling sections for the activity heatmap.
+  useEffect(() => {
+    const activityType = activeSection === 'purchases' ? 'buying' : activeSection === 'listings' ? 'selling' : null;
+    if (!activityType || !localStorage.getItem('token')) return undefined;
+    let lastTick = Date.now();
+    const dayKey = () => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+    const sendHeartbeat = async () => {
+      const now = Date.now();
+      const elapsed = Math.max(0, Math.min(60, Math.floor((now - lastTick) / 1000)));
+      lastTick = now;
+      if (document.visibilityState !== 'visible' || elapsed < 1) return;
+      try { await analyticsAPI.sendActivityHeartbeat({ activityType, day: dayKey(), seconds: elapsed }); } catch (_) { /* analytics must not interrupt workspace use */ }
+    };
+    const onVisibility = () => { lastTick = Date.now(); };
+    const intervalId = window.setInterval(sendHeartbeat, 60000);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => { window.clearInterval(intervalId); document.removeEventListener('visibilitychange', onVisibility); };
+  }, [activeSection]);
 
   useEffect(() => {
     if (activeSection === 'deployments') {
@@ -782,6 +806,10 @@ export default function Workspace() {
 
               </div>
 
+
+              <div className="mt-8 mb-10">
+                <ActivityHeatmap />
+              </div>
 
               {/* Quick actions */}
 
