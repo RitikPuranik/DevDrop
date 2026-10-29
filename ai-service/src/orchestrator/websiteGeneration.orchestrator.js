@@ -10,6 +10,16 @@ const {validateGeneratedFiles}=require('../validators/generatedFiles.validator')
 const buildValidator=require('../validators/build.validator');
 const { ensureProductionReady }=require('./deploymentReadiness');
 const { withTimeout, stage: runStage }=require('./stageRunner');
+const { createSkillSession }=require('../skills');
+const skillConfig=require('../skills/config');
+const { buildDesignSpec, enforceDesignSystemFloor }=require('../design/designIntelligence');
+const { reviewGeneratedSite }=require('../validators/quality.review');
+// Skill guidance and design intelligence are best-effort helpers: any failure degrades to the previous behaviour.
+function safeDesignSpec(args){try{return buildDesignSpec(args);}catch(e){console.warn('[DESIGN INTELLIGENCE] spec unavailable; continuing without it',{message:e.message});return null;}}
+function safeReview(files,designSpec){try{return reviewGeneratedSite({files,designSpec});}catch(e){console.warn('[QUALITY REVIEW] skipped',{message:e.message});return null;}}
+// Config/markup/data files get no skill text: design and React guidance only helps UI source files, and code runs once per file.
+function isUiSourceFile(p){return /\.(jsx?|mjs)$/i.test(p||'')&&!/^\/(main\.jsx|vite\.config\.js|postcss\.config\.js|tailwind\.config\.js)$/i.test(p||'');}
+function sessionTerms(preferences){return Object.values(preferences||{}).filter(v=>typeof v==='string'&&v.length<40);}
 const { normalizeAssets, buildMediaManifest, buildAssetSummaries, normalizeMediaPlan, toModelManifest, resolveAssetUrls }=require('../utils/assetContract');
 const MAX_BUILD_FIX_RETRIES=Math.max(0,Number.parseInt(process.env.MAX_BUILD_FIX_RETRIES||'3',10)||3);
 // Single overall timeout for the entire whole-website generation pipeline
@@ -80,6 +90,7 @@ async function debugWebsite(input = {}, { onStage } = {}) {
  const modelManifest = toModelManifest(mediaManifest);
  const MAX_DEBUG_RETRIES = Math.max(1, Number.parseInt(process.env.MAX_DEBUG_RETRIES || '3', 10) || 3);
  const meta = [];
+ const skills = createSkillSession({ websiteType: requirements.websiteType || 'custom', trigger: 'debug-repair' });
 
  for (let attempt = 0; attempt < MAX_DEBUG_RETRIES; attempt += 1) {
    Object.assign(files, resolveAssetUrls(files, mediaManifest));
@@ -95,6 +106,7 @@ async function debugWebsite(input = {}, { onStage } = {}) {
        dependencies,
        buildOutput: [],
        mediaManifest: modelManifest,
+       skillContext: skills.contextFor('debug', { terms: staticErrors }),
      }), meta, onStage);
      for (const change of debug.value?.changes || []) {
        if (change.path && typeof change.code === 'string') { const changePath = normalizeGeneratedPath(change.path); files[changePath] = { code: change.code }; }
@@ -104,7 +116,7 @@ async function debugWebsite(input = {}, { onStage } = {}) {
 
    const build = await stage('build-validator', () => buildValidator.run({ files, dependencies }), meta, onStage);
    if (build.success) {
-     const ready = await ensureProductionReady({ files, dependencies, mediaManifest: modelManifest, resolvedDependencies: build.resolvedDependencies }, meta, onStage);
+     const ready = await ensureProductionReady({ files, dependencies, mediaManifest: modelManifest, resolvedDependencies: build.resolvedDependencies, skillContext: skills.contextFor('deployment') }, meta, onStage);
      return {
        assistantMessage: 'Debug repair completed successfully. The existing generated website was repaired without regenerating it.',
        title: buildGeneratedTitle(requirements),
@@ -124,6 +136,7 @@ async function debugWebsite(input = {}, { onStage } = {}) {
      dependencies,
      buildOutput: build.errors || [],
      mediaManifest: modelManifest,
+     skillContext: skills.contextFor('debug', { terms: build.errors || [] }),
    }), meta, onStage);
    for (const change of debug.value?.changes || []) {
      if (change.path && typeof change.code === 'string') { const changePath = normalizeGeneratedPath(change.path); files[changePath] = { code: change.code }; }
@@ -153,33 +166,39 @@ async function generateWebsite(input,options={}){
 }
 async function runGeneration(input,{onStage}={}){
  const meta=[];console.log('[ORCHESTRATOR] Starting generation');const normalized=normalizeInput(input);const {preferences:cleanPrefs,referenceMedia}=extractReferenceImage(normalized.preferences);normalized.preferences=cleanPrefs;
+ const skillCfg=skillConfig.readConfig();const skills=createSkillSession({websiteType:normalized.websiteType,trigger:'website-generation',terms:sessionTerms(normalized.preferences),config:skillCfg});
  const mediaManifest=buildMediaManifest(normalized.assets);const modelManifest=toModelManifest(mediaManifest);const assetSummaries=buildAssetSummaries(normalized.assets);
  console.log('[AI STUDIO MEDIA] inputs', {assets:assetSummaries.length,inlineMedia:(normalized.media||[]).length,styleReference:referenceMedia.length});
- const requirementsResult=await stage('requirements',()=>requirementsAgent.run({...normalized,assetSummaries}),meta,onStage);const requirements=validateRequirements(requirementsResult.value);
+ const requirementsResult=await stage('requirements',()=>requirementsAgent.run({...normalized,assetSummaries,skillContext:skills.contextFor('requirements')}),meta,onStage);const requirements=validateRequirements(requirementsResult.value);
  // Server-side truth: one mediaPlan entry per real image/video asset, and asset metadata (never URLs) from the manifest rather than model output.
  requirements.mediaPlan=normalizeMediaPlan(requirements.mediaPlan,normalized.assets);
  requirements.assets=assetSummaries.map(({extraction,...a})=>({...a,...(extraction?{extractionStatus:extraction.status}:{})}));
  const mediaPlan=requirements.mediaPlan;
  console.log('[AI STUDIO MEDIA] requirements analysis complete', {mediaPlan:mediaPlan.length});
- const designResult=await stage('design',()=>designAgent.run({requirements,mediaPlan,preferences:normalized.preferences,websiteType:normalized.websiteType,media:referenceMedia}),meta,onStage);const design=validateDesign(designResult.value);
+ const designSpec=safeDesignSpec({websiteType:requirements.websiteType||normalized.websiteType,requirements,preferences:normalized.preferences,mediaPlan});skills.addTerms([...(requirements.features||[]).map(String),...(requirements.sections||[]).map(x=>typeof x==='string'?x:(x?.name||x?.title||''))]);
+ const designResult=await stage('design',()=>designAgent.run({requirements,mediaPlan,preferences:normalized.preferences,websiteType:normalized.websiteType,media:referenceMedia,designSpec,skillContext:skills.contextFor('design')}),meta,onStage);const design=validateDesign(designResult.value);
+ if(designSpec){design.designSpec=designSpec;const floorNotes=enforceDesignSystemFloor(design.designSystem,designSpec);if(floorNotes.length)console.warn('[DESIGN INTELLIGENCE]',floorNotes);console.log('[DESIGN INTELLIGENCE] spec applied',{variant:designSpec.meta.variant,style:designSpec.visualDirection.style,components:designSpec.components.length});}
  console.log('[AI STUDIO MEDIA] design plan complete');
- const architectureResult=await stage('architecture',()=>architectureAgent.run({requirements,design,mediaPlan}),meta,onStage);const architecture=validateArchitecture(architectureResult.value);
+ const architectureResult=await stage('architecture',()=>architectureAgent.run({requirements,design,mediaPlan,skillContext:skills.contextFor('architecture')}),meta,onStage);const architecture=validateArchitecture(architectureResult.value);
  const ordered=[...architecture.files].sort((a,b)=>{const rank=f=>f.path==='/package.json'?0:f.path==='/index.html'?1:f.path==='/main.jsx'?2:f.path==='/App.js'?3:/data|content/i.test(f.path)?4:/component/i.test(f.type||'')?5:6;return rank(a)-rank(b);});
  let files={};
  console.log('[AI STUDIO MEDIA] code manifest prepared', {assets:mediaManifest.length});
  for(const fileContract of ordered){
    const relatedContracts=architecture.files.filter(f=>f.path!==fileContract.path&&(fileContract.imports||[]).includes(f.path));
-   const result=await stage(`code:${fileContract.path}`,()=>codeGenerationAgent.run({fileContract,relatedContracts,requirements,design,userData:requirements.userData,mediaManifest:modelManifest,mediaPlan,media:referenceMedia}),meta,onStage);
+   const result=await stage(`code:${fileContract.path}`,()=>codeGenerationAgent.run({fileContract,relatedContracts,requirements,design,userData:requirements.userData,mediaManifest:modelManifest,mediaPlan,media:referenceMedia,skillContext:isUiSourceFile(fileContract.path)?skills.contextFor('code',{terms:[fileContract.path,fileContract.type,fileContract.responsibility]}):''}),meta,onStage);
    if(result.value?.path!==fileContract.path||typeof result.value.code!=='string')throw new Error(`Code agent returned an invalid path/contract for ${fileContract.path}`);
    files[fileContract.path]={code:result.value.code};
- }const integrationResult=await stage('integration',()=>integrationAgent.run({requirements,design,architecture,files}),meta,onStage);files=resolveAssetUrls(mergeFiles(files,integrationResult.value?.files),mediaManifest);let dependencies=architecture.dependencies||{};
+ }const integrationResult=await stage('integration',()=>integrationAgent.run({requirements,design,architecture,files,skillContext:skills.contextFor('integration')}),meta,onStage);files=resolveAssetUrls(mergeFiles(files,integrationResult.value?.files),mediaManifest);let dependencies=architecture.dependencies||{};
  if(files['/package.json']?.code){try{const pkg=JSON.parse(files['/package.json'].code);dependencies={...dependencies,...(pkg.dependencies||{}),...(pkg.devDependencies||{})};}catch{}}
  for(let attempt=0;attempt<=MAX_BUILD_FIX_RETRIES;attempt+=1){
   files=resolveAssetUrls(files,mediaManifest);
   const staticErrors=validateGeneratedFiles(files);
-  if(staticErrors.length){console.warn('[VALIDATOR] static validation failed',{attempt,errors:staticErrors});if(attempt===MAX_BUILD_FIX_RETRIES)throw Object.assign(new Error(staticErrors.join(' | ')),{userMessage:`Generated code failed validation after the maximum repair attempts: ${staticErrors.join(' | ').slice(0,1200)}`,debugContext:buildDebugContext({files,dependencies,architecture,requirements,design,errors:staticErrors,mediaManifest,mediaPlan})});const debug=await stage(`debug:${attempt+1}`,()=>debugAgent.run({errors:staticErrors,affectedFiles:Object.keys(files),files,architecture,requirements,design,dependencies,mediaManifest:modelManifest}),meta,onStage);for(const change of debug.value?.changes||[])if(change.path&&change.code){const changePath=normalizeGeneratedPath(change.path);files[changePath]={code:change.code};}continue;}
-  console.log('[VALIDATOR] static validation passed');const build=await stage('build-validator',()=>buildValidator.run({files,dependencies}),meta,onStage);if(build.success){console.log('[VALIDATOR] build passed');warnUnusedAssets(files,mediaManifest);const ready=await ensureProductionReady({files,dependencies,mediaManifest:modelManifest,resolvedDependencies:build.resolvedDependencies},meta,onStage);console.log('[ORCHESTRATOR] generation completed');return {assistantMessage:`Generated a ${requirements.websiteType} website through the multi-agent pipeline.`,title:buildGeneratedTitle(requirements),files:ready.files,dependencies:ready.dependencies,generationMeta:{agents:meta,deploymentReadiness:ready.report}};}
-  console.warn('[VALIDATOR] build failed',{attempt,errors:build.errors});if(attempt===MAX_BUILD_FIX_RETRIES)throw Object.assign(new Error('Build failed after maximum repair attempts'),{userMessage:`DevDrop could not produce a buildable website after the maximum repair attempts: ${(build.errors||[]).join(' | ').slice(0,1200)}`,debugContext:buildDebugContext({files,dependencies,architecture,requirements,design,errors:build.errors||[],buildOutput:build.errors||[],mediaManifest,mediaPlan})});const debug=await stage(`debug:${attempt+1}`,()=>debugAgent.run({errors:build.errors,affectedFiles:Object.keys(files),files,architecture,requirements,design,dependencies,buildOutput:build.errors,mediaManifest:modelManifest}),meta,onStage);for(const change of debug.value?.changes||[])if(change.path&&change.code){const changePath=normalizeGeneratedPath(change.path);files[changePath]={code:change.code};}
+  if(staticErrors.length){console.warn('[VALIDATOR] static validation failed',{attempt,errors:staticErrors});if(attempt===MAX_BUILD_FIX_RETRIES)throw Object.assign(new Error(staticErrors.join(' | ')),{userMessage:`Generated code failed validation after the maximum repair attempts: ${staticErrors.join(' | ').slice(0,1200)}`,debugContext:buildDebugContext({files,dependencies,architecture,requirements,design,errors:staticErrors,mediaManifest,mediaPlan})});const debug=await stage(`debug:${attempt+1}`,()=>debugAgent.run({errors:staticErrors,affectedFiles:Object.keys(files),files,architecture,requirements,design,dependencies,mediaManifest:modelManifest,skillContext:skills.contextFor('debug',{terms:staticErrors})}),meta,onStage);for(const change of debug.value?.changes||[])if(change.path&&change.code){const changePath=normalizeGeneratedPath(change.path);files[changePath]={code:change.code};}continue;}
+  console.log('[VALIDATOR] static validation passed');const build=await stage('build-validator',()=>buildValidator.run({files,dependencies}),meta,onStage);if(build.success){console.log('[VALIDATOR] build passed');warnUnusedAssets(files,mediaManifest);
+  const review=skillCfg.qualityReview?safeReview(files,designSpec):null;if(review)console.log('[QUALITY REVIEW]',review.summary);
+  if(review&&skillCfg.qualityEnforce&&review.blocking.length&&attempt<MAX_BUILD_FIX_RETRIES){const debug=await stage(`debug:${attempt+1}`,()=>debugAgent.run({errors:review.blocking,affectedFiles:Object.keys(files),files,architecture,requirements,design,dependencies,buildOutput:review.blocking,mediaManifest:modelManifest,skillContext:skills.contextFor('debug',{terms:review.blocking})}),meta,onStage);for(const change of debug.value?.changes||[])if(change.path&&change.code){const changePath=normalizeGeneratedPath(change.path);files[changePath]={code:change.code};}continue;}
+  const ready=await ensureProductionReady({files,dependencies,mediaManifest:modelManifest,resolvedDependencies:build.resolvedDependencies,skillContext:skills.contextFor('deployment')},meta,onStage);console.log('[ORCHESTRATOR] generation completed');return {assistantMessage:`Generated a ${requirements.websiteType} website through the multi-agent pipeline.`,title:buildGeneratedTitle(requirements),files:ready.files,dependencies:ready.dependencies,generationMeta:{agents:meta,deploymentReadiness:ready.report,qualityReview:review?{summary:review.summary,findings:review.findings}:null,skills:skills.report(),designSpec:designSpec?{variant:designSpec.meta.variant,style:designSpec.visualDirection.style,composition:designSpec.visualDirection.composition,components:designSpec.components}:null}};}
+  console.warn('[VALIDATOR] build failed',{attempt,errors:build.errors});if(attempt===MAX_BUILD_FIX_RETRIES)throw Object.assign(new Error('Build failed after maximum repair attempts'),{userMessage:`DevDrop could not produce a buildable website after the maximum repair attempts: ${(build.errors||[]).join(' | ').slice(0,1200)}`,debugContext:buildDebugContext({files,dependencies,architecture,requirements,design,errors:build.errors||[],buildOutput:build.errors||[],mediaManifest,mediaPlan})});const debug=await stage(`debug:${attempt+1}`,()=>debugAgent.run({errors:build.errors,affectedFiles:Object.keys(files),files,architecture,requirements,design,dependencies,buildOutput:build.errors,mediaManifest:modelManifest,skillContext:skills.contextFor('debug',{terms:build.errors})}),meta,onStage);for(const change of debug.value?.changes||[])if(change.path&&change.code){const changePath=normalizeGeneratedPath(change.path);files[changePath]={code:change.code};}
  }
  throw new Error('Generation failed after maximum repair attempts');
 }

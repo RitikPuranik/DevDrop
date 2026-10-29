@@ -1,0 +1,489 @@
+{
+  "schemaVersion": 1,
+  "skills": [
+    {
+      "id": "frontend-design",
+      "name": "Frontend Design",
+      "description": "Anthropic frontend-design guidance on distinctive, intentional visual design. Included unmodified.",
+      "version": "1.0.0",
+      "category": "design",
+      "origin": "third-party",
+      "enabled": true,
+      "essential": false,
+      "source": {
+        "repository": "anthropics/skills",
+        "path": "skills/frontend-design/SKILL.md",
+        "commit": "dbd4588f9e1033efb41dad4bef2f7947c8993d44",
+        "upstreamHash": "d91970639e9f5c37682ac7ab60094d35f1c7c1f38d731bd56396563aee10c1d3",
+        "checkedAt": "2026-10-28"
+      },
+      "license": {
+        "identifier": "Apache-2.0",
+        "verificationStatus": "verified",
+        "noticePath": "licenses/third-party/frontend-design"
+      },
+      "supportedFrameworks": [
+        "react-vite"
+      ],
+      "compatibleAgents": [
+        "design"
+      ],
+      "triggers": [
+        "website-generation"
+      ],
+      "websiteTypes": "*",
+      "priority": 100,
+      "maxContextTokens": 3200,
+      "contentPath": "design/frontend-design/SKILL.md",
+      "contentHash": "d91970639e9f5c37682ac7ab60094d35f1c7c1f38d731bd56396563aee10c1d3",
+      "modifications": [],
+      "conflictsWith": [],
+      "notes": "Written for interactive design sessions; DevDrop's trusted platform rules make it non-interactive (no client questions, screenshots or tool use) and the designSpec wins on conflicts."
+    },
+    {
+      "id": "web-design-guidelines",
+      "name": "Web Interface Guidelines",
+      "description": "Vercel Labs Web Interface Guidelines rule list (accessibility, focus, forms, animation, performance), adapted for build-time use.",
+      "version": "1.0.0",
+      "category": "quality",
+      "origin": "third-party",
+      "enabled": true,
+      "essential": false,
+      "source": {
+        "repository": "vercel-labs/web-interface-guidelines",
+        "path": "command.md",
+        "commit": "434b7f91364665f2f733b310ec54809bf8f37937",
+        "upstreamHash": "d246b026f4f29b5823a9cc857f9edf3d2507002e055e32040cadeaf3b38e0234",
+        "checkedAt": "2026-10-28"
+      },
+      "license": {
+        "identifier": "MIT",
+        "verificationStatus": "verified",
+        "noticePath": "licenses/third-party/web-design-guidelines",
+        "copyright": "Copyright (c) 2025 Vercel Labs"
+      },
+      "supportedFrameworks": [
+        "react-vite"
+      ],
+      "compatibleAgents": [
+        "code",
+        "edit"
+      ],
+      "triggers": [
+        "website-generation",
+        "incremental-edit"
+      ],
+      "websiteTypes": "*",
+      "priority": 60,
+      "maxContextTokens": 1500,
+      "contentPath": "quality/web-design-guidelines/SKILL.md",
+      "contentHash": "575006ff9c2357ddc187a737b6da836b052df284d5ad34e1d1c3d4ea915b0d1d",
+      "modifications": [
+        "Removed review-command frontmatter and preamble ($ARGUMENTS, review-output instructions)",
+        "Removed the 'Output Format' section (review-report examples that use TypeScript file names)",
+        "Removed the SSR-only 'Hydration Safety' section",
+        "Removed two library-specific phrases (Next.js image 'priority' prop, 'nuqs')",
+        "Added a DevDrop header comment and one build-time usage paragraph"
+      ],
+      "conflictsWith": [],
+      "notes": "The upstream agent-skills wrapper that fetches rules at runtime is NOT used; rules are pinned here at the commit above."
+    },
+    {
+      "id": "devdrop-design-system",
+      "name": "DevDrop Design System",
+      "description": "Spec-first design tokens, layout, spacing, honest-content and state rules.",
+      "version": "1.0.0",
+      "category": "design",
+      "origin": "devdrop",
+      "enabled": true,
+      "essential": false,
+      "source": null,
+      "license": {
+        "identifier": "DevDrop-original",
+        "verificationStatus": "internal"
+      },
+      "supportedFrameworks": [
+        "react-vite"
+      ],
+      "compatibleAgents": [
+        "design",
+        "architecture"
+      ],
+      "triggers": [
+        "website-generation"
+      ],
+      "websiteTypes": "*",
+      "priority": 90,
+      "maxContextTokens": 900,
+      "contentPath": "design/devdrop-design-system/SKILL.md",
+      "contentHash": "da8014aaa8ba2ffe0f372c36d504fc0ccd04a56cec3236e45484d9fe54f4feda",
+      "modifications": [],
+      "conflictsWith": [],
+      "filterFrameworkConflicts": false
+    },
+    {
+      "id": "ui-ux-intelligence",
+      "name": "UI/UX Intelligence",
+      "description": "Original per-site-type UX and conversion-path guidance.",
+      "version": "1.0.0",
+      "category": "design",
+      "origin": "devdrop",
+      "enabled": true,
+      "essential": false,
+      "source": null,
+      "license": {
+        "identifier": "DevDrop-original",
+        "verificationStatus": "internal"
+      },
+      "supportedFrameworks": [
+        "react-vite"
+      ],
+      "compatibleAgents": [
+        "design",
+        "architecture"
+      ],
+      "triggers": [
+        "website-generation"
+      ],
+      "websiteTypes": "*",
+      "priority": 80,
+      "maxContextTokens": 1100,
+      "contentPath": "design/ui-ux-intelligence/SKILL.md",
+      "contentHash": "f70bd374b6abb20cb564bba1e89fc3af1e1675ffe8b0843e322e9ad41aec1f0c",
+      "modifications": [],
+      "conflictsWith": []
+    },
+    {
+      "id": "requirements-fidelity",
+      "name": "Requirements Fidelity",
+      "description": "Preserve supplied facts, map assets, never invent content.",
+      "version": "1.0.0",
+      "category": "requirements",
+      "origin": "devdrop",
+      "enabled": true,
+      "essential": false,
+      "source": null,
+      "license": {
+        "identifier": "DevDrop-original",
+        "verificationStatus": "internal"
+      },
+      "supportedFrameworks": [
+        "react-vite"
+      ],
+      "compatibleAgents": [
+        "requirements"
+      ],
+      "triggers": [
+        "website-generation"
+      ],
+      "websiteTypes": "*",
+      "priority": 100,
+      "maxContextTokens": 500,
+      "contentPath": "requirements/requirements-fidelity/SKILL.md",
+      "contentHash": "faf5d9b9b8335cf09d42627b2c33b51fb9f0629381980ad4b3bad43392c8d590",
+      "modifications": [],
+      "conflictsWith": []
+    },
+    {
+      "id": "react-best-practices",
+      "name": "React Best Practices",
+      "description": "Original React + Vite JavaScript engineering principles.",
+      "version": "1.0.0",
+      "category": "engineering",
+      "origin": "devdrop",
+      "enabled": true,
+      "essential": false,
+      "source": null,
+      "license": {
+        "identifier": "DevDrop-original",
+        "verificationStatus": "internal"
+      },
+      "supportedFrameworks": [
+        "react-vite"
+      ],
+      "compatibleAgents": [
+        "architecture",
+        "code",
+        "edit",
+        "debug"
+      ],
+      "triggers": [
+        "website-generation",
+        "incremental-edit",
+        "debug-repair"
+      ],
+      "websiteTypes": "*",
+      "priority": 70,
+      "maxContextTokens": 1000,
+      "contentPath": "engineering/react-best-practices/SKILL.md",
+      "contentHash": "c771b794d9f91c07852042edec03bc694ef6aa50a898162c1e157cb7a33fcf80",
+      "modifications": [],
+      "conflictsWith": []
+    },
+    {
+      "id": "framework-compatibility",
+      "name": "Framework Compatibility (React + Vite)",
+      "description": "Platform facts for the DevDrop generator; always wins over other guidance.",
+      "version": "1.0.0",
+      "category": "engineering",
+      "origin": "devdrop",
+      "enabled": true,
+      "essential": true,
+      "source": null,
+      "license": {
+        "identifier": "DevDrop-original",
+        "verificationStatus": "internal"
+      },
+      "supportedFrameworks": [
+        "react-vite"
+      ],
+      "compatibleAgents": [
+        "architecture",
+        "code",
+        "integration",
+        "debug",
+        "deployment",
+        "edit"
+      ],
+      "triggers": [
+        "website-generation",
+        "incremental-edit",
+        "debug-repair"
+      ],
+      "websiteTypes": "*",
+      "priority": 120,
+      "maxContextTokens": 700,
+      "contentPath": "engineering/framework-compatibility/SKILL.md",
+      "contentHash": "9c25139886101146b04081a3430bb42a99668408dba7d0208512e89a241201bc",
+      "modifications": [],
+      "conflictsWith": [],
+      "filterFrameworkConflicts": false
+    },
+    {
+      "id": "accessibility-review",
+      "name": "Accessibility Review",
+      "description": "Original accessibility checklist aligned with the deterministic quality review.",
+      "version": "1.0.0",
+      "category": "quality",
+      "origin": "devdrop",
+      "enabled": true,
+      "essential": false,
+      "source": null,
+      "license": {
+        "identifier": "DevDrop-original",
+        "verificationStatus": "internal"
+      },
+      "supportedFrameworks": [
+        "react-vite"
+      ],
+      "compatibleAgents": [
+        "integration"
+      ],
+      "triggers": [
+        "website-generation"
+      ],
+      "websiteTypes": "*",
+      "priority": 50,
+      "maxContextTokens": 500,
+      "contentPath": "quality/accessibility-review/SKILL.md",
+      "contentHash": "8d0fff2514b498a96046fedb6c49b2b74e26e93ff691aaa1f9823660252de238",
+      "modifications": [],
+      "conflictsWith": []
+    },
+    {
+      "id": "generated-code-safety",
+      "name": "Generated Code Safety",
+      "description": "Rules for what generated websites must never contain.",
+      "version": "1.0.0",
+      "category": "security",
+      "origin": "devdrop",
+      "enabled": true,
+      "essential": true,
+      "source": null,
+      "license": {
+        "identifier": "DevDrop-original",
+        "verificationStatus": "internal"
+      },
+      "supportedFrameworks": [
+        "react-vite"
+      ],
+      "compatibleAgents": [
+        "code",
+        "debug",
+        "edit",
+        "deployment",
+        "integration"
+      ],
+      "triggers": [
+        "website-generation",
+        "incremental-edit",
+        "debug-repair"
+      ],
+      "websiteTypes": "*",
+      "priority": 110,
+      "maxContextTokens": 600,
+      "contentPath": "security/generated-code-safety/SKILL.md",
+      "contentHash": "f6f6a3236fdc4f0e50d26cb32b212f6218ee1e650cccd67f7f66b502481d35ba",
+      "modifications": [],
+      "conflictsWith": []
+    },
+    {
+      "version": "1.0.0",
+      "origin": "third-party",
+      "enabled": true,
+      "essential": false,
+      "supportedFrameworks": [
+        "react-vite"
+      ],
+      "websiteTypes": "*",
+      "id": "vercel-react-best-practices",
+      "name": "Vercel React Best Practices (selection)",
+      "description": "48 client-side React performance/rendering rules selected from Vercel's react-best-practices; server, Next.js and SSR rules omitted.",
+      "category": "engineering",
+      "source": {
+        "repository": "vercel-labs/agent-skills",
+        "path": "skills/react-best-practices/rules",
+        "files": [
+          "skills/react-best-practices/rules/advanced-effect-event-deps.md",
+          "skills/react-best-practices/rules/advanced-event-handler-refs.md",
+          "skills/react-best-practices/rules/advanced-init-once.md",
+          "skills/react-best-practices/rules/advanced-use-latest.md",
+          "skills/react-best-practices/rules/async-defer-await.md",
+          "skills/react-best-practices/rules/async-dependencies.md",
+          "skills/react-best-practices/rules/async-parallel.md",
+          "skills/react-best-practices/rules/async-suspense-boundaries.md",
+          "skills/react-best-practices/rules/bundle-conditional.md",
+          "skills/react-best-practices/rules/bundle-preload.md",
+          "skills/react-best-practices/rules/client-localstorage-schema.md",
+          "skills/react-best-practices/rules/client-passive-event-listeners.md",
+          "skills/react-best-practices/rules/js-batch-dom-css.md",
+          "skills/react-best-practices/rules/js-cache-function-results.md",
+          "skills/react-best-practices/rules/js-cache-property-access.md",
+          "skills/react-best-practices/rules/js-cache-storage.md",
+          "skills/react-best-practices/rules/js-combine-iterations.md",
+          "skills/react-best-practices/rules/js-early-exit.md",
+          "skills/react-best-practices/rules/js-flatmap-filter.md",
+          "skills/react-best-practices/rules/js-hoist-regexp.md",
+          "skills/react-best-practices/rules/js-index-maps.md",
+          "skills/react-best-practices/rules/js-length-check-first.md",
+          "skills/react-best-practices/rules/js-min-max-loop.md",
+          "skills/react-best-practices/rules/js-request-idle-callback.md",
+          "skills/react-best-practices/rules/js-set-map-lookups.md",
+          "skills/react-best-practices/rules/js-tosorted-immutable.md",
+          "skills/react-best-practices/rules/rendering-activity.md",
+          "skills/react-best-practices/rules/rendering-animate-svg-wrapper.md",
+          "skills/react-best-practices/rules/rendering-conditional-render.md",
+          "skills/react-best-practices/rules/rendering-content-visibility.md",
+          "skills/react-best-practices/rules/rendering-hoist-jsx.md",
+          "skills/react-best-practices/rules/rendering-svg-precision.md",
+          "skills/react-best-practices/rules/rendering-usetransition-loading.md",
+          "skills/react-best-practices/rules/rerender-defer-reads.md",
+          "skills/react-best-practices/rules/rerender-dependencies.md",
+          "skills/react-best-practices/rules/rerender-derived-state-no-effect.md",
+          "skills/react-best-practices/rules/rerender-derived-state.md",
+          "skills/react-best-practices/rules/rerender-functional-setstate.md",
+          "skills/react-best-practices/rules/rerender-lazy-state-init.md",
+          "skills/react-best-practices/rules/rerender-memo-with-default-value.md",
+          "skills/react-best-practices/rules/rerender-memo.md",
+          "skills/react-best-practices/rules/rerender-move-effect-to-event.md",
+          "skills/react-best-practices/rules/rerender-no-inline-components.md",
+          "skills/react-best-practices/rules/rerender-simple-expression-in-memo.md",
+          "skills/react-best-practices/rules/rerender-split-combined-hooks.md",
+          "skills/react-best-practices/rules/rerender-transitions.md",
+          "skills/react-best-practices/rules/rerender-use-deferred-value.md",
+          "skills/react-best-practices/rules/rerender-use-ref-transient-values.md"
+        ],
+        "commit": "1a2c79d4e6c4a2283dc2c614b6538cbe1ed5ca62",
+        "upstreamHash": "573232947fefc8697bf2c077f18905141ec491a07079e815694b9388d83a5837",
+        "checkedAt": "2026-10-28"
+      },
+      "license": {
+        "identifier": "MIT",
+        "verificationStatus": "declared",
+        "noticePath": "licenses/third-party/vercel-react-best-practices",
+        "copyright": "none stated upstream (no LICENSE file)"
+      },
+      "compatibleAgents": [
+        "code",
+        "edit",
+        "debug"
+      ],
+      "triggers": [
+        "website-generation",
+        "incremental-edit",
+        "debug-repair"
+      ],
+      "priority": 72,
+      "maxContextTokens": 700,
+      "maxBytes": 98304,
+      "contentPath": "engineering/vercel-react-best-practices/SKILL.md",
+      "contentHash": "b5c3a810d675e793d69b22bb742a0431624163357da379d141543fb957dfa0ca",
+      "modifications": [
+        "Per-rule frontmatter removed",
+        "Omitted 12 rules that are server, Next.js, SSR/hydration or SWR specific",
+        "Concatenated 48 rules in file-name order under a DevDrop header"
+      ],
+      "conflictsWith": [
+        "react-best-practices"
+      ],
+      "notes": "Gated: license declared MIT upstream but no LICENSE file or copyright holder; requires AI_SKILLS_ALLOW_UNVERIFIED_LICENSES=true. Takes precedence over the DevDrop-authored react-best-practices when enabled. Many rules use TypeScript examples; those sections are filtered out automatically for JavaScript-only generation."
+    },
+    {
+      "version": "1.0.0",
+      "origin": "third-party",
+      "enabled": true,
+      "essential": false,
+      "supportedFrameworks": [
+        "react-vite"
+      ],
+      "websiteTypes": "*",
+      "id": "ui-ux-pro-max",
+      "name": "UI UX Pro Max (category reasoning)",
+      "description": "Per-industry pattern/style/colour/typography/effects starting points derived from one dataset (ui-reasoning.csv).",
+      "category": "design",
+      "source": {
+        "repository": "nextlevelbuilder/ui-ux-pro-max-skill",
+        "path": "src/ui-ux-pro-max/data/ui-reasoning.csv",
+        "commit": "28b3b8dee8c976df4fa3e94aed4e092ad43fcb03",
+        "upstreamHash": "f0774dd741cecdad5eec842034bd6d5e9ea50e9f220a1910069748daa0bb8e9a",
+        "checkedAt": "2026-10-28"
+      },
+      "license": {
+        "identifier": "MIT",
+        "verificationStatus": "declared",
+        "noticePath": "licenses/third-party/ui-ux-pro-max",
+        "copyright": "Copyright (c) 2024 Next Level Builder"
+      },
+      "compatibleAgents": [
+        "design",
+        "architecture"
+      ],
+      "triggers": [
+        "website-generation"
+      ],
+      "priority": 75,
+      "maxContextTokens": 1600,
+      "maxBytes": 98304,
+      "contentPath": "design/ui-ux-pro-max/SKILL.md",
+      "contentHash": "aebe5da67b2e5164ffd1c9fd2b060f5cfe9a603f733926656907f26ca00102b5",
+      "modifications": [
+        "Converted the CSV to Markdown (one section per UI category)",
+        "Omitted Decision_Rules, Reasoning and Confidence columns",
+        "Only this dataset is used; no scripts, fonts, other datasets or templates"
+      ],
+      "conflictsWith": [],
+      "notes": "Gated: repository license is MIT with a copyright line, but upstream dataset provenance is partial (many rows derived/needs-review). Requires AI_SKILLS_ALLOW_UNVERIFIED_LICENSES=true."
+    }
+  ],
+  "rejectedCandidates": [
+    {
+      "id": "web-design-guidelines-upstream-wrapper",
+      "repository": "vercel-labs/agent-skills",
+      "path": "skills/web-design-guidelines/SKILL.md",
+      "commit": "1a2c79d4e6c4a2283dc2c614b6538cbe1ed5ca62",
+      "decision": "rejected",
+      "checkedAt": "2026-10-28",
+      "reason": "The skill instructs the agent to fetch rules from a remote URL at review time, which DevDrop forbids. The rules were instead taken from the MIT-licensed vercel-labs/web-interface-guidelines repository at a pinned commit."
+    }
+  ]
+}

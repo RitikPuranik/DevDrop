@@ -54,6 +54,10 @@ if (require.main === module) {
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('unhandledRejection', (reason) => console.error('ai-service unhandled rejection:', reason));
 
+  // Validate the pinned skill library (manifest, license notices, content hashes). Never blocks startup:
+  // on failure skill guidance is disabled and generation continues with the baseline prompts.
+  try { require('./src/skills').startupCheck(); } catch (error) { console.error('ai-service: skill startup check crashed; skills disabled:', error.message); }
+
   httpServer = app.listen(PORT, () => {
     console.log(`ai-service listening on port ${PORT}`);
 

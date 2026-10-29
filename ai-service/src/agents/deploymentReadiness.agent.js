@@ -1,4 +1,5 @@
 const { callGemini } = require('../services/llm.service');
+const { withSkillContext } = require('../skills');
 const { normalizeChanges } = require('./debug.agent');
 
 const SYSTEM = `You are the Deployment Readiness Agent. The generated React + Vite website already builds and passes a browser smoke test, and it looks right in DevDrop's sandbox preview. Your only job is to remove things that work in that preview but break on a real Vercel deployment.
@@ -17,8 +18,8 @@ Rules:
 - If a finding is a false positive (for example the match is inside a comment or a string shown to the user), return no change for it.
 Return JSON only: {"changes":[{"path":"/File.js","code":"<complete file>","reason":"<short>"}]}. Return {"changes":[]} when nothing needs to change.`;
 
-async function run({ findings, files, mediaManifest = [], dependencies = {} }) {
-  const result = await callGemini({ system: SYSTEM, input: { findings, files, mediaManifest, dependencies } });
+async function run({ findings, files, mediaManifest = [], dependencies = {}, skillContext = '' }) {
+  const result = await callGemini({ system: withSkillContext(SYSTEM, skillContext), input: { findings, files, mediaManifest, dependencies } });
   return normalizeChanges(result);
 }
 

@@ -1,4 +1,5 @@
 const { callGemini } = require('../services/llm.service');
+const { withSkillContext } = require('../skills');
 
 const SYSTEM = `You are editing an existing, already-generated website project. You are NOT generating a new website and must never regenerate the project from scratch. Make the smallest safe change necessary to satisfy the user's edit request. Do not rewrite unrelated files. Preserve all existing functionality, styling, assets, routes, components and dependencies unless the user explicitly asks to change them. When editing layout, preserve or improve real responsive behavior at 320px, 375px, 430px, 768px and desktop widths. Do not introduce fixed page widths, horizontal overflow, desktop-only grids, or controls that become unusably small on touch screens.
 
@@ -15,8 +16,8 @@ Return JSON only, in this exact shape:
 
 Omit "changes" or "newFiles" (empty array) when there is nothing to put there. If the request is ambiguous or cannot be satisfied at all, still return valid JSON with empty "changes"/"newFiles" and explain why in "assistantMessage".`;
 
-async function run({ instruction, conversation, fileTree, relevantFiles, dependencies, mediaManifest = [] }) {
-  return callGemini({ system: SYSTEM, input: { instruction, conversation, fileTree, relevantFiles, dependencies, mediaManifest } });
+async function run({ instruction, conversation, fileTree, relevantFiles, dependencies, mediaManifest = [], skillContext = '' }) {
+  return callGemini({ system: withSkillContext(SYSTEM, skillContext), input: { instruction, conversation, fileTree, relevantFiles, dependencies, mediaManifest } });
 }
 
 module.exports = { run };

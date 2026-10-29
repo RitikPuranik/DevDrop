@@ -1,12 +1,14 @@
 {
   "name": "devdrop-ai-service",
   "version": "1.0.0",
-  "description": "DevDrop AI Studio generation service (Gemini) — separated from the main backend so long-running generation never blocks it.",
+  "description": "DevDrop AI Studio generation service (Gemini) \u2014 separated from the main backend so long-running generation never blocks it.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon --ext js,json,env server.js",
-    "test": "jest"
+    "test": "jest",
+    "skills:verify": "node scripts/verifySkills.js",
+    "skills:benchmark": "node scripts/benchmarkSkills.js"
   },
   "dependencies": {
     "@babel/parser": "^7.29.8",

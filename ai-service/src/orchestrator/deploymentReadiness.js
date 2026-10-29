@@ -16,7 +16,7 @@ const normalizePath = (p) => (typeof p === 'string' && p.trim() ? (p.trim().star
  * It is best-effort and NEVER makes things worse: any change is re-validated, and
  * if that fails the previously validated files are kept. It never throws.
  */
-async function ensureProductionReady({ files, dependencies = {}, mediaManifest = [], resolvedDependencies = null }, meta = [], onStage) {
+async function ensureProductionReady({ files, dependencies = {}, mediaManifest = [], resolvedDependencies = null, skillContext = '' }, meta = [], onStage) {
   const report = { applied: [], findings: [], fixed: 0, unresolved: [], pinned: 0, skipped: null };
   let current = { ...(files || {}) };
   let resolved = resolvedDependencies;
@@ -32,7 +32,7 @@ async function ensureProductionReady({ files, dependencies = {}, mediaManifest =
       const affected = new Set(actionable.map((f) => f.path));
       const sentFiles = {};
       for (const p of affected) sentFiles[p] = current[p]?.code || '';
-      const result = await runStage(`deployment-readiness:${attempt + 1}`, () => deploymentReadinessAgent.run({ findings: actionable, files: sentFiles, mediaManifest, dependencies }), meta, onStage);
+      const result = await runStage(`deployment-readiness:${attempt + 1}`, () => deploymentReadinessAgent.run({ findings: actionable, files: sentFiles, mediaManifest, dependencies, skillContext }), meta, onStage);
       const changes = (result.value?.changes || []).filter((c) => c.path && typeof c.code === 'string' && c.code.trim());
       if (!changes.length) break;
 

@@ -98,6 +98,15 @@ process, not global). The Gemini pool's *config* is shared safely via Mongo; its
 Mongo document, so state converges but isn't instantly consistent — fine for
 cooldown/health tracking, not for hard concurrency limits).
 
+## Skills and design intelligence
+
+`ai-service` can append bundled, hash-pinned, license-checked guidance ("skills") to agent prompts and builds a validated `designSpec` (layout, palette, typography, components) before the Design Agent runs. A deterministic accessibility/safety review runs after the build. All of it is optional and fails safe; set `AI_SKILLS_ENABLED=false` to restore the previous prompts exactly.
+
+- Architecture, security boundaries and operations: [docs/SKILLS_ARCHITECTURE.md](docs/SKILLS_ARCHITECTURE.md)
+- Provenance and license checks (what is approved, rejected or pending): [docs/SKILL_LICENSES.md](docs/SKILL_LICENSES.md)
+- Offline benchmark (prompt-size overhead; live quality metrics are not measured): [docs/SKILLS_BENCHMARK.md](docs/SKILLS_BENCHMARK.md)
+- Verify the library: `npm run skills:verify`
+
 ## Local setup
 
 ```bash

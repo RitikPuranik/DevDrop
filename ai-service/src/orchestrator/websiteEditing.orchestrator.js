@@ -6,6 +6,7 @@ const { ensureProductionReady } = require('./deploymentReadiness');
 const { identifyRelevantFiles } = require('./relevantFiles');
 const { withTimeout, stage: runStage } = require('./stageRunner');
 const { buildMediaManifest, toModelManifest, resolveAssetUrls } = require('../utils/assetContract');
+const { createSkillSession } = require('../skills');
 
 // Single overall timeout for the entire incremental-edit pipeline
 // (relevant-files detection -> edit agent -> validation/debug repair loop).
@@ -55,6 +56,8 @@ async function runEdit(input, { onStage } = {}) {
   console.log('[EDIT-ORCHESTRATOR] Starting incremental edit');
   const normalized = normalizeInput(input);
   const existingPaths = Object.keys(normalized.files);
+  // Edits are file-targeted and small: the session only supplies the compact edit/debug/deployment guidance.
+  const skills = createSkillSession({ websiteType: input.websiteType || 'custom', trigger: 'incremental-edit', terms: [normalized.instruction] });
 
   if (existingPaths.length === 0) {
     throw Object.assign(new Error('editWebsite called with no existing project files'), {
@@ -90,6 +93,7 @@ async function runEdit(input, { onStage } = {}) {
       relevantFiles,
       dependencies: normalized.dependencies,
       mediaManifest: toModelManifest(normalized.mediaManifest),
+      skillContext: skills.contextFor('edit', { terms: [normalized.instruction] }),
     }),
     meta,
     onStage
@@ -164,6 +168,7 @@ async function runEdit(input, { onStage } = {}) {
         dependencies: currentDependencies,
         buildOutput,
         mediaManifest: toModelManifest(normalized.mediaManifest),
+        skillContext: skills.contextFor('debug', { terms: errors }),
       }),
       meta,
       onStage
@@ -178,7 +183,7 @@ async function runEdit(input, { onStage } = {}) {
 
   files = resolveAssetUrls(files, normalized.mediaManifest);
   let dependencies = dependenciesFromPackageJson(files, normalized.dependencies);
-  const ready = await ensureProductionReady({ files, dependencies, mediaManifest: toModelManifest(normalized.mediaManifest), resolvedDependencies: lastResolved }, meta, onStage);
+  const ready = await ensureProductionReady({ files, dependencies, mediaManifest: toModelManifest(normalized.mediaManifest), resolvedDependencies: lastResolved, skillContext: skills.contextFor('deployment') }, meta, onStage);
   files = ready.files;
   dependencies = dependenciesFromPackageJson(files, normalized.dependencies);
 
@@ -194,6 +199,7 @@ async function runEdit(input, { onStage } = {}) {
       relevantFilesConsidered: relevantPaths,
       relevantFilesConfident: detection.value.confident,
       deploymentReadiness: ready.report,
+      skills: skills.report(),
     },
   };
 }
