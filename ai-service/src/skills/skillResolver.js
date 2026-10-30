@@ -61,7 +61,7 @@ function resolveSkills(registry, request = {}, { strict = false, config: configO
     } catch (error) {
       const code = error instanceof SkillLoadError ? error.code : 'READ_FAILED';
       if (entry.essential && strict) throw new SkillIntegrityError(entry.id, code);
-      result.excluded.push({ id: entry.id, reason: `unavailable:${code}` });
+      result.excluded.push({ id: entry.id, reason: `unavailable:${code}`, detail: error.message });
       continue;
     }
     const full = estimateTokens(loaded.text);

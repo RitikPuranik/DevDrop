@@ -63,3 +63,19 @@ describe('registration', () => {
     expect(mockUpsert).toHaveBeenCalledTimes(ids.length);
   });
 });
+
+describe('Redis-command saving switches', () => {
+  it('AUCTION_SWEEP_INTERVAL_MS overrides the 60s auction check; garbage falls back to 60s', () => {
+    process.env.AUCTION_SWEEP_INTERVAL_MS = '300000';
+    expect(find('schedule:ended-auctions')).toEqual({ every: 300000 });
+    process.env.AUCTION_SWEEP_INTERVAL_MS = 'abc';
+    expect(find('schedule:ended-auctions')).toEqual({ every: 60000 });
+  });
+  it('QUEUE_SCHEDULES_ENABLED=false registers nothing; default registers all', async () => {
+    process.env.QUEUE_SCHEDULES_ENABLED = 'false';
+    expect(await registerSchedules()).toEqual([]);
+    expect(mockUpsert).not.toHaveBeenCalled();
+    delete process.env.QUEUE_SCHEDULES_ENABLED;
+    expect((await registerSchedules()).length).toBe(5);
+  });
+});

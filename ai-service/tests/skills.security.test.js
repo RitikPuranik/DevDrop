@@ -80,7 +80,7 @@ describe('malicious-looking skill text is rejected', () => {
     const { registry } = registryFor([{ id: 'evil', content: evil, priority: 99 }]);
     const res = resolveSkills(registry, { agent: 'design' });
     expect(res.selected).toEqual([]);
-    expect(res.excluded).toEqual([{ id: 'evil', reason: 'unavailable:CONTENT_REJECTED' }]);
+    expect(res.excluded).toEqual([expect.objectContaining({ id: 'evil', reason: 'unavailable:CONTENT_REJECTED' })]);
     expect(buildSkillContext(registry, res, {}).text).toBe('');
   });
 });

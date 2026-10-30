@@ -115,7 +115,7 @@ describe('precedence, duplicates, conflicts and budgets (fixtures)', () => {
     fs.writeFileSync(path.join(libraryRoot, 'design/optional/SKILL.md'), 'changed');
     const ok = resolveSkills(registry, { agent: 'design' }, { strict: true });
     expect(ids(ok)).toEqual(['core']);
-    expect(ok.excluded).toEqual([{ id: 'optional', reason: 'unavailable:HASH_MISMATCH' }]);
+    expect(ok.excluded).toEqual([expect.objectContaining({ id: 'optional', reason: 'unavailable:HASH_MISMATCH' })]);
     fs.writeFileSync(path.join(libraryRoot, 'design/core/SKILL.md'), 'changed');
     registry.clearCache();
     expect(() => resolveSkills(registry, { agent: 'design' }, { strict: true })).toThrow(SkillIntegrityError);
@@ -180,3 +180,34 @@ describe('skill session', () => {
 });
 
 it('estimateTokens is a monotonic char-based estimate', () => expect(estimateTokens('abcd')).toBe(1));
+
+describe('per-skill outcome logging', () => {
+  it('logs one short line per successfully used skill', () => {
+    const logger = { log: jest.fn(), warn: jest.fn(), error: jest.fn() };
+    createSkillSession({ websiteType: 'cafe', logger, config: readConfig({}) }).contextFor('design');
+    const lines = logger.log.mock.calls.map((c) => c[0]);
+    expect(lines).toEqual(['[SKILL OK] design/frontend-design ~2341tok', expect.stringMatching(/^\[SKILL OK\] design\/devdrop-design-system ~\d+tok$/), expect.stringMatching(/^\[SKILL OK\] design\/ui-ux-intelligence ~\d+tok$/)]);
+    for (const l of lines) expect(l).not.toContain('\n');
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+  it('logs a detailed failure (reason, effect, action) without leaking skill text', () => {
+    const fs = require('fs'); const path = require('path');
+    const { registry, libraryRoot } = registryFor([{ id: 'good', content: BODY(100), priority: 60, essential: true }, { id: 'broken', content: BODY(100), priority: 40 }]);
+    fs.writeFileSync(path.join(libraryRoot, 'design/broken/SKILL.md'), 'TOP SECRET TAMPERED CONTENT');
+    const logger = { log: jest.fn(), warn: jest.fn(), error: jest.fn() };
+    createSkillSession({ registry, logger, config: readConfig({}) }).contextFor('design');
+    expect(logger.log.mock.calls.map((c) => c[0])).toEqual([expect.stringMatching(/^\[SKILL OK\] design\/good /)]);
+    const failure = logger.error.mock.calls[0][0];
+    expect(failure).toMatch(/\[SKILL FAILED\] design\/broken/);
+    expect(failure).toMatch(/reason : HASH_MISMATCH/);
+    expect(failure).toMatch(/effect : .*NOT added/);
+    expect(failure).toMatch(/action : .*skills:verify/);
+    expect(failure).not.toContain('TOP SECRET');
+  });
+  it('does not log policy skips (disabled, license-gated) as failures', () => {
+    const logger = { log: jest.fn(), warn: jest.fn(), error: jest.fn() };
+    createSkillSession({ websiteType: 'cafe', logger, config: readConfig({}) }).contextFor('design');
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(logger.log.mock.calls.join()).not.toMatch(/ui-ux-pro-max/);
+  });
+});

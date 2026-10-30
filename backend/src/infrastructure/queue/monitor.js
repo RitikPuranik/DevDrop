@@ -23,7 +23,8 @@ const getQueueSnapshot = async () => {
   return out;
 };
 
-const startQueueMonitor = ({ intervalMs = 60000, logger = console } = {}) => {
+const startQueueMonitor = ({ intervalMs = getQueueConfig().monitorIntervalMs, logger = console } = {}) => {
+  if (!intervalMs) return { stop: () => {} }; // disabled (QUEUE_MONITOR_INTERVAL_MS=0): saves Redis commands
   const timer = setInterval(async () => {
     try {
       const snapshot = await getQueueSnapshot();

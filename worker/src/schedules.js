@@ -1,6 +1,7 @@
 'use strict';
 
 const { upsertSchedule, QUEUE_NAMES, JOB_TYPES } = require('../../backend/src/infrastructure/queue');
+const { getQueueConfig } = require('../../backend/src/infrastructure/queue/config');
 
 // Every recurring task is a BullMQ job scheduler on events-queue. upsertJobScheduler is idempotent by id,
 // so restarts and multiple worker instances never create duplicate schedules, and the Redis-side
@@ -19,7 +20,7 @@ const backupRepeat = () => {
 };
 
 const buildSchedules = () => [
-  { id: 'schedule:ended-auctions', repeat: { every: 60 * 1000 }, type: JOB_TYPES.PROCESS_ENDED_AUCTIONS },
+  { id: 'schedule:ended-auctions', repeat: { every: Number.parseInt(process.env.AUCTION_SWEEP_INTERVAL_MS || '60000', 10) || 60000 }, type: JOB_TYPES.PROCESS_ENDED_AUCTIONS },
   { id: 'schedule:supabase-cleanup', repeat: { pattern: process.env.SUPABASE_CLEANUP_CRON || '0 3 * * 0', tz: tz() }, type: JOB_TYPES.SUPABASE_CLEANUP },
   { id: 'schedule:ai-studio-cleanup', repeat: { pattern: process.env.AI_STUDIO_CLEANUP_CRON || '*/5 * * * *', tz: tz() }, type: JOB_TYPES.AI_STUDIO_CLEANUP },
   { id: 'schedule:backup', repeat: backupRepeat(), type: JOB_TYPES.RUN_BACKUP },
@@ -28,6 +29,10 @@ const buildSchedules = () => [
 ];
 
 const registerSchedules = async () => {
+  if (!getQueueConfig().schedulesEnabled) {
+    console.log('Recurring schedules disabled (QUEUE_SCHEDULES_ENABLED=false)');
+    return [];
+  }
   const schedules = buildSchedules();
   for (const s of schedules) {
     try {

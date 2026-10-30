@@ -118,7 +118,7 @@ async function chat({ tier = 'fast', messages, json = false, jsonSchema = null, 
 
       if (isGenerationFailure) {
         structuredBlockedUntil.set(model, Date.now() + STRUCTURED_BLOCK_MS);
-        console.warn('[Groq] generation failed, retrying without response_format', { model, message: error?.response?.data?.error?.message });
+        console.warn(`[Groq] ${model}: JSON mode failed, retrying plain (${String(error?.response?.data?.error?.message || error.message).slice(0, 100)})`);
         // 1) the model often did produce usable JSON; salvage it.
         const salvaged = json ? parseJson(failedText) : null;
         if (salvaged) return { text: failedText, json: salvaged, model, keyId: null, finishReason: 'salvaged' };
@@ -127,7 +127,7 @@ async function chat({ tier = 'fast', messages, json = false, jsonSchema = null, 
           return await call(model, false);
         } catch (retryError) {
           lastError = retryError;
-          console.warn('[Groq] plain retry failed', { model, status: retryError?.response?.status, message: retryError?.response?.data?.error?.message });
+          console.warn(`[Groq] ${model}: plain retry failed status=${retryError?.response?.status || '-'}`);
         }
         if (models.length > 1) continue;
         throw lastError;
@@ -135,7 +135,7 @@ async function chat({ tier = 'fast', messages, json = false, jsonSchema = null, 
 
       // Model-level rejection -> try the next model in the chain.
       if ([400, 404, 422].includes(status) && models.length > 1) {
-        console.warn('[Groq] model rejected, trying next', { model, status, message: error?.response?.data?.error?.message });
+        console.warn(`[Groq] ${model}: rejected status=${status || '-'}, trying next`);
         continue;
       }
       throw error;

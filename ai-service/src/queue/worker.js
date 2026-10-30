@@ -23,6 +23,9 @@ const settings = () => ({
   quotaMinDelayMs: int('AI_QUOTA_MIN_DELAY_MS', 30000),
   quotaMaxDelayMs: int('AI_QUOTA_MAX_DELAY_MS', 15 * 60 * 1000),
   stalledIntervalMs: int('QUEUE_STALLED_INTERVAL_MS', 60000),
+  // Idle workers block on Redis for this long before re-polling. Every re-poll costs Redis commands (Upstash bills per command),
+  // while new jobs still wake the worker immediately, so a long value saves quota without delaying jobs. BullMQ default is 5.
+  drainDelaySec: int('QUEUE_DRAIN_DELAY_SEC', 30, 1),
   maxStalledCount: int('QUEUE_MAX_STALLED_COUNT', 1),
 });
 
@@ -205,6 +208,7 @@ function createAiWorker({ connection, processor } = {}) {
     concurrency: cfg.concurrency,
     stalledInterval: cfg.stalledIntervalMs,
     maxStalledCount: cfg.maxStalledCount,
+    drainDelay: cfg.drainDelaySec,
     lockDuration: 60000,
   });
 

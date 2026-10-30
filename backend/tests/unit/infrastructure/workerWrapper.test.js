@@ -31,6 +31,7 @@ describe('createQueueWorker lifecycle', () => {
     const w = createQueueWorker({ queueName: 'events-queue', processor: async () => ({}), concurrency: 2 });
     expect(w.opts).toMatchObject({ concurrency: 2, maxStalledCount: 1 });
     expect(w.opts.stalledInterval).toBeGreaterThan(0);
+    expect(w.opts.drainDelay).toBe(30); // idle polling every 30s instead of BullMQ's 5s default (saves Redis commands)
   });
 
   it('is idempotent: a job already terminal (e.g. cancelled, replayed after restart) is skipped, not re-run', async () => {

@@ -48,6 +48,12 @@ const getQueueConfig = () => ({
   securityEmailTtlMs: int('SECURITY_EMAIL_JOB_TTL_MS', 15 * 60 * 1000),
   verifyCooldownMs: int('VERIFICATION_EMAIL_COOLDOWN_MS', 60 * 1000),
   stalledIntervalMs: int('QUEUE_STALLED_INTERVAL_MS', 60000),
+  // Idle workers block on Redis this many seconds before re-polling (BullMQ default 5). New jobs still wake them at once.
+  drainDelaySec: int('QUEUE_DRAIN_DELAY_SEC', 30, { min: 1 }),
+  // Queue-depth monitor cadence (each tick reads several counters per queue). 0 disables it.
+  monitorIntervalMs: int('QUEUE_MONITOR_INTERVAL_MS', 300000),
+  // Set false to skip registering recurring schedules (auction sweep, outbox sweep, cleanups, backup) - e.g. on a dev machine.
+  schedulesEnabled: !/^(0|false|no|off)$/i.test(String(process.env.QUEUE_SCHEDULES_ENABLED || 'true')),
   maxStalledCount: int('QUEUE_MAX_STALLED_COUNT', 1),
   monitor: {
     waitingWarnMs: int('QUEUE_WAITING_WARN_MS', 10 * 60 * 1000),

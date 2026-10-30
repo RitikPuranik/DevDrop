@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { fmt: fmtLog } = require('./utils/logfmt');
 const GroqApiKey = require('./models/groqApiKey.model');
 const { decrypt } = require('./utils/crypto');
 
@@ -375,13 +376,13 @@ async function execute(requestFn) {
       const result = await requestFn(entry.rawKey);
       markTokenUsage(entry, result?.usage || result?.data?.usage);
       markSuccess(entry);
-      console.log('[Groq Pool] SUCCESS', { key: entry.label, keyId: entry.id, latencyMs: Date.now() - startedAt });
+      console.log(`[Groq Pool] ok ${fmtLog({ key: entry.label, ms: Date.now() - startedAt })}`);
       return { result, keyId: entry.id };
     } catch (error) {
       const info = markFailure(entry, error);
       lastError = error;
       lastInfo = info;
-      console.warn('[Groq Pool] FAILED', { key: entry.label, keyId: entry.id, reason: info.classification, status: error?.response?.status || null });
+      console.warn(`[Groq Pool] FAILED ${fmtLog({ key: entry.label, reason: info.classification, status: error?.response?.status })}`);
       if (info.classification === 'rate_limit') {
         const waitMs = Math.min(info.retryAfterMs || RATE_LIMIT_COOLDOWN_MS, MAX_COOLDOWN_MS);
         globalRateLimitUntil = Math.max(globalRateLimitUntil, Date.now() + waitMs);

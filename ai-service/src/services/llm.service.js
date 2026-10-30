@@ -1,4 +1,5 @@
 const geminiPool = require('../geminiPool.service');
+const { fmt: fmtLog } = require('../utils/logfmt');
 const axios = require('axios');
 const { classify, envMs } = require('../geminiFailureClassifier');
 const { getJobContext } = require('../utils/jobContext');
@@ -396,13 +397,7 @@ async function waitForCapacity(waitMs, poolError) {
     attemptedProjects: poolError?.attemptedProjects ?? null,
     message: 'Waiting for Gemini capacity',
   };
-  console.warn('[LLM] waiting for Gemini capacity', {
-    jobId: ctx.jobId || null,
-    waitMs,
-    reason: info.reason,
-    attemptedProjects: info.attemptedProjects,
-    retryAt: info.retryAt,
-  });
+  console.warn(`[LLM] waiting for Gemini capacity ${fmtLog({ waitS: Math.round(waitMs / 1000), reason: info.reason })}`);
   let resume = null;
   if (typeof ctx.onCapacityWait === 'function') resume = await ctx.onCapacityWait(info);
   try {
@@ -502,12 +497,7 @@ async function callGemini({ system, input, timeout = DEFAULT_TIMEOUT_MS }) {
       const detail = safeError(error);
 
       // One concise line per failure (no stack trace for expected 429s).
-      console.warn('[LLM] agent request failed', {
-        jobId: getJobContext().jobId || null,
-        attempt,
-        durationMs: Date.now() - startedAt,
-        ...detail,
-      });
+      console.warn(`[LLM] agent request failed ${fmtLog({ attempt, ms: Date.now() - startedAt, ...detail }, { drop: ['stack', 'raw', 'body'] })}`);
 
       if (error?.code === 'GEMINI_POOL_EXHAUSTED') {
         // Every eligible project was tried (or none was eligible). Wait for

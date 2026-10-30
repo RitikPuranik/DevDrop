@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { fmt: fmtLog, verbose: logVerbose } = require('./utils/logfmt');
 const mongoose = require('mongoose');
 const GeminiApiKey = require('./models/geminiApiKey.model');
 const GeminiPoolState = require('./models/geminiPoolState.model');
@@ -102,9 +103,14 @@ function keyLogName(entry) {
 }
 
 /** Structured log line. Never pass credentials or prompts into `fields`. */
+// Routine bookkeeping is hidden unless AI_LOG_VERBOSE=true; warnings and errors stay, as one compact line each.
+const VERBOSE_ONLY_EVENTS = new Set(['PROJECT SELECTED', 'SWITCHING PROJECT', 'PROJECT TEMPORARILY EXCLUDED']);
+const NOISY_FIELDS = ['requestId', 'keyId', 'quotaId', 'providerRetryAfterMs', 'scope', 'projectsTried', 'attemptedGroups'];
 function plog(level, event, fields = {}) {
+  if (level === 'info' && VERBOSE_ONLY_EVENTS.has(event) && !logVerbose()) return;
   const fn = level === 'error' ? console.error : level === 'warn' ? console.warn : console.log;
-  fn(`[Gemini Pool] ${event}`, { jobId: getJobContext().jobId || null, ...fields });
+  const jobId = getJobContext().jobId;
+  fn(`[Gemini Pool] ${event} ${fmtLog({ job: jobId ? String(jobId).slice(-8) : null, ...fields }, { drop: logVerbose() ? [] : NOISY_FIELDS })}`.trimEnd());
 }
 
 function persistAsync(id, update) {
@@ -670,17 +676,7 @@ function recordTokenUsageFromResult(entry, result, model) {
     null;
 
   if (!usageMetadata) {
-    console.warn('[Gemini Pool] SUCCESS WITHOUT TOKEN METADATA', {
-      keyId: entry.id,
-      model,
-      resultShape: {
-        hasData: Boolean(result?.data),
-        hasUsageMetadata: Boolean(result?.usageMetadata),
-        hasResponse: Boolean(result?.response),
-        hasResponseData: Boolean(result?.response?.data),
-        hasParsed: Boolean(result?.parsed),
-      },
-    });
+    console.warn(`[Gemini Pool] SUCCESS WITHOUT TOKEN METADATA model=${model}`);
     return null;
   }
 
@@ -695,11 +691,7 @@ function recordTokenUsageFromResult(entry, result, model) {
         (Number(usageMetadata.candidatesTokenCount) || 0)),
   };
 
-  console.log('[Gemini Pool] TOKEN USAGE', {
-    keyId: entry.id,
-    model,
-    ...usage,
-  });
+  console.log(`[Gemini Pool] tokens ${fmtLog({ model, prompt: usage.promptTokens, out: usage.candidateTokens, total: usage.totalTokens })}`);
 
   return usage;
 }

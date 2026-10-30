@@ -103,6 +103,7 @@ const createQueueWorker = ({
       concurrency: concurrency || 1,
       stalledInterval: cfg.stalledIntervalMs,
       maxStalledCount: cfg.maxStalledCount,
+      drainDelay: cfg.drainDelaySec,
       ...workerOptions,
     }
   );

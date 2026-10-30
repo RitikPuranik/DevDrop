@@ -71,10 +71,24 @@ function createSkillSession({
       text = built.text;
       const record = { agent, skills: built.skills.map((s) => s.id), skillTokens: built.usedTokens, platformTokens: built.platformTokens, budget: resolution.budget.total };
       usage.push(record);
-      logger.log?.(`[SKILLS] ${agent}: ${record.skills.join(',') || 'none'} (~${record.skillTokens + record.platformTokens} tokens)`);
+      // Success is one short line per skill; failures are loud and explain why (ids/codes only, never skill text).
+      for (const s of built.skills) logger.log?.(`[SKILL OK] ${agent}/${s.id} ~${s.tokens}tok`);
+      for (const f of resolution.excluded.filter((e) => e.reason.startsWith('unavailable:'))) {
+        logger.error?.([
+          '[SKILL FAILED] ' + `${agent}/${f.id}`,
+          `  reason : ${f.reason.slice('unavailable:'.length)} - ${f.detail || 'could not be loaded'}`,
+          '  effect : this skill was NOT added to the prompt; generation continues with the remaining skills',
+          '  action : run `npm run skills:verify` and check src/skills/library and manifest.json for tampering or edits',
+        ].join('\n'));
+      }
     } catch (error) {
       // Log the failure class only; never skill content or job data.
-      logger.warn?.(`[SKILLS] ${agent}: skill context unavailable (${error.code || error.name}); continuing without it`);
+      logger.error?.([
+        `[SKILL FAILED] ${agent}/(all skills)`,
+        `  reason : ${error.code || error.name} - ${String(error.message || '').slice(0, 200)}`,
+        '  effect : no skill context was added for this stage; generation continues with the baseline prompts',
+        '  action : run `npm run skills:verify`; if an essential skill failed integrity checks, skills stay off for the rest of this job',
+      ].join('\n'));
       if (error instanceof SkillIntegrityError) disabled = true;
     }
     memo.set(key, text);

@@ -92,3 +92,20 @@ describe('queue/cache separation (static)', () => {
     expect(src).not.toMatch(/bullmq|\.\.\/queue/);
   });
 });
+
+describe('Redis-command saving defaults', () => {
+  const { getQueueConfig } = require('../../../src/infrastructure/queue/config');
+  const keys = ['QUEUE_DRAIN_DELAY_SEC', 'QUEUE_MONITOR_INTERVAL_MS', 'QUEUE_SCHEDULES_ENABLED'];
+  const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+  afterEach(() => keys.forEach((k) => (saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k]))));
+  it('defaults: 30s drain delay, 5 min monitor, schedules on', () => {
+    keys.forEach((k) => delete process.env[k]);
+    expect(getQueueConfig()).toMatchObject({ drainDelaySec: 30, monitorIntervalMs: 300000, schedulesEnabled: true });
+  });
+  it('are overridable, and the monitor can be disabled', () => {
+    process.env.QUEUE_DRAIN_DELAY_SEC = '60'; process.env.QUEUE_MONITOR_INTERVAL_MS = '0'; process.env.QUEUE_SCHEDULES_ENABLED = 'off';
+    expect(getQueueConfig()).toMatchObject({ drainDelaySec: 60, monitorIntervalMs: 0, schedulesEnabled: false });
+    const { startQueueMonitor } = require('../../../src/infrastructure/queue/monitor');
+    expect(startQueueMonitor().stop).toEqual(expect.any(Function));
+  });
+});

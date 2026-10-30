@@ -429,9 +429,10 @@ describe('Other error handling and safety', () => {
   });
 
   test('raw API keys never reach the logs or the thrown error', async () => {
+    process.env.AI_LOG_VERBOSE = 'true'; // verbose mode logs every routine event, so the leak check covers all of them
     const requestFn = jest.fn(() => Promise.reject(rateLimit({ retryDelay: '5s' })));
     let error;
-    try { await geminiPool.executeModels(['M1'], requestFn); } catch (e) { error = e; }
+    try { await geminiPool.executeModels(['M1'], requestFn); } catch (e) { error = e; } finally { delete process.env.AI_LOG_VERBOSE; }
     const written = JSON.stringify(logSpy.flatMap((s) => s.mock.calls));
     [A, B, C].forEach((key) => {
       expect(written).not.toContain(key);
@@ -441,6 +442,17 @@ describe('Other error handling and safety', () => {
     expect(written).toContain('PROJECT RATE LIMITED');
     expect(written).toContain('SWITCHING PROJECT');
     expect(written).toContain('POOL EXHAUSTED');
+  });
+
+  test('default logs are compact: one short line per event, routine bookkeeping hidden', async () => {
+    await expect(geminiPool.executeModels(['M1'], () => Promise.reject(rateLimit({ retryDelay: '5s' })))).rejects.toThrow();
+    const lines = logSpy.flatMap((s) => s.mock.calls).map((c) => c.join(' '));
+    const written = lines.join('\n');
+    expect(written).toContain('PROJECT RATE LIMITED');
+    expect(written).toContain('POOL EXHAUSTED');
+    expect(written).not.toMatch(/SWITCHING PROJECT|PROJECT SELECTED|PROJECT TEMPORARILY EXCLUDED/);
+    for (const l of lines) { expect(l).not.toContain('\n'); expect(l.length).toBeLessThan(330); expect(l).not.toMatch(/keyId=|requestId=/); }
+    [A, B, C].forEach((key) => expect(written).not.toContain(key));
   });
 
   test('expected 429s do not log stack traces', async () => {
