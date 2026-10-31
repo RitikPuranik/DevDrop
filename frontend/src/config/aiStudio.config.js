@@ -179,6 +179,28 @@ export const DESIGN_RESEARCH = {
   maximalist: { composition: 'Layered editorial collage with overlapping visual planes, broken grids, oversized type, colored slabs and deliberate depth.', navigation: 'Bold utility nav integrated into the composition, with oversized wordmark and offset links rather than a floating generic navbar.', hero: 'Oversized headline crossing image and color blocks, stacked labels, sticker-like CTA and one dominant visual focal point.', sections: 'Manifesto, image collage, services, selected work, quote wall, social proof and a highly graphic CTA/footer.', cards: 'Mixed card sizes and orientations, thin frames, paper-like blocks, occasional hard shadows and rotated accents.', imagery: 'Layered photography, cutouts, scanned textures, paper edges, stickers and abstract graphic fragments.', type: 'Expressive geometric or grotesk display type with extreme scale contrast and short supporting copy.', spacing: 'Dense local clusters balanced by deliberate large negative-space breaks between compositions.', motion: 'Layered reveal, image drift, sticker pop-ins and marquee accents; keep the primary reading order stable.' },
 };
 
+/* Animation is multi-select. `design.animationList` is the source of truth; `design.animations` always mirrors the
+ * strongest selected level so older consumers (preview, ai-service motion level) keep working unchanged. */
+const MOTION_STRENGTH = ['none', 'subtle', 'scroll', 'interactive', 'parallax', 'kinetic', 'dynamic'];
+export function animationIds(design = {}) {
+  const raw = Array.isArray(design.animationList) ? design.animationList : (Array.isArray(design.animations) ? design.animations : [design.animations || 'subtle']);
+  const valid = [...new Set(raw)].filter((id) => ANIMATION_OPTIONS.some((o) => o.id === id));
+  if (valid.includes('none') && valid.length > 1) return valid.filter((id) => id !== 'none');
+  return valid.length ? valid : ['subtle'];
+}
+export function primaryAnimation(ids) {
+  return [...ids].sort((a, b) => MOTION_STRENGTH.indexOf(b) - MOTION_STRENGTH.indexOf(a))[0] || 'subtle';
+}
+export function toggleAnimation(design, id) {
+  const current = animationIds(design);
+  let next;
+  if (id === 'none') next = ['none'];
+  else if (current.includes(id)) next = current.filter((x) => x !== id);
+  else next = [...current.filter((x) => x !== 'none'), id];
+  if (!next.length) next = ['none'];
+  return { animationList: next, animations: primaryAnimation(next) };
+}
+
 export const DESIGN_TYPOGRAPHY = [
   { id: 'grotesk', label: 'Grotesk Sans', font: "'Space Grotesk','Inter',system-ui,sans-serif", direction: 'Characterful grotesk sans (Space Grotesk / Familjen Grotesk style) for headings and body.' },
   { id: 'serif', label: 'Editorial Serif', font: "Georgia,'Times New Roman',serif", direction: 'Expressive display serif headings (Playfair Display / DM Serif Display style) paired with a neutral sans body (Inter / Lato).' },
@@ -195,18 +217,19 @@ export function describeDesign(design = {}) {
   const pick = (list, id, fallback) => list.find((item) => item.id === id) || fallback;
   const style = pick(DESIGN_STYLES, design.style, DESIGN_STYLES[1]);
   const theme = pick(DESIGN_THEMES, design.theme, DESIGN_THEMES[0]);
-  const motion = pick(ANIMATION_OPTIONS, design.animations, ANIMATION_OPTIONS[1]);
+  const motions = animationIds(design).map((id) => pick(ANIMATION_OPTIONS, id, ANIMATION_OPTIONS[1]));
   const palette = pick(DESIGN_PALETTES, design.paletteId, null);
   const typo = pick(DESIGN_TYPOGRAPHY, design.typography, DESIGN_TYPOGRAPHY[0]);
   return [
     `Style: ${style.label} — ${style.direction}`,
     `Theme: ${theme.label} — ${theme.direction}`,
     'Theme text-color contract: use semantic text tokens for heading, body, muted/secondary, link/accent, inverse-on-accent, and text-on-surface colors. Never hardcode a conflicting text color when a theme token applies. Keep text colors paired with the chosen background/surface for accessible contrast.',
-    `Animation: ${motion.label} — ${motion.direction}`,
+    motions.length > 1 ? `Animation (combine all of these, layered tastefully): ${motions.map((m) => `${m.label} — ${m.direction}`).join(' | ')}` : `Animation: ${motions[0].label} — ${motions[0].direction}`,
     `Primary color: ${design.primaryColor || 'Choose a tasteful accent that fits the theme.'}`,
     `Color palette${palette ? ` (${palette.name})` : ''}: ${design.palette || (palette ? palette.colors.join(', ') : 'AI-selected palette')}`,
     `Typography: ${typo.label} — ${typo.direction}`,
     `Deep design recipe: ${JSON.stringify(DESIGN_RESEARCH[style.id] || {})}`,
+    ...(String(design.customPrompt || '').trim() ? [`Design notes from the user (follow these in addition to the choices above): ${String(design.customPrompt).trim()}`] : []),
     'Apply this direction consistently to composition, information architecture, hero structure, navigation, sections, cards, imagery, typography, spacing, controls, motion and footer treatment — not only colors. Always honor prefers-reduced-motion and preserve accessible reading order.',
     'Responsive contract: treat 320px, 375px, 430px, 768px and desktop as first-class compositions. Avoid fixed-width content and horizontal overflow; use fluid typography, max-width media, flexible grids, responsive navigation, stacked mobile layouts and touch-friendly controls while preserving the selected visual language.',
   ].join('\n');

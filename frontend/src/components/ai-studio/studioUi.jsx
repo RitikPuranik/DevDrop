@@ -91,13 +91,13 @@ export function MediaDrop({ kind, list, onChange }) {
   );
 }
 
-const QUICK_PROMPTS = [
+export const QUICK_PROMPTS = [
   { label: 'Make it interactive', text: 'Make it interactive with rich hover and click micro-interactions.', icon: Zap },
   { label: 'Add smooth scrolling', text: 'Add smooth scrolling and scroll-linked reveal animations.', icon: MousePointerClick },
   { label: 'Warm pastel colors', text: 'Use a warm pastel color palette.', icon: Palette },
 ];
 
-export function SpecialRequestsCard({ value = '', onChange, placeholder, side = null, className = '' }) {
+export function SpecialRequestsCard({ value = '', onChange, placeholder, side = null, className = '', title = 'Anything else you want?', quickPrompts = QUICK_PROMPTS, compact = false }) {
   const addPrompt = (text) => {
     const current = value.trim();
     if (current.includes(text)) return;
@@ -105,16 +105,16 @@ export function SpecialRequestsCard({ value = '', onChange, placeholder, side = 
 ${text}` : text);
   };
   return (
-    <section className={`s-card p-5 md:p-6 ${className}`}>
+    <section className={compact ? className : `s-card p-5 md:p-6 ${className}`}>
       <div className={`grid gap-4 ${side ? 'lg:grid-cols-3' : ''}`}>
         <div className={side ? 'lg:col-span-2' : ''}>
-          <label className="mb-2 block text-[15px] font-semibold">Anything else you want? <span className="text-[13px] font-normal text-[var(--s-muted)]">(optional)</span></label>
-          <textarea value={value} onChange={(e) => onChange(e.target.value)} rows={4} placeholder={placeholder} className={`${INPUT} resize-none`} />
+          <label className="mb-2 block text-[15px] font-semibold">{title} <span className="text-[13px] font-normal text-[var(--s-muted)]">(optional)</span></label>
+          <textarea value={value} onChange={(e) => onChange(e.target.value)} rows={compact ? 3 : 4} placeholder={placeholder} className={`${INPUT} resize-none`} />
         </div>
         {side && <div className="space-y-3 lg:pr-8">{side}</div>}
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
-        {QUICK_PROMPTS.map(({ label, text, icon: Icon }) => (
+        {quickPrompts.map(({ label, text, icon: Icon = Zap }) => (
           <button key={label} type="button" onClick={() => addPrompt(text)} className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3.5 py-1.5 text-xs font-semibold text-[var(--s-text)] transition-colors hover:bg-white/10">
             <Icon size={13} className="text-[var(--s-hi)]" /> {label}
           </button>

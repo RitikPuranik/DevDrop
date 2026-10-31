@@ -1,6 +1,6 @@
 import React from 'react';
 import { Loader2, Pencil } from 'lucide-react';
-import { DESIGN_STYLES, DESIGN_THEMES, ANIMATION_OPTIONS } from '../../config/aiStudio.config';
+import { DESIGN_STYLES, DESIGN_THEMES, ANIMATION_OPTIONS, animationIds } from '../../config/aiStudio.config';
 import StepShell from './StepShell';
 
 function Row({ label, value }) {
@@ -11,7 +11,7 @@ function Row({ label, value }) {
 export default function ReviewStep({ details, design, onBack, onEditStep, onGenerate, generating }) {
   const style = DESIGN_STYLES.find((item) => item.id === design.style)?.label || design.style;
   const theme = DESIGN_THEMES.find((item) => item.id === design.theme)?.label || design.theme;
-  const animation = ANIMATION_OPTIONS.find((item) => item.id === design.animations)?.label || design.animations;
+  const animation = animationIds(design).map((id) => ANIMATION_OPTIONS.find((item) => item.id === id)?.label || id).join(' + ');
   const contentCount = details.projects.length + details.experience.length + details.education.length + details.achievements.length;
 
   return (
@@ -27,7 +27,7 @@ export default function ReviewStep({ details, design, onBack, onEditStep, onGene
         </section>
         <section className="s-card p-5">
           <div className="mb-2 flex items-center justify-between"><p className="s-display text-[17px] text-[var(--s-hi)]">Design</p><button type="button" onClick={() => onEditStep(1)} className="text-xs text-[var(--s-muted)] hover:text-[var(--s-text)]">Edit</button></div>
-          <Row label="Style" value={style} /><Row label="Theme" value={theme} /><Row label="Animation" value={animation} /><Row label="Primary color" value={design.primaryColor || 'AI-selected palette'} />
+          <Row label="Style" value={style} /><Row label="Theme" value={theme} /><Row label="Animation" value={animation} /><Row label="Primary color" value={design.primaryColor || 'AI-selected palette'} /><Row label="Design notes" value={design.customPrompt} />
         </section>
       </div>
 

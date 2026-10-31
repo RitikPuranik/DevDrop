@@ -1,0 +1,81 @@
+{
+  "_comment": "Vetted npm packages that vendored components may depend on. Anything not listed makes a component ineligible: nothing is installed on the strength of upstream metadata. Ranges are the ranges to request; the build validator freezes the resolved exact versions afterwards. 'family' is used to prevent two libraries doing the same job (e.g. two animation engines).",
+  "packages": {
+    "motion": {
+      "range": "^12.0.0",
+      "family": "animation-engine",
+      "weight": "medium",
+      "notes": "import from 'motion/react'"
+    },
+    "gsap": {
+      "range": "^3.12.5",
+      "family": "timeline-animation",
+      "weight": "medium"
+    },
+    "lucide-react": {
+      "range": "^0.468.0",
+      "family": "icons",
+      "weight": "light"
+    },
+    "class-variance-authority": {
+      "range": "^0.7.1",
+      "family": "variants",
+      "weight": "light"
+    },
+    "@radix-ui/react-accordion": {
+      "range": "^1.2.2",
+      "family": "headless-ui",
+      "weight": "light"
+    },
+    "@radix-ui/react-slot": {
+      "range": "^1.1.1",
+      "family": "headless-ui",
+      "weight": "light"
+    },
+    "embla-carousel-react": {
+      "range": "^8.5.1",
+      "family": "carousel",
+      "weight": "medium"
+    },
+    "recharts": {
+      "range": "^2.15.0",
+      "family": "charts",
+      "weight": "heavy"
+    },
+    "three": {
+      "range": "^0.171.0",
+      "family": "webgl",
+      "weight": "heavy"
+    },
+    "ogl": {
+      "range": "^1.0.11",
+      "family": "webgl",
+      "weight": "medium"
+    },
+    "radix-ui": {
+      "range": "^1.8.1",
+      "family": "headless-ui",
+      "weight": "light",
+      "notes": "umbrella package; MIT on npm"
+    },
+    "react-use-measure": {
+      "range": "^2.1.7",
+      "family": "measure",
+      "weight": "light",
+      "notes": "MIT on npm"
+    },
+    "border-beam": {
+      "range": "^1.4.1",
+      "family": "effects",
+      "weight": "light",
+      "notes": "MIT on npm"
+    }
+  },
+  "aliases": {
+    "framer-motion": "motion"
+  },
+  "alwaysAvailable": [
+    "react",
+    "react-dom"
+  ]
+}

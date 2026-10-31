@@ -3,7 +3,8 @@ import { toJpeg } from 'html-to-image';
 import {
   ArrowLeft, ArrowRight, Ban, Check, ChevronsDown, Layers, Laptop, Loader2, MousePointerClick, Plus, Smartphone, Sparkles, Spline, Timer, Type,
 } from 'lucide-react';
-import { DESIGN_STYLES, DESIGN_THEMES, ANIMATION_OPTIONS, DESIGN_PALETTES, DESIGN_TYPOGRAPHY } from '../../config/aiStudio.config';
+import { DESIGN_STYLES, DESIGN_THEMES, ANIMATION_OPTIONS, DESIGN_PALETTES, DESIGN_TYPOGRAPHY, animationIds, toggleAnimation } from '../../config/aiStudio.config';
+import { SpecialRequestsCard } from './studioUi';
 import ReferenceDrivenLivePreview from './preview/ReferenceDrivenLivePreview';
 
 /* ───────────── helpers ───────────── */
@@ -79,6 +80,12 @@ function Section({ n, title, children }) {
     </section>
   );
 }
+
+const DESIGN_QUICK_PROMPTS = [
+  { label: 'More whitespace', text: 'Use generous whitespace and a calmer, more spacious layout.' },
+  { label: 'Bolder headlines', text: 'Make the headlines larger and more expressive.' },
+  { label: 'Rounded & soft', text: 'Use softer, more rounded shapes and gentle shadows.' },
+];
 
 /* ───────────── main step ───────────── */
 export default function DesignPreferencesStep({ design, onChange, onBack, onNext, topBar, websiteType = 'portfolio' }) {
@@ -311,12 +318,13 @@ export default function DesignPreferencesStep({ design, onChange, onBack, onNext
             </Section>
 
             <Section n={4} title="Animation & Motion">
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" role="radiogroup" aria-label="Animation">
+              <p className="-mt-1 mb-3 text-[11px] text-[var(--s-faint)]">Pick one or more. Choosing &quot;None&quot; clears the others.</p>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" role="group" aria-label="Animation (multiple allowed)">
                 {ANIMATION_OPTIONS.map((m) => {
-                  const sel = design.animations === m.id;
+                  const sel = animationIds(design).includes(m.id);
                   const Icon = MOTION_ICONS[m.id] || Sparkles;
                   return (
-                    <button key={m.id} type="button" role="radio" aria-checked={sel} onClick={() => set({ animations: m.id })} className={`${optCls(sel)} flex flex-col items-center gap-1.5 px-2 py-4`} style={optStyle(sel)}>
+                    <button key={m.id} type="button" role="checkbox" aria-checked={sel} onClick={() => set(toggleAnimation(design, m.id))} className={`${optCls(sel)} flex flex-col items-center gap-1.5 px-2 py-4`} style={optStyle(sel)}>
                       {sel && <span className="absolute right-1.5 top-1.5 rounded-full bg-[var(--s-bg)] px-1.5 py-0.5 text-[9px] font-bold uppercase" style={{ color: accent }}>Selected</span>}
                       <Icon size={24} style={{ color: sel ? accent : 'rgba(255,255,255,.6)' }} />
                       <span className="text-[13px] font-medium">{m.label}</span>
@@ -339,6 +347,17 @@ export default function DesignPreferencesStep({ design, onChange, onBack, onNext
                   );
                 })}
               </div>
+            </Section>
+
+            <Section n={6} title="Your design notes">
+              <SpecialRequestsCard
+                compact
+                title="Anything else about the design?"
+                value={design.customPrompt || ''}
+                onChange={(value) => set({ customPrompt: value })}
+                placeholder="Describe anything specific: a reference look, a section layout, hover behavior, fonts, colors to avoid, mood, spacing, imagery style..."
+                quickPrompts={DESIGN_QUICK_PROMPTS}
+              />
             </Section>
           </div>
         </div>

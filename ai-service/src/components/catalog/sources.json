@@ -1,0 +1,211 @@
+{
+  "_comment": "Declarative source definitions. Adding a library or component = adding an entry here and running `npm run components:ingest`; no pipeline code changes. Each entry pins an exact upstream commit. Ingestion only reads files; it never installs packages or runs upstream scripts.",
+  "sources": [
+    {
+      "id": "magicui",
+      "adapter": "shadcn-registry",
+      "repository": "magicuidesign/magicui",
+      "commit": "efe76fc5755eca1142dd4f74c1d6f0ace2887e3c",
+      "licensePath": "LICENSE.md",
+      "registryJson": "registry.json",
+      "fileRoot": "apps/www",
+      "styling": [
+        "tailwind"
+      ],
+      "include": [
+        "marquee",
+        "border-beam",
+        "shimmer-button",
+        "number-ticker",
+        "blur-fade",
+        "dot-pattern",
+        "animated-gradient-text",
+        "ripple",
+        "text-reveal",
+        "animated-shiny-text",
+        "retro-grid",
+        "orbiting-circles",
+        "scroll-progress",
+        "word-rotate",
+        "typing-animation",
+        "magic-card",
+        "meteors"
+      ]
+    },
+    {
+      "id": "motion-primitives",
+      "adapter": "github-files",
+      "repository": "ibelick/motion-primitives",
+      "commit": "120f64f6ca60348e251f929e9c81f11ccbe45eda",
+      "licensePath": "LICENCE.md",
+      "styling": [
+        "tailwind"
+      ],
+      "files": [
+        {
+          "slug": "spotlight",
+          "path": "components/core/spotlight.tsx",
+          "description": "Cursor-following spotlight glow that attaches to its parent element."
+        },
+        {
+          "slug": "tilt",
+          "path": "components/core/tilt.tsx",
+          "description": "3D pointer-driven tilt wrapper with spring rotation and optional glare."
+        },
+        {
+          "slug": "magnetic",
+          "path": "components/core/magnetic.tsx",
+          "description": "Magnetic pull effect that makes an element follow the pointer within a radius."
+        },
+        {
+          "slug": "infinite-slider",
+          "path": "components/core/infinite-slider.tsx",
+          "description": "Infinite horizontal or vertical slider for logos and content with hover slowdown."
+        },
+        {
+          "slug": "text-effect",
+          "path": "components/core/text-effect.tsx",
+          "description": "Per-character, per-word or per-line text entrance animation with configurable presets."
+        },
+        {
+          "slug": "glow-effect",
+          "path": "components/core/glow-effect.tsx",
+          "description": "Animated multi-color glow halo behind an element, with several animation modes."
+        },
+        {
+          "slug": "animated-group",
+          "path": "components/core/animated-group.tsx",
+          "description": "Staggered entrance animation for a group of children with preset variants."
+        },
+        {
+          "slug": "text-shimmer",
+          "path": "components/core/text-shimmer.tsx",
+          "description": "Shimmering highlight sweeping across text."
+        },
+        {
+          "slug": "border-trail",
+          "path": "components/core/border-trail.tsx",
+          "description": "A light trail that travels around an element's border."
+        },
+        {
+          "slug": "scroll-progress",
+          "path": "components/core/scroll-progress.tsx",
+          "description": "Scroll progress bar bound to page or container scroll."
+        },
+        {
+          "slug": "text-scramble",
+          "path": "components/core/text-scramble.tsx",
+          "description": "Scrambling character text reveal in a terminal style."
+        },
+        {
+          "slug": "text-loop",
+          "path": "components/core/text-loop.tsx",
+          "description": "Cycles through a list of text items with animated transitions."
+        }
+      ]
+    },
+    {
+      "id": "react-bits",
+      "adapter": "github-files",
+      "repository": "DavidHDev/react-bits",
+      "commit": "e12c22192ac7b4b452c5e2feb9b586d74765d696",
+      "licensePath": "LICENSE.md",
+      "styling": [
+        "css"
+      ],
+      "files": [
+        {
+          "slug": "glare-hover",
+          "path": "src/content/Animations/GlareHover/GlareHover.jsx",
+          "css": "src/content/Animations/GlareHover/GlareHover.css",
+          "description": "Glare sweep that crosses a surface on hover."
+        }
+      ]
+    },
+    {
+      "id": "shadcn",
+      "adapter": "github-files",
+      "repository": "shadcn-ui/ui",
+      "commit": "b8d7baa15b1dca5716f13153e63795fc3d741f6b",
+      "licensePath": "LICENSE.md",
+      "styling": [
+        "tailwind"
+      ],
+      "files": [
+        {
+          "slug": "accordion",
+          "path": "apps/v4/registry/new-york-v4/ui/accordion.tsx",
+          "description": "Accessible vertically stacked disclosure sections built on Radix Accordion."
+        },
+        {
+          "slug": "card",
+          "path": "apps/v4/registry/new-york-v4/ui/card.tsx",
+          "description": "Card surface with header, title, description, content and footer slots."
+        }
+      ]
+    },
+    {
+      "id": "cult-ui",
+      "adapter": "shadcn-registry",
+      "repository": "nolly-studio/cult-ui",
+      "commit": "d71b1428b811c2779d46ea41b7ef8c9f9c9991c2",
+      "licensePath": "LICENSE.md",
+      "registryJson": "apps/www/registry.json",
+      "fileRoot": "apps/www",
+      "styling": [
+        "tailwind"
+      ],
+      "include": [
+        "bg-animate-button",
+        "gradient-heading",
+        "cosmic-button",
+        "minimal-card",
+        "lightboard",
+        "dock",
+        "expandable",
+        "direction-aware-tabs",
+        "shift-card",
+        "folded-card",
+        "cutout-card",
+        "floating-panel",
+        "bg-animated-gradient",
+        "glow-button",
+        "halo-badge",
+        "edge-blur",
+        "distorted-glass",
+        "fluted-glass",
+        "animated-number",
+        "copy-button",
+        "code-block",
+        "family-button",
+        "text-gif"
+      ]
+    },
+    {
+      "id": "origin-ui",
+      "adapter": "shadcn-registry",
+      "repository": "origin-space/originui",
+      "commit": "890a79a5368b3cdebbdd860aa1908f2843fd7ddc",
+      "licensePath": "LICENSE",
+      "registryJson": "apps/origin/registry.json",
+      "fileRoot": "apps/origin",
+      "styling": [
+        "tailwind"
+      ],
+      "include": [
+        "accordion",
+        "avatar",
+        "badge",
+        "button",
+        "tabs",
+        "tooltip",
+        "switch",
+        "progress",
+        "separator",
+        "textarea",
+        "input",
+        "checkbox"
+      ]
+    }
+  ]
+}

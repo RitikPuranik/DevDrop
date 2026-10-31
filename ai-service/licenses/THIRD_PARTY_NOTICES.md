@@ -24,3 +24,44 @@ The files below are bundled in `src/skills/library/`. Full license texts are sto
 - Modifications: CSV converted to Markdown; Decision_Rules, Reasoning and Confidence columns omitted. Upstream file sha256 recorded in the manifest.
 
 All other skills in the library are original DevDrop-authored text (see `docs/SKILL_LICENSES.md`).
+
+
+# Vendored UI components (Component Intelligence catalog)
+
+Source files in `src/components/catalog/sources/` are derived from the repositories below at the pinned commits. Full license texts: `src/components/catalog/licenses/<library>.txt`. Every record in `src/components/catalog/index.json` lists the exact upstream file, commit, sha256 of upstream and stored files, and each mechanical modification. Generated websites that include any of these components receive their own `/THIRD_PARTY_NOTICES.md` with the full license text.
+
+## cult-ui
+- Repository: https://github.com/nolly-studio/cult-ui @ `d71b1428b811c2779d46ea41b7ef8c9f9c9991c2`
+- License: MIT (Copyright (c) 2023 Jordan-Gilliam)
+- Components: bg-animate-button [verified], bg-animated-gradient [verified], code-block [verified], copy-button [pending-verification], cosmic-button [pending-verification], cutout-card [pending-verification], direction-aware-tabs [verified], distorted-glass [verified], dock [verified], edge-blur [verified], expandable [verified], family-button [verified], floating-panel [verified], fluted-glass [pending-verification], folded-card [pending-verification], gradient-heading [verified], halo-badge [pending-verification], lightboard [verified], minimal-card [pending-verification], shift-card [verified], text-gif [pending-verification]
+- Modifications: TypeScript->JavaScript (esbuild), path-alias rewrites, framer-motion->motion/react, provenance header added; recorded per component.
+
+## magicui
+- Repository: https://github.com/magicuidesign/magicui @ `efe76fc5755eca1142dd4f74c1d6f0ace2887e3c`
+- License: MIT (Copyright (c) Magic UI)
+- Components: animated-gradient-text [verified], animated-shiny-text [verified], blur-fade [verified], border-beam [verified], dot-pattern [verified], magic-card [pending-verification], marquee [verified], meteors [verified], number-ticker [verified], orbiting-circles [verified], retro-grid [verified], ripple [verified], scroll-progress [verified], shimmer-button [verified], text-reveal [verified], typing-animation [verified], word-rotate [verified]
+- Modifications: TypeScript->JavaScript (esbuild), path-alias rewrites, framer-motion->motion/react, provenance header added; recorded per component.
+
+## motion-primitives
+- Repository: https://github.com/ibelick/motion-primitives @ `120f64f6ca60348e251f929e9c81f11ccbe45eda`
+- License: MIT (Copyright (c) 2024 ibelick). Note: trailing non-license text ignored: "app/page.tsx"
+- Components: animated-group [verified], border-trail [verified], glow-effect [verified], infinite-slider [verified], magnetic [verified], scroll-progress [verified], spotlight [verified], text-effect [verified], text-loop [verified], text-scramble [verified], text-shimmer [verified], tilt [verified]
+- Modifications: TypeScript->JavaScript (esbuild), path-alias rewrites, framer-motion->motion/react, provenance header added; recorded per component.
+
+## origin-ui
+- Repository: https://github.com/origin-space/originui @ `890a79a5368b3cdebbdd860aa1908f2843fd7ddc`
+- License: MIT (Copyright (c) 2025 coss.com; Originally Copyright (c) 2025 Origin UI)
+- Components: accordion [verified], avatar [verified], badge [verified], button [verified], checkbox [verified], input [verified], progress [verified], switch [verified], tabs [verified], textarea [verified], tooltip [verified]
+- Modifications: TypeScript->JavaScript (esbuild), path-alias rewrites, framer-motion->motion/react, provenance header added; recorded per component.
+
+## react-bits
+- Repository: https://github.com/DavidHDev/react-bits @ `e12c22192ac7b4b452c5e2feb9b586d74765d696`
+- License: LicenseRef-MIT-Commons-Clause (Copyright (c) 2026 David Haz). **Restriction:** Commons Clause: the components themselves may not be sold, sublicensed or redistributed (alone, in a bundle or as a ported version). Use inside an application, website or product is permitted.
+- Components: glare-hover [restricted]
+- Modifications: TypeScript->JavaScript (esbuild), path-alias rewrites, framer-motion->motion/react, provenance header added; recorded per component.
+
+## shadcn
+- Repository: https://github.com/shadcn-ui/ui @ `b8d7baa15b1dca5716f13153e63795fc3d741f6b`
+- License: MIT (Copyright (c) 2023 shadcn)
+- Components: accordion [verified], card [verified]
+- Modifications: TypeScript->JavaScript (esbuild), path-alias rewrites, framer-motion->motion/react, provenance header added; recorded per component.

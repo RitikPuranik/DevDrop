@@ -1,0 +1,64 @@
+/*!
+ * DevDrop component provenance (license notice - do not remove)
+ * Component : cult-ui/gradient-heading
+ * Source    : github.com/nolly-studio/cult-ui @ d71b1428b811 : apps/www/registry/default/ui/gradient-heading.tsx
+ * License   : MIT, Copyright (c) 2023 Jordan-Gilliam
+ * Full text : /THIRD_PARTY_NOTICES.md
+ */
+import React from "react";
+import { Slot } from "@radix-ui/react-slot";
+import { cva } from "class-variance-authority";
+import { cn } from "../../lib/utils.js";
+const headingVariants = cva(
+  "bg-clip-text pb-3 tracking-tight text-transparent",
+  {
+    variants: {
+      variant: {
+        default: "bg-gradient-to-t from-neutral-700 to-neutral-800 dark:from-stone-200 dark:to-neutral-200",
+        pink: "from-accent to-accent/90 bg-gradient-to-t dark:from-stone-200 dark:to-neutral-200",
+        light: "bg-gradient-to-t from-neutral-200 to-neutral-300",
+        secondary: "bg-gradient-to-t from-neutral-500 to-neutral-600 dark:from-stone-200 dark:to-neutral-200"
+      },
+      size: {
+        default: "text-2xl sm:text-3xl lg:text-4xl",
+        xxs: "text-base sm:text-lg lg:text-lg",
+        xs: "text-lg sm:text-xl lg:text-2xl",
+        sm: "text-xl sm:text-2xl lg:text-3xl",
+        md: "text-2xl sm:text-3xl lg:text-4xl",
+        lg: "text-3xl sm:text-4xl lg:text-5xl",
+        xl: "text-4xl sm:text-5xl lg:text-6xl",
+        xll: "text-4xl sm:text-6xl lg:text-[5.4rem] lg:leading-[0.5rem]",
+        xxl: "text-5xl sm:text-6xl lg:text-[6rem]",
+        xxxl: "text-5xl sm:text-6xl lg:text-[8rem]"
+      },
+      weight: {
+        default: "font-bold",
+        thin: "font-thin",
+        base: "font-base",
+        semi: "font-semibold",
+        bold: "font-bold",
+        black: "font-black"
+      }
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "default",
+      weight: "default"
+    }
+  }
+);
+const GradientHeading = React.forwardRef(
+  ({ asChild, variant, weight, size, className, children, ...props }, ref) => {
+    const Comp = asChild ? Slot : "h3";
+    return <Comp ref={ref} {...props} className={className}>
+        <span className={cn(headingVariants({ variant, size, weight }))}>
+          {children}
+        </span>
+      </Comp>;
+  }
+);
+GradientHeading.displayName = "GradientHeading";
+export {
+  GradientHeading,
+  headingVariants
+};

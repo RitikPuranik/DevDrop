@@ -8,7 +8,7 @@ import ReviewStep from './ReviewStep';
 import { buildPortfolioPrompt } from './portfolioPrompt';
 
 const INITIAL_DETAILS = { name:'',role:'',location:'',bio:'',targetAudience:'',primaryGoal:'',phone:'',contactEmail:'',resumeFile:null,skills:[],projects:[],experience:[],education:[],achievements:[],interests:[],socialLinks:{github:'',linkedin:'',twitter:'',instagram:'',kaggle:''},ctaText:'',ctaLink:'',images:[],videos:[] };
-const INITIAL_DESIGN = { style:'modern',theme:'dark',animations:'subtle',primaryColor:'#b8935a',paletteId:'amber',palette:'#b8935a, #e8d9bf, #b4583a, #2f3436, #f1f1f1',typography:'grotesk',themeTouched:false,paletteTouched:false };
+const INITIAL_DESIGN = { style:'modern',theme:'dark',animations:'subtle',animationList:['subtle'],customPrompt:'',primaryColor:'#b8935a',paletteId:'amber',palette:'#b8935a, #e8d9bf, #b4583a, #2f3436, #f1f1f1',typography:'grotesk',themeTouched:false,paletteTouched:false };
 export default function PortfolioBuilder({onBack,onGenerate}){
  const [step,setStep]=useState(0),[details,setDetails]=useState(INITIAL_DETAILS),[design,setDesign]=useState(INITIAL_DESIGN),[generating,setGenerating]=useState(false);
  const generate=async()=>{setGenerating(true);try{await onGenerate(buildPortfolioPrompt(details,design),{details,design});}finally{setGenerating(false);}};

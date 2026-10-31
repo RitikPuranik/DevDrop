@@ -16,8 +16,8 @@ const int = (key, fallback, min = 0) => {
 
 const settings = () => ({
   concurrency: int('AI_QUEUE_CONCURRENCY', 1, 1),
-  timeoutMs: int('AI_JOB_TIMEOUT_MS', 20 * 60 * 1000),
-  // Gemini capacity is already waited out INSIDE a call (llm.service, GEMINI_CAPACITY_WAIT_MAX_MS) without
+  timeoutMs: int('AI_JOB_TIMEOUT_MS', 18000000),
+  // Gemini capacity is already waited out INSIDE a call (llm.service, AI_JOB_TIMEOUT_MS budget) without
   // restarting the pipeline. Re-queueing restarts the whole pipeline, so extra queue-level delays default to 0.
   quotaMaxDelays: int('AI_QUOTA_MAX_DELAYS', 0),
   quotaMinDelayMs: int('AI_QUOTA_MIN_DELAY_MS', 30000),

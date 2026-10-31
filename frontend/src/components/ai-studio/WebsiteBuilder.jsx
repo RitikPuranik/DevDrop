@@ -350,7 +350,7 @@ function DetailsStep({ type, details, onChange, onBack, onNext }) {
           </div>
         </Card>
 
-        <SpecialRequestsCard className="lg:col-span-12" value={details.specialRequests || ''} onChange={(value) => update('specialRequests', value)} placeholder="Add any specific idea, section, behavior, animation, reference, wording, feature, constraint, or anything else you want the AI to know." />
+        <SpecialRequestsCard className="lg:col-span-12" value={details.specialRequests || ''} onChange={(value) => update('specialRequests', value)} placeholder={TYPE_NOTE_HINTS[type] || DEFAULT_NOTE_HINT} />
       </div>
 
       <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between [&>button]:w-full sm:[&>button]:w-auto">
@@ -364,7 +364,7 @@ function DetailsStep({ type, details, onChange, onBack, onNext }) {
 export default function WebsiteBuilder({ type, onBack, onGenerate }) {
   const [step, setStep] = useState(0);
   const [details, setDetails] = useState({});
-  const [design, setDesign] = useState({ style: 'modern', theme: 'dark', animations: 'subtle', primaryColor: '#b8935a', paletteId: 'amber', palette: '#b8935a, #e8d9bf, #b4583a, #2f3436, #f1f1f1', typography: 'grotesk', themeTouched: false, paletteTouched: false });
+  const [design, setDesign] = useState({ style: 'modern', theme: 'dark', animations: 'subtle', animationList: ['subtle'], customPrompt: '', primaryColor: '#b8935a', paletteId: 'amber', palette: '#b8935a, #e8d9bf, #b4583a, #2f3436, #f1f1f1', typography: 'grotesk', themeTouched: false, paletteTouched: false });
   const [generating, setGenerating] = useState(false);
   const schema = SCHEMAS[type];
 
@@ -427,6 +427,12 @@ export default function WebsiteBuilder({ type, onBack, onGenerate }) {
                 <p className="text-xs font-semibold text-[var(--s-accent)]">Anything else you want?</p>
                 <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--s-muted)]">{details.specialRequests || 'Nothing extra provided.'}</p>
               </div>
+              {String(design.customPrompt || '').trim() && (
+                <div className="mt-3 rounded-xl border border-[var(--s-raised)] bg-[var(--s-surface)] p-4">
+                  <p className="text-xs font-semibold text-[var(--s-accent)]">Design notes</p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--s-muted)]">{design.customPrompt}</p>
+                </div>
+              )}
               <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between [&>button]:w-full sm:[&>button]:w-auto">
                 <button type="button" onClick={() => setStep(1)} disabled={generating} className="s-btn s-btn-ghost"><ArrowLeft size={14} /> Previous Step</button>
                 <button type="button" onClick={generate} disabled={generating} className={GRAD}>{generating ? 'Generating…' : `Generate ${schema?.title?.replace(/^Build your /, '') || 'Website'}`}</button>
@@ -441,7 +447,36 @@ export default function WebsiteBuilder({ type, onBack, onGenerate }) {
   );
 }
 
+const TYPE_RULES = {
+  ecommerce: 'For e-commerce, build polished catalog, product, search/filter, cart and checkout UI from supplied requirements without inventing real inventory or payment credentials.',
+  blog: 'For blogs, build clear editorial hierarchy, article cards, article detail structure, categories/tags/search and subscription UI from supplied requirements without inventing factual claims.',
+  landing: 'For landing pages, prioritize the supplied conversion goal and make the CTA hierarchy obvious without fabricating proof.',
+  cafe: 'For cafes/restaurants, build an appetizing menu (by category), ambience/gallery, hours, location, reservation/order CTA and contact sections using only the supplied menu items and prices.',
+  hotel: 'For hotels, build clear room cards, amenities, gallery, location/nearby highlights, policies and an enquiry/booking CTA without inventing rates, ratings, reviews or availability.',
+  studio: 'For freelancing studios, build services, packages, process, case studies, testimonials and a strong inquiry/booking CTA using only real supplied work, clients and quotes.',
+  saas: 'For SaaS/web apps, prioritize product clarity, feature storytelling, workflow visuals, pricing, integrations and signup/demo conversion without inventing product capabilities, customer metrics or security claims.',
+  event: 'For events/conferences, prioritize event identity, date/time, schedule, speakers, venue, tickets/registration, sponsors and attendee information using only supplied facts.',
+  education: 'For education/course sites, prioritize curriculum, instructor credibility, outcomes, format, pricing/enrollment and student proof using only supplied information.',
+  custom: "For custom websites, treat the user's description as the source of truth and infer only information architecture, layout and interaction patterns. Do not force the project into a predefined category when the brief describes something different.",
+};
+
+const TYPE_NOTE_HINTS = {
+  ecommerce: 'Shipping rules, bundle ideas, product page behavior, brand voice, collections to feature, checkout notes...',
+  blog: 'Content pillars, article layout, newsletter tone, author bios, reading experience, ad-free preferences...',
+  landing: 'Offer wording, objections to answer, section order, proof you really have, CTA behavior, tone of voice...',
+  cafe: 'Menu highlights, ambience, opening-hour quirks, reservation or order flow, local touches, photo mood...',
+  hotel: 'Room storytelling, amenities to spotlight, seasonal offers, enquiry flow, nearby highlights, guest-experience tone...',
+  studio: 'Positioning, services to lead with, case-study format, pricing presentation, booking flow, client types...',
+  saas: 'Product story, hero demo idea, pricing tiers, integrations to show, onboarding CTA, tone for developers or teams...',
+  event: 'Agenda format, speaker presentation, ticket tiers, venue info, sponsor placement, countdown or registration behavior...',
+  education: 'Curriculum presentation, instructor story, outcomes, enrollment flow, student proof you really have, pricing layout...',
+  custom: 'Describe the site you want in detail: purpose, pages, sections, behavior, references, and anything else the AI should know.',
+};
+const DEFAULT_NOTE_HINT = 'Add any specific idea, section, behavior, animation, reference, wording, feature, constraint, or anything else you want the AI to know.';
+
 export function buildWebsitePrompt(type, details, design) {
+  // Only the selected type's guidance is sent; rules for every other type are never included.
+  const typeRules = TYPE_RULES[type] ? `- ${TYPE_RULES[type]}\n` : '';
   const labels = { ecommerce: 'e-commerce store', blog: 'blog / magazine', landing: 'marketing landing page', cafe: 'cafe / restaurant website', hotel: 'hotel / stay website', studio: 'freelancing studio / agency website', saas: 'SaaS / web app website', event: 'event / conference website', education: 'education / course website', custom: 'custom website' };
   const title = labels[type] || 'website';
   const specification = Object.entries(details)
@@ -457,17 +492,7 @@ GENERATION RULES:
 - Build a complete responsive React website ready to preview, with semantic accessible HTML, working navigation, meaningful buttons, and no TODOs or broken imports.
 - Make the design specific to the requested business/publication/product rather than a generic template.
 - Respect the selected animation level and prefers-reduced-motion.
-- For e-commerce, build polished catalog, product, search/filter, cart and checkout UI from supplied requirements without inventing real inventory or payment credentials.
-- For blogs, build clear editorial hierarchy, article cards, article detail structure, categories/tags/search and subscription UI from supplied requirements without inventing factual claims.
-- For landing pages, prioritize the supplied conversion goal and make the CTA hierarchy obvious without fabricating proof.
-- For cafes/restaurants, build an appetizing menu (by category), ambience/gallery, hours, location, reservation/order CTA and contact sections using only the supplied menu items and prices.
-- For hotels, build clear room cards, amenities, gallery, location/nearby highlights, policies and an enquiry/booking CTA without inventing rates, ratings, reviews or availability.
-- For freelancing studios, build services, packages, process, case studies, testimonials and a strong inquiry/booking CTA using only real supplied work, clients and quotes.
-- For SaaS/web apps, prioritize product clarity, feature storytelling, workflow visuals, pricing, integrations and signup/demo conversion without inventing product capabilities, customer metrics or security claims.
-- For events/conferences, prioritize event identity, date/time, schedule, speakers, venue, tickets/registration, sponsors and attendee information using only supplied facts.
-- For education/course sites, prioritize curriculum, instructor credibility, outcomes, format, pricing/enrollment and student proof using only supplied information.
-- For custom websites, treat the user's description as the source of truth and infer only information architecture, layout and interaction patterns. Do not force the project into a predefined category when the brief describes something different.
-- Check all JSX component references before returning the structured file-generation JSON.
+${typeRules}- Check all JSX component references before returning the structured file-generation JSON.
 
 WEBSITE TYPE: ${title}
 

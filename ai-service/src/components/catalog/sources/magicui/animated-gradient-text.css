@@ -1,0 +1,7 @@
+@keyframes gradient {
+  to {
+    background-position: var(--bg-size, 300%) 0;
+  }
+}
+
+.animate-gradient { animation: gradient 8s linear infinite; }

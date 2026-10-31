@@ -11,10 +11,10 @@ const buildValidator=require('../validators/build.validator');
 const { ensureProductionReady }=require('./deploymentReadiness');
 const { withTimeout, stage: runStage }=require('./stageRunner');
 const { createSkillSession }=require('../skills');
-const { scopeDebugInput, applyChanges }=require('../utils/debugScope');
 const skillConfig=require('../skills/config');
 const { buildDesignSpec, enforceDesignSystemFloor }=require('../design/designIntelligence');
 const { reviewGeneratedSite }=require('../validators/quality.review');
+const { createComponentSession }=require('../components');
 // Skill guidance and design intelligence are best-effort helpers: any failure degrades to the previous behaviour.
 function safeDesignSpec(args){try{return buildDesignSpec(args);}catch(e){console.warn('[DESIGN INTELLIGENCE] spec unavailable; continuing without it',{message:e.message});return null;}}
 function safeReview(files,designSpec){try{return reviewGeneratedSite({files,designSpec});}catch(e){console.warn('[QUALITY REVIEW] skipped',{message:e.message});return null;}}
@@ -26,7 +26,7 @@ const MAX_BUILD_FIX_RETRIES=Math.max(0,Number.parseInt(process.env.MAX_BUILD_FIX
 // Single overall timeout for the entire whole-website generation pipeline
 // (requirements -> design -> architecture -> code-gen -> integration ->
 // validation/debug loop). Replaces the old per-agent/per-stage timeouts.
-const GENERATION_TIMEOUT_MS=Number.parseInt(process.env.WEBSITE_GENERATION_TIMEOUT_MS||'900000',10);
+const GENERATION_TIMEOUT_MS=Number.parseInt(process.env.AI_JOB_TIMEOUT_MS||'18000000',10);
 // The style-preview screenshot travels as preferences.referenceImage (a data URL). Pull it out of the
 // text preferences (so it is never JSON-stringified into a prompt) and expose it as an inline media part.
 function extractReferenceImage(preferences){const prefs={...(preferences||{})};const ref=prefs.referenceImage;delete prefs.referenceImage;const m=typeof ref==='string'?/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(ref):null;return {preferences:prefs,referenceMedia:m?[{assetId:'style-reference',fileName:'style-reference-preview',mimeType:m[1],data:m[2],label:'FULL-WEBSITE STYLE REFERENCE: top-to-bottom capture of the entire selected preview, not just the first viewport. Reproduce the visual language across the full generated site, including navigation, hero proportions, section rhythm, grid/card composition, typography, surfaces, borders, shadows, CTAs, footer, responsive feel, and the selected website type. The screenshot viewport is '+String(prefs.referenceViewport||'desktop')+'. Treat this as a visual system reference, not literal content: use the real content/copy from the requirements.'}]:[]};}
@@ -74,23 +74,6 @@ function buildDebugContext({ files, dependencies, architecture, requirements, de
  };
 }
 
-function scopedDebug(errors,files){const sc=scopeDebugInput({errors,files});return {affectedFiles:sc.affectedFiles,files:sc.files};}
-// Debug-loop bookkeeping. One compact line per attempt; stops early when the agent keeps returning no effective change for the same error.
-function noteDebugProgress(progress, errors, changed, attempt) {
-  const signature = (errors || []).join('|').slice(0, 600);
-  console.log(`[DEBUG LOOP] attempt ${attempt + 1}: ${errors.length} error(s), changed ${changed.length ? changed.join(', ') : 'nothing'}`);
-  progress.noEffect = changed.length === 0 && signature === progress.lastSignature ? progress.noEffect + 1 : (changed.length === 0 ? 1 : 0);
-  progress.lastSignature = signature;
-  return progress.noEffect >= 2;
-}
-function stalledDebug(errors, files, ctx) {
-  const shown = errors.join(' | ').slice(0, 1200);
-  return Object.assign(new Error('Debug repair stalled: the agent made no effective change to the same error twice'), {
-    userMessage: `Debug repair stopped because the same error remained and the repair agent returned no change that fixes it: ${shown}`,
-    debugContext: buildDebugContext({ files, dependencies: ctx.dependencies, architecture: ctx.architecture, requirements: ctx.requirements, design: ctx.design, errors, buildOutput: [], mediaManifest: ctx.mediaManifest, mediaPlan: ctx.mediaPlan }),
-  });
-}
-
 async function debugWebsite(input = {}, { onStage } = {}) {
  const files = { ...(input.files || {}) };
  let dependencies = input.dependencies || {};
@@ -109,17 +92,15 @@ async function debugWebsite(input = {}, { onStage } = {}) {
  const MAX_DEBUG_RETRIES = Math.max(1, Number.parseInt(process.env.MAX_DEBUG_RETRIES || '3', 10) || 3);
  const meta = [];
  const skills = createSkillSession({ websiteType: requirements.websiteType || 'custom', trigger: 'debug-repair' });
- const progress = { lastSignature: null, noEffect: 0 };
 
  for (let attempt = 0; attempt < MAX_DEBUG_RETRIES; attempt += 1) {
    Object.assign(files, resolveAssetUrls(files, mediaManifest));
    const staticErrors = validateGeneratedFiles(files);
    if (staticErrors.length) {
-     const scope = scopeDebugInput({ errors: staticErrors, files });
      const debug = await stage(`debug-only:${attempt + 1}`, () => debugAgent.run({
        errors: staticErrors,
-       affectedFiles: scope.affectedFiles,
-       files: scope.files,
+       affectedFiles: Object.keys(files),
+       files,
        architecture,
        requirements,
        design,
@@ -128,8 +109,9 @@ async function debugWebsite(input = {}, { onStage } = {}) {
        mediaManifest: modelManifest,
        skillContext: skills.contextFor('debug', { terms: staticErrors }),
      }), meta, onStage);
-     const changed = applyChanges(files, debug.value?.changes, normalizeGeneratedPath);
-     if (noteDebugProgress(progress, staticErrors, changed, attempt)) throw stalledDebug(staticErrors, files, { dependencies, architecture, requirements, design, mediaManifest, mediaPlan });
+     for (const change of debug.value?.changes || []) {
+       if (change.path && typeof change.code === 'string') { const changePath = normalizeGeneratedPath(change.path); files[changePath] = { code: change.code }; }
+     }
      continue;
    }
 
@@ -145,11 +127,10 @@ async function debugWebsite(input = {}, { onStage } = {}) {
      };
    }
 
-   const scope = scopeDebugInput({ errors: build.errors || [], files });
    const debug = await stage(`debug-only:${attempt + 1}`, () => debugAgent.run({
      errors: build.errors || [],
-     affectedFiles: scope.affectedFiles,
-     files: scope.files,
+     affectedFiles: Object.keys(files),
+     files,
      architecture,
      requirements,
      design,
@@ -158,8 +139,9 @@ async function debugWebsite(input = {}, { onStage } = {}) {
      mediaManifest: modelManifest,
      skillContext: skills.contextFor('debug', { terms: build.errors || [] }),
    }), meta, onStage);
-   const changed = applyChanges(files, debug.value?.changes, normalizeGeneratedPath);
-   if (noteDebugProgress(progress, build.errors || [], changed, attempt)) throw stalledDebug(build.errors || [], files, { dependencies, architecture, requirements, design, mediaManifest, mediaPlan });
+   for (const change of debug.value?.changes || []) {
+     if (change.path && typeof change.code === 'string') { const changePath = normalizeGeneratedPath(change.path); files[changePath] = { code: change.code }; }
+   }
  }
 
  const finalErrors = validateGeneratedFiles(files);
@@ -198,27 +180,33 @@ async function runGeneration(input,{onStage}={}){
  const designResult=await stage('design',()=>designAgent.run({requirements,mediaPlan,preferences:normalized.preferences,websiteType:normalized.websiteType,media:referenceMedia,designSpec,skillContext:skills.contextFor('design')}),meta,onStage);const design=validateDesign(designResult.value);
  if(designSpec){design.designSpec=designSpec;const floorNotes=enforceDesignSystemFloor(design.designSystem,designSpec);if(floorNotes.length)console.warn('[DESIGN INTELLIGENCE]',floorNotes);console.log('[DESIGN INTELLIGENCE] spec applied',{variant:designSpec.meta.variant,style:designSpec.visualDirection.style,components:designSpec.components.length});}
  console.log('[AI STUDIO MEDIA] design plan complete');
- const architectureResult=await stage('architecture',()=>architectureAgent.run({requirements,design,mediaPlan,skillContext:skills.contextFor('architecture')}),meta,onStage);const architecture=validateArchitecture(architectureResult.value);
- const ordered=[...architecture.files].sort((a,b)=>{const rank=f=>f.path==='/package.json'?0:f.path==='/index.html'?1:f.path==='/main.jsx'?2:f.path==='/App.js'?3:/data|content/i.test(f.path)?4:/component/i.test(f.type||'')?5:6;return rank(a)-rank(b);});
+ // Component Intelligence (design-first discovery + curation). Not a separate reported stage: stage names are a frontend contract. Failure-safe.
+ const components=createComponentSession({distribution:input.distribution||normalized.preferences?.distribution});
+ if(components.enabled&&designSpec)await components.makePlan({design,designSpec});
+ const architectureResult=await stage('architecture',()=>architectureAgent.run({requirements,design,mediaPlan,componentPlan:components.planSummary(),skillContext:skills.contextFor('architecture')}),meta,onStage);const architecture=components.applyToArchitecture(validateArchitecture(architectureResult.value));
+ const ordered=[...architecture.files].sort((a,b)=>{const rank=f=>f.path==='/package.json'?0:f.path==='/lib/utils.js'?2.4:f.vendored?2.5:f.path==='/index.html'?1:f.path==='/main.jsx'?2:f.path==='/App.js'?3:/data|content/i.test(f.path)?4:/component/i.test(f.type||'')?5:6;return rank(a)-rank(b);});
  let files={};
  console.log('[AI STUDIO MEDIA] code manifest prepared', {assets:mediaManifest.length});
  for(const fileContract of ordered){
+   if(components.isDeterministic(fileContract)){files[fileContract.path]={code:components.deterministicSource()};continue;}
    const relatedContracts=architecture.files.filter(f=>f.path!==fileContract.path&&(fileContract.imports||[]).includes(f.path));
-   const result=await stage(`code:${fileContract.path}`,()=>codeGenerationAgent.run({fileContract,relatedContracts,requirements,design,userData:requirements.userData,mediaManifest:modelManifest,mediaPlan,media:referenceMedia,skillContext:isUiSourceFile(fileContract.path)?skills.contextFor('code',{terms:[fileContract.path,fileContract.type,fileContract.responsibility]}):''}),meta,onStage);
+   const result=await stage(`code:${fileContract.path}`,()=>codeGenerationAgent.run({fileContract,relatedContracts,requirements,design,userData:requirements.userData,mediaManifest:modelManifest,mediaPlan,media:referenceMedia,componentBrief:fileContract.componentIds?components.briefFor(fileContract,{designSpec,design}):null,relatedSources:Object.fromEntries(relatedContracts.filter(c=>c.vendored&&files[c.path]).map(c=>[c.path,files[c.path].code])),skillContext:isUiSourceFile(fileContract.path)?skills.contextFor('code',{terms:[fileContract.path,fileContract.type,fileContract.responsibility]}):''}),meta,onStage);
    if(result.value?.path!==fileContract.path||typeof result.value.code!=='string')throw new Error(`Code agent returned an invalid path/contract for ${fileContract.path}`);
    files[fileContract.path]={code:result.value.code};
- }const integrationResult=await stage('integration',()=>integrationAgent.run({requirements,design,architecture,files,skillContext:skills.contextFor('integration')}),meta,onStage);files=resolveAssetUrls(mergeFiles(files,integrationResult.value?.files),mediaManifest);let dependencies=architecture.dependencies||{};
+ }const integrationResult=await stage('integration',()=>integrationAgent.run({requirements,design,architecture,files,skillContext:skills.contextFor('integration')}),meta,onStage);files=components.finalize(resolveAssetUrls(mergeFiles(files,integrationResult.value?.files),mediaManifest)).files;let dependencies=architecture.dependencies||{};
  if(files['/package.json']?.code){try{const pkg=JSON.parse(files['/package.json'].code);dependencies={...dependencies,...(pkg.dependencies||{}),...(pkg.devDependencies||{})};}catch{}}
+ dependencies={...dependencies,...(components.plan.dependencies||{})};
  for(let attempt=0;attempt<=MAX_BUILD_FIX_RETRIES;attempt+=1){
-  files=resolveAssetUrls(files,mediaManifest);
+  files=components.finalize(resolveAssetUrls(files,mediaManifest)).files;
   const staticErrors=validateGeneratedFiles(files);
-  if(staticErrors.length){console.warn('[VALIDATOR] static validation failed',{attempt,errors:staticErrors});if(attempt===MAX_BUILD_FIX_RETRIES)throw Object.assign(new Error(staticErrors.join(' | ')),{userMessage:`Generated code failed validation after the maximum repair attempts: ${staticErrors.join(' | ').slice(0,1200)}`,debugContext:buildDebugContext({files,dependencies,architecture,requirements,design,errors:staticErrors,mediaManifest,mediaPlan})});const debug=await stage(`debug:${attempt+1}`,()=>debugAgent.run({errors:staticErrors,...scopedDebug(staticErrors,files),architecture,requirements,design,dependencies,mediaManifest:modelManifest,skillContext:skills.contextFor('debug',{terms:staticErrors})}),meta,onStage);for(const change of debug.value?.changes||[])if(change.path&&change.code){const changePath=normalizeGeneratedPath(change.path);files[changePath]={code:change.code};}continue;}
+  if(staticErrors.length){console.warn('[VALIDATOR] static validation failed',{attempt,errors:staticErrors});if(attempt===MAX_BUILD_FIX_RETRIES)throw Object.assign(new Error(staticErrors.join(' | ')),{userMessage:`Generated code failed validation after the maximum repair attempts: ${staticErrors.join(' | ').slice(0,1200)}`,debugContext:buildDebugContext({files,dependencies,architecture,requirements,design,errors:staticErrors,mediaManifest,mediaPlan})});const debug=await stage(`debug:${attempt+1}`,()=>debugAgent.run({errors:staticErrors,affectedFiles:Object.keys(files),files,architecture,requirements,design,dependencies,mediaManifest:modelManifest,skillContext:skills.contextFor('debug',{terms:staticErrors})}),meta,onStage);for(const change of debug.value?.changes||[])if(change.path&&change.code){const changePath=normalizeGeneratedPath(change.path);files[changePath]={code:change.code};}continue;}
   console.log('[VALIDATOR] static validation passed');const build=await stage('build-validator',()=>buildValidator.run({files,dependencies}),meta,onStage);if(build.success){console.log('[VALIDATOR] build passed');warnUnusedAssets(files,mediaManifest);
   const review=skillCfg.qualityReview?safeReview(files,designSpec):null;if(review)console.log('[QUALITY REVIEW]',review.summary);
-  const reviewErrors=review?[...(skillCfg.qualityEnforce?review.blocking:[]),...(skillCfg.fixDeadControls?review.functional:[])]:[];
-  if(reviewErrors.length&&attempt<MAX_BUILD_FIX_RETRIES){const debug=await stage(`debug:${attempt+1}`,()=>debugAgent.run({errors:reviewErrors,...scopedDebug(reviewErrors,files),architecture,requirements,design,dependencies,buildOutput:reviewErrors,mediaManifest:modelManifest,skillContext:skills.contextFor('debug',{terms:reviewErrors})}),meta,onStage);for(const change of debug.value?.changes||[])if(change.path&&change.code){const changePath=normalizeGeneratedPath(change.path);files[changePath]={code:change.code};}continue;}
-  const ready=await ensureProductionReady({files,dependencies,mediaManifest:modelManifest,resolvedDependencies:build.resolvedDependencies,skillContext:skills.contextFor('deployment')},meta,onStage);console.log('[ORCHESTRATOR] generation completed');return {assistantMessage:`Generated a ${requirements.websiteType} website through the multi-agent pipeline.`,title:buildGeneratedTitle(requirements),files:ready.files,dependencies:ready.dependencies,generationMeta:{agents:meta,deploymentReadiness:ready.report,qualityReview:review?{summary:review.summary,findings:review.findings}:null,skills:skills.report(),designSpec:designSpec?{variant:designSpec.meta.variant,style:designSpec.visualDirection.style,composition:designSpec.visualDirection.composition,components:designSpec.components}:null}};}
-  console.warn('[VALIDATOR] build failed',{attempt,errors:build.errors});if(attempt===MAX_BUILD_FIX_RETRIES)throw Object.assign(new Error('Build failed after maximum repair attempts'),{userMessage:`DevDrop could not produce a buildable website after the maximum repair attempts: ${(build.errors||[]).join(' | ').slice(0,1200)}`,debugContext:buildDebugContext({files,dependencies,architecture,requirements,design,errors:build.errors||[],buildOutput:build.errors||[],mediaManifest,mediaPlan})});const debug=await stage(`debug:${attempt+1}`,()=>debugAgent.run({errors:build.errors,...scopedDebug(build.errors,files),architecture,requirements,design,dependencies,buildOutput:build.errors,mediaManifest:modelManifest,skillContext:skills.contextFor('debug',{terms:build.errors})}),meta,onStage);for(const change of debug.value?.changes||[])if(change.path&&change.code){const changePath=normalizeGeneratedPath(change.path);files[changePath]={code:change.code};}
+  const compReview=components.review(files,dependencies);
+  const reviewErrors=[...(review?[...(skillCfg.qualityEnforce?review.blocking:[]),...(skillCfg.fixDeadControls?review.functional:[])]:[]),...compReview.blocking];
+  if(reviewErrors.length&&attempt<MAX_BUILD_FIX_RETRIES){const debug=await stage(`debug:${attempt+1}`,()=>debugAgent.run({errors:reviewErrors,affectedFiles:Object.keys(files),files,architecture,requirements,design,dependencies,buildOutput:reviewErrors,mediaManifest:modelManifest,skillContext:skills.contextFor('debug',{terms:reviewErrors})}),meta,onStage);for(const change of debug.value?.changes||[])if(change.path&&change.code){const changePath=normalizeGeneratedPath(change.path);files[changePath]={code:change.code};}continue;}
+  const ready=await ensureProductionReady({files,dependencies,mediaManifest:modelManifest,resolvedDependencies:build.resolvedDependencies,skillContext:skills.contextFor('deployment')},meta,onStage);console.log('[ORCHESTRATOR] generation completed');return {assistantMessage:`Generated a ${requirements.websiteType} website through the multi-agent pipeline.`,title:buildGeneratedTitle(requirements),files:ready.files,dependencies:ready.dependencies,generationMeta:{agents:meta,deploymentReadiness:ready.report,qualityReview:review?{summary:review.summary,findings:review.findings}:null,skills:skills.report(),components:components.enabled?{...components.meta(),review:compReview.findings}:null,designSpec:designSpec?{variant:designSpec.meta.variant,style:designSpec.visualDirection.style,composition:designSpec.visualDirection.composition,components:designSpec.components}:null}};}
+  console.warn('[VALIDATOR] build failed',{attempt,errors:build.errors});if(attempt===MAX_BUILD_FIX_RETRIES)throw Object.assign(new Error('Build failed after maximum repair attempts'),{userMessage:`DevDrop could not produce a buildable website after the maximum repair attempts: ${(build.errors||[]).join(' | ').slice(0,1200)}`,debugContext:buildDebugContext({files,dependencies,architecture,requirements,design,errors:build.errors||[],buildOutput:build.errors||[],mediaManifest,mediaPlan})});const debug=await stage(`debug:${attempt+1}`,()=>debugAgent.run({errors:build.errors,affectedFiles:Object.keys(files),files,architecture,requirements,design,dependencies,buildOutput:build.errors,mediaManifest:modelManifest,skillContext:skills.contextFor('debug',{terms:build.errors})}),meta,onStage);for(const change of debug.value?.changes||[])if(change.path&&change.code){const changePath=normalizeGeneratedPath(change.path);files[changePath]={code:change.code};}
  }
  throw new Error('Generation failed after maximum repair attempts');
 }

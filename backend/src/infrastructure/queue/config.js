@@ -25,7 +25,7 @@ const getQueueConfig = () => ({
   },
   timeoutMs: {
     // Processor-level hard stop; 0 disables.
-    ai: int('AI_JOB_TIMEOUT_MS', 20 * 60 * 1000),
+    ai: int('AI_JOB_TIMEOUT_MS', 18000000),
     deployment: int('DEPLOYMENT_JOB_TIMEOUT_MS', 45 * 60 * 1000),
     events: int('EVENTS_JOB_TIMEOUT_MS', 60 * 1000),
     // Backups / cleanups share events-queue but are long-running.

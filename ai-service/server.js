@@ -57,6 +57,7 @@ if (require.main === module) {
   // Validate the pinned skill library (manifest, license notices, content hashes). Never blocks startup:
   // on failure skill guidance is disabled and generation continues with the baseline prompts.
   try { require('./src/skills').startupCheck(); } catch (error) { console.error('ai-service: skill startup check crashed; skills disabled:', error.message); }
+  try { const st = require('./src/components').getDefaultStore(); const bad = st.verifyAll(); console.log(bad.length ? `[COMPONENTS] catalog integrity FAILED, library components disabled: ${bad.join(' | ')}` : `[COMPONENTS] ready: ${st.size()} catalogued components`); } catch (error) { console.error('ai-service: component catalog check crashed; library components disabled:', error.message); }
 
   httpServer = app.listen(PORT, () => {
     console.log(`ai-service listening on port ${PORT}`);

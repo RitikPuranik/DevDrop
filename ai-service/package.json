@@ -8,13 +8,16 @@
     "dev": "nodemon --ext js,json,env server.js",
     "test": "jest",
     "skills:verify": "node scripts/verifySkills.js",
-    "skills:benchmark": "node scripts/benchmarkSkills.js"
+    "skills:benchmark": "node scripts/benchmarkSkills.js",
+    "components:ingest": "node scripts/ingestComponents.js",
+    "components:verify": "node scripts/verifyComponents.js"
   },
   "dependencies": {
     "@babel/parser": "^7.29.8",
     "axios": "^1.6.0",
     "bullmq": "^6.3.12",
     "dotenv": "^16.3.1",
+    "esbuild": "^0.25.12",
     "express": "^4.18.2",
     "ioredis": "^6.0.0",
     "mongoose": "^8.0.0",
