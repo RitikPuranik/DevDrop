@@ -38,7 +38,7 @@ import DeploymentCard from '../../components/deployment/DeploymentCard';
 import WorkspaceShell, {
   WorkspaceLoading,
 } from '../../components/account/WorkspaceShell';
-import ActivityHeatmap from '../../components/account/ActivityHeatMap';
+import ActivityHeatmap from '../../components/account/ActivityHeatmap';
 import { analyticsAPI } from '../../api/analytics';
 
 import { useAccentTheme } from '../../hooks/useAccentTheme';
