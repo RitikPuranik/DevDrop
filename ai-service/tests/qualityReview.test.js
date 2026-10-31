@@ -3,16 +3,16 @@ const { buildDesignSpec } = require('../src/design/designIntelligence');
 
 const files = (code, extra = {}) => ({ '/index.html': { code: '<!doctype html><meta name="viewport" content="width=device-width"><script src="https://cdn.tailwindcss.com"></script><div id="root"></div>' }, '/App.js': { code }, ...extra });
 const rules = (r) => r.findings.map((f) => f.rule);
-const GOOD = 'export default function App(){return <div><header><nav>n</nav></header><main><h1>Hi</h1><img src="a.jpg" alt="A"/><label htmlFor="e">Email</label><input id="e"/><button aria-label="Close"><svg/></button><a href="https://x" target="_blank" rel="noopener noreferrer">x</a></main><footer>f</footer></div>}';
+const GOOD = 'export default function App(){return <div><header><nav>n</nav></header><main><h1>Hi</h1><img src="a.jpg" alt="A"/><label htmlFor="e">Email</label><input id="e"/><button aria-label="Close" onClick={close}><svg/></button><a href="https://x" target="_blank" rel="noopener noreferrer">x</a></main><footer>f</footer></div>}';
 
 describe('accessibility and semantics', () => {
   it('passes a well-formed site', () => {
     const r = reviewGeneratedSite({ files: files(GOOD) });
-    expect(r.summary).toEqual({ errors: 0, warnings: 0, infos: 0, total: 0 });
+    expect(r.summary).toEqual({ errors: 0, warnings: 0, infos: 0, total: 0, functional: 0 });
   });
   it.each([
     ['img-alt', '<main><h1>x</h1><img src="a"/></main>'],
-    ['icon-button-name', '<main><h1>x</h1><button><svg/></button></main>'],
+    ['icon-button-name', '<main><h1>x</h1><button onClick={go}><svg/></button></main>'],
     ['non-semantic-click', '<main><h1>x</h1><div onClick={go}>go</div></main>'],
     ['form-control-label', '<main><h1>x</h1><input type="text"/></main>'],
     ['blank-target-rel', '<main><h1>x</h1><a href="https://x" target="_blank">x</a></main>'],
@@ -85,5 +85,58 @@ describe('design spec consistency', () => {
     const r = reviewGeneratedSite({ files: files(GOOD, { '/index.css': { code: css } }), designSpec: spec });
     expect(rules(r)).not.toContain('spec-palette-unused');
     expect(rules(r)).not.toContain('spec-tokens-missing');
+  });
+});
+
+describe('dead controls (buttons and links that do nothing)', () => {
+  const run = (jsx, extra) => reviewGeneratedSite({ files: files(`export default function App(){return <main><h1>x</h1>${jsx}</main>}`, extra) });
+  const functional = (r) => r.findings.filter((f) => f.category === 'functional').map((f) => f.rule);
+  it('flags a button with no handler and names its label for the repair agent', () => {
+    const r = run('<button>Book a table</button>');
+    expect(functional(r)).toEqual(['dead-button']);
+    expect(r.functional[0]).toMatch(/^DEAD CONTROL \[dead-button\] \/App\.js:1: <button> "Book a table"/);
+    expect(r.summary.functional).toBe(1);
+  });
+  it('flags empty handlers, but accepts real handlers, submit buttons in forms, disabled buttons and spread props', () => {
+    expect(functional(run('<button onClick={() => {}}>x</button>'))).toEqual(['dead-button']);
+    expect(functional(run('<button onClick={go}>x</button>'))).toEqual([]);
+    expect(functional(run('<form onSubmit={s}><button>Send</button></form>'))).toEqual([]);
+    expect(functional(run('<button disabled>x</button>'))).toEqual([]);
+    expect(functional(run('<button {...rest}>x</button>'))).toEqual([]);
+  });
+  it('flags custom Button components used without any behaviour', () => {
+    expect(functional(run('<PrimaryButton>Go</PrimaryButton>'))).toEqual(['dead-button']);
+    expect(functional(run('<PrimaryButton onClick={go}>Go</PrimaryButton>'))).toEqual([]);
+    expect(functional(run('<Button href="#menu">Go</Button><section id="menu"/>'))).toEqual([]);
+  });
+  it('flags dead links and anchors that point at missing sections', () => {
+    expect(functional(run('<a href="#">x</a>'))).toEqual(['dead-link']);
+    expect(functional(run('<a>x</a>'))).toEqual(['dead-link']);
+    expect(functional(run('<a href="#menu">Menu</a>'))).toEqual(['broken-anchor']);
+    expect(functional(run('<a href="#menu">Menu</a><section id="menu"/>'))).toEqual([]);
+    expect(functional(run('<a href="#menu">Menu</a>', { '/Menu.js': { code: 'export default ()=> <section id="menu"/>' } }))).toEqual([]);
+    expect(functional(run('<button onClick={() => document.getElementById("gone").scrollIntoView()}>Go</button>'))).toEqual(['broken-anchor']);
+  });
+  it('flags forms with no submit handler', () => expect(functional(run('<form><input aria-label="e"/></form>'))).toEqual(['form-no-handler']));
+  it('does not treat accessibility or safety findings as functional', () => {
+    expect(functional(run('<img src="a"/><a href="https://x" target="_blank">x</a>'))).toEqual([]);
+  });
+});
+
+describe('motion and interactivity vs the design spec', () => {
+  const spec = (animations) => buildDesignSpec({ websiteType: 'cafe', preferences: { animations } });
+  const body = 'export default function App(){return <main><h1>x</h1></main>}';
+  it('warns when motion is requested but the site is static', () => {
+    const r = reviewGeneratedSite({ files: files(body), designSpec: spec('scroll') });
+    expect(r.findings.map((f) => f.rule)).toEqual(expect.arrayContaining(['no-motion', 'no-interactivity']));
+  });
+  it('is satisfied by transitions/observers and state', () => {
+    const code = 'import {useState} from "react"; export default function App(){const [o,setO]=useState(false);return <main><h1>x</h1><button className="transition hover:scale-105" onClick={()=>setO(!o)}>t</button></main>}';
+    const r = reviewGeneratedSite({ files: files(code, { '/a.css': { code: '@media (prefers-reduced-motion: reduce){*{animation:none}}' } }), designSpec: spec('scroll') });
+    expect(r.findings.map((f) => f.rule)).not.toEqual(expect.arrayContaining(['no-motion']));
+    expect(r.findings.map((f) => f.rule)).not.toContain('no-interactivity');
+  });
+  it('does not demand motion when the user chose none', () => {
+    expect(reviewGeneratedSite({ files: files(body), designSpec: spec('none') }).findings.map((f) => f.rule)).not.toContain('no-motion');
   });
 });

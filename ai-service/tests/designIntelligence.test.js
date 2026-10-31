@@ -136,3 +136,35 @@ describe('design system floor', () => {
     expect(enforceDesignSystemFloor(null, spec)).toEqual([]);
   });
 });
+
+describe('motion plan and interactivity', () => {
+  const spec = (animations, style) => buildDesignSpec({ websiteType: 'cafe', preferences: { animations, style } });
+  it('maps intensity to concrete, buildable behaviour', () => {
+    for (const [pref, level] of [['subtle', 'subtle'], ['scroll', 'moderate'], ['parallax', 'expressive']]) {
+      const s = spec(pref);
+      expect(s.motionPlan.level).toBe(level);
+      expect(s.motionPlan.scroll).toContain('reveal-once');
+      expect(s.motionPlan.durationMs).toBeGreaterThanOrEqual(150);
+      expect(s.motionPlan.reducedMotion).toBe('remove-movement-keep-state-changes');
+    }
+    expect(spec('parallax').motionPlan.scroll).toContain('hero-media-parallax');
+    expect(spec('none').motionPlan).toMatchObject({ level: 'none', scroll: [] });
+  });
+  it('defaults to visible motion when the user did not choose, and gives each style a signature', () => {
+    expect(buildDesignSpec({ websiteType: 'saas' }).motionPlan.level).not.toBe('none');
+    expect(spec(undefined, 'glass').motionPlan.signature).toBe('blur-and-glow-on-hover');
+    expect(spec(undefined, 'brutalist').motionPlan.signature).toBe('hard-offset-shadow-press');
+  });
+  it('exposes section ids as anchor targets and requires functional controls', () => {
+    const s = buildDesignSpec(CASES.restaurant);
+    expect(s.interactivity.sectionIds).toEqual(s.layout.pageStructure.map((x) => x.id));
+    expect(s.interactivity.everyControlFunctional).toBe(true);
+  });
+  it('validator rejects inconsistent motion or interactivity', () => {
+    const base = () => JSON.parse(JSON.stringify(buildDesignSpec(CASES.restaurant)));
+    let s = base(); s.motionPlan.level = 'expressive'; expect(validateDesignSpec(s).errors.join()).toMatch(/motionPlan.level/);
+    s = base(); s.motionPlan.hover = []; expect(validateDesignSpec(s).errors.join()).toMatch(/motionPlan needs/);
+    s = base(); s.interactivity.everyControlFunctional = false; expect(validateDesignSpec(s).errors.join()).toMatch(/everyControlFunctional/);
+    s = base(); s.interactivity.sectionIds = ['x']; expect(validateDesignSpec(s).errors.join()).toMatch(/sectionIds/);
+  });
+});

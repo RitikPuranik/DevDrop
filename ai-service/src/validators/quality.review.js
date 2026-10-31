@@ -29,9 +29,15 @@ const getAttr = (opening, name) => attrs(opening).find((a) => a.type === 'JSXAtt
 const attrString = (a) => (a?.value?.type === 'StringLiteral' ? a.value.value : a?.value?.type === 'JSXExpressionContainer' && a.value.expression.type === 'StringLiteral' ? a.value.expression.value : null);
 const staticString = (n) => (n?.type === 'StringLiteral' ? n.value : n?.type === 'TemplateLiteral' && !n.expressions.length ? n.quasis.map((q) => q.value.cooked).join('') : null);
 
+const FUNCTIONAL_RULES = new Set(['dead-button', 'dead-link', 'broken-anchor', 'form-no-handler']);
+const CUSTOM_BUTTON_RE = /(?:^|[a-z])(?:Button|Btn|CTA)$/;
+const textOf = (node) => (node.children || []).map((c) => (c.type === 'JSXText' ? c.value : c.type === 'JSXExpressionContainer' && c.expression.type === 'StringLiteral' ? c.expression.value : '')).join(' ').replace(/\s+/g, ' ').trim().slice(0, 40);
+const emptyHandler = (a) => { const e = a?.value?.expression; return Boolean(e && (e.type === 'ArrowFunctionExpression' || e.type === 'FunctionExpression') && e.body.type === 'BlockStatement' && e.body.body.length === 0); };
+
 function reviewGeneratedSite({ files = {}, designSpec = null } = {}) {
   const findings = [];
-  const add = (severity, rule, path, line, message) => findings.push({ severity, rule, path, line: line || null, message });
+  const add = (severity, rule, path, line, message) => findings.push({ severity, rule, path, line: line || null, message, ...(FUNCTIONAL_RULES.has(rule) ? { category: 'functional' } : {}) });
+  const knownIds = new Set(); const anchors = []; const lookups = [];
   let sawMain = false; let sawNav = false; let sawFooter = false; let sawH1 = false;
   const allText = [];
 
@@ -69,6 +75,19 @@ function reviewGeneratedSite({ files = {}, designSpec = null } = {}) {
         if (name === 'footer') sawFooter = true;
         if (name === 'h1') { sawH1 = true; h1InFile.push(line); }
         const spread = hasSpread(opening);
+        const insideForm = parents.some((p) => p.type === 'JSXElement' && jsxName(p.openingElement.name) === 'form');
+        const idAttr = attrString(getAttr(opening, 'id'));
+        if (idAttr) knownIds.add(idAttr);
+
+        if (name === 'button' && !spread && !insideForm && attrString(getAttr(opening, 'type')) !== 'submit' && !getAttr(opening, 'disabled') && (!getAttr(opening, 'onClick') || emptyHandler(getAttr(opening, 'onClick'))) && !getAttr(opening, 'onSubmit')) add('warning', 'dead-button', path, line, `<button>${textOf(node) ? ` "${textOf(node)}"` : ''} does nothing: it has no working click handler. Give it real behaviour (scroll to an existing section id, open an in-page modal or form, update state, or submit a validated form); if it cannot be made real, remove it.`);
+        if (CUSTOM_BUTTON_RE.test(name) && !spread && !insideForm && !['onClick', 'href', 'to', 'type', 'onSubmit', 'as', 'asChild', 'disabled'].some((p) => getAttr(opening, p))) add('warning', 'dead-button', path, line, `<${name}>${textOf(node) ? ` "${textOf(node)}"` : ''} is used with no onClick, href or to, so it does nothing. Give it real behaviour or remove it.`);
+        if (name === 'form' && !spread && !getAttr(opening, 'onSubmit') && !getAttr(opening, 'action')) add('warning', 'form-no-handler', path, line, '<form> has no onSubmit handler: submitting reloads the page or does nothing. Add a handler that validates and shows a success or error state.');
+        if (name === 'a' && !spread) {
+          const href = attrString(getAttr(opening, 'href'));
+          const hasClick = getAttr(opening, 'onClick') && !emptyHandler(getAttr(opening, 'onClick'));
+          if (!hasClick && (href === '#' || href === '' || /^javascript:/i.test(href || '') || (href === null && !getAttr(opening, 'href')))) add('warning', 'dead-link', path, line, `<a>${textOf(node) ? ` "${textOf(node)}"` : ''} goes nowhere (href="${href === null ? '' : href}"). Point it at a real section id, page or URL, or remove it.`);
+          if (href && /^#[A-Za-z][\w-]*$/.test(href)) anchors.push({ id: href.slice(1), path, line, text: textOf(node) });
+        }
 
         if (name === 'img' && !spread && !getAttr(opening, 'alt')) add('warning', 'img-alt', path, line, '<img> has no alt attribute (use alt="" for decorative images).');
         if (name === 'button' && !spread && !getAttr(opening, 'aria-label') && !getAttr(opening, 'aria-labelledby') && !getAttr(opening, 'title')) {
@@ -101,6 +120,7 @@ function reviewGeneratedSite({ files = {}, designSpec = null } = {}) {
       }
       if (node.type === 'CallExpression') {
         const callee = node.callee;
+        if (callee.type === 'MemberExpression' && callee.property?.name === 'getElementById') { const id = staticString(node.arguments[0]); if (id) lookups.push({ id, path, line }); }
         if (callee.type === 'Identifier' && callee.name === 'eval') add('error', 'unsafe-api', path, line, 'eval() is not allowed in generated code.');
         if (callee.type === 'MemberExpression' && callee.object?.name === 'document' && callee.property?.name === 'write') add('error', 'unsafe-api', path, line, 'document.write is not allowed in generated code.');
         if (callee.type === 'Identifier' && ['setTimeout', 'setInterval'].includes(callee.name) && staticString(node.arguments[0]) !== null) add('error', 'unsafe-api', path, line, 'String argument to setTimeout/setInterval is eval in disguise.');
@@ -140,11 +160,22 @@ function reviewGeneratedSite({ files = {}, designSpec = null } = {}) {
     if (!/--[a-z][\w-]*\s*:/i.test(joined)) add('info', 'spec-tokens-missing', null, null, 'No CSS custom properties found; design tokens should be declared once and reused.');
   }
 
+  // Broken anchors: links/scroll lookups that point at ids no element declares. Ids written as plain id="..." in the project count.
+  for (const [p, f] of Object.entries(files)) for (const m of String(f?.code || '').matchAll(/\bid=["']([A-Za-z][\w-]*)["']/g)) knownIds.add(m[1]);
+  for (const a of anchors) if (!knownIds.has(a.id)) add('warning', 'broken-anchor', a.path, a.line, `Link${a.text ? ` "${a.text}"` : ''} points to #${a.id} but no element has id="${a.id}". Add the id to the target section or fix the link.`);
+  for (const l of lookups) if (!knownIds.has(l.id)) add('warning', 'broken-anchor', l.path, l.line, `getElementById("${l.id}") finds nothing: no element has that id.`);
+  if (designSpec?.visualDirection?.motionIntensity && designSpec.visualDirection.motionIntensity !== 'none' && jsxFiles.length) {
+    if (!/IntersectionObserver|@keyframes|animation\s*:|\banimate-|framer-motion|transition\s*:|\btransition(?:-[a-z]+)?\b|hover:/.test(joined)) add('warning', 'no-motion', null, null, 'The design spec asks for motion but no animation, transition or hover effect was found.');
+    if (!/\buse(?:State|Reducer)\b/.test(joined)) add('warning', 'no-interactivity', null, null, 'No component keeps interactive state (useState/useReducer); the site is likely static.');
+  }
+
   findings.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || String(a.path).localeCompare(String(b.path)) || (a.line || 0) - (b.line || 0));
   const limited = findings.slice(0, 60);
   const summary = { errors: findings.filter((f) => f.severity === 'error').length, warnings: findings.filter((f) => f.severity === 'warning').length, infos: findings.filter((f) => f.severity === 'info').length, total: findings.length };
+  const functional = findings.filter((f) => f.category === 'functional').slice(0, 14).map((f) => `DEAD CONTROL [${f.rule}] ${f.path || 'project'}${f.line ? `:${f.line}` : ''}: ${f.message}`);
+  summary.functional = findings.filter((f) => f.category === 'functional').length;
   const blocking = findings.filter((f) => f.severity === 'error').slice(0, 12).map((f) => `SAFETY REVIEW [${f.rule}] ${f.path || 'project'}${f.line ? `:${f.line}` : ''}: ${f.message}`);
-  return { findings: limited, summary, blocking };
+  return { findings: limited, summary, blocking, functional };
 }
 
 module.exports = { reviewGeneratedSite, ALLOWED_SCRIPT_HOSTS };

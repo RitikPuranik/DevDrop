@@ -10,7 +10,7 @@ const TEXT = '# Demo\n\n## Section\nUse tokens.\n';
 describe('real manifest', () => {
   const registry = getDefaultRegistry({ reload: true, config: readConfig({}) });
   it('loads and every skill passes hash verification', () => {
-    expect(registry.list().length).toBe(11);
+    expect(registry.list().length).toBe(12);
     for (const e of registry.list()) expect(registry.loadContent(e.id).hash).toBe(e.contentHash);
   });
   it('contains no placeholder SHAs or unverified third-party licenses', () => {

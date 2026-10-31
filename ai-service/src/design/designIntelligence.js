@@ -25,14 +25,14 @@ const TYPE_STACKS = {
   condensed: { heading: 'Oswald', body: 'Inter', fallback: 'sans-serif', bodyFallback: 'sans-serif' },
 };
 const STYLE_TRAITS = {
-  minimal: { density: 'spacious', radius: 'sharp', motion: 'subtle' }, modern: { density: 'balanced', radius: 'soft', motion: 'subtle' },
+  minimal: { density: 'spacious', radius: 'sharp', motion: 'subtle' }, modern: { density: 'balanced', radius: 'soft', motion: 'moderate' },
   bold: { density: 'balanced', radius: 'sharp', motion: 'moderate' }, editorial: { density: 'spacious', radius: 'sharp', motion: 'subtle' },
   creative: { density: 'balanced', radius: 'round', motion: 'moderate' }, glass: { density: 'balanced', radius: 'round', motion: 'moderate' },
   clay: { density: 'balanced', radius: 'round', motion: 'moderate' }, brutalist: { density: 'balanced', radius: 'sharp', motion: 'subtle' },
   brutalism: { density: 'balanced', radius: 'sharp', motion: 'subtle' }, cyberpunk: { density: 'compact', radius: 'sharp', motion: 'moderate' },
   neumorphism: { density: 'balanced', radius: 'round', motion: 'subtle' }, bento: { density: 'balanced', radius: 'soft', motion: 'subtle' },
   retro: { density: 'balanced', radius: 'soft', motion: 'moderate' }, luxury: { density: 'spacious', radius: 'sharp', motion: 'subtle' },
-  corporate: { density: 'balanced', radius: 'soft', motion: 'subtle' }, organic: { density: 'spacious', radius: 'round', motion: 'subtle' },
+  corporate: { density: 'balanced', radius: 'soft', motion: 'subtle' }, organic: { density: 'spacious', radius: 'round', motion: 'moderate' },
   retrofuturist: { density: 'balanced', radius: 'soft', motion: 'moderate' }, maximalist: { density: 'compact', radius: 'soft', motion: 'expressive' },
 };
 const MOTION_BY_PREF = { none: 'none', subtle: 'subtle', scroll: 'moderate', interactive: 'moderate', parallax: 'expressive', kinetic: 'expressive', dynamic: 'expressive' };
@@ -99,6 +99,18 @@ function fnv1a(str) {
 }
 const asText = (v) => (typeof v === 'string' ? v : Array.isArray(v) ? v.map(asText).join(' ') : v && typeof v === 'object' ? Object.values(v).map(asText).join(' ') : '');
 const hasUserKey = (userData, re) => Object.entries(userData || {}).some(([k, v]) => re.test(k) && (Array.isArray(v) ? v.length : Boolean(v)));
+
+// Concrete, buildable motion vocabulary per intensity (CSS/IntersectionObserver only; no extra dependencies).
+const MOTION_LEVELS = {
+  subtle: { entrance: 'fade-up-12px', durationMs: 400, staggerMs: 60, scroll: ['reveal-once'], hover: ['lift-2px', 'link-underline'], extras: [] },
+  moderate: { entrance: 'fade-up-20px', durationMs: 500, staggerMs: 80, scroll: ['reveal-once', 'sticky-header-transition', 'active-section-highlight'], hover: ['lift-4px-shadow', 'link-underline', 'image-zoom', 'button-press'], extras: ['tab-accordion-transitions', 'animated-counters-supplied-figures-only'] },
+  expressive: { entrance: 'staggered-sequence', durationMs: 650, staggerMs: 100, scroll: ['reveal-once', 'hero-media-parallax', 'sticky-header-transition', 'active-section-highlight', 'marquee-strip'], hover: ['magnetic-button', 'lift-4px-shadow', 'image-zoom', 'button-press', 'link-underline'], extras: ['headline-word-reveal', 'page-load-sequence', 'tab-accordion-transitions', 'animated-counters-supplied-figures-only'] },
+};
+const STYLE_SIGNATURE = { glass: 'blur-and-glow-on-hover', cyberpunk: 'neon-flicker-hover', luxury: 'slow-700ms-fades', brutalist: 'hard-offset-shadow-press', brutalism: 'hard-offset-shadow-press', clay: 'squish-press-scale-96', bento: 'tile-lift-and-scale', retro: 'playful-wiggle-hover', neumorphism: 'soft-inset-press', maximalist: 'layered-parallax-motion', editorial: 'image-reveal-wipe', organic: 'gentle-float', retrofuturist: 'scanline-glow-hover', bold: 'big-scale-hover', creative: 'tilt-on-hover', minimal: 'precise-underline-sweep', modern: 'smooth-lift', corporate: 'restrained-fade' };
+function buildMotionPlan(level, style) {
+  if (level === 'none') return { level: 'none', entrance: 'none', durationMs: 0, staggerMs: 0, scroll: [], hover: ['focus-visible-ring'], extras: [], signature: 'none', reducedMotion: 'n/a' };
+  return { level, ...MOTION_LEVELS[level], signature: STYLE_SIGNATURE[style] || 'smooth-lift', reducedMotion: 'remove-movement-keep-state-changes' };
+}
 
 function buildPalette(prefs, themeId, style, adjustments) {
   const base = THEMES[themeId === 'auto' ? 'light' : themeId] || THEMES.light;
@@ -172,7 +184,10 @@ function buildDesignSpec({ websiteType = 'custom', requirements = {}, preference
       breakpoints: [320, 375, 430, 768, 1024, 1280], pageStructure: structure,
     },
     components: [...new Set(structure.map((s) => s.component))],
+    motionPlan: buildMotionPlan(motion, style),
     interactions: [...variant.interactions, ...(motion === 'none' ? [] : ['all animation has a prefers-reduced-motion fallback'])],
+    // Every control must do something real; section ids are the anchor targets for navigation links.
+    interactivity: { everyControlFunctional: true, sectionIds: structure.map((s) => s.id), rules: ['nav links use href="#<sectionId>" and each section element carries that id', 'no href="#" and no button without a handler', 'forms validate, show success and error states', 'filters, tabs, carts and accordions change real state'] },
     mediaUsage: media.map((m) => ({ assetId: m.assetId, role: String(m.role || m.placement || 'section-visual').slice(0, 40) })),
     contentRules: { preserveUserContent: true, noInventedFacts: true, noInventedTestimonials: true, placeholderPolicy: 'omit-or-neutral-generic' },
     qualityRequirements: { semanticHtml: true, keyboardAccessible: true, responsive: true, reducedMotionSupport: true },

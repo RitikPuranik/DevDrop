@@ -4,7 +4,7 @@ const { SkillLoadError } = require('./skillLoader');
 
 // Per-stage ceilings for skill content (tokens). The effective budget is min(this, AI_SKILLS_MAX_CONTEXT_TOKENS).
 const AGENT_BUDGETS = Object.freeze({
-  requirements: 700, design: 5200, architecture: 1800, code: 2000, integration: 1200, debug: 1200, deployment: 700, edit: 2400,
+  requirements: 700, design: 5200, architecture: 2200, code: 2800, integration: 1500, debug: 1200, deployment: 700, edit: 2400,
 });
 
 class SkillIntegrityError extends Error {

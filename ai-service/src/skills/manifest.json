@@ -473,6 +473,41 @@
       ],
       "conflictsWith": [],
       "notes": "Gated: repository license is MIT with a copyright line, but upstream dataset provenance is partial (many rows derived/needs-review). Requires AI_SKILLS_ALLOW_UNVERIFIED_LICENSES=true."
+    },
+    {
+      "id": "motion-and-interaction",
+      "name": "Motion and Interaction",
+      "description": "Original guidance for animation, micro-interactions and making every control functional, using plain React and CSS.",
+      "version": "1.0.0",
+      "category": "engineering",
+      "origin": "devdrop",
+      "enabled": true,
+      "essential": false,
+      "source": null,
+      "license": {
+        "identifier": "DevDrop-original",
+        "verificationStatus": "internal"
+      },
+      "supportedFrameworks": [
+        "react-vite"
+      ],
+      "compatibleAgents": [
+        "architecture",
+        "code",
+        "edit"
+      ],
+      "triggers": [
+        "website-generation",
+        "incremental-edit"
+      ],
+      "websiteTypes": "*",
+      "priority": 95,
+      "maxContextTokens": 1100,
+      "contentPath": "engineering/motion-and-interaction/SKILL.md",
+      "contentHash": "0797c2eaca72ef44867b8ce209191c26b8d9bae204bbe293bb808c02e4f84337",
+      "modifications": [],
+      "conflictsWith": [],
+      "filterFrameworkConflicts": true
     }
   ],
   "rejectedCandidates": [

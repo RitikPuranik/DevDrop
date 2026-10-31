@@ -26,6 +26,8 @@ function readConfig(env = process.env) {
     // Deterministic post-build review (no model calls). Findings are reported; they only trigger repair when enforce is on.
     qualityReview: truthy(env.AI_SKILLS_QUALITY_REVIEW, true),
     qualityEnforce: truthy(env.AI_SKILLS_QUALITY_ENFORCE, false),
+    // Buttons/links/forms that do nothing are functional defects, not style: send them through the repair loop by default.
+    fixDeadControls: truthy(env.AI_SKILLS_FIX_DEAD_CONTROLS, true),
   });
 }
 

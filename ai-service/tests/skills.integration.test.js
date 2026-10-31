@@ -116,6 +116,32 @@ describe('generation pipeline with skills', () => {
     expect(dbg.run.mock.calls[0][0].errors[0]).toMatch(/SAFETY REVIEW \[unsafe-api\]/);
     expect(result.files['/App.js'].code).toBe(OK_CODE);
   });
+  it('sends dead buttons and broken anchors to the repair agent by default, naming each one', async () => {
+    const DEAD = 'export default function App(){ return <main><h1>x</h1><a href="#menu">Menu</a><button>Book now</button></main>; }';
+    code.run.mockImplementation(async ({ fileContract }) => ({ value: { path: fileContract.path, code: DEAD } }));
+    dbg.run.mockResolvedValue({ value: { changes: [{ path: '/App.js', code: OK_CODE }] } });
+    const stages = [];
+    const result = await generateWebsite(input(), { onStage: (n, s) => { if (s === 'started') stages.push(n); } });
+    expect(stages).toContain('debug:1');
+    const errors = dbg.run.mock.calls[0][0].errors;
+    expect(errors.join('\n')).toMatch(/DEAD CONTROL \[dead-button\].*"Book now"/);
+    expect(errors.join('\n')).toMatch(/DEAD CONTROL \[broken-anchor\].*#menu/);
+    expect(result.files['/App.js'].code).toBe(OK_CODE);
+  });
+  it('can switch the dead-control repair off', async () => {
+    process.env.AI_SKILLS_FIX_DEAD_CONTROLS = 'false';
+    code.run.mockImplementation(async ({ fileContract }) => ({ value: { path: fileContract.path, code: 'export default function App(){ return <main><h1>x</h1><button>Book now</button></main>; }' } }));
+    const result = await generateWebsite(input());
+    delete process.env.AI_SKILLS_FIX_DEAD_CONTROLS;
+    expect(dbg.run).not.toHaveBeenCalled();
+    expect(result.generationMeta.qualityReview.summary.functional).toBe(1);
+  });
+  it('tells the code and architecture agents to build the motion plan and working controls', async () => {
+    await generateWebsite(input());
+    expect(code.run.mock.calls[0][0].skillContext).toContain('id="motion-and-interaction"');
+    expect(arch.run.mock.calls[0][0].skillContext).toContain('id="motion-and-interaction"');
+    expect(code.run.mock.calls[0][0].design.designSpec.motionPlan.level).not.toBe('none');
+  });
   it('behaves like the baseline when skills are disabled', async () => {
     process.env.AI_SKILLS_ENABLED = 'false';
     const stages = [];

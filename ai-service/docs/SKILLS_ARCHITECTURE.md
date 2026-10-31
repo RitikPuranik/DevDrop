@@ -60,12 +60,12 @@ requirements ──► [designSpec built] ──► design ──► architectur
 |---|---|---|
 | requirements | requirements-fidelity | 700 |
 | design | frontend-design, devdrop-design-system, ui-ux-intelligence, ui-ux-pro-max (opt-in) | 5200 |
-| architecture | framework-compatibility, devdrop-design-system, ui-ux-intelligence (react-best-practices is targeted but usually falls outside the 1800-token ceiling) | 1800 |
-| code (UI source files only) | framework-compatibility, generated-code-safety, react-best-practices (or vercel-react-best-practices when opted in), web-design-guidelines | 2000 |
-| integration | framework-compatibility, generated-code-safety, accessibility-review | 1200 |
+| architecture | framework-compatibility, motion-and-interaction, devdrop-design-system, ui-ux-intelligence | 2200 |
+| code (UI source files only) | framework-compatibility, generated-code-safety, motion-and-interaction, react-best-practices (or vercel-react-best-practices when opted in), web-design-guidelines | 2800 |
+| integration | framework-compatibility, generated-code-safety, accessibility-review | 1500 |
 | debug | framework-compatibility, generated-code-safety, react-best-practices (sections chosen by the error text) | 1200 |
 | deployment readiness | framework-compatibility, generated-code-safety | 700 |
-| edit (incremental) | framework-compatibility, generated-code-safety, react-best-practices, web-design-guidelines | 2400 |
+| edit (incremental) | framework-compatibility, generated-code-safety, motion-and-interaction, react-best-practices, web-design-guidelines | 2400 |
 
 The two opt-in skills add about 1.4k estimated tokens per site on average (benchmark with the flag on: about 24.5k vs 23.1k). The effective ceiling is `min(stage ceiling, AI_SKILLS_MAX_CONTEXT_TOKENS)`. The ~330-token platform rules block is added on top whenever any skill is included. Code files that are not UI source (`package.json`, `index.html`, `main.jsx`, config files) receive no skill text. Existing agent prompts, the debug agent's targeted-repair rules and the deployment agent's rules are unchanged; skill text is appended after them.
 
@@ -84,6 +84,14 @@ Every skill declares `supportedFrameworks` (currently only `react-vite`). The re
 The spec is passed to the Design Agent as binding input, attached as `design.designSpec` (so architecture, code, integration and debug receive it through the existing `design` argument), and summarized in `generationMeta.designSpec`. `enforceDesignSystemFloor` replaces the model's text/background colours with the spec palette only when the model's pair is below 4.5:1. If the engine cannot build a spec (for example unusable input) generation continues without it.
 
 Limits: variants are a small hand-written set, not a design search; the engine does not look at reference images (the Design Agent still does, within the spec).
+
+## 5b. Motion, interactivity and working controls
+Generated sites used to come out static because no prompt asked for motion and nothing checked controls. Now:
+- `designSpec.motionPlan` turns the motion intensity (from the user's animation preference, or a style default of subtle/moderate/expressive) into concrete behaviour: entrance and stagger timing, scroll behaviours (reveal, sticky header, active-section highlight, parallax, marquee), hover/press effects, extras (tab/accordion transitions, counters for supplied figures only) and a per-style signature (for example glass: blur-and-glow-on-hover, brutalist: hard-offset-shadow-press). It is dependency-free (CSS plus IntersectionObserver).
+- `designSpec.interactivity.sectionIds` lists the section ids the page must expose, so navigation anchors resolve.
+- The code agent is told to implement the plan for real and that every button, link and form must work. The architecture agent plans shared `/hooks/useReveal.js` and `/components/Reveal.js` and real state for interactive elements. The `motion-and-interaction` skill holds the patterns (including a small reveal hook).
+- The quality review detects dead controls: `<button>` or `*Button` components without a working handler, empty `onClick`, `href="#"`/empty/missing links, `<form>` without `onSubmit`, and `#anchor` links or `getElementById` calls with no matching id. By default (`AI_SKILLS_FIX_DEAD_CONTROLS=true`) these go through the existing debug/repair loop with each control named by its label; it uses the same retry budget and never rewrites unrelated code. It also warns (report only) when motion was requested but no animation/transition/hover or interactive state exists.
+Limits: detection is static, so a handler that exists but is logically wrong is not caught; a reusable Button component that renders a bare `<button>` without a handler can be flagged; the Playwright runtime check does not click controls.
 
 ## 6. Quality review
 `reviewGeneratedSite` (AST-based, no model) runs after a successful build and before deployment readiness. It reports: missing alt text, icon-only buttons without names, clickable non-interactive elements, unlabeled form controls, missing landmarks/h1, `target="_blank"` without `rel`, removed focus outlines, `transition: all`, animation without `prefers-reduced-motion`, viewport meta, fixed widths of 640px or more, unapproved external scripts/iframes/network calls, `eval`/`new Function`/`document.write`/string timers/dynamic script injection, dynamic `dangerouslySetInnerHTML`, and palette/token use against the designSpec. Findings go to `generationMeta.qualityReview`. By default nothing blocks. With `AI_SKILLS_QUALITY_ENFORCE=true`, severity-`error` findings are sent once through the existing debug/repair loop (consuming one of the existing repair attempts). This review complements, and does not replace, static validation, the build and the Playwright runtime check, and passing it does not prove the generated code is safe. It is not run on incremental edits.

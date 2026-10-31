@@ -118,6 +118,15 @@ function validateDesignSpec(spec) {
     for (const c of spec.components) if (!used.has(c)) err(`component "${c}" is listed but not placed in pageStructure`);
   }
   if (!Array.isArray(spec.interactions)) err('interactions must be an array');
+  const mp = spec.motionPlan;
+  if (!obj(mp)) err('motionPlan is required');
+  else {
+    if (!obj(spec.visualDirection) || mp.level !== spec.visualDirection.motionIntensity) err('motionPlan.level must equal visualDirection.motionIntensity');
+    if (mp.level !== 'none' && (!Number.isInteger(mp.durationMs) || mp.durationMs < 150 || mp.durationMs > 1200 || !Array.isArray(mp.scroll) || !mp.scroll.length || !Array.isArray(mp.hover) || !mp.hover.length)) err('motionPlan needs a sane duration, scroll and hover behaviours');
+  }
+  const ia = spec.interactivity;
+  if (!obj(ia) || ia.everyControlFunctional !== true) err('interactivity.everyControlFunctional must be true');
+  else if (obj(l) && Array.isArray(l.pageStructure) && (!Array.isArray(ia.sectionIds) || ia.sectionIds.join() !== l.pageStructure.map((s) => s.id).join())) err('interactivity.sectionIds must match pageStructure ids');
 
   const cr = spec.contentRules;
   if (!obj(cr) || cr.preserveUserContent !== true || cr.noInventedFacts !== true || cr.noInventedTestimonials !== true) err('contentRules must forbid invented facts and testimonials and preserve user content');
