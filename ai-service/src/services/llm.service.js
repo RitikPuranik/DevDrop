@@ -24,7 +24,7 @@ const RETRY_DELAY_MS = Math.max(0, Number.parseInt(process.env.GEMINI_RETRY_DELA
 //   GEMINI_CAPACITY_FALLBACK_WAIT_MS first wait when no retry time is known
 //                                    (default 5000, doubles each cycle, jittered)
 // A provider-supplied wait is used as-is; only the fallback is bounded.
-const CAPACITY_WAIT_MAX_MS = envMs('GEMINI_CAPACITY_WAIT_MAX_MS', 1800000);
+const CAPACITY_WAIT_MAX_MS = envMs('GEMINI_CAPACITY_WAIT_MAX_MS', 18000000);
 const CAPACITY_MAX_CYCLES = envMs('GEMINI_CAPACITY_MAX_CYCLES', 50);
 const CAPACITY_FALLBACK_WAIT_MS = envMs('GEMINI_CAPACITY_FALLBACK_WAIT_MS', 5000);
 const DEFAULT_GEMINI_MODELS = [

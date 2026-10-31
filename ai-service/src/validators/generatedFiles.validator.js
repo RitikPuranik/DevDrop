@@ -45,6 +45,15 @@ function jsxBindings(ast, code) {
     if (!bindings.has(name)) throw new Error(`JSX component "${name}" is undefined`);
   });
 }
+function findTypeScriptSyntax(code, path) {
+  let ast;
+  try { ast = parse(code, { sourceType: 'module', sourceFilename: path, plugins: ['jsx', 'typescript', 'dynamicImport', 'optionalChaining', 'nullishCoalescingOperator', 'topLevelAwait'] }); } catch { return null; }
+  let hit = null;
+  walk(ast, (n) => { if (!hit && typeof n.type === 'string' && n.type.startsWith('TS')) hit = n; });
+  if (!hit) return null;
+  const names = { TSTypeAnnotation: 'type annotation', TSInterfaceDeclaration: 'interface declaration', TSTypeAliasDeclaration: 'type alias', TSAsExpression: '"as" type assertion', TSTypeParameterDeclaration: 'generic type parameters', TSTypeParameterInstantiation: 'generic type arguments', TSEnumDeclaration: 'enum', TSNonNullExpression: 'non-null assertion (!)', TSSatisfiesExpression: '"satisfies" expression', TSTypeAssertion: 'type assertion', TSParameterProperty: 'parameter property', TSDeclareFunction: 'declare function' };
+  return { line: hit.loc?.start?.line || 1, what: names[hit.type] || `TypeScript construct (${hit.type})` };
+}
 function validateGeneratedFiles(files) {
   const errors = [];
   if (!files || typeof files !== 'object' || Array.isArray(files)) return ['Generated files must be an object.'];
@@ -55,10 +64,15 @@ function validateGeneratedFiles(files) {
     const code = typeof obj?.code === 'string' ? obj.code : '';
     if (!code.trim()) { errors.push(`${path}: empty source.`); continue; }
     if (!/\.(js|jsx|mjs|cjs)$/i.test(path)) continue; // non-JS assets (css, html, json, etc.) are not parsed as JavaScript
-    if (/\binterface\s+|\btype\s+[A-Za-z_$]|:\s*(string|number|boolean)\b/.test(code)) errors.push(`${path}: TypeScript syntax is not allowed.`);
     let ast;
     try { ast = parse(code, { sourceType: 'module', sourceFilename: path, plugins: ['jsx','dynamicImport','optionalChaining','nullishCoalescingOperator','topLevelAwait'] }); jsxBindings(ast, code); }
-    catch (e) { errors.push(`${path}: ${e.message}`); continue; }
+    catch (e) {
+      // Words like "interface" or "type of" inside strings/data are valid JavaScript and parse fine. Only a real parse failure can mean
+      // TypeScript, so confirm by parsing again with the TypeScript grammar and naming the exact construct and line.
+      const ts = findTypeScriptSyntax(code, path);
+      errors.push(ts ? `${path}:${ts.line}: TypeScript syntax is not allowed (${ts.what}). Remove the ${ts.what} and keep plain JavaScript/JSX.` : `${path}: ${e.message}`);
+      continue;
+    }
     const imports = [];
     walk(ast, (n) => { if (n.type === 'ImportDeclaration') imports.push({ specifiers: n.specifiers || [], source: n.source.value }); });
     for (const imp of imports) {
