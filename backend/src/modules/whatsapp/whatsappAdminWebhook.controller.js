@@ -91,6 +91,7 @@ const commandResponse = async (raw) => {
 };
 
 const verify = (req, res) => {
+  console.info('[whatsapp-assistant] GET webhook verification hit');
   const mode = req.query['hub.mode'];
   const token = String(req.query['hub.verify_token'] || '');
   const challenge = req.query['hub.challenge'];
@@ -103,14 +104,16 @@ const receive = async (req, res) => {
   const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.from('');
   const appSecret = String(process.env.META_APP_SECRET || '').trim();
   const signature = String(req.get('x-hub-signature-256') || '');
-  if (!appSecret || !/^sha256=[a-f0-9]{64}$/i.test(signature)) return res.sendStatus(401);
+  console.info('[whatsapp-assistant] POST webhook hit', { rawBytes: raw.length, appSecretConfigured: Boolean(appSecret), signaturePresent: Boolean(signature), contentType: req.get('content-type') || null });
+  if (!appSecret || !/^sha256=[a-f0-9]{64}$/i.test(signature)) { console.warn('[whatsapp-assistant] rejected: missing app secret or signature'); return res.sendStatus(401); }
   const digest = 'sha256=' + crypto.createHmac('sha256', appSecret).update(raw).digest('hex');
-  if (!safeEq(signature, digest)) return res.sendStatus(401);
+  if (!safeEq(signature, digest)) { console.warn('[whatsapp-assistant] rejected: signature mismatch', { rawBytes: raw.length }); return res.sendStatus(401); }
 
   let payload;
   try { payload = JSON.parse(raw.toString('utf8')); } catch { return res.sendStatus(400); }
   // Acknowledge Meta promptly. Process only incoming WhatsApp messages, ignore status callbacks.
   res.sendStatus(200);
+  console.info('[whatsapp-assistant] verified payload', { object: payload.object || null, changes: (payload.entry || []).flatMap(e => e.changes || []).map(ch => ch.field), messageCount: (payload.entry || []).flatMap(e => e.changes || []).reduce((n, ch) => n + (ch.value?.messages || []).length, 0), statusCount: (payload.entry || []).flatMap(e => e.changes || []).reduce((n, ch) => n + (ch.value?.statuses || []).length, 0) });
   if (payload.object !== 'whatsapp_business_account') return;
 
   const configuredAdmin = digitsOnly(process.env.WHATSAPP_ADMIN_SENDER_WA_ID || process.env.WHATSAPP_ADMIN_PHONE_NUMBER);
@@ -124,7 +127,7 @@ const receive = async (req, res) => {
       for (const message of change.value?.messages || []) {
         const sender = digitsOnly(message.from);
         if (!sender || sender !== configuredAdmin) {
-          console.warn('[whatsapp-assistant] ignored message from unauthorized sender');
+          console.warn('[whatsapp-assistant] ignored unauthorized sender', { senderPresent: Boolean(sender), configuredSenderConfigured: Boolean(configuredAdmin), senderMatches: Boolean(sender) && sender === configuredAdmin });
           continue;
         }
         // Basic duplicate suppression per process. For durable cross-instance dedupe, persist provider message IDs.
