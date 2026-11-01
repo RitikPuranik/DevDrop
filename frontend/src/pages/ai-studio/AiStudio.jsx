@@ -5,6 +5,8 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, ArrowUp, Loader2, Square, RotateCcw, Bot, User, CheckSquare, ChevronDown, Paperclip, Mic, Sparkles, Send, X, Film, FileText } from 'lucide-react';
 import { usePostHog } from '../../analytics/PostHogProvider';
 import { aiGenerateAPI } from '../../api/aiGenerate';
+import { quotaModalFromError } from '../../components/billing/billingUtils';
+import { QUOTA_EVENT } from '../../components/billing/QuotaModalHost';
 import { aiStudioAPI } from '../../api/aiStudio';
 import { subscribeToJob } from '../../api/socket';
 import AppPreview from '../../components/ai-studio/AppPreview';
@@ -110,6 +112,9 @@ export default function AiStudio() {
   };
   const handleJobError=(err)=>{
     if(err?.cancelled){setError(null);setStopped(true);setMessages(prev=>prev.some(m=>m.notice)&&prev[prev.length-1]?.notice?prev:[...prev,{role:'assistant',notice:true,content:STOP_NOTICE}]);return;}
+    // Entitlement/quota refusals are structured: show the upgrade modal, not an error toast or a failed-build message.
+    const billingModal=quotaModalFromError(err);
+    if(billingModal){setError(null);window.dispatchEvent(new CustomEvent(QUOTA_EVENT,{detail:billingModal}));return;}
     const msg=err?.response?.data?.message||err?.message||'Something went wrong generating your app. Please try again.';
     if(err?.jobId){setFailedJobId(err.jobId);setDebugRetryAvailable(Boolean(err.debugAvailable));}
     setError(msg); setMessages(prev=>[...prev,{role:'assistant',content:`⚠️ ${msg}`}]);

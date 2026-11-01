@@ -62,6 +62,25 @@ const couponSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+
+    // ---- Subscription-checkout rules (all optional; existing marketplace coupons are unaffected) ----
+    // Which checkout the coupon can be used in. Missing/legacy coupons behave as marketplace-only.
+    appliesTo: {
+      type: [String],
+      enum: ['marketplace', 'subscription'],
+      default: undefined,
+    },
+    startsAt: { type: Date, default: null },
+    expiresAt: { type: Date, default: null },
+    maxRedemptions: { type: Number, default: null, min: 1 }, // global cap; single_global implies 1 when unset
+    redemptionCount: { type: Number, default: 0, min: 0 }, // subscription redemptions (reserved + redeemed)
+    perUserLimit: { type: Number, default: null, min: 1 },
+    minPurchaseMinor: { type: Number, default: null, min: 0 },
+    maxDiscountMinor: { type: Number, default: null, min: 0 },
+    eligiblePlans: { type: [String], default: undefined }, // e.g. ['pro'] (empty/missing = all paid plans)
+    eligibleIntervals: { type: [String], default: undefined }, // e.g. ['monthly']
+    firstTimeOnly: { type: Boolean, default: false },
+    stackableWithAnnualDiscount: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

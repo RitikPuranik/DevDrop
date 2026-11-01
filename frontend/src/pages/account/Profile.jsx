@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   Loader2, LogOut, Camera, X, CheckCircle, AlertCircle,
-  Mail, User as UserIcon, Palette, LayoutGrid, ChevronRight, Check, ShieldAlert,
+  Mail, User as UserIcon, Landmark, LayoutGrid, ChevronRight, Check, ShieldAlert,
 } from 'lucide-react';
 import { userAPI } from '../../api/user';
 import { authAPI } from '../../api/auth';
@@ -12,7 +12,7 @@ import { useAccentTheme } from '../../hooks/useAccentTheme';
 
 export default function Profile() {
   const navigate = useNavigate();
-  const { themeId, setTheme, cssVars, themes } = useAccentTheme();
+  const { cssVars } = useAccentTheme();
 
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -23,12 +23,50 @@ export default function Profile() {
   const [savingName, setSavingName] = useState(false);
   const [sendingVerification, setSendingVerification] = useState(false);
 
+  // Payout details (moved here from the workspace)
+  const [bankDetails, setBankDetails] = useState({ upiId: '', phoneNumber: '' });
+  const [loadingBank, setLoadingBank] = useState(true);
+  const [savingBank, setSavingBank] = useState(false);
+
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) { navigate('/'); return; }
     fetchProfile();
+    fetchBankDetails();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Deep link from the workspace (/profile#payout-details)
+  useEffect(() => {
+    if (loading || loadingBank || window.location.hash !== '#payout-details') return;
+    document.getElementById('payout-details')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [loading, loadingBank]);
+
+  const fetchBankDetails = async () => {
+    try {
+      setLoadingBank(true);
+      const res = await userAPI.getBankDetails();
+      if (res.data?.data) setBankDetails({ upiId: res.data.data.upiId || '', phoneNumber: res.data.data.phoneNumber || '' });
+    } catch (err) {
+      if (err.response?.status !== 404) toast.error('Failed to load payout details');
+    } finally {
+      setLoadingBank(false);
+    }
+  };
+
+  const handleSaveBank = async (e) => {
+    e.preventDefault();
+    try {
+      setSavingBank(true);
+      await userAPI.saveBankDetails(bankDetails);
+      toast.success('Payout details saved successfully');
+      setProfile((prev) => ({ ...prev, hasBankDetails: true }));
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to save payout details');
+    } finally {
+      setSavingBank(false);
+    }
+  };
 
   const fetchProfile = async () => {
     try {
@@ -330,32 +368,39 @@ export default function Profile() {
               </div>
             </motion.div>
 
-            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className={`${card} p-6 md:p-8`}>
+            <motion.div id="payout-details" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className={`${card} p-6 md:p-8`}>
               <h2 className="ws-display text-[22px] text-white mb-1 flex items-center gap-2.5">
-                <Palette size={18} className="text-[#cbb392]" /> Appearance
+                <Landmark size={18} className="text-[#cbb392]" /> Payout details
               </h2>
-              <p className="text-white/55 text-[14px] mb-6">Choose an accent colour for your Profile &amp; Workspace.</p>
+              <p className="text-white/55 text-[14px] mb-6">Used when marketplace earnings are paid out.</p>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {themes.map((t) => {
-                  const isActive = t.id === themeId;
-                  return (
-                    <button
-                      key={t.id}
-                      onClick={() => setTheme(t.id)}
-                      aria-pressed={isActive}
-                      className={`relative flex flex-col items-center gap-3 rounded-xl border p-4 transition-all ${
-                        isActive ? 'border-[#e8e2d6]/70 bg-white/[0.06]' : 'border-white/[0.1] hover:border-white/25 hover:bg-white/[0.03]'
-                      }`}
-                    >
-                      <span className="w-9 h-9 rounded-full flex items-center justify-center border border-white/20" style={{ backgroundColor: t.accent }}>
-                        {isActive && <Check size={15} className="text-white" />}
-                      </span>
-                      <span className="text-[13.5px] font-semibold text-white/85">{t.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
+              {loadingBank ? (
+                <div className="space-y-3" aria-busy="true" aria-label="Loading payout details">
+                  <div className="h-12 rounded-xl bg-white/[0.05] animate-pulse" />
+                  <div className="h-12 rounded-xl bg-white/[0.05] animate-pulse" />
+                </div>
+              ) : (
+                <form onSubmit={handleSaveBank} className="space-y-4">
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <label className="block">
+                      <span className="block text-[12.5px] font-semibold text-white/60 mb-2">UPI ID</span>
+                      <div className={fieldBox}>
+                        <input required value={bankDetails.upiId} onChange={(e) => setBankDetails({ ...bankDetails, upiId: e.target.value })} placeholder="username@upi" className="w-full bg-transparent outline-none text-[14.5px] text-white placeholder:text-white/30" />
+                      </div>
+                    </label>
+                    <label className="block">
+                      <span className="block text-[12.5px] font-semibold text-white/60 mb-2">Phone number</span>
+                      <div className={fieldBox}>
+                        <input required type="tel" value={bankDetails.phoneNumber} onChange={(e) => setBankDetails({ ...bankDetails, phoneNumber: e.target.value })} placeholder="+91 9876543210" className="w-full bg-transparent outline-none text-[14.5px] text-white placeholder:text-white/30" />
+                      </div>
+                    </label>
+                  </div>
+                  <button type="submit" disabled={savingBank} className="px-6 py-3 rounded-full bg-[var(--accent)] text-white text-[13px] font-bold inline-flex items-center gap-2 hover:opacity-90 disabled:opacity-50 transition-all">
+                    {savingBank ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle size={15} />}
+                    {savingBank ? 'Saving...' : 'Save payout details'}
+                  </button>
+                </form>
+              )}
             </motion.div>
           </div>
         </div>

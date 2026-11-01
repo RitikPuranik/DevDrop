@@ -2,6 +2,7 @@ import React, { lazy, Suspense, useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { Toaster } from "sonner";
+import QuotaModalHost from "./components/billing/QuotaModalHost";
 
 import IntroLoader from './components/loaders/IntroLoader';
 import Loader from './components/loaders/LoadingScreen';
@@ -162,7 +163,8 @@ function AppContent() {
               </Routes>
             </Suspense>
 
-            <Toaster
+            <QuotaModalHost />
+          <Toaster
               position="top-right"
               richColors
               toastOptions={{

@@ -1,6 +1,12 @@
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
 
+const safeEqual = (a, b) => {
+  const x = Buffer.from(String(a || ''));
+  const y = Buffer.from(String(b || ''));
+  return x.length === y.length && crypto.timingSafeEqual(x, y);
+};
+
 // Lazy Razorpay instance — created on first use so the server can start without keys in dev
 let _razorpay = null;
 const getRazorpay = () => {
@@ -82,7 +88,7 @@ const verifyPaymentSignature = (razorpayOrderId, razorpayPaymentId, razorpaySign
       .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
       .update(body)
       .digest('hex');
-    return expectedSignature === razorpaySignature;
+    return safeEqual(expectedSignature, razorpaySignature);
   } catch (error) {
     console.error('Razorpay signature verification error:', error);
     throw error;
@@ -98,14 +104,41 @@ const verifyWebhookSignature = (rawBody, razorpaySignature) => {
       .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET)
       .update(rawBody)
       .digest('hex');
-    return expectedSignature === razorpaySignature;
+    return safeEqual(expectedSignature, razorpaySignature);
   } catch (error) {
     console.error('Razorpay webhook verification error:', error);
     throw error;
   }
 };
 
+/**
+ * Create an order for an amount that is ALREADY in minor units (paise). Used by subscription billing, where the
+ * amount is computed server-side as integers; no float math and no test-mode amount clamping.
+ */
+const createOrderMinor = async (receipt, amountMinor, currency = 'INR', notes = {}) => {
+  if (!Number.isSafeInteger(amountMinor) || amountMinor < 100) throw new Error('Invalid order amount');
+  try {
+    return await getRazorpay().orders.create({ amount: amountMinor, currency, receipt, notes });
+  } catch (error) {
+    console.error('Razorpay create order (minor) error:', error?.error?.description || error.message);
+    throw new Error(error?.error?.description || error.message);
+  }
+};
+
+/** Payments attempted against an order (trusted server-to-server read). */
+const fetchOrderPayments = async (razorpayOrderId) => {
+  try {
+    const res = await getRazorpay().orders.fetchPayments(razorpayOrderId);
+    return res?.items || [];
+  } catch (error) {
+    console.error('Razorpay fetch order payments error:', error?.error?.description || error.message);
+    throw new Error(error?.error?.description || error.message);
+  }
+};
+
 module.exports = {
+  createOrderMinor,
+  fetchOrderPayments,
   createOrder,
   fetchOrder,
   fetchPayment,

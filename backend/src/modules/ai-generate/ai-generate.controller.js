@@ -2,6 +2,8 @@ const crypto = require('crypto');
 const { resolveGenerationAssets } = require('../../services/ai-studio/aiStudioAssetPipeline.service');
 const queue = require('../../infrastructure/queue');
 const { emitToJob } = require('../../shared/realtime/socket');
+const entitlements = require('../billing/entitlement.service');
+const { BillingError, sendBillingError } = require('../billing/errors');
 
 const { QUEUE_NAMES, JOB_TYPES, QueueJob, jobStore } = queue;
 
@@ -62,6 +64,7 @@ const reconcileJob = async (job) => {
   if (await queue.isJobLive(QUEUE_NAMES.AI, job.jobKey)) return true;
   const message = 'This generation was lost when the AI queue restarted. Please try again.';
   await jobStore.markFailed(job.jobKey, { message, class: 'transient' }, { queue: QUEUE_NAMES.AI });
+  await entitlements.releaseJob(job.jobKey, 'lost').catch((e) => console.warn('[billing] release failed:', e.message));
   if (job.projectId) {
     await lifecycle().finishJob({ projectId: job.projectId, userId: job.userId, jobKey: job.jobKey, outcome: 'failed', message }).catch(() => {});
   }
@@ -84,6 +87,13 @@ exports.generate = async (req, res) => {
 
     const existingFiles = fileData && fileData.files && typeof fileData.files === 'object' && Object.keys(fileData.files).length ? fileData.files : null;
     const hasExistingFiles = Boolean(existingFiles);
+
+    // ---- ENTITLEMENT GATE (1/2): reject before any request preparation. Nothing below this line can reach
+    // ai-service for a user who is not entitled. The client's "edit" claim is NOT trusted: the server decides
+    // whether this is an edit or a (quota-consuming) generation.
+    const ownedProject = projectId ? await lifecycle().getOwnedProject(projectId, req.userId).catch(() => null) : null;
+    const usageKind = await entitlements.classifyRequest({ userId: req.userId, projectId, claimsEdit: hasExistingFiles, project: ownedProject });
+    await entitlements.checkAccess(req.userId, usageKind);
     // Throws 400/403/404/502 with a user-facing message for critical asset
     // problems; optional document-extraction problems are reported per asset
     // (assets.*.extraction.status) and never fail the request.
@@ -134,19 +144,26 @@ exports.generate = async (req, res) => {
     }
 
     const jobKey = crypto.randomUUID();
-    await queue.enqueueJob({
-      queue: QUEUE_NAMES.AI,
-      type: JOB_TYPES.AI_GENERATE,
-      jobKey,
-      userId: req.userId,
-      refType: 'ai-payload',
-      refId: payloadHash,
-      mode,
-      projectId,
-      payload, // large input stays in MongoDB; Redis only carries the job key
-      data: { mode },
-      priority: queue.PRIORITY.TRANSACTIONAL,
-    });
+    // ---- ENTITLEMENT GATE (2/2): atomically reserve the unit. If this throws, no job is created or enqueued.
+    await entitlements.reserveJob({ userId: req.userId, jobKey, kind: usageKind, projectId });
+    try {
+      await queue.enqueueJob({
+        queue: QUEUE_NAMES.AI,
+        type: JOB_TYPES.AI_GENERATE,
+        jobKey,
+        userId: req.userId,
+        refType: 'ai-payload',
+        refId: payloadHash,
+        mode,
+        projectId,
+        payload, // large input stays in MongoDB; Redis only carries the job key
+        data: { mode },
+        priority: queue.PRIORITY.TRANSACTIONAL,
+      });
+    } catch (enqueueError) {
+      await entitlements.releaseJob(jobKey, 'enqueue_failed').catch(() => {});
+      throw enqueueError;
+    }
     if (projectId) {
       // Chat history + inputs live on the project so a refresh / another tab can pick the run back up.
       await lifecycle().attachJob({
@@ -157,6 +174,7 @@ exports.generate = async (req, res) => {
     }
     res.status(202).json({ success:true, data:{ jobId: jobKey, status:'queued' } });
   } catch(error) {
+    if (error instanceof BillingError) return sendBillingError(res, error);
     console.error('AI generate error:', error.message);
     if (error.code === 'QUEUE_UNAVAILABLE') return res.status(503).json({ success:false, message:'AI generation is temporarily unavailable. Please try again shortly.' });
     res.status(error.statusCode||500).json({success:false,message:error.userMessage||'Failed to generate app'});
@@ -184,6 +202,9 @@ exports.debugRetry = async (req, res) => {
     }
     const ctx = original.debugContext;
     const debugJobId = crypto.randomUUID();
+    // Same gate as generate(): entitlement re-checked, and the unit the failure released is re-taken (one unit per generation).
+    await entitlements.reserveDebugRetry({ userId: req.userId, originalJobKey: original.jobKey, debugJobKey: debugJobId, projectId: original.projectId });
+    try {
     await queue.enqueueJob({
       queue: QUEUE_NAMES.AI,
       type: JOB_TYPES.AI_GENERATE,
@@ -208,6 +229,10 @@ exports.debugRetry = async (req, res) => {
       data: { mode: 'debug' },
       priority: queue.PRIORITY.TRANSACTIONAL,
     });
+    } catch (enqueueError) {
+      await entitlements.releaseJob(debugJobId, 'enqueue_failed').catch(() => {});
+      throw enqueueError;
+    }
     // The original job's debug context is single-use.
     await QueueJob.updateOne({ jobKey: original.jobKey }, { $unset: { debugContext: '' } });
     if (original.projectId) {
@@ -219,6 +244,7 @@ exports.debugRetry = async (req, res) => {
     }
     res.status(202).json({ success:true, data:{jobId:debugJobId,status:'queued',mode:'debug'} });
   } catch(error) {
+    if (error instanceof BillingError) return sendBillingError(res, error);
     if (error.code === 'QUEUE_UNAVAILABLE') return res.status(503).json({ success:false, message:'AI generation is temporarily unavailable. Please try again shortly.' });
     res.status(error.statusCode||500).json({success:false,message:error.userMessage||'Failed to start debug retry'});
   }
@@ -230,9 +256,12 @@ exports.cancel = async (req, res) => {
     const job = await findOwnedJob(req.params.id, req.userId);
     if (!job) return res.status(404).json({ success:false, message:'Job not found' });
     if (QueueJob.TERMINAL.includes(job.status)) return res.status(409).json({ success:false, message:`Job already ${job.status}` });
+    const wasStarted = job.status === 'active';
     await queue.removeWaitingJob(QUEUE_NAMES.AI, job.jobKey, 'cancelled by user');
     console.log('[queue] CANCEL REQUESTED by user', { queue: QUEUE_NAMES.AI, jobKey: job.jobKey, previousStatus: job.status });
     await jobStore.markCancelled(job.jobKey, { queue: QUEUE_NAMES.AI });
+    // Quota policy: cancelled before the worker started => refunded; cancelled while running => provider tokens were spent, unit stays consumed.
+    await (wasStarted ? entitlements.commitJob(job.jobKey) : entitlements.releaseJob(job.jobKey, 'cancelled_before_start')).catch((e) => console.warn('[billing] settle on cancel failed:', e.message));
     // Running job: push the stop to the worker right away (it frees its slot and the next queued job starts).
     if (typeof queue.publishCancel === 'function') await queue.publishCancel(job.jobKey);
     if (job.projectId) {

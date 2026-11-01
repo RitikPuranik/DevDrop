@@ -156,6 +156,11 @@ const findValidCoupon = async (code, userId) => {
     throw createHttpError(400, 'Coupon not found');
   }
 
+  // Subscription-only coupons (appliesTo set without 'marketplace') are not valid for marketplace purchases.
+  if (Array.isArray(coupon.appliesTo) && coupon.appliesTo.length && !coupon.appliesTo.includes('marketplace')) {
+    throw createHttpError(400, 'Coupon not found');
+  }
+
   if (!coupon.active) {
     throw createHttpError(400, 'This coupon is not active');
   }

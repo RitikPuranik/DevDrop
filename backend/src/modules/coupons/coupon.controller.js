@@ -52,12 +52,51 @@ const createCoupon = async (req, res) => {
       return res.status(409).json({ success: false, message: 'Coupon code already exists' });
     }
 
+    // Optional subscription-checkout rules. Absent => classic marketplace coupon, behaviour unchanged.
+    const extra = {};
+    const b = req.body;
+    if (b.appliesTo !== undefined) {
+      const list = [].concat(b.appliesTo).map(String);
+      if (!list.length || list.some((x) => !['marketplace', 'subscription'].includes(x))) {
+        return res.status(400).json({ success: false, message: 'appliesTo must be marketplace and/or subscription' });
+      }
+      extra.appliesTo = list;
+    }
+    const num = (v, name, { int = false, min = 0 } = {}) => {
+      if (v === undefined || v === null || v === '') return undefined;
+      const n = Number(v);
+      if (!Number.isFinite(n) || n < min || (int && !Number.isInteger(n))) throw Object.assign(new Error(`${name} is invalid`), { badRequest: true });
+      return n;
+    };
+    try {
+      const set = (k, v) => { if (v !== undefined) extra[k] = v; };
+      set('maxRedemptions', num(b.maxRedemptions, 'maxRedemptions', { int: true, min: 1 }));
+      set('perUserLimit', num(b.perUserLimit, 'perUserLimit', { int: true, min: 1 }));
+      set('minPurchaseMinor', num(b.minPurchaseMinor, 'minPurchaseMinor', { int: true }));
+      set('maxDiscountMinor', num(b.maxDiscountMinor, 'maxDiscountMinor', { int: true }));
+    } catch (e) {
+      if (e.badRequest) return res.status(400).json({ success: false, message: e.message });
+      throw e;
+    }
+    for (const k of ['startsAt', 'expiresAt']) {
+      if (b[k]) {
+        const d = new Date(b[k]);
+        if (Number.isNaN(d.getTime())) return res.status(400).json({ success: false, message: `${k} is not a valid date` });
+        extra[k] = d;
+      }
+    }
+    if (Array.isArray(b.eligiblePlans)) extra.eligiblePlans = b.eligiblePlans.map(String);
+    if (Array.isArray(b.eligibleIntervals)) extra.eligibleIntervals = b.eligibleIntervals.map(String);
+    if (b.firstTimeOnly !== undefined) extra.firstTimeOnly = Boolean(b.firstTimeOnly);
+    if (b.stackableWithAnnualDiscount !== undefined) extra.stackableWithAnnualDiscount = Boolean(b.stackableWithAnnualDiscount);
+
     const coupon = await Coupon.create({
       code,
       usageMode,
       discountType,
       discountValue: normalizedDiscountValue,
       active: req.body.active !== undefined ? Boolean(req.body.active) : true,
+      ...extra,
     });
 
     res.status(201).json({

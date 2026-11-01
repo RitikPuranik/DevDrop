@@ -11,6 +11,16 @@ jest.mock('../../../src/infrastructure/queue/queues', () => ({
 jest.mock('../../../src/services/ai-studio/aiStudioAssetPipeline.service', () => ({
   resolveGenerationAssets: jest.fn(async () => ({ assets: {}, media: [] })),
 }));
+// Entitlement/quota enforcement has its own suites (tests/api/billing). Here the user is simply entitled.
+jest.mock('../../../src/modules/billing/entitlement.service', () => ({
+  classifyRequest: jest.fn(async ({ claimsEdit }) => (claimsEdit ? 'edit' : 'generate')),
+  checkAccess: jest.fn(async () => ({})),
+  reserveJob: jest.fn(async () => ({ duplicate: false })),
+  reserveDebugRetry: jest.fn(async () => ({ duplicate: false })),
+  commitJob: jest.fn(async () => true),
+  releaseJob: jest.fn(async () => true),
+  isJobAuthorized: jest.fn(async () => true),
+}));
 const mockEmit = jest.fn();
 jest.mock('../../../src/shared/realtime/socket', () => ({ emitToJob: (...a) => mockEmit(...a), init: jest.fn() }));
 

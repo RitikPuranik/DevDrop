@@ -6,7 +6,6 @@ import {
   ShoppingBag,
   Rocket,
   Heart,
-  Landmark,
   Package,
   ExternalLink,
   Trash2,
@@ -21,6 +20,7 @@ import {
   TrendingUp,
   Terminal,
   ChevronRight,
+  Sparkles,
 } from 'lucide-react';
 
 import { userAPI } from '../../api/user';
@@ -40,6 +40,7 @@ import WorkspaceShell, {
 } from '../../components/account/WorkspaceShell';
 import ActivityHeatmap from '../../components/account/ActivityHeatmap';
 import { analyticsAPI } from '../../api/analytics';
+import PricingPage from '../../components/billing/PricingPage';
 
 import { useAccentTheme } from '../../hooks/useAccentTheme';
 
@@ -51,7 +52,6 @@ import {
   getListingPreviewFallback,
   StatusBadge,
   CardGridSkeleton,
-  BankDetailsSkeleton,
   EmptyState,
   GuidancePanel,
 } from '../../components/account/shared';
@@ -70,7 +70,7 @@ const NAV_ITEMS = [
     external: '/deploy-own',
   },
   { id: 'wishlist', label: 'Wishlist', icon: Heart },
-  { id: 'payouts', label: 'Payout Details', icon: Landmark },
+  { id: 'pricing', label: 'Pricing', icon: Sparkles },
 ];
 
 
@@ -94,7 +94,11 @@ export default function Workspace() {
   const navigate = useNavigate();
   const { cssVars } = useAccentTheme();
 
-  const [activeSection, setActiveSection] = useState('overview');
+  // ?section=pricing[&plan=pro] deep-links into a tab (used by the quota / upgrade modals).
+  const [activeSection, setActiveSection] = useState(() => {
+    const wanted = new URLSearchParams(window.location.search).get('section');
+    return NAV_ITEMS.some((n) => n.id === wanted && !n.external) ? wanted : 'overview';
+  });
 
   const [profile, setProfile] = useState(null);
   const [dashboard, setDashboard] = useState(null);
@@ -113,15 +117,6 @@ export default function Workspace() {
   const [deploymentsLoading, setDeploymentsLoading] = useState(false);
   const [deploymentProviders, setDeploymentProviders] = useState(null);
   const [deploymentFilter, setDeploymentFilter] = useState('all');
-
-  // Payout
-  const [bankDetails, setBankDetails] = useState({
-    upiId: '',
-    phoneNumber: '',
-  });
-
-  const [loadingBankDetails, setLoadingBankDetails] = useState(false);
-  const [savingBankDetails, setSavingBankDetails] = useState(false);
 
   // Listing form
   const [isAddingListing, setIsAddingListing] = useState(false);
@@ -183,10 +178,6 @@ export default function Workspace() {
 
     if (activeSection === 'wishlist') {
       fetchWishlist();
-    }
-
-    if (activeSection === 'payouts') {
-      fetchBankDetails();
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -364,56 +355,10 @@ export default function Workspace() {
   };
 
 
-  const fetchBankDetails = async () => {
-    try {
-      setLoadingBankDetails(true);
-
-      const res = await userAPI.getBankDetails();
-
-      if (res.data?.data) {
-        setBankDetails(res.data.data);
-      }
-    } catch (err) {
-      if (err.response?.status !== 404) {
-        toast.error(
-          'Failed to load bank details'
-        );
-      }
-    } finally {
-      setLoadingBankDetails(false);
-    }
-  };
-
-
   // -------------------------------------------------------
   // ACTIONS
   // -------------------------------------------------------
 
-  const handleSaveBankDetails = async (e) => {
-    e.preventDefault();
-
-    try {
-      setSavingBankDetails(true);
-
-      await userAPI.saveBankDetails(bankDetails);
-
-      toast.success(
-        'Payout details saved successfully'
-      );
-
-      setProfile((prev) => ({
-        ...prev,
-        hasBankDetails: true,
-      }));
-    } catch (err) {
-      toast.error(
-        err.response?.data?.message ||
-          'Failed to save bank details'
-      );
-    } finally {
-      setSavingBankDetails(false);
-    }
-  };
 
 
   const handleAddListing = async (e) => {
@@ -627,17 +572,17 @@ export default function Workspace() {
         'Connected providers and live deployments.',
     },
 
+    pricing: {
+      title: 'Build more. Ship faster.',
+      subtitle: 'Choose your plan and unlock more possibilities with DevDrop AI.',
+    },
+
     wishlist: {
       title: 'Wishlist',
       subtitle:
         'Templates you have saved for later.',
     },
 
-    payouts: {
-      title: 'Payout Details',
-      subtitle:
-        'Manage the account we use to pay you.',
-    },
   };
 
 
@@ -904,7 +849,7 @@ export default function Workspace() {
                       return (
                         <li key={item.label}>
                           <Row
-                            {...(item.go ? { type: 'button', onClick: () => setActiveSection(item.go) } : {})}
+                            {...(item.go ? { type: 'button', onClick: () => (item.go === 'payouts' ? navigate('/profile#payout-details') : setActiveSection(item.go)) } : {})}
                             className={`group flex w-full items-center gap-4 rounded-xl border border-white/[0.07] bg-white/[0.02] px-4 py-3.5 text-left transition-colors ${item.go ? 'hover:border-white/[0.18] hover:bg-white/[0.05]' : ''}`}
                           >
                             <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border ${item.done ? 'border-transparent bg-[#e8e2d6] text-[#050505]' : 'border-white/20 text-white/40'}`}>
@@ -1238,8 +1183,8 @@ export default function Workspace() {
                               ]}
                               actionLabel="Add payout details"
                               onAction={() =>
-                                setActiveSection(
-                                  'payouts'
+                                navigate(
+                                  '/profile#payout-details'
                                 )
                               }
                             />
@@ -2199,194 +2144,9 @@ export default function Workspace() {
           )}
 
 
-          {/* =================================================
-              PAYOUTS
-          ================================================= */}
-
-          {activeSection === 'payouts' && (
-            <motion.div
-              key="payouts"
-              {...pageTransition}
-            >
-
-              <div className="max-w-2xl">
-
-                {loadingBankDetails ? (
-
-                  <BankDetailsSkeleton />
-
-                ) : (
-
-                  <form
-                    onSubmit={
-                      handleSaveBankDetails
-                    }
-                    className="space-y-3"
-                  >
-
-                    <div
-                      className={`${cardClass} p-6`}
-                    >
-
-                      <div className="mb-6">
-
-                        <div className="
-                          flex
-                          items-center
-                          gap-3
-                        ">
-
-                          <div className="
-                            w-9
-                            h-9
-                            rounded-lg
-                            bg-white/[0.04]
-                            border
-                            border-white/[0.06]
-                            flex
-                            items-center
-                            justify-center
-                          ">
-                            <Landmark
-                              size={16}
-                              className="text-white/55"
-                            />
-                          </div>
-
-                          <div>
-
-                            <h3 className="
-                              text-[14px]
-                              font-semibold
-                            ">
-                              Payment information
-                            </h3>
-
-                            <p className="
-                              text-[12.5px]
-                              text-white/50
-                              mt-1
-                            ">
-                              Used when marketplace
-                              earnings are paid out.
-                            </p>
-
-                          </div>
-
-                        </div>
-
-                      </div>
-
-
-                      <div className="
-                        grid
-                        md:grid-cols-2
-                        gap-4
-                      ">
-
-                        <Field label="UPI ID">
-
-                          <input
-                            required
-                            className={
-                              inputClass
-                            }
-                            placeholder="username@upi"
-                            value={
-                              bankDetails.upiId ||
-                              ''
-                            }
-                            onChange={(e) =>
-                              setBankDetails({
-                                ...bankDetails,
-                                upiId:
-                                  e.target
-                                    .value,
-                              })
-                            }
-                          />
-
-                        </Field>
-
-
-                        <Field label="Phone number">
-
-                          <input
-                            required
-                            type="tel"
-                            className={
-                              inputClass
-                            }
-                            placeholder="+91 9876543210"
-                            value={
-                              bankDetails.phoneNumber ||
-                              ''
-                            }
-                            onChange={(e) =>
-                              setBankDetails({
-                                ...bankDetails,
-                                phoneNumber:
-                                  e.target
-                                    .value,
-                              })
-                            }
-                          />
-
-                        </Field>
-
-                      </div>
-
-                    </div>
-
-
-                    <button
-                      type="submit"
-                      disabled={
-                        savingBankDetails
-                      }
-                      className="
-                        w-full
-                        py-3.5
-                        rounded-xl
-                        bg-[var(--accent)]
-                        text-white
-                        text-[12.5px]
-                        font-bold
-                        uppercase
-                        tracking-wider
-                        flex
-                        items-center
-                        justify-center
-                        gap-2
-                        hover:opacity-90
-                        disabled:opacity-50
-                        transition-all
-                      "
-                    >
-
-                      {savingBankDetails ? (
-                        <Loader2
-                          size={15}
-                          className="animate-spin"
-                        />
-                      ) : (
-                        <CheckCircle
-                          size={15}
-                        />
-                      )}
-
-                      {savingBankDetails
-                        ? 'Saving...'
-                        : 'Save payout details'}
-
-                    </button>
-
-                  </form>
-
-                )}
-
-              </div>
-
+          {activeSection === 'pricing' && (
+            <motion.div key="pricing" {...pageTransition}>
+              <PricingPage initialPlanId={new URLSearchParams(window.location.search).get('plan')} />
             </motion.div>
           )}
 

@@ -65,6 +65,9 @@ app.use('/api/payment/webhook', express.raw({ type: 'application/json' }), (req,
   next();
 });
 
+// Subscription billing webhook also needs the raw body for HMAC verification
+app.use('/api/billing/webhook', express.raw({ type: 'application/json' }));
+
 // Internal Backend <-> Worker webhooks: registered before the global JSON parser
 // because they verify an HMAC over the raw request body.
 app.use('/internal/webhooks', require('./modules/internal'));
@@ -87,6 +90,7 @@ app.use('/api/seller',    require('./modules/seller'));
 app.use('/api/buyer',     require('./modules/buyer'));
 app.use('/api/admin',     require('./modules/admin'));
 app.use('/api/payment',   require('./modules/payment'));
+app.use('/api/billing',   require('./modules/billing'));
 app.use('/api/payout',    require('./modules/payout'));
 app.use('/api/wishlist',  require('./modules/wishlist'));
 app.use('/api/assets',    require('./modules/asset'));

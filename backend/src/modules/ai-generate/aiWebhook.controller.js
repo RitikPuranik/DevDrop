@@ -1,5 +1,6 @@
 const queue = require('../../infrastructure/queue');
 const { emitToJob } = require('../../shared/realtime/socket');
+const entitlements = require('../billing/entitlement.service');
 
 const { QUEUE_NAMES, JOB_TYPES, QueueJob, jobStore } = queue;
 
@@ -25,6 +26,12 @@ exports.getPayload = async (req, res) => {
   if (!serviceKeyOk(req)) return res.status(401).json({ success: false, message: 'Invalid or missing service key.' });
   const job = await QueueJob.findOne({ jobKey: req.params.id, type: JOB_TYPES.AI_GENERATE }).select('+payload status mode');
   if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
+  // Defense in depth: even a job that somehow reached the queue without passing the entitlement gate
+  // (direct Redis/Mongo write, legacy path) is never served to ai-service without a live quota reservation.
+  if (!(await entitlements.isJobAuthorized(req.params.id))) {
+    console.warn('[billing] refused to serve payload for an unauthorized job', { jobKey: req.params.id });
+    return res.status(403).json({ success: false, code: 'NOT_ENTITLED', message: 'Job is not authorized for AI generation.' });
+  }
   if (QueueJob.TERMINAL.includes(job.status) || !job.payload) {
     return res.status(409).json({ success: false, status: job.status, message: `Job is ${job.status}` });
   }
@@ -77,10 +84,12 @@ exports.receive = async (req, res) => {
       const { result, generationMeta } = req.body;
       if (Buffer.byteLength(JSON.stringify(result ?? null)) > MAX_RESULT_BYTES) {
         await jobStore.markFailed(jobId, { code: 'RESULT_TOO_LARGE', message: 'The generated project is too large to store.', class: 'permanent' }, { queue: QUEUE_NAMES.AI });
+        await entitlements.releaseJob(jobId, 'result_too_large');
         if (job.projectId) await lifecycle().finishJob({ projectId: job.projectId, userId: job.userId, jobKey: jobId, outcome: 'failed', message: 'The generated project is too large to store.' }).catch(() => {});
         emitToJob(jobId, 'ai-job:failed', { jobId, error: 'The generated project is too large to store.' });
       } else {
         await jobStore.markCompleted(jobId, { queue: QUEUE_NAMES.AI, result, generationMeta });
+        await entitlements.commitJob(jobId); // completed => the reserved unit stays consumed
         // Saved to the project here (not by the browser) so it survives a closed or refreshed tab.
         if (job.projectId) {
           await lifecycle().finishJob({ projectId: job.projectId, userId: job.userId, jobKey: jobId, outcome: 'completed', result, mode: job.mode })
@@ -92,6 +101,7 @@ exports.receive = async (req, res) => {
       const { error, failureClass, debugContext, errorType } = req.body;
       const message = String(error || 'AI generation failed').slice(0, 500);
       await jobStore.markFailed(jobId, { message, class: failureClass || 'permanent' }, { queue: QUEUE_NAMES.AI, debugContext, errorType: errorType === 'capacity_exhausted' ? 'capacity_exhausted' : 'failed' });
+      await entitlements.releaseJob(jobId, 'failed'); // terminal failure => refunded (a debug retry re-takes it)
       if (job.projectId) await lifecycle().finishJob({ projectId: job.projectId, userId: job.userId, jobKey: jobId, outcome: 'failed', message }).catch(() => {});
       emitToJob(jobId, 'ai-job:failed', { jobId, error: message });
     }
