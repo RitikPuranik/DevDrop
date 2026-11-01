@@ -29,7 +29,7 @@ describe('Free plan allowance', () => {
     const e = await err(reserve('generate'));
     expect(e.code).toBe('GENERATION_QUOTA_EXCEEDED');
     expect(e.status).toBe(402);
-    expect(e.details).toMatchObject({ currentPlan: { id: 'free' }, used: 1, limit: 1, remaining: 0, resetAt: null, isTopPlan: false });
+    expect(e.details).toMatchObject({ currentPlan: { id: 'free' }, used: 1, limit: 1, remaining: 0, resetAt: '2026-11-30T18:30:00.000Z', isTopPlan: false });
     expect(e.details.upgradeOptions.map((o) => o.planId)).toEqual(['pro', 'plus']);
     expect(JSON.stringify(e.details)).not.toMatch(/razorpay|secret|token|stack/i);
   });
@@ -41,11 +41,22 @@ describe('Free plan allowance', () => {
     await reserve('generate');
     await expect(reserve('edit')).resolves.toBeTruthy();
   });
-  it('the free allowance never resets', async () => {
+  it('the free allowance resets on the 1st of every month (IST), not before', async () => {
     const { ledger } = await reserve('generate');
-    await ent.commitJob(ledger.jobKey); // the generation completed
-    jest.setSystemTime(new Date('2028-01-01T00:00:00Z'));
+    await ent.commitJob(ledger.jobKey);
+    const e = await err(reserve('generate'));
+    expect(e.code).toBe('GENERATION_QUOTA_EXCEEDED');
+    expect(e.details.resetAt).toBe('2026-11-30T18:30:00.000Z'); // 1 Dec 00:00 IST
+    jest.setSystemTime(new Date('2026-11-30T18:29:00Z')); // 23:59 IST on 30 Nov: still November
     expect(await code(reserve('generate'))).toBe('GENERATION_QUOTA_EXCEEDED');
+    jest.setSystemTime(new Date('2026-11-30T18:31:00Z')); // 00:01 IST on 1 Dec
+    await expect(reserve('generate')).resolves.toBeTruthy();
+  });
+  it('free edits reset on the 1st too', async () => {
+    for (let i = 0; i < 5; i += 1) await reserve('edit');
+    expect(await code(reserve('edit'))).toBe('EDIT_QUOTA_EXCEEDED');
+    jest.setSystemTime(new Date('2026-12-01T00:00:00Z'));
+    await expect(reserve('edit')).resolves.toBeTruthy();
   });
 });
 
@@ -246,8 +257,8 @@ describe('usage summary', () => {
     const u = await ent.getUsageSummary(U);
     expect(u).toMatchObject({ plan: { id: 'pro' }, subscriptionStatus: 'active', billingInterval: 'monthly', generations: { used: 12, limit: 20, remaining: 8 }, edits: { unlimited: true } });
   });
-  it('Free shows lifetime allowance with no reset date', async () => {
+  it('Free shows the monthly allowance and the 1st-of-month reset date', async () => {
     const u = await ent.getUsageSummary(U);
-    expect(u).toMatchObject({ plan: { id: 'free' }, nextQuotaReset: null, renewalDate: null, quotaPeriod: 'lifetime', generations: { used: 0, limit: 1, remaining: 1 }, edits: { unlimited: false, limit: 5, remaining: 5 } });
+    expect(u).toMatchObject({ plan: { id: 'free' }, nextQuotaReset: '2026-11-30T18:30:00.000Z', renewalDate: null, quotaPeriod: 'monthly_calendar', generations: { used: 0, limit: 1, remaining: 1 }, edits: { unlimited: false, limit: 5, remaining: 5 } });
   });
 });

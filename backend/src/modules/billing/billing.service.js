@@ -60,7 +60,7 @@ async function getPlansView(userId) {
     platformFeeMinor: settings.platformFeeMinor,
     yearlyTerms: 'Yearly plans are charged upfront for the full year. Monthly plans are charged for one month at a time.',
     renewalTerms: 'Plans are prepaid for the term you choose and do not renew automatically. Renew from this page before your term ends to keep your plan.',
-    quotaTerms: 'Paid plans’ generation allowance resets every month from your subscription date, including yearly plans.',
+    quotaTerms: 'Free allowances reset on the 1st of every month. Paid plans’ generation allowance resets every month from your subscription date, including yearly plans.',
     fairUse: { editsPerHour: settings.fairUseEditsPerHour, text: `Unlimited AI edits are subject to a fair-use limit of ${settings.fairUseEditsPerHour} edits per hour.` },
     currentPlanId: ent.plan.id,
     subscriptionStatus: ent.status,

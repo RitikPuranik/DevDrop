@@ -54,7 +54,7 @@ billingOrderSchema.index({ userId: 1, createdAt: -1 });
 /** Usage counters per quota window. Atomic conditional $inc is what makes quota concurrency-safe. */
 const usageCounterSchema = new Schema({
   userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  windowKey: { type: String, required: true }, // 'free:lifetime' | ISO start of the paid quota window
+  windowKey: { type: String, required: true }, // 'free:YYYY-MM' (IST month) | ISO start of the paid quota window
   generationsUsed: { type: Number, default: 0, min: 0 },
   editsUsed: { type: Number, default: 0, min: 0 },
 }, { timestamps: true });

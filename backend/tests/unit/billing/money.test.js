@@ -10,7 +10,7 @@ const errCode = (fn) => { try { fn(); } catch (e) { return e instanceof BillingE
 
 describe('plan catalogue (backend-owned)', () => {
   it('matches the product configuration, in integer minor units', () => {
-    expect(plans.free).toMatchObject({ monthlyPriceMinor: 0, generationQuota: 1, quotaPeriod: 'lifetime', aiEdits: { limit: 5, unlimited: false }, purchasable: false });
+    expect(plans.free).toMatchObject({ monthlyPriceMinor: 0, generationQuota: 1, quotaPeriod: 'monthly_calendar', aiEdits: { limit: 5, unlimited: false }, purchasable: false });
     expect(plans.pro).toMatchObject({ monthlyPriceMinor: 79900, annualDiscountBps: 500, generationQuota: 20, aiEdits: { unlimited: true }, recommended: true });
     expect(plans.plus).toMatchObject({ monthlyPriceMinor: 129900, annualDiscountBps: 1000, generationQuota: 50, aiEdits: { unlimited: true }, premium: true });
   });

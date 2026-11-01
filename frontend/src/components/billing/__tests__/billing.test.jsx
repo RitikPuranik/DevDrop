@@ -104,11 +104,11 @@ describe('UsagePanel', () => {
     expect(bar).toHaveAttribute('aria-valuemax', '20');
     expect(screen.getByText('Unlimited')).toBeInTheDocument();
   });
-  it('Free plan has finite edits and no reset', () => {
-    render(<UsagePanel usage={{ ...base, plan: { id: 'free', name: 'Free' }, subscriptionStatus: 'free', billingInterval: null, renewalDate: null, nextQuotaReset: null, generations: { used: 1, limit: 1, remaining: 0 }, edits: { unlimited: false, used: 2, limit: 5, remaining: 3 } }} />);
+  it('Free plan has finite edits and shows its monthly reset date', () => {
+    render(<UsagePanel usage={{ ...base, plan: { id: 'free', name: 'Free' }, subscriptionStatus: 'free', billingInterval: null, renewalDate: null, nextQuotaReset: '2026-11-30T18:30:00.000Z', generations: { used: 1, limit: 1, remaining: 0 }, edits: { unlimited: false, used: 2, limit: 5, remaining: 3 } }} />);
     expect(screen.getByText('0 generations remaining')).toBeInTheDocument();
     expect(screen.getByText('3 edits remaining')).toBeInTheDocument();
-    expect(screen.getByText('Does not reset')).toBeInTheDocument();
+    expect(screen.getByText('1 Dec 2026')).toBeInTheDocument();
   });
 });
 

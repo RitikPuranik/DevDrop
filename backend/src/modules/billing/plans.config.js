@@ -47,11 +47,11 @@ function getBillingSettings(env = process.env) {
 }
 
 function featureList({ generationQuota, quotaPeriod, aiEdits, tierLabel }) {
-  const gen = quotaPeriod === 'lifetime'
-    ? `${generationQuota} website generation`
+  const gen = quotaPeriod === 'monthly_calendar'
+    ? `${generationQuota} website generation per month`
     : `${generationQuota} website generations per billing cycle`;
   const items = [gen];
-  items.push(aiEdits.unlimited ? 'Unlimited AI edits (fair use applies)' : `${aiEdits.limit} AI edits`);
+  items.push(aiEdits.unlimited ? 'Unlimited AI edits (fair use applies)' : `${aiEdits.limit} AI edits per month`);
   items.push(`${tierLabel} AI generation`);
   items.push(tierLabel === 'Standard' ? 'Basic page allowance' : 'More pages per website');
   return items;
@@ -80,7 +80,7 @@ function buildPlans(env = process.env) {
       monthlyPriceMinor: monthlyPrice(env, def),
       annualDiscountBps: def.annualDiscountBps,
       generationQuota: def.generationQuota,
-      quotaPeriod: def.quotaPeriod, // 'lifetime' (Free: never resets) | 'billing_cycle' (resets monthly from anchor)
+      quotaPeriod: def.quotaPeriod, // 'monthly_calendar' (Free: resets on the 1st, IST) | 'billing_cycle' (paid: resets monthly from the subscription date)
       aiEdits,
       generationTierLabel: def.tierLabel,
       features: featureList({ generationQuota: def.generationQuota, quotaPeriod: def.quotaPeriod, aiEdits, tierLabel: def.tierLabel }),
@@ -93,7 +93,7 @@ function buildPlans(env = process.env) {
   };
 
   return {
-    free: make({ id: 'free', envKey: 'FREE', name: 'Free', rank: 0, description: 'Try DevDrop AI on your first website.', monthlyPriceMinor: 0, annualDiscountBps: 0, generationQuota: 1, quotaPeriod: 'lifetime', editLimit: 5, tierLabel: 'Standard', cta: 'Get Started' }),
+    free: make({ id: 'free', envKey: 'FREE', name: 'Free', rank: 0, description: 'Try DevDrop AI on your first website.', monthlyPriceMinor: 0, annualDiscountBps: 0, generationQuota: 1, quotaPeriod: 'monthly_calendar', editLimit: 5, tierLabel: 'Standard', cta: 'Get Started' }),
     pro: make({ id: 'pro', envKey: 'PRO', name: 'Pro', rank: 1, description: 'For builders shipping websites regularly.', monthlyPriceMinor: 79900, annualDiscountBps: 500, generationQuota: 20, quotaPeriod: 'billing_cycle', editLimit: null, tierLabel: 'Better', recommended: true, cta: 'Upgrade to Pro' }),
     plus: make({ id: 'plus', envKey: 'PLUS', name: 'Plus', rank: 2, description: 'For studios and power users who build at volume.', monthlyPriceMinor: 129900, annualDiscountBps: 1000, generationQuota: 50, quotaPeriod: 'billing_cycle', editLimit: null, tierLabel: 'Better', premium: true, cta: 'Upgrade to Plus' }),
   };

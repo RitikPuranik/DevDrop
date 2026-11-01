@@ -10,7 +10,7 @@
  *  - A job that FAILS, or is cancelled before it started, is released (the unit is refunded).
  *    A job cancelled after it started stays consumed (provider tokens were spent).
  *  - Debug-retry of a failed job re-takes the unit the failure released (still ONE unit per generation).
- *  - Free: lifetime allowance, never resets. Paid: calendar-month windows from the subscription anchor,
+ *  - Free: resets on the 1st of every calendar month (India time). Paid: calendar-month windows from the subscription anchor,
  *    for monthly AND yearly billing (yearly is charged upfront but its quota still resets monthly).
  *  - "Unlimited" paid edits are subject to a configurable fair-use ceiling per rolling hour.
  */
@@ -19,7 +19,17 @@ const { BillingError } = require('./errors');
 const { getPlans, getBillingSettings } = require('./plans.config');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const FREE_WINDOW = 'free:lifetime';
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+/** Free plan window: the calendar month in India time (IST). Resets at 00:00 IST on the 1st. */
+function freeWindow(now) {
+  const ist = new Date(now.getTime() + IST_OFFSET_MS);
+  const y = ist.getUTCFullYear();
+  const m = ist.getUTCMonth();
+  const start = new Date(Date.UTC(y, m, 1) - IST_OFFSET_MS);
+  const end = new Date(Date.UTC(y, m + 1, 1) - IST_OFFSET_MS);
+  return { key: `free:${y}-${String(m + 1).padStart(2, '0')}`, start, end };
+}
 const STALE_RESERVATION_MS = 15 * 60 * 1000;
 
 // ---------- date helpers (UTC, calendar months, day-of-month clamped) ----------
@@ -65,7 +75,7 @@ async function resolveEntitlement(userId, now = new Date()) {
 
   let status = 'free';
   let plan = plans.free;
-  let window = { key: FREE_WINDOW, start: null, end: null };
+  let window = freeWindow(now);
 
   if (sub && sub.status === 'active' && plans[sub.planId]?.available) {
     plan = plans[sub.planId];
@@ -324,5 +334,5 @@ async function getUsageSummary(userId) {
 
 module.exports = {
   addMonths, quotaWindow, resolveEntitlement, checkAccess, reserveJob, reserveDebugRetry, commitJob, releaseJob,
-  isJobAuthorized, reconcileUserReservations, classifyRequest, getUsageSummary, upgradeOptionsFor, FREE_WINDOW, DAY_MS,
+  isJobAuthorized, reconcileUserReservations, classifyRequest, getUsageSummary, upgradeOptionsFor, freeWindow, DAY_MS,
 };

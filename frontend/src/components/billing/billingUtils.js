@@ -10,7 +10,7 @@ export function formatMoney(minor, currency = 'INR') {
 export function formatDate(iso) {
   if (!iso) return null;
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
 }
 
 export const percentLabel = (bps) => `${(Number(bps || 0) / 100).toFixed(Number(bps) % 100 ? 1 : 0)}%`;

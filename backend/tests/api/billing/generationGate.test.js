@@ -108,7 +108,7 @@ describe('ZERO ai-service dispatch when the user is not entitled', () => {
   });
   it('expired subscription with the Free allowance spent: 403 SUBSCRIPTION_INACTIVE', async () => {
     seedSub({ planId: 'pro', currentPeriodEnd: new Date('2026-10-20T00:00:00Z') });
-    fakes.UsageCounter.__rows.push({ _id: 'f', userId: U, windowKey: 'free:lifetime', generationsUsed: 1, editsUsed: 0 });
+    fakes.UsageCounter.__rows.push({ _id: 'f', userId: U, windowKey: 'free:2026-11', generationsUsed: 1, editsUsed: 0 });
     const res = await call(body());
     expect(status(res)).toBe(403);
     expect(payload(res).code).toBe('SUBSCRIPTION_INACTIVE');
@@ -227,8 +227,8 @@ describe('debug retry goes through the same gate', () => {
   it('a user who has since spent their allowance cannot use debug retry to get a free generation', async () => {
     failedJob();
     // failed job already refunded; the Free allowance was spent on something else
-    fakes.GenerationLedger.__rows.push({ _id: 'l', userId: U, jobKey: 'orig', kind: 'generate', planId: 'free', windowKey: 'free:lifetime', counted: true, status: 'released' });
-    fakes.UsageCounter.__rows.push({ _id: 'f', userId: U, windowKey: 'free:lifetime', generationsUsed: 1, editsUsed: 0 });
+    fakes.GenerationLedger.__rows.push({ _id: 'l', userId: U, jobKey: 'orig', kind: 'generate', planId: 'free', windowKey: 'free:2026-11', counted: true, status: 'released' });
+    fakes.UsageCounter.__rows.push({ _id: 'f', userId: U, windowKey: 'free:2026-11', generationsUsed: 1, editsUsed: 0 });
     const res = await retry();
     expect(status(res)).toBe(402);
     expectZeroAiDispatch(['orig']);
