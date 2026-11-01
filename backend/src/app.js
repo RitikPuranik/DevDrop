@@ -68,6 +68,9 @@ app.use('/api/payment/webhook', express.raw({ type: 'application/json' }), (req,
 // Subscription billing webhook also needs the raw body for HMAC verification
 app.use('/api/billing/webhook', express.raw({ type: 'application/json' }));
 
+// Meta WhatsApp inbound webhook must receive raw bytes for X-Hub-Signature-256 validation.
+app.use('/api/webhooks/whatsapp', require('./modules/whatsapp/whatsappAdminWebhook.routes'));
+
 // Internal Backend <-> Worker webhooks: registered before the global JSON parser
 // because they verify an HMAC over the raw request body.
 app.use('/internal/webhooks', require('./modules/internal'));
