@@ -74,6 +74,8 @@ const purchaseFreeWebsite = async (req, res) => {
       await events.enqueueSellerNotification(purchase._id, website.sellerId._id);
     } catch (e) { console.error('Purchase emails could not be queued:', e.message); }
 
+    try { await events.notifyWebsitePurchased(purchase); } catch (e) { console.error('Admin WhatsApp notification could not be queued:', e.message); }
+
     res.status(201).json({ success: true, message: 'Website purchased successfully', data: { purchase, website: { id: website._id, name: website.name, category: website.category } } });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error processing purchase', error: error.message });

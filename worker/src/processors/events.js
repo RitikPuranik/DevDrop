@@ -3,9 +3,10 @@
 const QueueJob = require('../../../backend/src/infrastructure/queue/queueJob.model');
 const queues = require('../../../backend/src/infrastructure/queue/queues');
 const { getQueue } = queues;
-const { JOB_TYPES, EMAIL_JOB_TYPES, QUEUE_NAMES, permanent, sanitizeError } = require('../../../backend/src/infrastructure/queue');
+const { JOB_TYPES, EMAIL_JOB_TYPES, WHATSAPP_JOB_TYPES, QUEUE_NAMES, permanent, sanitizeError } = require('../../../backend/src/infrastructure/queue');
 const jobStore = require('../../../backend/src/infrastructure/queue/jobStore');
 const { processEmailJob } = require('../../../backend/src/infrastructure/events/emailProcessor');
+const { processWhatsAppJob, onWhatsAppFinalFailure } = require('../../../backend/src/infrastructure/notifications/notificationProcessor');
 const { processEndedAuctions } = require('../jobs/auction.cron.service');
 const { runScheduledAiStudioCleanup } = require('../jobs/aiStudio.cleanup.cron.service');
 const { runScheduledCleanup: runSupabaseCleanup } = require('../jobs/supabase.cleanup.cron.service');
@@ -42,6 +43,7 @@ const reconcileJobs = async () => {
 
 const processEventsJob = async (job, ctx) => {
   if (EMAIL_JOB_TYPES.has(job.name)) return processEmailJob(job, ctx);
+  if (WHATSAPP_JOB_TYPES.has(job.name)) return processWhatsAppJob(job, ctx);
 
   switch (job.name) {
     case JOB_TYPES.OUTBOX_SWEEP: {
@@ -70,4 +72,9 @@ const processEventsJob = async (job, ctx) => {
   }
 };
 
-module.exports = { processEventsJob, reconcileJobs };
+// Final failures the processor could not record itself (processor timeout, stalled-job limit, crash).
+const onEventsFinalFailure = async (job, error) => {
+  if (WHATSAPP_JOB_TYPES.has(job?.name)) await onWhatsAppFinalFailure(job, error);
+};
+
+module.exports = { processEventsJob, onEventsFinalFailure, reconcileJobs };

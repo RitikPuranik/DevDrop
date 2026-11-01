@@ -398,6 +398,16 @@ const sendPurchaseEmails = async (buyerId, website, purchase) => {
   }
 };
 
+// Admin WhatsApp alert. Queued by reference and keyed by the purchase id, so verify retries and webhook replays
+// collapse into one notification; it never throws, so it can never fail a purchase.
+const notifyAdminOfPurchase = async (purchase) => {
+  try {
+    await events.notifyWebsitePurchased(purchase);
+  } catch (error) {
+    console.error('Admin WhatsApp notification could not be queued:', error?.message);
+  }
+};
+
 const buildSuccessResponse = async ({ paymentRecord, purchase, website, payoutRecord }) => {
   let resolvedPayout = payoutRecord;
 
@@ -449,6 +459,7 @@ const finalizePurchaseFromPayment = async ({ paymentRecord, website, orderId = n
     }
 
     await markExclusiveSaleCompleted(website, paymentRecord.buyerId);
+    await notifyAdminOfPurchase(existingPurchase); // idempotent: no second alert for a replayed confirmation
 
     return {
       purchase: existingPurchase,
@@ -501,6 +512,7 @@ const finalizePurchaseFromPayment = async ({ paymentRecord, website, orderId = n
   }
 
   await sendPurchaseEmails(paymentRecord.buyerId, website, purchase);
+  await notifyAdminOfPurchase(purchase);
 
   return { purchase, payoutRecord };
 };

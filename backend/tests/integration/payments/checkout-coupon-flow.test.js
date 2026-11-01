@@ -198,6 +198,39 @@ describe('Checkout coupon reservation → payment verification → purchase/payo
 
     expect(events.enqueuePurchaseConfirmation).toHaveBeenCalled();
     expect(events.enqueueSellerNotification).toHaveBeenCalled();
+
+    // Admin WhatsApp alert: queued once the Purchase is in its authoritative "completed" state.
+    expect(events.notifyWebsitePurchased).toHaveBeenCalledTimes(1);
+    expect(events.notifyWebsitePurchased.mock.calls[0][0]).toMatchObject({ paymentStatus: 'completed', websiteId: website._id });
+  });
+
+  it('replaying the payment confirmation (page refresh / retry) never creates a second purchase and always references the same purchase for the WhatsApp alert', async () => {
+    await request(app).post('/api/payment/create-order').set('Authorization', authHeaderFor(buyer)).send({ websiteId: website._id });
+    const [paymentRecord] = require('../../mocks/models/payment.model.mock').__all();
+    razorpayInstance.payments.fetch.mockResolvedValue({ id: 'pay_replay', status: 'captured' });
+    const signature = require('crypto').createHmac('sha256', process.env.RAZORPAY_KEY_SECRET).update(`${paymentRecord.razorpayOrderId}|pay_replay`).digest('hex');
+    const body = { razorpayOrderId: paymentRecord.razorpayOrderId, razorpayPaymentId: 'pay_replay', razorpaySignature: signature };
+
+    for (let i = 0; i < 3; i += 1) {
+      const res = await request(app).post('/api/payment/verify').set('Authorization', authHeaderFor(buyer)).send(body);
+      expect(res.status).toBe(200);
+    }
+    expect(Purchase.__all()).toHaveLength(1);
+    const ids = new Set(events.notifyWebsitePurchased.mock.calls.map((c) => String(c[0]._id)));
+    expect(ids.size).toBeLessThanOrEqual(1); // same purchase id => same eventKey => one logical notification
+  });
+
+  it('a notification failure cannot fail the purchase', async () => {
+    const err = jest.spyOn(console, 'error').mockImplementation(() => {});
+    events.notifyWebsitePurchased.mockRejectedValueOnce(new Error('queue down'));
+    await request(app).post('/api/payment/create-order').set('Authorization', authHeaderFor(buyer)).send({ websiteId: website._id });
+    const [paymentRecord] = require('../../mocks/models/payment.model.mock').__all();
+    razorpayInstance.payments.fetch.mockResolvedValue({ id: 'pay_q', status: 'captured' });
+    const signature = require('crypto').createHmac('sha256', process.env.RAZORPAY_KEY_SECRET).update(`${paymentRecord.razorpayOrderId}|pay_q`).digest('hex');
+    const res = await request(app).post('/api/payment/verify').set('Authorization', authHeaderFor(buyer)).send({ razorpayOrderId: paymentRecord.razorpayOrderId, razorpayPaymentId: 'pay_q', razorpaySignature: signature });
+    expect(res.status).toBe(200);
+    expect(Purchase.__all()).toHaveLength(1);
+    err.mockRestore();
   });
 
   it('prevents two concurrent checkouts from both reserving the same single_global coupon', async () => {
@@ -269,6 +302,7 @@ describe('Checkout coupon reservation → payment verification → purchase/payo
     expect(coupon.reservedByUserId).toBeNull();
     expect(coupon.usageCount).toBe(0);
     expect(Purchase.__all()).toHaveLength(0);
+    expect(events.notifyWebsitePurchased).not.toHaveBeenCalled(); // failed payment: no success alert
   });
 
   it('rejects checkout for a coupon reserved by a different in-flight checkout, without touching Payment/Purchase state', async () => {

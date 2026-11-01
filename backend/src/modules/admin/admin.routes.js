@@ -11,6 +11,9 @@ const groqPoolController = require('../groq-pool/groqPool.controller');
 
 router.use(auth, adminOnly);
 
+// WhatsApp admin notifications (reports, history, retries, settings) - protected by the gate above.
+router.use('/whatsapp', require('../whatsapp'));
+
 router.get('/dashboard', adminController.getDashboard);
 router.get('/coupons', couponController.getCoupons);
 router.post('/coupons', couponController.createCoupon);

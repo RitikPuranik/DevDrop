@@ -12,6 +12,8 @@ module.exports = {
   enqueuePayoutNotification: jest.fn().mockResolvedValue(accepted),
   enqueueAdminAlert: jest.fn().mockResolvedValue(accepted),
   enqueueOutbidNotification: jest.fn().mockResolvedValue(accepted),
+  notifySubscriptionPaid: jest.fn().mockResolvedValue({ enqueued: true }),
+  notifyWebsitePurchased: jest.fn().mockResolvedValue({ enqueued: true }),
   requestVerificationEmail: jest.fn().mockResolvedValue({ throttled: false, accepted: true }),
   requestPasswordResetEmail: jest.fn().mockResolvedValue(accepted),
   isQueueUnavailable: (error) => error?.code === 'QUEUE_UNAVAILABLE',

@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Globe, DollarSign, ListTodo, DatabaseBackup, TicketPercent, KeyRound } from 'lucide-react';
+import { LayoutDashboard, Globe, DollarSign, ListTodo, DatabaseBackup, TicketPercent, KeyRound, MessageCircle } from 'lucide-react';
 
 const navTabs = [
     { id: "review", name: "Review Queue", icon: <ListTodo size={16} /> },
@@ -7,6 +7,7 @@ const navTabs = [
     { id: "websites", name: "Websites", icon: <Globe size={16} /> },
     { id: "coupons", name: "Coupons", icon: <TicketPercent size={16} /> },
     { id: "payouts", name: "Payouts", icon: <DollarSign size={16} /> },
+    { id: "whatsapp", name: "WhatsApp", icon: <MessageCircle size={16} /> },
     { id: "backup", name: "Backup", icon: <DatabaseBackup size={16} /> },
     { id: "gemini-pool", name: "Gemini Pool", icon: <KeyRound size={16} /> },
     { id: "groq-pool", name: "Groq Pool", icon: <KeyRound size={16} /> },

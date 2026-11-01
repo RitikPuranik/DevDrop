@@ -22,6 +22,21 @@ export const adminAPI = {
   getPendingPayouts: (page = 1) => api.get(`/admin/payouts/pending?page=${page}`),
   processPayout: (id, data) => api.post(`/admin/payouts/${id}/process`, data),
 
+  // WhatsApp admin notifications
+  getWhatsAppOverview: () => api.get("/admin/whatsapp/overview"),
+  updateWhatsAppSettings: (data) => api.put("/admin/whatsapp/settings", data),
+  getWhatsAppReportStats: () => api.get("/admin/whatsapp/report/stats"),
+  previewWhatsAppReport: (metrics) => api.post("/admin/whatsapp/report/preview", { metrics }),
+  sendWhatsAppReport: (metrics, previewToken) => api.post("/admin/whatsapp/report/send", { metrics, previewToken }),
+  getWhatsAppNotifications: ({ status = '', type = '', page = 1, limit = 15 } = {}) => {
+    const params = new URLSearchParams({ page, limit });
+    if (status) params.append('status', status);
+    if (type) params.append('type', type);
+    return api.get(`/admin/whatsapp/notifications?${params.toString()}`);
+  },
+  retryWhatsAppNotification: (id) => api.post(`/admin/whatsapp/notifications/${id}/retry`),
+  sendWhatsAppTest: () => api.post("/admin/whatsapp/test"),
+
   // Backup & Restore
   getBackupStatus: () => api.get("/admin/backup/status"),
   getBackupHistory: (limit = 10, page = 1, { type, from, to } = {}) => {

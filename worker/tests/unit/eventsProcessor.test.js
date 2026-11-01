@@ -10,6 +10,7 @@ jest.mock('../../../backend/src/infrastructure/queue/queues', () => ({
 }));
 jest.mock('../../../backend/src/infrastructure/queue/jobStore', () => ({ markFailed: (...a) => mockMarkFailed(...a) }));
 jest.mock('../../../backend/src/infrastructure/queue/queueJob.model', () => ({ find: (...a) => mockFind(...a) }));
+jest.mock('../../../backend/src/infrastructure/notifications/notificationProcessor', () => ({ processWhatsAppJob: jest.fn(async () => ({ result: 'whatsapp' })), onWhatsAppFinalFailure: jest.fn(async () => {}) }));
 jest.mock('../../../backend/src/infrastructure/events/emailProcessor', () => ({ processEmailJob: jest.fn(async () => ({ result: 'email' })) }));
 jest.mock('../../src/jobs/auction.cron.service', () => ({ processEndedAuctions: jest.fn(async () => {}) }));
 jest.mock('../../src/jobs/aiStudio.cleanup.cron.service', () => ({ runScheduledAiStudioCleanup: jest.fn(async () => {}) }));
@@ -17,13 +18,31 @@ jest.mock('../../src/jobs/supabase.cleanup.cron.service', () => ({ runScheduledC
 jest.mock('../../src/jobs/backup.cron.service', () => ({ runScheduledBackup: jest.fn(async () => {}), runManualBackup: jest.fn(async () => ({ done: true })) }));
 
 const { UnrecoverableError } = require('../../../backend/src/infrastructure/queue/errors');
-const { processEventsJob, reconcileJobs } = require('../../src/processors/events');
+const { processEventsJob, onEventsFinalFailure, reconcileJobs } = require('../../src/processors/events');
+const whatsapp = require('../../../backend/src/infrastructure/notifications/notificationProcessor');
 const emailProcessor = require('../../../backend/src/infrastructure/events/emailProcessor');
 const auctions = require('../../src/jobs/auction.cron.service');
 const backups = require('../../src/jobs/backup.cron.service');
 
 const chain = (rows) => ({ limit: async () => rows });
 beforeEach(() => jest.clearAllMocks());
+
+describe('events-queue routing: WhatsApp admin notifications', () => {
+  it('sends every WhatsApp job type to the WhatsApp processor and never to the email processor', async () => {
+    for (const name of ['SUBSCRIPTION_PURCHASED', 'SUBSCRIPTION_RENEWED', 'WEBSITE_PURCHASED', 'ADMIN_REPORT', 'WHATSAPP_TEST']) {
+      await processEventsJob({ name, data: { notificationId: 'n' } }, { jobKey: 'k' });
+    }
+    expect(whatsapp.processWhatsAppJob).toHaveBeenCalledTimes(5);
+    expect(emailProcessor.processEmailJob).not.toHaveBeenCalled();
+  });
+
+  it('routes final failures of WhatsApp jobs (only) to the WhatsApp recovery hook', async () => {
+    const err = new Error('stalled');
+    await onEventsFinalFailure({ name: 'WEBSITE_PURCHASED', data: { notificationId: 'n' } }, err);
+    await onEventsFinalFailure({ name: 'EMAIL_WELCOME', data: {} }, err);
+    expect(whatsapp.onWhatsAppFinalFailure).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('events-queue routing', () => {
   it('sends every email job type to the email processor', async () => {

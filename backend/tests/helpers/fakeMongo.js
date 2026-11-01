@@ -37,7 +37,13 @@ function applyUpdate(doc, update) {
   const u = update || {};
   const direct = Object.keys(u).filter((k) => !k.startsWith('$'));
   direct.forEach((k) => { doc[k] = u[k]; });
-  Object.entries(u.$set || {}).forEach(([k, v]) => { if (v === undefined) delete doc[k]; else doc[k] = v; });
+  Object.entries(u.$set || {}).forEach(([k, v]) => {
+    if (k.includes('.')) { // dotted paths ("categories.renewal") write into nested objects, like MongoDB
+      const parts = k.split('.'); let o = doc;
+      parts.slice(0, -1).forEach((p) => { o[p] = isObj(o[p]) ? o[p] : {}; o = o[p]; });
+      o[parts[parts.length - 1]] = v;
+    } else if (v === undefined) delete doc[k]; else doc[k] = v;
+  });
   Object.keys(u.$unset || {}).forEach((k) => delete doc[k]);
   Object.entries(u.$inc || {}).forEach(([k, n]) => { doc[k] = (doc[k] || 0) + n; });
   Object.entries(u.$addToSet || {}).forEach(([k, v]) => { doc[k] = doc[k] || []; if (!doc[k].map(String).includes(String(v))) doc[k].push(v); });
@@ -52,6 +58,7 @@ function makeCollection({ defaults = {}, unique = [], sparse = [] } = {}) {
     let data = result;
     const p = { then: (res, rej) => Promise.resolve(data).then(res, rej), catch: (rej) => Promise.resolve(data).catch(rej) };
     p.sort = (spec) => { if (Array.isArray(data) && spec) { const [[k, dir]] = Object.entries(spec); data = [...data].sort((a, b) => (val(a[k]) > val(b[k]) ? 1 : -1) * dir); } return p; };
+    p.skip = (n) => { if (Array.isArray(data)) data = data.slice(n); return p; };
     p.limit = (n) => { if (Array.isArray(data)) data = data.slice(0, n); return p; };
     p.select = () => p; p.lean = () => p;
     return p;

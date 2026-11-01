@@ -4,7 +4,7 @@ const path = require('path');
 
 const { createApp } = require('./src/app');
 const { processDeploymentJob, onDeploymentFinalFailure } = require('./src/processors/deployment');
-const { processEventsJob } = require('./src/processors/events');
+const { processEventsJob, onEventsFinalFailure } = require('./src/processors/events');
 const { registerSchedules } = require('./src/schedules');
 const connectDB = require('../backend/src/shared/config/database');
 const queue = require('../backend/src/infrastructure/queue');
@@ -84,8 +84,11 @@ const start = async () => {
       queueName: queue.QUEUE_NAMES.EVENTS,
       processor: processEventsJob,
       concurrency: cfg.concurrency.events,
-      timeoutMs: (job) => (queue.EMAIL_JOB_TYPES.has(job.name) ? cfg.timeoutMs.events : cfg.timeoutMs.maintenance),
+      // WhatsApp jobs are short network calls like emails, but a processor timeout is NOT retried (the message may
+      // already have been delivered): it is parked as "unconfirmed" by onEventsFinalFailure instead.
+      timeoutMs: (job) => (queue.EMAIL_JOB_TYPES.has(job.name) || queue.WHATSAPP_JOB_TYPES.has(job.name) ? cfg.timeoutMs.events : cfg.timeoutMs.maintenance),
       timeoutTransient: (job) => queue.EMAIL_JOB_TYPES.has(job.name),
+      onFinalFailure: onEventsFinalFailure,
     }),
   ];
   await registerSchedules();

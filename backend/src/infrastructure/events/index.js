@@ -1,3 +1,5 @@
 'use strict';
 
-module.exports = { ...require('./emailJobs'), ...require('./securityEmails') };
+const { notifySubscriptionPaid, notifyWebsitePurchased } = require('../notifications/notificationEvents');
+
+module.exports = { ...require('./emailJobs'), ...require('./securityEmails'), notifySubscriptionPaid, notifyWebsitePurchased };
