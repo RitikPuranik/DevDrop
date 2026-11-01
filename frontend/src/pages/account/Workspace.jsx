@@ -31,7 +31,7 @@ import { authAPI } from '../../api/auth';
 import { deploymentAPI } from '../../api/deployment';
 
 import { toast } from 'sonner';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import ProviderConnectCard from '../../components/deployment/ProviderConnectCard';
 import DeploymentCard from '../../components/deployment/DeploymentCard';
@@ -99,6 +99,13 @@ export default function Workspace() {
     const wanted = new URLSearchParams(window.location.search).get('section');
     return NAV_ITEMS.some((n) => n.id === wanted && !n.external) ? wanted : 'overview';
   });
+
+  // Kashi (and the quota modals) can send ?section=… while the workspace is already open.
+  const { search: locationSearch } = useLocation();
+  useEffect(() => {
+    const wanted = new URLSearchParams(locationSearch).get('section');
+    if (wanted && NAV_ITEMS.some((n) => n.id === wanted && !n.external)) setActiveSection(wanted);
+  }, [locationSearch]);
 
   const [profile, setProfile] = useState(null);
   const [dashboard, setDashboard] = useState(null);

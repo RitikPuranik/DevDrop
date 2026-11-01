@@ -201,6 +201,32 @@ export function toggleAnimation(design, id) {
   return { animationList: next, animations: primaryAnimation(next) };
 }
 
+/** Applies a validated design suggestion from Kashi on top of the user's current design choices. */
+export function mergeKashiDesign(prev = {}, suggestion = {}) {
+  const next = { ...prev };
+  if (DESIGN_STYLES.some((o) => o.id === suggestion.style)) next.style = suggestion.style;
+  if (DESIGN_THEMES.some((o) => o.id === suggestion.theme)) { next.theme = suggestion.theme; next.themeTouched = true; }
+  if (DESIGN_TYPOGRAPHY_IDS.includes(suggestion.typography)) next.typography = suggestion.typography;
+  const palette = DESIGN_PALETTES.find((o) => o.id === suggestion.paletteId);
+  if (palette) {
+    next.paletteId = palette.id;
+    next.palette = palette.colors.join(', ');
+    next.primaryColor = palette.colors[0];
+    next.paletteTouched = true;
+  }
+  if (/^#[0-9a-f]{6}$/i.test(suggestion.primaryColor || '')) next.primaryColor = suggestion.primaryColor;
+  if (Array.isArray(suggestion.animationList) && suggestion.animationList.length) {
+    const ids = animationIds({ animationList: suggestion.animationList });
+    next.animationList = ids;
+    next.animations = primaryAnimation(ids);
+  }
+  if (suggestion.customPrompt) {
+    const existing = String(prev.customPrompt || '').trim();
+    next.customPrompt = existing && !existing.includes(suggestion.customPrompt) ? `${existing}\n${suggestion.customPrompt}` : suggestion.customPrompt;
+  }
+  return next;
+}
+
 export const DESIGN_TYPOGRAPHY = [
   { id: 'grotesk', label: 'Grotesk Sans', font: "'Space Grotesk','Inter',system-ui,sans-serif", direction: 'Characterful grotesk sans (Space Grotesk / Familjen Grotesk style) for headings and body.' },
   { id: 'serif', label: 'Editorial Serif', font: "Georgia,'Times New Roman',serif", direction: 'Expressive display serif headings (Playfair Display / DM Serif Display style) paired with a neutral sans body (Inter / Lato).' },
@@ -212,6 +238,8 @@ export const DESIGN_TYPOGRAPHY = [
   { id: 'rounded', label: 'Rounded Friendly', font: "'Nunito','Quicksand',ui-rounded,'Trebuchet MS',sans-serif", direction: 'Soft rounded sans (Nunito / Quicksand style) for a friendly, approachable tone.' },
   { id: 'condensed', label: 'Condensed Impact', font: "Impact,'Oswald','Arial Narrow',sans-serif", direction: 'Heavy condensed display headings (Oswald / Anton / Bebas Neue style) with a plain sans body.' },
 ];
+
+const DESIGN_TYPOGRAPHY_IDS = DESIGN_TYPOGRAPHY.map((t) => t.id);
 
 export function describeDesign(design = {}) {
   const pick = (list, id, fallback) => list.find((item) => item.id === id) || fallback;

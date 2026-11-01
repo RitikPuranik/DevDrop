@@ -6,6 +6,7 @@ import { GRAD, PAGE_BG } from './studioStyles';
 import DesignPreferencesStep from './DesignPreferencesStep';
 import StudioTopBar from './StudioTopBar';
 import { describeDesign } from '../../config/aiStudio.config';
+import useKashiStudioFill from '../kashi/useKashiStudioFill';
 
 const SCHEMAS = {
   ecommerce: {
@@ -367,6 +368,13 @@ export default function WebsiteBuilder({ type, onBack, onGenerate }) {
   const [design, setDesign] = useState({ style: 'modern', theme: 'dark', animations: 'subtle', animationList: ['subtle'], customPrompt: '', primaryColor: '#b8935a', paletteId: 'amber', palette: '#b8935a, #e8d9bf, #b4583a, #2f3436, #f1f1f1', typography: 'grotesk', themeTouched: false, paletteTouched: false });
   const [generating, setGenerating] = useState(false);
   const schema = SCHEMAS[type];
+
+  // Kashi can read this form's fields and prefill details/design from what the user tells it.
+  const kashiFields = React.useMemo(
+    () => (schema?.sections || []).flatMap(([, fields]) => fields.map(([key, label]) => ({ key, label }))),
+    [schema],
+  );
+  useKashiStudioFill({ websiteType: type, fields: kashiFields, details, setDetails, setDesign, step });
 
   const generate = async () => {
     setGenerating(true);

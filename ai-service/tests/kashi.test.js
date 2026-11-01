@@ -119,3 +119,79 @@ describe('kashi chat', () => {
     expect(r.actions).toEqual([{ type: 'navigate', path: '/template' }]);
   });
 });
+
+describe('kashi: billing, payout and deep links', () => {
+  const usage = {
+    plan: { id: 'free', name: 'Free' }, subscriptionStatus: 'free', billingInterval: null, renewalDate: null, nextQuotaReset: '2026-12-01T00:00:00.000Z',
+    generations: { used: 1, limit: 1, remaining: 0 }, edits: { unlimited: false, used: 2, limit: 5, remaining: 3 },
+    isTopPlan: false, upgradeOptions: [{ planId: 'pro', name: 'Pro', monthlyPriceMinor: 79900, generationQuota: 20 }],
+  };
+  const account = { usage, emailVerified: true, payoutSaved: false };
+  const ctx = { isLoggedIn: true, path: '/', account };
+
+  test('deep links only resolve when they match a known target', () => {
+    expect(resolveNavigation('/profile#payout-details', { isLoggedIn: true })).toMatchObject({ ok: true, path: '/profile#payout-details' });
+    expect(resolveNavigation('/workspace?section=pricing', { isLoggedIn: true })).toMatchObject({ ok: true, path: '/workspace?section=pricing' });
+    expect(resolveNavigation('/workspace?section=pricing', { isLoggedIn: false })).toMatchObject({ ok: false, reason: 'login_required' });
+    // unknown section falls back to the plain workspace page, never to an invented URL
+    expect(resolveNavigation('/workspace?section=hacked', { isLoggedIn: true }).path).toBe('/workspace');
+  });
+
+  test('the prompt carries the real quota numbers and payout status, not browser input', async () => {
+    groq.chat.mockReset();
+    groq.chat.mockResolvedValueOnce({ json: { reply: 'ok', navigate: null, fix_deployment: false, studio_fill: null }, model: 'm' });
+    await answer({ message: 'how much quota is left?', context: { ...ctx, account: { ...account, payoutSaved: false } } });
+    const system = groq.chat.mock.calls[0][0].messages[0].content;
+    expect(system).toContain('1 used of 1, 0 left');
+    expect(system).toContain('2 used of 5, 3 left');
+    expect(system).toContain('Payout details (UPI ID + phone) saved: NO');
+    expect(system).toContain('/profile#payout-details');
+  });
+
+  test('logged-out users never get account facts in the prompt', async () => {
+    groq.chat.mockReset();
+    groq.chat.mockResolvedValueOnce({ json: { reply: 'log in', navigate: null, fix_deployment: false, studio_fill: null }, model: 'm' });
+    await answer({ message: 'quota?', context: { isLoggedIn: false, account } });
+    expect(groq.chat.mock.calls[0][0].messages[0].content).toContain('No account facts are available');
+  });
+
+  test('quota answer still works from real numbers when the model is down, and offers pricing when exhausted', async () => {
+    groq.chat.mockReset();
+    groq.chat.mockRejectedValueOnce(new Error('down'));
+    const r = await answer({ message: 'how many generations are left', context: ctx });
+    expect(r.reply).toContain('1 of 1 website generations used, 0 left');
+    expect(r.reply).toContain('3 left');
+    expect(r.actions).toEqual([{ type: 'navigate', path: '/workspace?section=pricing' }]);
+  });
+});
+
+describe('kashi: AI Studio fill', () => {
+  const studio = { websiteType: 'cafe', step: 'details', fields: [{ key: 'venueName', label: 'Cafe name' }, { key: 'hours', label: 'Opening hours' }], filled: [] };
+
+  test('returns a studio_fill action containing only valid ids and on-screen field keys', async () => {
+    groq.chat.mockReset();
+    groq.chat.mockResolvedValueOnce({
+      json: {
+        reply: 'Filled in the basics.', navigate: null, fix_deployment: false,
+        studio_fill: {
+          website_type: null,
+          details: [{ key: 'venueName', value: 'Brew & Bloom' }, { key: 'invented', value: 'x' }, { key: 'hours', value: '   ' }],
+          design: { style: 'luxury', theme: 'warm', animations: ['scroll', 'bogus'], palette_id: 'nope', typography: 'serif', primary_color: 'red', custom_prompt: null },
+        },
+      }, model: 'm',
+    });
+    const r = await answer({ message: 'a premium cafe called Brew & Bloom', context: { isLoggedIn: true, path: '/ai-studio', studio } });
+    expect(r.actions).toEqual([{ type: 'studio_fill', websiteType: null, details: { venueName: 'Brew & Bloom' }, design: { style: 'luxury', theme: 'warm', typography: 'serif', animationList: ['scroll'] } }]);
+  });
+
+  test('can pick a website type from the picker but ignores a fill with nothing valid', async () => {
+    groq.chat.mockReset();
+    groq.chat.mockResolvedValueOnce({ json: { reply: 'Starting a cafe site.', navigate: null, fix_deployment: false, studio_fill: { website_type: 'cafe', details: [], design: {} } }, model: 'm' });
+    let r = await answer({ message: 'cafe site', context: { isLoggedIn: true, path: '/ai-studio', studio: { websiteType: null, step: 'types', fields: [], filled: [] } } });
+    expect(r.actions).toEqual([{ type: 'studio_fill', websiteType: 'cafe', details: {}, design: {} }]);
+
+    groq.chat.mockResolvedValueOnce({ json: { reply: 'What is it for?', navigate: null, fix_deployment: false, studio_fill: { website_type: 'spaceship', details: [{ key: 'x', value: 'y' }], design: { style: 'zzz' } } }, model: 'm' });
+    r = await answer({ message: 'make me a site', context: { isLoggedIn: true, path: '/ai-studio', studio } });
+    expect(r.actions).toEqual([]);
+  });
+});

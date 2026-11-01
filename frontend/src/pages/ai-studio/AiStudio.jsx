@@ -18,6 +18,7 @@ import { buildPortfolioPrompt } from '../../components/ai-studio/portfolioPrompt
 import WebsiteBuilder, { buildWebsitePrompt } from '../../components/ai-studio/WebsiteBuilder';
 import { WEBSITE_TYPES } from '../../config/aiStudio.config';
 import { useAiStudioSession } from '../../hooks/ai-studio/useAiStudioSession';
+import { FILL_EVENT, peekStudioFill, setStudioSnapshot } from '../../components/kashi/studioBridge';
 
 // Files attached while editing are uploaded through the normal AI Studio asset
 // endpoint, so they land in the same ai-studio/{projectId}/assets storage prefix
@@ -48,6 +49,20 @@ export default function AiStudio() {
   const workspaceActive=isGenerating||Boolean(fileData)||messages.length>0;
   useEffect(()=>{window.__devdropStudioWorkspace=workspaceActive;window.dispatchEvent(new CustomEvent('navbar-compact',{detail:workspaceActive}));},[workspaceActive]);
   useEffect(()=>()=>{window.__devdropStudioWorkspace=false;window.dispatchEvent(new CustomEvent('navbar-compact',{detail:false}));},[]);
+  // Kashi: on the type picker it can see that no type is chosen yet and open the type it picked for the user;
+  // the builder that mounts then takes the queued details/design (see kashi/useKashiStudioFill).
+  const studioModeRef=useRef(studioMode); studioModeRef.current=studioMode;
+  useEffect(()=>setStudioSnapshot(()=>studioModeRef.current==='types'?{websiteType:null,step:'types',fields:[],filled:[]}:null),[]);
+  useEffect(()=>{
+    const open=()=>{
+      if(studioModeRef.current!=='types')return;
+      const pending=peekStudioFill();
+      const target=WEBSITE_TYPES.find(t=>t.id===pending?.websiteType&&t.enabled);
+      if(target)setStudioMode(target.id);
+    };
+    open(); window.addEventListener(FILL_EVENT,open);
+    return()=>window.removeEventListener(FILL_EVENT,open);
+  },[]);
   // The message box grows with what is typed (like WhatsApp) up to a limit, then scrolls inside itself.
   const composerRef=useRef(null);
   useEffect(()=>{const el=composerRef.current;if(!el)return;const MAX=176;el.style.height='auto';el.style.height=`${Math.min(el.scrollHeight,MAX)}px`;el.style.overflowY=el.scrollHeight>MAX?'auto':'hidden';},[input]);

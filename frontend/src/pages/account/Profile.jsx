@@ -2,10 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   Loader2, LogOut, Camera, X, CheckCircle, AlertCircle,
-  Mail, User as UserIcon, Landmark, LayoutGrid, ChevronRight, Check, ShieldAlert,
+  Mail, User as UserIcon, Landmark, LayoutGrid, ChevronRight, Check, ShieldAlert, Sparkles,
 } from 'lucide-react';
 import { userAPI } from '../../api/user';
 import { authAPI } from '../../api/auth';
+import { billingAPI } from '../../api/billing';
+import { formatDate } from '../../components/billing/billingUtils';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { useAccentTheme } from '../../hooks/useAccentTheme';
@@ -27,6 +29,14 @@ export default function Profile() {
   const [bankDetails, setBankDetails] = useState({ upiId: '', phoneNumber: '' });
   const [loadingBank, setLoadingBank] = useState(true);
   const [savingBank, setSavingBank] = useState(false);
+
+  // Current plan + this month's AI Studio usage (read-only; all numbers come from the billing API)
+  const [usage, setUsage] = useState(null);
+  const [usageFailed, setUsageFailed] = useState(false);
+  useEffect(() => {
+    if (!localStorage.getItem('token')) return;
+    billingAPI.usage().then((res) => setUsage(res.data?.data || null)).catch(() => setUsageFailed(true));
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -366,6 +376,49 @@ export default function Profile() {
                   </div>
                 )}
               </div>
+            </motion.div>
+
+            <motion.div id="your-plan" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }} className={`${card} p-6 md:p-8`}>
+              <h2 className="ws-display text-[22px] text-white mb-1 flex items-center gap-2.5">
+                <Sparkles size={18} className="text-[#cbb392]" /> Your plan
+              </h2>
+              <p className="text-white/50 text-[14px] mb-5">Your DevDrop AI plan and this period's AI Studio usage.</p>
+              {usage ? (
+                <>
+                  <div className="flex flex-wrap gap-2" role="list" aria-label="Plans">
+                    {[['free', 'Free'], ['pro', 'Pro'], ['plus', 'Plus']].map(([id, label]) => {
+                      const active = usage.plan?.id === id;
+                      return (
+                        <span key={id} role="listitem" aria-current={active ? 'true' : undefined} className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full border text-[13px] font-bold ${active ? 'bg-[#e8e2d6] text-[#050505] border-transparent' : 'border-white/10 text-white/35'}`}>
+                          {active && <Check size={13} />} {label}
+                        </span>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                      <p className="text-[12px] text-white/45">Website generations</p>
+                      <p className="mt-1 text-[18px] font-bold text-white tabular-nums">{usage.generations?.used} / {usage.generations?.limit} used</p>
+                      <p className="text-[12px] text-white/45">{usage.generations?.remaining} left</p>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                      <p className="text-[12px] text-white/45">AI edits</p>
+                      <p className="mt-1 text-[18px] font-bold text-white tabular-nums">{usage.edits?.unlimited ? 'Unlimited' : `${usage.edits?.used} / ${usage.edits?.limit} used`}</p>
+                      <p className="text-[12px] text-white/45">{usage.edits?.unlimited ? 'Fair use applies' : `${usage.edits?.remaining} left`}</p>
+                    </div>
+                  </div>
+                  <p className="mt-4 text-[13px] text-white/45">
+                    {[formatDate(usage.nextQuotaReset) && `Quota resets ${formatDate(usage.nextQuotaReset)}`, formatDate(usage.renewalDate) && `${usage.subscriptionStatus === 'cancelling' ? 'Ends' : 'Renews'} ${formatDate(usage.renewalDate)}`].filter(Boolean).join(' · ')}
+                  </p>
+                  <button type="button" onClick={() => navigate('/workspace?section=pricing')} className="mt-4 px-5 py-2.5 rounded-full border border-white/15 text-white/85 text-[13px] font-bold hover:bg-white/5 transition-colors">
+                    {usage.isTopPlan ? 'Manage billing' : 'Upgrade or manage billing'}
+                  </button>
+                </>
+              ) : usageFailed ? (
+                <p className="text-white/50 text-[14px]">Couldn't load your plan right now. <button type="button" onClick={() => navigate('/workspace?section=pricing')} className="underline text-white/80">Open billing</button></p>
+              ) : (
+                <div className="h-24 rounded-xl bg-white/[0.04] animate-pulse" aria-busy="true" aria-label="Loading your plan" />
+              )}
             </motion.div>
 
             <motion.div id="payout-details" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className={`${card} p-6 md:p-8`}>

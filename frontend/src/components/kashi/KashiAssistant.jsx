@@ -3,13 +3,14 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Loader2, Send, Sparkles, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { kashiAPI } from '../../api/kashi';
+import { getStudioSnapshot, queueStudioFill } from './studioBridge';
 
 const STORAGE_KEY = 'kashi_chat_v1';
 const GREETING = {
   role: 'assistant',
-  content: "Hi, I'm Kashi. Ask me anything about DevDrop, or tell me where to go — \"open AI Studio\", \"show my deployments\", \"templates\"…",
+  content: "Hi, I'm Kashi. Ask me anything about DevDrop, check how much of your monthly quota is left, get help filling AI Studio, or tell me where to go — \"open billing\", \"add payout details\", \"templates\"…",
 };
-const SUGGESTIONS = ['Open AI Studio', 'Browse templates', 'Deploy my own project', 'Go to my workspace'];
+const SUGGESTIONS = ['How much quota do I have left?', 'Help me plan my website', 'How do I sell a website?', 'Open billing'];
 
 const readSaved = () => {
   try {
@@ -26,6 +27,7 @@ const readSaved = () => {
  * /api/kashi/chat and carries out the actions it returns:
  *   - navigate        -> react-router navigation (paths are validated server-side)
  *   - fix_deployment  -> starts the build-fix run for the deployment being viewed
+ *   - studio_fill     -> prefills the AI Studio form (website type, details, design) from what the user said
  */
 export default function KashiAssistant({ side = 'right' }) {
   const navigate = useNavigate();
@@ -66,6 +68,10 @@ export default function KashiAssistant({ side = 'right' }) {
     for (const action of actions) {
       if (action.type === 'navigate' && typeof action.path === 'string') {
         navigate(action.path);
+      } else if (action.type === 'studio_fill') {
+        // Server-validated ids/keys only. The studio form that is (or is about to be) on screen applies it.
+        queueStudioFill({ websiteType: action.websiteType || null, details: action.details || {}, design: action.design || {} });
+        if (!location.pathname.startsWith('/ai-studio')) navigate('/ai-studio');
       } else if (action.type === 'fix_deployment' && action.deploymentId) {
         try {
           await kashiAPI.startFix(action.deploymentId);
@@ -76,7 +82,7 @@ export default function KashiAssistant({ side = 'right' }) {
         }
       }
     }
-  }, [navigate]);
+  }, [navigate, location.pathname]);
 
   const send = async (text) => {
     const message = String(text ?? input).trim();
@@ -86,7 +92,7 @@ export default function KashiAssistant({ side = 'right' }) {
     setInput('');
     setSending(true);
     try {
-      const res = await kashiAPI.chat({ message, history, context: { path: location.pathname, deploymentId } });
+      const res = await kashiAPI.chat({ message, history, context: { path: location.pathname, deploymentId, studio: location.pathname.startsWith('/ai-studio') ? getStudioSnapshot() : null } });
       const data = res.data?.data;
       setMessages((prev) => [...prev, { role: 'assistant', content: data?.reply || 'Done.' }]);
       await runActions(data?.actions);
@@ -164,7 +170,7 @@ export default function KashiAssistant({ side = 'right' }) {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               maxLength={1200}
-              placeholder={deploymentId ? 'Ask Kashi, or "fix this deployment"…' : 'Ask Kashi or say where to go…'}
+              placeholder={deploymentId ? 'Ask Kashi, or "fix this deployment"…' : location.pathname.startsWith('/ai-studio') ? 'Tell Kashi about your website…' : 'Ask Kashi or say where to go…'}
               className="flex-1 rounded-xl bg-white/5 border border-white/10 px-3.5 py-2.5 text-sm outline-none focus:border-[#8b7355] placeholder:text-white/25"
             />
             <button type="submit" disabled={sending || !input.trim()} aria-label="Send" className="w-10 h-10 rounded-xl bg-[#8b7355] hover:bg-[#725e46] disabled:opacity-40 flex items-center justify-center transition-colors"><Send size={15} /></button>
