@@ -54,6 +54,28 @@ const MODEL_ATTEMPT_LIMIT = Math.max(
 const MODELS = configuredGeminiModels().slice(0, MODEL_ATTEMPT_LIMIT);
 
 
+// Thinking depth. The wire format is the one this file already used (generationConfig.thinkingConfig.thinkingLevel);
+// a number is sent as the older thinkingBudget instead. The two fields are mutually exclusive in the API, so only one is ever sent.
+const DEFAULT_THINKING_LEVEL = 'low'; // what every call used before the `thinking` option existed
+const THINKING_LEVELS = ['minimal', 'low', 'medium', 'high'];
+const MAX_OUTPUT_TOKENS = () => Number.parseInt(process.env.GEMINI_MAX_OUTPUT_TOKENS || '32768', 10);
+// Model ceiling for an explicit token budget; thinking also shares maxOutputTokens, so never allow it to consume all of it.
+const maxThinkingBudget = () => {
+  const modelMax = Number.parseInt(process.env.GEMINI_MAX_THINKING_BUDGET || '24576', 10);
+  const outputRoom = MAX_OUTPUT_TOKENS() - 1024;
+  return Math.max(0, Math.min(Number.isFinite(modelMax) && modelMax >= 0 ? modelMax : 24576, Number.isFinite(outputRoom) ? outputRoom : 24576));
+};
+
+/** Maps the optional `thinking` call option to the request's thinkingConfig. Absent or unusable = the unchanged default. */
+function buildThinkingConfig(thinking) {
+  if (thinking === undefined || thinking === null || thinking === '') return { thinkingLevel: DEFAULT_THINKING_LEVEL };
+  if (typeof thinking === 'number' && Number.isFinite(thinking) && thinking >= 0) {
+    return { thinkingBudget: Math.min(Math.floor(thinking), maxThinkingBudget()) };
+  }
+  const level = String(thinking).trim().toLowerCase();
+  return { thinkingLevel: THINKING_LEVELS.includes(level) ? level : DEFAULT_THINKING_LEVEL };
+}
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function extractText(response) {
@@ -407,7 +429,7 @@ async function waitForCapacity(waitMs, poolError) {
   }
 }
 
-async function callGemini({ system, input, timeout = DEFAULT_TIMEOUT_MS }) {
+async function callGemini({ system, input, timeout = DEFAULT_TIMEOUT_MS, thinking }) {
   const requestTimeout = Math.min(
     Number.isFinite(Number(timeout)) && Number(timeout) > 0 ? Number(timeout) : DEFAULT_TIMEOUT_MS,
     Number.isFinite(MAX_GEMINI_TIMEOUT_MS) && MAX_GEMINI_TIMEOUT_MS > 0 ? MAX_GEMINI_TIMEOUT_MS : 60000
@@ -452,7 +474,7 @@ async function callGemini({ system, input, timeout = DEFAULT_TIMEOUT_MS }) {
                 process.env.GEMINI_MAX_OUTPUT_TOKENS || '32768',
                 10
               ),
-              thinkingConfig: { thinkingLevel: 'low' },
+              thinkingConfig: buildThinkingConfig(thinking),
             },
           },
           {
@@ -554,4 +576,4 @@ async function callGemini({ system, input, timeout = DEFAULT_TIMEOUT_MS }) {
   throw error;
 }
 
-module.exports = { callGemini };
+module.exports = { callGemini, buildThinkingConfig };

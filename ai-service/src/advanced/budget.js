@@ -23,7 +23,7 @@ const estimateTokens = (value) => {
  * Provider-reported token usage is used when present; otherwise tokens are estimated from payload size.
  */
 function createBudget(limits, { now = () => Date.now(), startedAt = now() } = {}) {
-  const used = { llmCalls: 0, inputTokens: 0, outputTokens: 0, repairAttempts: 0, outputBytes: 0 };
+  const used = { llmCalls: 0, inputTokens: 0, outputTokens: 0, thinkingTokens: 0, repairAttempts: 0, outputBytes: 0 };
   const consumedBefore = { ms: 0 }; // time spent by earlier attempts of the same job when resuming from a checkpoint
 
   const totalTokens = () => used.inputTokens + used.outputTokens;
@@ -49,10 +49,17 @@ function createBudget(limits, { now = () => Date.now(), startedAt = now() } = {}
     afterLlmCall: ({ input, value, usage }) => {
       used.llmCalls += 1;
       const inTok = Number(usage?.promptTokenCount);
-      const outTok = Number(usage?.candidatesTokenCount) + (Number(usage?.thoughtsTokenCount) || 0);
+      // Thinking tokens are billed as output: count them with the visible answer (a missing candidates count must not drop them).
+      const thoughtTok = Number(usage?.thoughtsTokenCount) || 0;
+      const outTok = (Number(usage?.candidatesTokenCount) || 0) + thoughtTok;
+      if (thoughtTok > 0) used.thinkingTokens += thoughtTok;
       used.inputTokens += Number.isFinite(inTok) && inTok > 0 ? inTok : estimateTokens((({ media, ...rest }) => rest)(input || {}));
       used.outputTokens += Number.isFinite(outTok) && outTok > 0 ? outTok : estimateTokens(value);
     },
+    /** Smallest share left of the token and cost budgets (1 = untouched, 0 = spent). */
+    remainingFraction: () => Math.max(0, Math.min(1 - totalTokens() / limits.maxTotalTokens, 1 - costUsd() / limits.maxCostUsd)),
+    /** Raising reasoning depth costs tokens, so it is refused when less than `minFraction` of the token or cost budget is left. */
+    canEscalate(minFraction = 0.15) { return this.remainingFraction() >= minFraction; },
     canRepair: () => used.repairAttempts < limits.maxRepairAttempts,
     recordRepairAttempt: () => { used.repairAttempts += 1; },
     /** Output size is checked on the assembled project; a project over the cap is refused rather than silently truncated. */
@@ -66,7 +73,7 @@ function createBudget(limits, { now = () => Date.now(), startedAt = now() } = {}
     restore(snapshot) {
       if (!snapshot || typeof snapshot !== 'object') return;
       // A resumed attempt keeps what earlier attempts already spent, so retries cannot be used to dodge the limits.
-      for (const k of ['llmCalls', 'inputTokens', 'outputTokens', 'repairAttempts']) if (Number.isFinite(snapshot[k])) used[k] = snapshot[k];
+      for (const k of ['llmCalls', 'inputTokens', 'outputTokens', 'thinkingTokens', 'repairAttempts']) if (Number.isFinite(snapshot[k])) used[k] = snapshot[k];
       if (Number.isFinite(snapshot.elapsedMs)) consumedBefore.ms = snapshot.elapsedMs;
     },
     snapshot: () => ({ ...used, elapsedMs: elapsedMs(), totalTokens: totalTokens(), costUsd: Number(costUsd().toFixed(4)) }),

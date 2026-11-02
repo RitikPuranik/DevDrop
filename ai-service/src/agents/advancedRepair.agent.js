@@ -15,7 +15,7 @@ function normalize(result) {
   return { ...result, value: { rootCause: String(v.rootCause || ''), changes: list(v.changes), newFiles: list(v.newFiles), deleteFiles: (Array.isArray(v.deleteFiles) ? v.deleteFiles : []).filter((p) => typeof p === 'string'), dependencies: v.dependencies && typeof v.dependencies === 'object' ? v.dependencies : {} } };
 }
 
-async function run({ issues, affectedFiles, contextFiles, manifest, spec, tokens, dependencies, mediaManifest = [], skillContext = '' }) {
-  return normalize(await callGemini({ system: withSkillContext(SYSTEM, skillContext), input: { issues, affectedFiles, contextFiles, manifest, spec, designTokens: tokens, dependencies, mediaManifest } }));
+async function run({ issues, affectedFiles, contextFiles, manifest, spec, tokens, dependencies, mediaManifest = [], skillContext = '', thinking }) {
+  return normalize(await callGemini({ system: withSkillContext(SYSTEM, skillContext), input: { issues, affectedFiles, contextFiles, manifest, spec, designTokens: tokens, dependencies, mediaManifest }, thinking }));
 }
 module.exports = { run, normalize, SYSTEM };

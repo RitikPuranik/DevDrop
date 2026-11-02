@@ -11,7 +11,7 @@ Return JSON only:
 "manifest":{"pages":[{"id","title","path","purpose","required":true,"recommended":false,"parent","layout","sections":[],"content":[],"interactions":[],"nav":{"header":true,"footer":false,"label"}}],"notFound":{"title"}}}
 Paths are URL routes ("/", "/about", "/products/:slug" for dynamic pages). Every page needs its own purpose, layout and sections: pages must not be the same layout with different headings. Functional requirements must be real behaviour (search, filters, cart, validated forms with loading/success/error states), never decorative controls. Do not promise backend integrations that do not exist: describe an honest demo implementation or the configuration needed.`;
 
-async function run({ requirements, preferences, websiteType, userData, mediaPlan = [], skillContext = '', level = null }) {
-  return callGemini({ system: withLevelBrief(withSkillContext(SYSTEM, skillContext), level), input: { websiteType, requirements, userData, preferences: preferences || {}, mediaPlan } });
+async function run({ requirements, preferences, websiteType, userData, mediaPlan = [], skillContext = '', level = null, thinking }) {
+  return callGemini({ system: withLevelBrief(withSkillContext(SYSTEM, skillContext), level), input: { websiteType, requirements, userData, preferences: preferences || {}, mediaPlan }, thinking });
 }
 module.exports = { run, SYSTEM };

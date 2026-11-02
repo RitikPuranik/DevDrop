@@ -32,13 +32,14 @@ function relevantContext(store, affected, { maxFiles = 14 } = {}) {
   return Object.fromEntries(ordered.map((p) => [p, files[p].code]));
 }
 
-async function repairCluster({ cluster, store, agent, manifest, spec, tokens, dependencies, mediaManifest, skills, phase, log = () => {} }) {
+async function repairCluster({ cluster, store, agent, manifest, spec, tokens, dependencies, mediaManifest, skills, phase, thinking, log = () => {} }) {
   const affected = [...cluster.files];
   const context = relevantContext(store, affected.length ? affected : ['/App.js']);
   const result = await agent.run({
     issues: cluster.issues.map(({ id, layer, severity, message, files, pageId }) => ({ id, layer, severity, message, files, pageId })),
     affectedFiles: affected, contextFiles: context, manifest, spec, tokens, dependencies, mediaManifest,
     skillContext: skills?.contextFor('debug', { terms: cluster.issues.map((i) => i.message) }) || '',
+    ...(thinking ? { thinking } : {}),
   });
   const v = result.value || {};
   const applied = { modified: [], created: [], deleted: [], rejected: [], dependencies: {}, rootCause: v.rootCause || '' };

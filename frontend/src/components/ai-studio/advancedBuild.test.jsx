@@ -42,6 +42,14 @@ describe('advanced build levels UI', () => {
     render(<AdvancedBuildPanel summary={{ level: 'low', pages: [], quality: { passed: true } }} isGenerating={false} />);
     expect(screen.getByTestId('advanced-level-badge').textContent).toMatch(/Low level/);
   });
+  it('shows escalations only when there are some', () => {
+    const { rerender } = render(<AdvancedBuildPanel summary={{ level: 'max', pages: [], quality: { passed: true }, effort: { escalations: 0 } }} isGenerating={false} />);
+    expect(screen.queryByTestId('advanced-escalations')).toBeNull();
+    rerender(<AdvancedBuildPanel summary={{ level: 'max', pages: [], quality: { passed: true }, effort: { escalations: 3 } }} isGenerating={false} />);
+    expect(screen.getByTestId('advanced-escalations').textContent).toMatch(/3 escalations/);
+    rerender(<AdvancedBuildPanel summary={{ level: 'max', pages: [], quality: { passed: true }, effort: { escalations: 1 } }} isGenerating={false} />);
+    expect(screen.getByTestId('advanced-escalations').textContent).toMatch(/1 escalation$/);
+  });
   it('level picker selects a level and reports it', () => {
     const onChange = vi.fn();
     render(<AdvancedLevelPicker level="moderate" onChange={onChange} />);

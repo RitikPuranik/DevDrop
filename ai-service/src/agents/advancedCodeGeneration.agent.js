@@ -1,6 +1,6 @@
 const { callGemini } = require('../services/llm.service');
 const { withSkillContext } = require('../skills');
-const { withLevelBrief } = require('../advanced/levels');
+const { withLevelBrief, withAesthetics } = require('../advanced/levels');
 
 const SYSTEM = `You are the Code Generation Agent for one file of an advanced multi-page React website. Write the COMPLETE source of exactly the file in fileContract (JavaScript/JSX only, React function components, no TypeScript, no secrets, no invented imports).
 
@@ -21,8 +21,8 @@ function normalize(result, expectedPath) {
   return { ...result, value: { ...v, path: expectedPath, code, additionalFiles } };
 }
 
-async function run({ fileContract, relatedContracts, relatedSources, spec, manifest, page, tokens, requirements, design, mediaManifest = [], mediaPlan = [], media = [], existingPaths = [], skillContext = '', level = null }) {
-  const result = await callGemini({ system: withLevelBrief(withSkillContext(SYSTEM, skillContext), level), input: { fileContract, page, relatedContracts, relatedSources, spec, manifest, designTokens: tokens, requirements, design, mediaManifest, mediaPlan, media, existingPaths } });
+async function run({ fileContract, relatedContracts, relatedSources, spec, manifest, page, tokens, requirements, design, mediaManifest = [], mediaPlan = [], media = [], existingPaths = [], skillContext = '', level = null, thinking }) {
+  const result = await callGemini({ system: withAesthetics(withLevelBrief(withSkillContext(SYSTEM, skillContext), level), level), input: { fileContract, page, relatedContracts, relatedSources, spec, manifest, designTokens: tokens, requirements, design, mediaManifest, mediaPlan, media, existingPaths }, thinking });
   return normalize(result, fileContract.path);
 }
 module.exports = { run, normalize, SYSTEM };

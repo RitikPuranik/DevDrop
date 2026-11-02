@@ -14,7 +14,7 @@ Rules:
 Return JSON only: {project:{framework:"react-vite",language:"javascript"},files:[{path,type,category:"design-system|shared|page|module|entry",pageId,responsibility,exports:[],imports:[paths of OTHER planned files this file imports]}],dependencies:{},routes:[],dataModel:{}}.
 Every manifest page needs a file with that pageId. Declare third-party packages in dependencies (react-router-dom is added automatically). Uploaded assets are remote URLs given at code-generation time; do not create files for them.`;
 
-async function run({ requirements, design, spec, manifest, tokens, mediaPlan = [], componentPlan = [], skillContext = '', level = null }) {
-  return callGemini({ system: withLevelBrief(withSkillContext(SYSTEM + (componentPlan.length ? ' componentPlan lists library components the system vendors under /components/ui/; do not create contracts for them.' : ''), skillContext), level), input: { requirements, design, spec, manifest, designTokens: tokens, mediaPlan, ...(componentPlan.length ? { componentPlan } : {}) } });
+async function run({ requirements, design, spec, manifest, tokens, mediaPlan = [], componentPlan = [], skillContext = '', level = null, thinking }) {
+  return callGemini({ system: withLevelBrief(withSkillContext(SYSTEM + (componentPlan.length ? ' componentPlan lists library components the system vendors under /components/ui/; do not create contracts for them.' : ''), skillContext), level), input: { requirements, design, spec, manifest, designTokens: tokens, mediaPlan, ...(componentPlan.length ? { componentPlan } : {}) }, thinking });
 }
 module.exports = { run, SYSTEM };

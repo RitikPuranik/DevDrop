@@ -27,7 +27,7 @@ const { normalizeAssets, buildMediaManifest, buildAssetSummaries, normalizeMedia
 const base = require('./websiteGeneration.orchestrator');
 const { runWithJob, getJobContext } = require('../utils/jobContext');
 const { resolveLimits, settings } = require('../advanced/config');
-const { resolveLevel, profileFor, applyLevel } = require('../advanced/levels');
+const { resolveLevel, profileFor, applyLevel, thinkingFor, ESCALATION_MIN_BUDGET_FRACTION } = require('../advanced/levels');
 const { createBudget, BudgetExceededError } = require('../advanced/budget');
 const { createProjectStore } = require('../advanced/projectStore');
 const { normalizeWebsiteSpec, normalizePageManifest, normalizeAdvancedArchitecture, normalizeFileRequests } = require('../advanced/contracts');
@@ -63,6 +63,30 @@ const defaultDeps = () => ({
   probe: undefined,
 });
 const cancelCheck = () => { if (getJobContext().isCancelled?.()) throw Object.assign(new Error('Job cancelled'), { cancelled: true }); };
+
+/**
+ * Reasoning depth for one model call: the level's setting for the role, raised by `steps` notches when the step is hard.
+ * Escalation is dropped (and recorded as skipped) when under 15% of the token/cost budget is left, and thinkingFor() already
+ * stops at the level's own ceiling. Returns the thinking value to pass to the agent; counts an escalation only when it applies.
+ */
+function thinkingForCall(ctx, role, { steps = 0, reason = '' } = {}) {
+  const base = thinkingFor(ctx.level, role);
+  if (!steps) return base;
+  if (!ctx.budget.canEscalate(ESCALATION_MIN_BUDGET_FRACTION)) {
+    if (base !== thinkingFor(ctx.level, role, { steps })) ctx.effort.events.push({ role, reason, from: base, to: base, skipped: 'low-budget' });
+    return base;
+  }
+  const raised = thinkingFor(ctx.level, role, { steps });
+  if (raised !== base) { ctx.effort.escalations += 1; ctx.effort.events.push({ role, reason, from: base, to: raised }); }
+  return raised;
+}
+const effortMeta = (ctx) => ({
+  level: ctx.level,
+  thinking: profileFor(ctx.level).thinking,
+  ceiling: profileFor(ctx.level).thinkingCeiling,
+  escalations: ctx.effort.escalations,
+  events: ctx.effort.events.slice(0, 20),
+});
 const folderList = (paths) => [...new Set(paths.map((p) => p.split('/').slice(1, -1).slice(0, 2).join('/')).filter(Boolean))].sort();
 const errFiles = (text, known) => known.filter((p) => String(text).includes(p.slice(1))).slice(0, 6);
 
@@ -90,7 +114,8 @@ function createRun(input, { onStage, onProgress, onCheckpoint, deps: injected, m
   const store = createProjectStore();
   const warnings = [];
   const warn = (m) => { warnings.push(m); console.warn('[ADVANCED]', m); };
-  return { deps, level, limits, budget, meta, stage, progress, store, warn, warnings, onCheckpoint, onStage, mode };
+  const effort = { escalations: 0, events: [] };
+  return { effort, deps, level, limits, budget, meta, stage, progress, store, warn, warnings, onCheckpoint, onStage, mode };
 }
 
 /* -------------------------------------------------------------------------- quality <-> repair loop */
@@ -108,7 +133,7 @@ async function qualityRepairLoop(ctx, st) {
     const before = report;
     report = await stage(`adv:quality:${round + 1}`, async () => ({ value: await runQualityEngine({
       files: scaffold(store.toFiles(), dependencies, st.requirements?.websiteType), manifest: st.manifest, pageFileIds: st.pageFileIds, dependencies,
-      build: deps.build, includeVisual: round === 0, visualAgent: deps.agents.visualQa, qa: profileFor(ctx.level).qa, skills: st.skills, spec: st.spec, probe: deps.probe,
+      build: deps.build, includeVisual: round === 0, visualAgent: { run: (a) => deps.agents.visualQa.run({ ...a, thinking: thinkingForCall(ctx, 'visualQa') }) }, qa: profileFor(ctx.level).qa, skills: st.skills, spec: st.spec, probe: deps.probe,
       onPhase: (p) => progress.task(`Quality checks: ${p}`),
     }) })).then((r) => r.value);
     dependencies = report.dependencies;
@@ -144,9 +169,13 @@ async function qualityRepairLoop(ctx, st) {
     progress.repairState({ attempts: budget.used.repairAttempts, max: budget.limits.maxRepairAttempts, open: blocking.length });
     const roundInfo = { round: rounds.length + 1, issues: targets.slice(0, 20).map((i) => ({ id: i.id, layer: i.layer, message: i.message.slice(0, 240), files: i.files })), applied: [], created: [], modified: [] };
     rounds.push(roundInfo);
+    // Adaptive effort: round 1 uses the level's setting; later rounds go one step higher, plus one more for every earlier round
+    // that was rolled back (it made things worse). Capped at the level's ceiling, and skipped when the budget is nearly spent.
+    const repairSteps = (rounds.length > 1 ? 1 : 0) + rounds.filter((r) => r.rolledBack).length;
+    const repairThinking = thinkingForCall(ctx, 'repair', { steps: repairSteps, reason: rounds.some((r) => r.rolledBack) ? `round ${roundInfo.round} after rollback` : `round ${roundInfo.round}` });
     for (const cluster of clusterIssues(targets)) {
       cancelCheck();
-      const applied = await stage(`adv:repair:${roundInfo.round}`, async () => ({ value: await repairCluster({ cluster, store, agent: deps.agents.repair, manifest: st.manifest, spec: st.spec, tokens: st.tokens, dependencies, mediaManifest: mediaModel, skills: st.skills, phase: `repair:${roundInfo.round}`, log: (m) => progress.note(m) }) })).then((r) => r.value);
+      const applied = await stage(`adv:repair:${roundInfo.round}`, async () => ({ value: await repairCluster({ cluster, store, agent: deps.agents.repair, manifest: st.manifest, spec: st.spec, tokens: st.tokens, dependencies, mediaManifest: mediaModel, skills: st.skills, phase: `repair:${roundInfo.round}`, thinking: repairThinking, log: (m) => progress.note(m) }) })).then((r) => r.value);
       roundInfo.applied.push(applied);
       roundInfo.created.push(...applied.created); roundInfo.modified.push(...applied.modified);
       for (const p of applied.created) { progress.addFile({ category: 'shared', path: p }); progress.fileFinished({ category: 'shared', path: p }); }
@@ -165,7 +194,7 @@ async function qualityRepairLoop(ctx, st) {
 
 function makeCheckpoint(ctx, st, phase) {
   const files = {}; for (const [p, f] of Object.entries(ctx.store.toFiles())) files[p] = f.code;
-  return { schema: CHECKPOINT_SCHEMA, phase, requirements: st.requirements, mediaPlan: st.mediaPlan, design: st.design, spec: st.spec, manifest: st.manifest, architecture: st.architecture, pageFileIds: st.pageFileIds, dependencies: st.dependencies, files, level: ctx.level, budget: ctx.budget.snapshot() };
+  return { schema: CHECKPOINT_SCHEMA, phase, requirements: st.requirements, mediaPlan: st.mediaPlan, design: st.design, spec: st.spec, manifest: st.manifest, architecture: st.architecture, pageFileIds: st.pageFileIds, dependencies: st.dependencies, files, level: ctx.level, budget: ctx.budget.snapshot(), escalations: ctx.effort.escalations };
 }
 
 function failure(ctx, st, message, errors) {
@@ -196,6 +225,7 @@ async function finalize(ctx, st, title, qr, extraMeta = {}) {
     architecture: { fileCount: Object.keys(outFiles).length, generatedFileCount: store.size, folders: folderList(Object.keys(outFiles)), createdByPhase: Object.fromEntries(Object.entries(store.createdByPhase()).map(([k, v]) => [k, v.length])) },
     quality: { passed: rep.passed, layers: rep.layers, remaining: issues, probeSkipped: rep.probeSkipped || null },
     repairs: qr.rounds.map((r) => ({ round: r.round, issues: r.issues.length, created: r.created, modified: r.modified, rootCause: r.rootCause, verified: r.verified || null, rolledBack: Boolean(r.rolledBack) })),
+    effort: effortMeta(ctx),
     budget: budget.report(),
     progress: progress.snapshot(),
     warnings: ctx.warnings.slice(0, 20),
@@ -217,6 +247,7 @@ async function runAdvanced(input, opts) {
   const mediaManifest = buildMediaManifest(normalized.assets);
   const st = { skills, mediaManifest, modelManifest: toModelManifest(mediaManifest), dependencies: {}, pageFileIds: {} };
   if (checkpoint?.budget) budget.restore(checkpoint.budget);
+  if (Number.isFinite(checkpoint?.escalations)) ctx.effort.escalations = checkpoint.escalations; // older checkpoints simply have none
 
   // 1. requirements
   progress.start('requirements', 'Understanding your request');
@@ -237,14 +268,14 @@ async function runAdvanced(input, opts) {
     Object.assign(st, { spec: checkpoint.spec, manifest: checkpoint.manifest, design: checkpoint.design, architecture: checkpoint.architecture, pageFileIds: checkpoint.pageFileIds || {} });
     st.dependencies = checkpoint.dependencies || {};
   } else {
-    const planned = await stage('adv:plan', () => deps.agents.planner.run({ requirements: st.requirements, preferences: normalized.preferences, websiteType: normalized.websiteType, userData: st.requirements.userData, mediaPlan: st.mediaPlan, skillContext: skills.contextFor('requirements'), level: ctx.level }));
+    const planned = await stage('adv:plan', () => deps.agents.planner.run({ requirements: st.requirements, preferences: normalized.preferences, websiteType: normalized.websiteType, userData: st.requirements.userData, mediaPlan: st.mediaPlan, skillContext: skills.contextFor('requirements'), level: ctx.level, thinking: thinkingForCall(ctx, 'planner') }));
     st.spec = normalizeWebsiteSpec(planned.value?.spec, { websiteType: normalized.websiteType });
     st.manifest = normalizePageManifest(planned.value?.manifest || planned.value, { websiteType: normalized.websiteType });
     progress.setPages(st.manifest.pages);
     progress.start('design', 'Creating the design system');
-    const d = await stage('adv:design', () => deps.agents.design.run({ requirements: st.requirements, mediaPlan: st.mediaPlan, preferences: normalized.preferences, websiteType: normalized.websiteType, media: referenceMedia, designSpec: null, skillContext: skills.contextFor('design') }));
+    const d = await stage('adv:design', () => deps.agents.design.run({ requirements: st.requirements, mediaPlan: st.mediaPlan, preferences: normalized.preferences, websiteType: normalized.websiteType, media: referenceMedia, designSpec: null, skillContext: skills.contextFor('design'), level: ctx.level, thinking: thinkingForCall(ctx, 'design') }));
     st.design = validateDesign(d.value);
-    const arch = await stage('adv:architecture', () => deps.agents.architecture.run({ requirements: st.requirements, design: st.design, spec: st.spec, manifest: st.manifest, tokens: tokenBrief(buildDesignAssets(st.design).tokens), mediaPlan: st.mediaPlan, skillContext: skills.contextFor('architecture'), level: ctx.level }));
+    const arch = await stage('adv:architecture', () => deps.agents.architecture.run({ requirements: st.requirements, design: st.design, spec: st.spec, manifest: st.manifest, tokens: tokenBrief(buildDesignAssets(st.design).tokens), mediaPlan: st.mediaPlan, skillContext: skills.contextFor('architecture'), level: ctx.level, thinking: thinkingForCall(ctx, 'architecture') }));
     st.architecture = normalizeAdvancedArchitecture(arch.value, st.manifest, { warn });
     st.dependencies = { ...(st.architecture.dependencies || {}) };
   }
@@ -284,7 +315,9 @@ async function runAdvanced(input, opts) {
     const page = st.manifest.pages.find((p) => p.id === contract.pageId) || null;
     let value = null; let lastProblem = '';
     for (let attempt = 0; attempt < 2 && !value; attempt += 1) {
-      const result = await stage(`code:${contract.path}`, () => deps.agents.code.run({ fileContract: contract, relatedContracts: related, relatedSources: sourcesFor(contract), spec: st.spec, manifest: st.manifest, page, tokens: st.tokens, requirements: st.requirements, design: st.design, mediaManifest: st.modelManifest, mediaPlan: st.mediaPlan, media: referenceMedia, existingPaths: store.list(), level: ctx.level, skillContext: /\.(jsx?|mjs)$/i.test(contract.path) ? skills.contextFor('code', { terms: [contract.path, contract.type, contract.responsibility] }) : '' }));
+      // A retry after invalid output reasons one step deeper instead of repeating the identical call.
+      const thinking = thinkingForCall(ctx, 'code', { steps: attempt, reason: `retry ${contract.path}` });
+      const result = await stage(`code:${contract.path}`, () => deps.agents.code.run({ fileContract: contract, relatedContracts: related, relatedSources: sourcesFor(contract), spec: st.spec, manifest: st.manifest, page, tokens: st.tokens, requirements: st.requirements, design: st.design, mediaManifest: st.modelManifest, mediaPlan: st.mediaPlan, media: referenceMedia, existingPaths: store.list(), level: ctx.level, thinking, skillContext: /\.(jsx?|mjs)$/i.test(contract.path) ? skills.contextFor('code', { terms: [contract.path, contract.type, contract.responsibility] }) : '' }));
       const v = result.value;
       if (v?.path === contract.path && typeof v.code === 'string' && v.code.trim()) { value = v; } else lastProblem = `invalid output for ${contract.path}`;
     }
@@ -317,7 +350,7 @@ async function runAdvanced(input, opts) {
   progress.start('functionality', 'Connecting pages, routes and features');
   const wiring = runStructuralChecks({ files: store.toFiles(), manifest: st.manifest, dependencies: st.dependencies, pageFileIds: st.pageFileIds }).filter((i) => i.blocking && ['route-missing', 'page-not-connected', 'no-404-route', 'broken-internal-link', 'static-validation'].includes(i.id));
   if (wiring.length) {
-    const r = await stage('adv:integration', () => deps.agents.integration.run({ requirements: st.requirements, design: st.design, architecture: st.architecture, files: store.toFiles(), errors: wiring.map((i) => i.message).slice(0, 15), skillContext: skills.contextFor('integration') }));
+    const r = await stage('adv:integration', () => deps.agents.integration.run({ requirements: st.requirements, design: st.design, architecture: st.architecture, files: store.toFiles(), errors: wiring.map((i) => i.message).slice(0, 15), skillContext: skills.contextFor('integration'), thinking: thinkingForCall(ctx, 'integration') }));
     for (const [p, f] of Object.entries(r.value?.files || {})) if (f?.code) store.write(p, f.code, { owner: 'integration', phase: 'integration' });
   }
   progress.done('functionality');

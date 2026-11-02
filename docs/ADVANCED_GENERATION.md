@@ -23,6 +23,11 @@ On the Review step, once **Advanced build** is on, the user picks a level. It is
 | Repair rounds | up to 2 | up to 4 | plan limit |
 | Quality layers | structure + build | + browser functional/responsive | + AI visual review |
 | Agent brief (planner / architecture / code) | essential pages, compact | all requested + helpful pages | complete premium build |
+| Reasoning depth per call (planner / architecture / code / repair / visual QA) | minimal / minimal / minimal / low / minimal (design: low) | medium / medium / low / medium / low (design: medium) | high / high / medium / high / high (design: high) |
+
+**Reasoning depth and adaptive escalation.** Each model call gets a Gemini `thinkingLevel` for its role (`PROFILES[level].thinking` in `levels.js`; design and integration follow the same table; calls without the option keep the old fixed `low`). When a step is hard the depth is raised one notch for that call only: a code file retried after invalid output, repair round 2 and later, and one extra notch for each earlier repair round that was rolled back. Escalation never goes above the level's ceiling (`thinkingCeiling`: low stays at `low`, moderate and max can reach `high`) and is skipped when less than 15% of the token or cost budget is left. Thinking tokens count toward the token/cost budget. The result reports `generationMeta.advanced.effort` (`level`, per-role `thinking`, `escalations`, `events`), and the build panel shows "N escalations" when N > 0.
+
+The design and code agents also receive a level-scaled **visual craft** brief (`AESTHETICS` in `levels.js`): consistent style at low, a distinctive art direction at moderate, studio-grade composition, type, depth and motion at max.
 
 Every level runs the full advanced pipeline (plan, design system, architecture, ordered generation, integration, build check, repair). A level can only lower limits, never exceed the plan or operator ceilings, and there is still no file-count cap. Quota use is unchanged.
 

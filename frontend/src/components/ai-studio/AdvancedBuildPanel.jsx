@@ -1,6 +1,6 @@
 import React from 'react';
 import { levelLabel } from './advancedLevels';
-import { FileText, Layers, Wrench, ShieldCheck, LockKeyhole } from 'lucide-react';
+import { FileText, Layers, Wrench, ShieldCheck, LockKeyhole, Brain } from 'lucide-react';
 
 const LAYER_LABEL = { structural: 'Structure', build: 'Build', functional: 'Functionality', responsive: 'Responsive', visual: 'Visual' };
 const tone = (s) => (s === 'passed' ? 'text-[var(--s-ok)]' : s === 'failed' ? 'text-[var(--s-err)]' : s === 'running' ? 'text-[var(--s-hi)]' : 'text-[var(--s-faint)]');
@@ -30,6 +30,7 @@ export default function AdvancedBuildPanel({ snapshot, summary, isGenerating }) 
         <div className="flex flex-wrap gap-x-3 gap-y-1">{Object.entries(validation).map(([k, v]) => <span key={k} className={tone(v)}>{LAYER_LABEL[k] || k}: {v}</span>)}</div>
       </div>}
       {(repair.attempts > 0 || repairs.length > 0) && <p className="flex items-center gap-1.5"><Wrench className="h-3.5 w-3.5" />{repairs.length ? `${repairs.length} automatic repair round${repairs.length === 1 ? '' : 's'}` : `Repair attempt ${repair.attempts}${repair.max ? ` of ${repair.max}` : ''}`}</p>}
+      {summary?.effort?.escalations > 0 && <p className="flex items-center gap-1.5" data-testid="advanced-escalations"><Brain className="h-3.5 w-3.5" />{summary.effort.escalations} escalation{summary.effort.escalations === 1 ? '' : 's'}</p>}
       {summary && !isGenerating && <div className="border-t border-[var(--s-line)] pt-2">
         <p className="text-[var(--s-text)]">{summary.quality?.passed ? 'All quality checks passed.' : 'Finished with notes.'}</p>
         {(summary.quality?.remaining || []).slice(0, 5).map((i, n) => <p key={n} className="mt-1 text-[11px]">• {i.message}</p>)}
