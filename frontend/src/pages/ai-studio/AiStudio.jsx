@@ -2,7 +2,7 @@ import {buildAssetContract} from '../../components/ai-studio/assetContract';
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, ArrowUp, Loader2, Square, RotateCcw, Bot, User, CheckSquare, ChevronDown, Paperclip, Mic, Sparkles, Send, X, Film, FileText } from 'lucide-react';
+import { ArrowLeft, ArrowUp, Loader2, Square, RotateCcw, Bot, User, Paperclip, Mic, Sparkles, Send, X, Film, FileText } from 'lucide-react';
 import { usePostHog } from '../../analytics/PostHogProvider';
 import { aiGenerateAPI } from '../../api/aiGenerate';
 import { quotaModalFromError } from '../../components/billing/billingUtils';
@@ -37,7 +37,7 @@ const STOP_NOTICE='Generation stopped. Tell me what to change, or start a new ge
 export default function AiStudio() {
   const navigate = useNavigate(); const posthog = usePostHog();
   const [advancedLive,setAdvancedLive]=useState(null); const [advancedSummary,setAdvancedSummary]=useState(null); const [advancedAllowed,setAdvancedAllowed]=useState(null);
-  const [studioMode,setStudioMode]=useState('types'); const [mobileView,setMobileView]=useState('chat'); const [failedJobId,setFailedJobId]=useState(null); const [debugRetryAvailable,setDebugRetryAvailable]=useState(false); const [messages,setMessages]=useState([]); const [fileData,setFileData]=useState(null); const [appTitle,setAppTitle]=useState(null); const [input,setInput]=useState(''); const [isGenerating,setIsGenerating]=useState(false); const [genStatusLabel,setGenStatusLabel]=useState('Generating…'); const [pipeline,setPipeline]=useState({}); const [genMode,setGenMode]=useState('generate'); const [currentStage,setCurrentStage]=useState(null); const [error,setError]=useState(null); const [showContract,setShowContract]=useState(false); const scrollRef=useRef(null);
+  const [studioMode,setStudioMode]=useState('types'); const [mobileView,setMobileView]=useState('chat'); const [failedJobId,setFailedJobId]=useState(null); const [debugRetryAvailable,setDebugRetryAvailable]=useState(false); const [messages,setMessages]=useState([]); const [fileData,setFileData]=useState(null); const [appTitle,setAppTitle]=useState(null); const [input,setInput]=useState(''); const [isGenerating,setIsGenerating]=useState(false); const [genStatusLabel,setGenStatusLabel]=useState('Generating…'); const [pipeline,setPipeline]=useState({}); const [genMode,setGenMode]=useState('generate'); const [currentStage,setCurrentStage]=useState(null); const [error,setError]=useState(null); const scrollRef=useRef(null);
   // stopped: the user pressed Stop (or it was stopped from another tab). resuming: restoring a saved project after a refresh.
   const [stopped,setStopped]=useState(false); const [stopping,setStopping]=useState(false); const [resuming,setResuming]=useState(()=>Boolean(readSavedId()));
   const currentJobRef=useRef(null); const cancelWaitRef=useRef(null); const syncNowRef=useRef(null); const specRef=useRef(null);
@@ -252,13 +252,13 @@ export default function AiStudio() {
     return { images: uploadedImages, videos: uploadedVideos };
   };
 
-  const handleWebsiteGenerate=async(type,details,design)=>{
+  const handleWebsiteGenerate=async(type,details,design,options={})=>{
     const media=await uploadMediaAssets(type,details);
     const prompt=buildWebsitePrompt(type,{...details,images:media.images,videos:media.videos},design);
     const nextMessages=[{role:'user',content:prompt}];
     setStudioMode('chat');
     setMessages(nextMessages);
-    await runGeneration(nextMessages,{websiteType:type,userData:{...details,images:undefined,videos:undefined},preferences:design,assets:buildAssetContract({images:media.images,videos:media.videos})});
+    await runGeneration(nextMessages,{websiteType:type,userData:{...details,images:undefined,videos:undefined},preferences:design,assets:buildAssetContract({images:media.images,videos:media.videos}),generationTier:options.advanced?'advanced':'standard'});
   };
   const handlePickFiles=(e)=>{
     const picked=Array.from(e.target.files||[]); e.target.value='';
@@ -340,15 +340,13 @@ export default function AiStudio() {
   </div>
 </div>;
   if(studioMode==='portfolio')return <div key="studio-portfolio" className="studio fixed inset-0 z-40 overflow-y-auto"><PortfolioBuilder onBack={()=>setStudioMode('types')} onGenerate={handlePortfolioGenerate}/></div>;
-  if(['ecommerce','blog','landing','cafe','hotel','studio','saas','event','education','custom'].includes(studioMode))return <div key={`studio-${studioMode}`} className="studio fixed inset-0 z-40 overflow-y-auto"><WebsiteBuilder type={studioMode} onBack={()=>setStudioMode('types')} onGenerate={handleWebsiteGenerate}/></div>;
+  if(['ecommerce','blog','landing','cafe','hotel','studio','saas','event','education','custom'].includes(studioMode))return <div key={`studio-${studioMode}`} className="studio fixed inset-0 z-40 overflow-y-auto"><WebsiteBuilder type={studioMode} onBack={()=>setStudioMode('types')} onGenerate={handleWebsiteGenerate} advancedAvailable={advancedAllowed===true} advancedLocked={advancedAllowed===false} onUpgrade={()=>navigate(pricingPath('plus'))}/></div>;
   const pipelineMode=genMode==='debug'?'debug':(genMode==='edit'?'edit':'generate');
   const complete=!isGenerating&&Boolean(fileData)&&!error;
   const advancedView=advancedLive||(advancedSummary?.progress)||null;
   const {steps:pipelineSteps,percent,queued}=advancedView&&genMode!=='edit'?computeAdvancedPipeline(advancedView,{isGenerating,complete}):computePipeline({mode:pipelineMode,pipeline,isGenerating,complete,currentStage});
   const firstPrompt=messages[0]?.role==='user'?messages[0].content:'';
   const chatMessages=firstPrompt?messages.slice(1):messages;
-  const ruleLines=firstPrompt.split('\n').map(l=>l.replace(/^\s*[-*•]\s*/,'').trim()).filter(Boolean);
-  const shownRules=showContract?ruleLines:ruleLines.slice(0,3);
   const history=messages.filter(m=>m.role==='user').map(m=>m.content);
   const card='s-card';
   return <div className={`studio fixed inset-0 z-40 flex flex-col transition-[padding] duration-500 ease-out ${workspaceActive?'pt-13':'pt-[3.75rem]'}`}>
@@ -358,15 +356,6 @@ export default function AiStudio() {
     <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
       <div className={`${mobileView==='chat'?'flex':'hidden'} min-h-0 w-full flex-1 flex-col lg:flex lg:w-[380px] lg:flex-none lg:shrink-0 lg:border-r lg:border-[var(--s-line)]`}>
         <div ref={scrollRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-3">
-          {firstPrompt&&<div className="overflow-hidden rounded-2xl border border-[var(--s-line)]">
-            <button type="button" onClick={()=>setShowContract(v=>!v)} aria-expanded={showContract} className="flex w-full items-center gap-2.5 px-3.5 py-3 text-left">
-              <CheckSquare className="h-4 w-4 text-[var(--s-muted)]"/>
-              <span className="flex-1 text-[13px] font-medium text-[var(--s-text)]">Your brief</span>
-              <span className="text-[11px] text-[var(--s-faint)]">{ruleLines.length} points</span>
-              <ChevronDown className={`h-4 w-4 text-[var(--s-faint)] transition-transform ${showContract?'rotate-180':''}`}/>
-            </button>
-            {showContract&&<ul className="max-h-64 space-y-1.5 overflow-y-auto border-t border-[var(--s-line)] px-3.5 py-3 text-[12px] leading-5 text-[var(--s-muted)]">{ruleLines.map((r,i)=><li key={i} className="flex gap-2"><span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-[var(--s-faint)]"/><span>{r}</span></li>)}</ul>}
-          </div>}
           {chatMessages.map((m,i)=>m.role==='user'
             ?<div key={i} className="ml-auto max-w-[88%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-white/[0.07] px-3.5 py-2.5 text-[13px] leading-5 text-[var(--s-text)]">{m.content}</div>
             :<div key={i} className="flex gap-2.5"><span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/[0.07]"><Sparkles className="h-3 w-3 text-[var(--s-text)]"/></span><div className="whitespace-pre-wrap text-[13px] leading-6 text-[var(--s-muted)]">{m.content}</div></div>)}

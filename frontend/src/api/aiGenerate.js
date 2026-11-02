@@ -11,6 +11,7 @@ export const aiGenerateAPI = {
       assets: spec.assets,
       projectId: spec.projectId,
       conversation: spec.conversation,
+      generationTier: spec.generationTier,
     }),
   getJob: (jobId) => api.get(`/ai-generate/jobs/${jobId}`),
   cancel: (jobId) => api.delete(`/ai-generate/jobs/${jobId}`),

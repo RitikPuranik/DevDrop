@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { ArrowLeft, ArrowRight, LockKeyhole, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Card, Field, StepHeader, MediaDrop, SpecialRequestsCard } from './studioUi';
 import { GRAD, PAGE_BG } from './studioStyles';
@@ -362,11 +362,13 @@ function DetailsStep({ type, details, onChange, onBack, onNext }) {
   );
 }
 
-export default function WebsiteBuilder({ type, onBack, onGenerate }) {
+export default function WebsiteBuilder({ type, onBack, onGenerate, advancedAvailable = false, advancedLocked = false, onUpgrade }) {
   const [step, setStep] = useState(0);
   const [details, setDetails] = useState({});
   const [design, setDesign] = useState({ style: 'modern', theme: 'dark', animations: 'subtle', animationList: ['subtle'], customPrompt: '', primaryColor: '#b8935a', paletteId: 'amber', palette: '#b8935a, #e8d9bf, #b4583a, #2f3436, #f1f1f1', typography: 'grotesk', themeTouched: false, paletteTouched: false });
   const [generating, setGenerating] = useState(false);
+  const [advanced, setAdvanced] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
   const schema = SCHEMAS[type];
 
   // Kashi can read this form's fields and prefill details/design from what the user tells it.
@@ -378,7 +380,7 @@ export default function WebsiteBuilder({ type, onBack, onGenerate }) {
 
   const generate = async () => {
     setGenerating(true);
-    try { await onGenerate(type, details, design); } finally { setGenerating(false); }
+    try { await onGenerate(type, details, design, { advanced: advancedAvailable && advanced }); } finally { setGenerating(false); }
   };
 
   if (step === 1) {
@@ -441,6 +443,24 @@ export default function WebsiteBuilder({ type, onBack, onGenerate }) {
                   <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--s-muted)]">{design.customPrompt}</p>
                 </div>
               )}
+              {advancedAvailable && (
+                <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-[var(--s-raised)] bg-[var(--s-surface)] p-4">
+                  <input type="checkbox" checked={advanced} onChange={(e) => setAdvanced(e.target.checked)} disabled={generating} className="mt-1 h-4 w-4 shrink-0 accent-[var(--s-hi)]" data-testid="advanced-toggle" />
+                  <span>
+                    <span className="block text-xs font-semibold text-[var(--s-accent)]">Advanced build</span>
+                    <span className="mt-1 block text-sm text-[var(--s-muted)]">Multi-page generation with automatic testing and repair. Takes longer. Leave off for the faster standard build.</span>
+                  </span>
+                </label>
+              )}
+              {advancedLocked && (
+                <button type="button" onClick={() => setUpgradeOpen(true)} className="mt-4 flex w-full items-start gap-3 rounded-xl border border-[var(--s-raised)] bg-[var(--s-surface)] p-4 text-left opacity-80 transition-opacity hover:opacity-100" data-testid="advanced-locked">
+                  <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0 text-[var(--s-muted)]" />
+                  <span className="flex-1">
+                    <span className="flex items-center gap-2 text-xs font-semibold text-[var(--s-accent)]">Advanced build <span className="rounded-full border border-[var(--s-line)] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[var(--s-muted)]">Plus / Pro</span></span>
+                    <span className="mt-1 block text-sm text-[var(--s-muted)]">Multi-page generation with automatic testing and repair.</span>
+                  </span>
+                </button>
+              )}
               <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between [&>button]:w-full sm:[&>button]:w-auto">
                 <button type="button" onClick={() => setStep(1)} disabled={generating} className="s-btn s-btn-ghost"><ArrowLeft size={14} /> Previous Step</button>
                 <button type="button" onClick={generate} disabled={generating} className={GRAD}>{generating ? 'Generating…' : `Generate ${schema?.title?.replace(/^Build your /, '') || 'Website'}`}</button>
@@ -449,6 +469,20 @@ export default function WebsiteBuilder({ type, onBack, onGenerate }) {
           )}
         </motion.div>
 
+        {upgradeOpen && (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4" role="dialog" aria-modal="true" aria-label="Upgrade required" onClick={() => setUpgradeOpen(false)}>
+            <div className="relative w-full max-w-sm rounded-2xl border border-[var(--s-line-strong)] bg-[var(--s-surface)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
+              <button type="button" onClick={() => setUpgradeOpen(false)} aria-label="Close" className="absolute right-3 top-3 rounded-full p-1 text-[var(--s-faint)] hover:text-[var(--s-text)]"><X className="h-4 w-4" /></button>
+              <span className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.06]"><LockKeyhole className="h-4 w-4 text-[var(--s-text)]" /></span>
+              <p className="mt-3 text-base font-semibold text-[var(--s-text)]">Advanced build is a Plus / Pro feature</p>
+              <p className="mt-2 text-sm text-[var(--s-muted)]">Upgrade to generate multi-page websites with automatic testing and repair.</p>
+              <div className="mt-5 flex gap-2">
+                <button type="button" onClick={() => setUpgradeOpen(false)} className="s-btn s-btn-ghost flex-1">Not now</button>
+                <button type="button" onClick={() => { setUpgradeOpen(false); onUpgrade?.(); }} className="s-btn s-btn-primary flex-1">View plans</button>
+              </div>
+            </div>
+          </div>
+        )}
         {generating && <div className="mt-5 flex items-center justify-center gap-2 text-xs text-[var(--s-faint)]">Questionnaire locked while generation runs…</div>}
       </div>
     </div>
