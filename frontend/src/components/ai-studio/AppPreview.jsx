@@ -14,6 +14,7 @@ import ShipProjectModal from './ShipProjectModal';
 import Github from './GithubIcon';
 import GeneratingScreen from './GeneratingScreen';
 import JSZip from 'jszip';
+import { applyPreviewRouter, buildEntryCode } from './routerWrap';
 
 const PLACEHOLDER_FILES = {
  '/App.js': {
@@ -127,36 +128,9 @@ button, input, textarea, select {
 }
 `;
 
-// Generated sites often use useLocation()/useNavigate()/<Link> in shared components (Header, Footer) without
-// anything rendering a <Router> above them, which crashes the preview with "useLocation() may be used only in
-// the context of a <Router> component". When the site uses react-router but creates no Router of its own, the
-// preview entry supplies one (a second, nested Router would crash too, so it is skipped when one exists).
-const ROUTER_IMPORT_RE = /from\s*['"]react-router(?:-dom)?['"]|require\(\s*['"]react-router(?:-dom)?['"]\s*\)/;
-const OWN_ROUTER_RE = /<\s*(?:BrowserRouter|HashRouter|MemoryRouter|StaticRouter|Router|RouterProvider)\b|createBrowserRouter\s*\(|createHashRouter\s*\(|createMemoryRouter\s*\(/;
-export function siteNeedsRouterWrapper(files) {
- let usesRouter = false;
- let hasOwnRouter = false;
- for (const [filePath, obj] of Object.entries(files || {})) {
-  if (!/\.(?:jsx?|tsx?|mjs)$/i.test(filePath) || /^\/(?:main|index)\.(?:jsx?|tsx?)$/i.test(filePath)) continue;
-  const code = typeof obj === 'string' ? obj : obj?.code;
-  if (typeof code !== 'string') continue;
-  if (ROUTER_IMPORT_RE.test(code)) usesRouter = true;
-  if (OWN_ROUTER_RE.test(code)) hasOwnRouter = true;
- }
- return usesRouter && !hasOwnRouter;
-}
-
-export function buildEntryCode(files, appImport = './App') {
- const wrap = siteNeedsRouterWrapper(files);
- return `import React from 'react';\nimport ReactDOM from 'react-dom/client';\n${wrap ? "import { BrowserRouter } from 'react-router-dom';\n" : ''}import App from '${appImport}';\n\nconst root = ReactDOM.createRoot(document.getElementById('root'));\nroot.render(\n  <React.StrictMode>\n    ${wrap ? '<BrowserRouter><App /></BrowserRouter>' : '<App />'}\n  </React.StrictMode>\n);\n`;
-}
-
 function normalizeGeneratedFiles(sourceFiles) {
- const files = { ...(sourceFiles || {}) };
- // Supply the Router wrapper through the preview entry (Sandpack's react template boots from /index.js).
- if (siteNeedsRouterWrapper(files) && !files['/index.js'] && !files['/index.jsx']) {
-  files['/index.js'] = { code: buildEntryCode(files), hidden: true };
- }
+ // The preview owns the single Router above the whole app (see routerWrap.js).
+ const files = applyPreviewRouter(sourceFiles);
  const responsivePath = '/__devdrop-responsive.css';
  const existingResponsive = files[responsivePath];
  const appFile = files['/App.js'];
