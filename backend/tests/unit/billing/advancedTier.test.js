@@ -30,3 +30,14 @@ describe('advanced generation tier (server-side entitlement)', () => {
     expect(resolveGenerationTier({ ent: ent('plus'), env: { ADVANCED_GENERATION_ENABLED: 'false' } }).tier).toBe('standard');
   });
 });
+
+describe('advanced build level validation', () => {
+  const { _requestedLevelOf } = require('../../../src/modules/ai-generate/ai-generate.controller');
+  test('accepts low / moderate / max (case-insensitive), anything else falls back to max', () => {
+    expect(_requestedLevelOf({ advancedLevel: 'low' })).toBe('low');
+    expect(_requestedLevelOf({ advancedLevel: ' Moderate ' })).toBe('moderate');
+    expect(_requestedLevelOf({ advancedLevel: 'max' })).toBe('max');
+    for (const bad of [undefined, null, '', 'ultra', 5, {}]) expect(_requestedLevelOf({ advancedLevel: bad })).toBe('max');
+    expect(_requestedLevelOf(undefined)).toBe('max');
+  });
+});

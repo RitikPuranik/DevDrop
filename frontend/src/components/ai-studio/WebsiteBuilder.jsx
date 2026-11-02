@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { DEFAULT_ADVANCED_LEVEL } from './advancedLevels';
+import AdvancedLevelPicker from './AdvancedLevelPicker';
 import { ArrowLeft, ArrowRight, LockKeyhole, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Card, Field, StepHeader, MediaDrop, SpecialRequestsCard } from './studioUi';
@@ -368,6 +370,7 @@ export default function WebsiteBuilder({ type, onBack, onGenerate, advancedAvail
   const [design, setDesign] = useState({ style: 'modern', theme: 'dark', animations: 'subtle', animationList: ['subtle'], customPrompt: '', primaryColor: '#b8935a', paletteId: 'amber', palette: '#b8935a, #e8d9bf, #b4583a, #2f3436, #f1f1f1', typography: 'grotesk', themeTouched: false, paletteTouched: false });
   const [generating, setGenerating] = useState(false);
   const [advanced, setAdvanced] = useState(false);
+  const [level, setLevel] = useState(DEFAULT_ADVANCED_LEVEL);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const schema = SCHEMAS[type];
 
@@ -380,7 +383,7 @@ export default function WebsiteBuilder({ type, onBack, onGenerate, advancedAvail
 
   const generate = async () => {
     setGenerating(true);
-    try { await onGenerate(type, details, design, { advanced: advancedAvailable && advanced }); } finally { setGenerating(false); }
+    try { await onGenerate(type, details, design, { advanced: advancedAvailable && advanced, level }); } finally { setGenerating(false); }
   };
 
   if (step === 1) {
@@ -452,6 +455,7 @@ export default function WebsiteBuilder({ type, onBack, onGenerate, advancedAvail
                   </span>
                 </label>
               )}
+              {advancedAvailable && advanced && <AdvancedLevelPicker level={level} onChange={setLevel} disabled={generating} />}
               {advancedLocked && (
                 <button type="button" onClick={() => setUpgradeOpen(true)} className="mt-4 flex w-full items-start gap-3 rounded-xl border border-[var(--s-raised)] bg-[var(--s-surface)] p-4 text-left opacity-80 transition-opacity hover:opacity-100" data-testid="advanced-locked">
                   <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0 text-[var(--s-muted)]" />

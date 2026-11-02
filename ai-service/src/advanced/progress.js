@@ -20,7 +20,7 @@ const CATEGORY_PHASE = { 'design-system': 'design', shared: 'shared', entry: 'sh
 
 function createProgress({ onChange = () => {} } = {}) {
   const phase = Object.fromEntries(PHASES.map(([id]) => [id, 'pending'])); // pending | running | done | skipped
-  const state = { pages: [], files: { planned: 0, written: 0, created: 0 }, task: null, validation: {}, repair: { attempts: 0, max: 0, fixed: 0, open: 0 }, notes: [], complexity: null, architecture: { folders: [] } };
+  const state = { pages: [], files: { planned: 0, written: 0, created: 0 }, task: null, validation: {}, repair: { attempts: 0, max: 0, fixed: 0, open: 0 }, notes: [], level: null, complexity: null, architecture: { folders: [] } };
   const queued = { total: {}, done: {} };
 
   const snapshot = () => ({
@@ -31,6 +31,7 @@ function createProgress({ onChange = () => {} } = {}) {
     pagesTotal: state.pages.length,
     files: { ...state.files },
     folders: state.architecture.folders,
+    level: state.level,
     complexity: state.complexity,
     currentTask: state.task,
     validation: { ...state.validation },
@@ -47,6 +48,7 @@ function createProgress({ onChange = () => {} } = {}) {
     task(text) { state.task = text; emit(); },
     setPages(pages) { state.pages = pages.map((p) => ({ id: p.id, title: p.title, path: p.path, status: 'planned', recommended: Boolean(p.recommended) })); emit(); },
     setPageStatus(id, status) { const p = state.pages.find((x) => x.id === id); if (p) { p.status = status; emit(); } },
+    setLevel(level) { state.level = level || null; emit(); },
     setArchitecture({ folders, complexity }) { state.architecture.folders = folders; state.complexity = complexity || state.complexity; emit(); },
     planFiles(contracts) { queued.total = {}; for (const c of contracts) { const ph = CATEGORY_PHASE[c.category] || 'shared'; queued.total[ph] = (queued.total[ph] || 0) + 1; } state.files.planned = contracts.length; emit(); },
     addFile(contract) { const ph = CATEGORY_PHASE[contract.category] || 'shared'; queued.total[ph] = (queued.total[ph] || 0) + 1; state.files.planned += 1; state.files.created += 1; if (phase[ph] === 'done') phase[ph] = 'running'; emit(); },

@@ -78,6 +78,9 @@ exports.reconcileJob = reconcileJob;
 const hashPayload = (payload) => crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 
 // The browser may only ever ASK for a pipeline; the backend decides. Anything but these two exact strings is ignored.
+// Build level of an advanced job (low | moderate | max). Unknown / missing values fall back to 'max' (the pre-levels behaviour).
+const ADVANCED_LEVELS = ['low', 'moderate', 'max'];
+const requestedLevelOf = (body) => { const v = String(body?.advancedLevel ?? '').trim().toLowerCase(); return ADVANCED_LEVELS.includes(v) ? v : 'max'; };
 const requestedTierOf = (body) => (body?.generationTier === 'advanced' || body?.generationTier === 'standard' ? body.generationTier : undefined);
 
 // Per-user cap on simultaneous advanced jobs (they are long-running and expensive). Dead jobs are reconciled first so a lost job never blocks a user.
@@ -94,6 +97,7 @@ const assertAdvancedConcurrency = async (userId, limits) => {
 
 const findOwnedJob = (jobKey, userId) => QueueJob.findOne({ jobKey, userId, type: JOB_TYPES.AI_GENERATE });
 
+exports._requestedLevelOf = requestedLevelOf;
 exports.generate = async (req, res) => {
   try {
     const { fileData, websiteType, userData, preferences, assets, projectId } = req.body;
@@ -140,7 +144,7 @@ exports.generate = async (req, res) => {
       existingDependencies: (existingFiles && fileData?.dependencies) || {},
       // Server-decided. ai-service only runs the advanced pipeline for a payload that carries this, and the payload
       // endpoint re-checks the entitlement when the worker picks the job up.
-      ...(decision.tier === 'advanced' ? { tier: 'advanced', advanced: { limits: decision.limits } } : { tier: 'standard' }),
+      ...(decision.tier === 'advanced' ? { tier: 'advanced', advanced: { limits: decision.limits, level: requestedLevelOf(req.body) } } : { tier: 'standard' }),
     };
 
     // Duplicate-submission protection: an identical request from the same user that is still
@@ -197,7 +201,7 @@ exports.generate = async (req, res) => {
         spec: { websiteType, userData, preferences: payload.preferences, assets },
       }).catch((e) => console.warn('AI Studio attachJob failed:', e.message));
     }
-    res.status(202).json({ success:true, data:{ jobId: jobKey, status:'queued', tier: decision.tier } });
+    res.status(202).json({ success:true, data:{ jobId: jobKey, status:'queued', tier: decision.tier, ...(decision.tier === 'advanced' ? { level: payload.advanced.level } : {}) } });
   } catch(error) {
     if (error instanceof BillingError) return sendBillingError(res, error);
     console.error('AI generate error:', error.message);
@@ -260,7 +264,7 @@ exports.debugRetry = async (req, res) => {
         buildOutput: ctx.buildOutput,
         mediaManifest: ctx.mediaManifest || [],
         mediaPlan: ctx.mediaPlan || [],
-        ...(debugTier === 'advanced' ? { tier: 'advanced', advanced: { limits: debugLimits, context: ctx.advanced || null } } : { tier: 'standard' }),
+        ...(debugTier === 'advanced' ? { tier: 'advanced', advanced: { limits: debugLimits, level: ADVANCED_LEVELS.includes(ctx.advanced?.level) ? ctx.advanced.level : 'max', context: ctx.advanced || null } } : { tier: 'standard' }),
       },
       data: { mode: 'debug', tier: debugTier },
       priority: queue.PRIORITY.TRANSACTIONAL,

@@ -27,6 +27,7 @@ const { normalizeAssets, buildMediaManifest, buildAssetSummaries, normalizeMedia
 const base = require('./websiteGeneration.orchestrator');
 const { runWithJob, getJobContext } = require('../utils/jobContext');
 const { resolveLimits, settings } = require('../advanced/config');
+const { resolveLevel, profileFor, applyLevel } = require('../advanced/levels');
 const { createBudget, BudgetExceededError } = require('../advanced/budget');
 const { createProjectStore } = require('../advanced/projectStore');
 const { normalizeWebsiteSpec, normalizePageManifest, normalizeAdvancedArchitecture, normalizeFileRequests } = require('../advanced/contracts');
@@ -79,15 +80,17 @@ function scaffold(files, dependencies, title) {
 
 function createRun(input, { onStage, onProgress, onCheckpoint, deps: injected, mode = 'generate', budget: opts_budget } = {}) {
   const deps = { ...defaultDeps(), ...(injected || {}), agents: { ...defaultDeps().agents, ...(injected?.agents || {}) } };
-  const limits = resolveLimits(input.advanced?.limits);
+  const level = resolveLevel(input.advanced?.level ?? input.advanced?.context?.level);
+  const limits = applyLevel(resolveLimits(input.advanced?.limits), level);
   const budget = opts_budget || createBudget(limits);
   const meta = [];
   const stage = (name, fn) => runStage(name, fn, meta, onStage);
   const progress = createProgress({ onChange: (snap) => onProgress?.(snap) });
+  progress.setLevel(level);
   const store = createProjectStore();
   const warnings = [];
   const warn = (m) => { warnings.push(m); console.warn('[ADVANCED]', m); };
-  return { deps, limits, budget, meta, stage, progress, store, warn, warnings, onCheckpoint, onStage, mode };
+  return { deps, level, limits, budget, meta, stage, progress, store, warn, warnings, onCheckpoint, onStage, mode };
 }
 
 /* -------------------------------------------------------------------------- quality <-> repair loop */
@@ -105,7 +108,7 @@ async function qualityRepairLoop(ctx, st) {
     const before = report;
     report = await stage(`adv:quality:${round + 1}`, async () => ({ value: await runQualityEngine({
       files: scaffold(store.toFiles(), dependencies, st.requirements?.websiteType), manifest: st.manifest, pageFileIds: st.pageFileIds, dependencies,
-      build: deps.build, includeVisual: round === 0, visualAgent: deps.agents.visualQa, skills: st.skills, spec: st.spec, probe: deps.probe,
+      build: deps.build, includeVisual: round === 0, visualAgent: deps.agents.visualQa, qa: profileFor(ctx.level).qa, skills: st.skills, spec: st.spec, probe: deps.probe,
       onPhase: (p) => progress.task(`Quality checks: ${p}`),
     }) })).then((r) => r.value);
     dependencies = report.dependencies;
@@ -162,7 +165,7 @@ async function qualityRepairLoop(ctx, st) {
 
 function makeCheckpoint(ctx, st, phase) {
   const files = {}; for (const [p, f] of Object.entries(ctx.store.toFiles())) files[p] = f.code;
-  return { schema: CHECKPOINT_SCHEMA, phase, requirements: st.requirements, mediaPlan: st.mediaPlan, design: st.design, spec: st.spec, manifest: st.manifest, architecture: st.architecture, pageFileIds: st.pageFileIds, dependencies: st.dependencies, files, budget: ctx.budget.snapshot() };
+  return { schema: CHECKPOINT_SCHEMA, phase, requirements: st.requirements, mediaPlan: st.mediaPlan, design: st.design, spec: st.spec, manifest: st.manifest, architecture: st.architecture, pageFileIds: st.pageFileIds, dependencies: st.dependencies, files, level: ctx.level, budget: ctx.budget.snapshot() };
 }
 
 function failure(ctx, st, message, errors) {
@@ -170,7 +173,7 @@ function failure(ctx, st, message, errors) {
   return Object.assign(new Error(message), {
     userMessage: message,
     failureClass: 'permanent',
-    debugContext: { files, dependencies: st.dependencies || {}, architecture: st.architecture || null, requirements: st.requirements || null, design: st.design || null, errors, buildOutput: errors, mediaManifest: st.mediaManifest || [], mediaPlan: st.mediaPlan || [], advanced: { spec: st.spec, manifest: st.manifest, pageFileIds: st.pageFileIds } },
+    debugContext: { files, dependencies: st.dependencies || {}, architecture: st.architecture || null, requirements: st.requirements || null, design: st.design || null, errors, buildOutput: errors, mediaManifest: st.mediaManifest || [], mediaPlan: st.mediaPlan || [], advanced: { level: ctx.level, spec: st.spec, manifest: st.manifest, pageFileIds: st.pageFileIds } },
   });
 }
 
@@ -187,6 +190,7 @@ async function finalize(ctx, st, title, qr, extraMeta = {}) {
   const issues = rep.issues.filter((i) => !i.blocking).slice(0, 30).map((i) => ({ layer: i.layer, severity: i.severity, message: i.message.slice(0, 240), files: i.files }));
   const advanced = {
     tier: 'advanced',
+    level: ctx.level,
     spec: { category: st.spec.category, purpose: st.spec.purpose, audience: st.spec.audience, complexity: st.spec.complexity },
     pages: st.manifest.pages.map((p) => ({ id: p.id, title: p.title, path: p.path, recommended: p.recommended, dynamic: p.dynamic })),
     architecture: { fileCount: Object.keys(outFiles).length, generatedFileCount: store.size, folders: folderList(Object.keys(outFiles)), createdByPhase: Object.fromEntries(Object.entries(store.createdByPhase()).map(([k, v]) => [k, v.length])) },
@@ -233,14 +237,14 @@ async function runAdvanced(input, opts) {
     Object.assign(st, { spec: checkpoint.spec, manifest: checkpoint.manifest, design: checkpoint.design, architecture: checkpoint.architecture, pageFileIds: checkpoint.pageFileIds || {} });
     st.dependencies = checkpoint.dependencies || {};
   } else {
-    const planned = await stage('adv:plan', () => deps.agents.planner.run({ requirements: st.requirements, preferences: normalized.preferences, websiteType: normalized.websiteType, userData: st.requirements.userData, mediaPlan: st.mediaPlan, skillContext: skills.contextFor('requirements') }));
+    const planned = await stage('adv:plan', () => deps.agents.planner.run({ requirements: st.requirements, preferences: normalized.preferences, websiteType: normalized.websiteType, userData: st.requirements.userData, mediaPlan: st.mediaPlan, skillContext: skills.contextFor('requirements'), level: ctx.level }));
     st.spec = normalizeWebsiteSpec(planned.value?.spec, { websiteType: normalized.websiteType });
     st.manifest = normalizePageManifest(planned.value?.manifest || planned.value, { websiteType: normalized.websiteType });
     progress.setPages(st.manifest.pages);
     progress.start('design', 'Creating the design system');
     const d = await stage('adv:design', () => deps.agents.design.run({ requirements: st.requirements, mediaPlan: st.mediaPlan, preferences: normalized.preferences, websiteType: normalized.websiteType, media: referenceMedia, designSpec: null, skillContext: skills.contextFor('design') }));
     st.design = validateDesign(d.value);
-    const arch = await stage('adv:architecture', () => deps.agents.architecture.run({ requirements: st.requirements, design: st.design, spec: st.spec, manifest: st.manifest, tokens: tokenBrief(buildDesignAssets(st.design).tokens), mediaPlan: st.mediaPlan, skillContext: skills.contextFor('architecture') }));
+    const arch = await stage('adv:architecture', () => deps.agents.architecture.run({ requirements: st.requirements, design: st.design, spec: st.spec, manifest: st.manifest, tokens: tokenBrief(buildDesignAssets(st.design).tokens), mediaPlan: st.mediaPlan, skillContext: skills.contextFor('architecture'), level: ctx.level }));
     st.architecture = normalizeAdvancedArchitecture(arch.value, st.manifest, { warn });
     st.dependencies = { ...(st.architecture.dependencies || {}) };
   }
@@ -280,7 +284,7 @@ async function runAdvanced(input, opts) {
     const page = st.manifest.pages.find((p) => p.id === contract.pageId) || null;
     let value = null; let lastProblem = '';
     for (let attempt = 0; attempt < 2 && !value; attempt += 1) {
-      const result = await stage(`code:${contract.path}`, () => deps.agents.code.run({ fileContract: contract, relatedContracts: related, relatedSources: sourcesFor(contract), spec: st.spec, manifest: st.manifest, page, tokens: st.tokens, requirements: st.requirements, design: st.design, mediaManifest: st.modelManifest, mediaPlan: st.mediaPlan, media: referenceMedia, existingPaths: store.list(), skillContext: /\.(jsx?|mjs)$/i.test(contract.path) ? skills.contextFor('code', { terms: [contract.path, contract.type, contract.responsibility] }) : '' }));
+      const result = await stage(`code:${contract.path}`, () => deps.agents.code.run({ fileContract: contract, relatedContracts: related, relatedSources: sourcesFor(contract), spec: st.spec, manifest: st.manifest, page, tokens: st.tokens, requirements: st.requirements, design: st.design, mediaManifest: st.modelManifest, mediaPlan: st.mediaPlan, media: referenceMedia, existingPaths: store.list(), level: ctx.level, skillContext: /\.(jsx?|mjs)$/i.test(contract.path) ? skills.contextFor('code', { terms: [contract.path, contract.type, contract.responsibility] }) : '' }));
       const v = result.value;
       if (v?.path === contract.path && typeof v.code === 'string' && v.code.trim()) { value = v; } else lastProblem = `invalid output for ${contract.path}`;
     }
@@ -350,7 +354,7 @@ async function runAdvancedDebug(input, opts) {
 
 async function runWithBudget(input, opts, runner) {
   // The budget lives in the job context so llm.service meters EVERY model call, including the reused agents.
-  const limits = resolveLimits(input.advanced?.limits);
+  const limits = applyLevel(resolveLimits(input.advanced?.limits), resolveLevel(input.advanced?.level ?? input.advanced?.context?.level));
   const budget = createBudget(limits);
   const parent = getJobContext() || {};
   const wrapped = { ...parent, beforeLlmCall: () => budget.beforeLlmCall?.(), afterLlmCall: (x) => budget.afterLlmCall?.(x) };

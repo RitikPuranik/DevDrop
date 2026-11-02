@@ -75,3 +75,58 @@ test('cancellation stops the run', async () => {
   const { deps } = fakes();
   await expect(runWithJob({ isCancelled: () => true }, () => generateAdvancedWebsite(input, { deps }))).rejects.toMatchObject({ cancelled: true });
 });
+
+/* -------------------------------------------------------------------------- build levels */
+const { applyLevel, resolveLevel, profileFor, withLevelBrief } = require('../src/advanced/levels');
+const { resolveLimits } = require('../src/advanced/config');
+
+describe('advanced build levels', () => {
+  const plan = { maxWallClockMs: 90 * 60000, maxLlmCalls: 800, maxTotalTokens: 10_000_000, maxCostUsd: 8, maxOutputBytes: 12 * 1048576, maxRepairAttempts: 6, maxParallelism: 4 };
+  test('unknown or missing level keeps the pre-levels behaviour (max)', () => {
+    expect(resolveLevel(undefined)).toBe('max'); expect(resolveLevel('turbo')).toBe('max'); expect(resolveLevel('LOW')).toBe('low');
+  });
+  test('budgets are ordered low < moderate < max and never exceed the plan', () => {
+    const [lo, mo, mx] = ['low', 'moderate', 'max'].map((l) => applyLevel(resolveLimits(plan), l));
+    for (const k of ['maxWallClockMs', 'maxLlmCalls', 'maxTotalTokens', 'maxCostUsd', 'maxRepairAttempts']) {
+      expect(lo[k]).toBeLessThan(mo[k]); expect(mo[k]).toBeLessThanOrEqual(mx[k]); expect(mx[k]).toBeLessThanOrEqual(resolveLimits(plan)[k]);
+    }
+    expect(mx).toMatchObject({ maxLlmCalls: 800, maxRepairAttempts: 6 });
+    expect(lo.maxParallelism).toBe(mx.maxParallelism);
+  });
+  test('a small plan is never pushed above itself by a level floor', () => {
+    const tiny = applyLevel({ ...resolveLimits(plan), maxLlmCalls: 30, maxCostUsd: 0.2 }, 'low');
+    expect(tiny.maxLlmCalls).toBeLessThanOrEqual(30); expect(tiny.maxCostUsd).toBeLessThanOrEqual(0.2);
+  });
+  test('briefs differ and only apply when a level is given', () => {
+    expect(withLevelBrief('SYS')).toBe('SYS');
+    expect(withLevelBrief('SYS', 'low')).toContain('LOW'); expect(withLevelBrief('SYS', 'max')).toContain('MAX');
+  });
+  test('quality layers: low skips browser+visual, moderate adds browser, max adds visual', () => {
+    expect(profileFor('low').qa).toEqual({ browser: false, visual: false });
+    expect(profileFor('moderate').qa).toEqual({ browser: true, visual: false });
+    expect(profileFor('max').qa).toEqual({ browser: true, visual: true });
+  });
+
+  async function runLevel(level) {
+    const { deps } = fakes();
+    const seen = { levels: [], probes: 0, visual: 0 };
+    for (const a of ['planner', 'architecture', 'code']) { const orig = deps.agents[a].run; deps.agents[a].run = async (args) => { seen.levels.push(args.level); return orig(args); }; }
+    deps.agents.visualQa = { run: async () => { seen.visual += 1; return { value: { issues: [] } }; } };
+    deps.build = async ({ afterBuild }) => ({ success: true, errors: [], afterBuildResult: afterBuild ? await afterBuild('/dist') : null });
+    deps.probe = async (dist, opts) => { seen.probes += 1; return { pages: [], forms: [], discovered: [], shots: opts.collectShots ? [{ pageId: 'home', viewport: 'desktop', mimeType: 'image/jpeg', data: 'x' }] : [] }; };
+    const r = await generateAdvancedWebsite({ ...input, advanced: { limits: { maxRepairAttempts: 6 }, level } }, { deps });
+    return { r, seen };
+  }
+  test('each level changes what actually runs', async () => {
+    const low = await runLevel('low'); const mod = await runLevel('moderate'); const max = await runLevel('max');
+    expect(low.r.generationMeta.advanced.level).toBe('low');
+    expect(low.seen.levels.every((l) => l === 'low')).toBe(true);
+    expect(low.seen.probes).toBe(0); expect(low.seen.visual).toBe(0);
+    expect(low.r.generationMeta.advanced.quality.layers.functional.status).toBe('skipped');
+    expect(low.r.generationMeta.advanced.quality.layers.visual.status).toBe('skipped');
+    expect(mod.seen.probes).toBeGreaterThan(0); expect(mod.seen.visual).toBe(0);
+    expect(mod.r.generationMeta.advanced.quality.layers.visual.status).toBe('skipped');
+    expect(max.seen.probes).toBeGreaterThan(0); expect(max.seen.visual).toBe(1);
+    expect(max.r.generationMeta.advanced.budget.limits.maxLlmCalls).toBeGreaterThan(low.r.generationMeta.advanced.budget.limits.maxLlmCalls);
+  });
+});

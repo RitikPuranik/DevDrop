@@ -258,7 +258,7 @@ export default function AiStudio() {
     const nextMessages=[{role:'user',content:prompt}];
     setStudioMode('chat');
     setMessages(nextMessages);
-    await runGeneration(nextMessages,{websiteType:type,userData:{...details,images:undefined,videos:undefined},preferences:design,assets:buildAssetContract({images:media.images,videos:media.videos}),generationTier:options.advanced?'advanced':'standard'});
+    await runGeneration(nextMessages,{websiteType:type,userData:{...details,images:undefined,videos:undefined},preferences:design,assets:buildAssetContract({images:media.images,videos:media.videos}),generationTier:options.advanced?'advanced':'standard',advancedLevel:options.advanced?(options.level||'moderate'):undefined});
   };
   const handlePickFiles=(e)=>{
     const picked=Array.from(e.target.files||[]); e.target.value='';

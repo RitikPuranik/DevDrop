@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import AdvancedBuildPanel, { AdvancedUpgradePrompt } from './AdvancedBuildPanel';
 import { computeAdvancedPipeline } from './pipelineSteps';
 import { quotaModalFromError } from '../billing/billingUtils';
@@ -27,5 +27,28 @@ describe('advanced build UI', () => {
   });
   it('maps FEATURE_NOT_IN_PLAN to the upgrade modal', () => {
     expect(quotaModalFromError({ response: { data: { code: 'FEATURE_NOT_IN_PLAN', message: 'x' } } }).variant).toBe('unlock');
+  });
+});
+
+import { fireEvent } from '@testing-library/react';
+import { ADVANCED_LEVELS } from './advancedLevels';
+import AdvancedLevelPicker from './AdvancedLevelPicker';
+
+describe('advanced build levels UI', () => {
+  it('offers low, moderate and max', () => {
+    expect(ADVANCED_LEVELS.map((l) => l.id)).toEqual(['low', 'moderate', 'max']);
+  });
+  it('shows the level badge on the build panel', () => {
+    render(<AdvancedBuildPanel summary={{ level: 'low', pages: [], quality: { passed: true } }} isGenerating={false} />);
+    expect(screen.getByTestId('advanced-level-badge').textContent).toMatch(/Low level/);
+  });
+  it('level picker selects a level and reports it', () => {
+    const onChange = vi.fn();
+    render(<AdvancedLevelPicker level="moderate" onChange={onChange} />);
+    expect(screen.getByTestId('level-moderate').checked).toBe(true);
+    fireEvent.click(screen.getByTestId('level-max'));
+    expect(onChange).toHaveBeenCalledWith('max');
+    fireEvent.click(screen.getByTestId('level-low'));
+    expect(onChange).toHaveBeenCalledWith('low');
   });
 });

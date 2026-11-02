@@ -14,6 +14,18 @@ requirements -> planner (spec + page manifest) -> design system -> architecture 
 
 Resources are limited by time, LLM calls, tokens, cost, output bytes, repair rounds and parallelism, never by file/component count.
 
+## Build levels (Low / Moderate / Max)
+On the Review step, once **Advanced build** is on, the user picks a level. It is sent as `advancedLevel`, validated by the backend (`requestedLevelOf`; unknown or missing = `max`, the pre-levels behaviour), forwarded as `payload.advanced.level`, and kept for debug retries. `ai-service/src/advanced/levels.js` turns it into real differences:
+
+| | Low | Moderate | Max |
+|---|---|---|---|
+| Budget (of the plan's limits, with floors) | 35% | 65% | 100% |
+| Repair rounds | up to 2 | up to 4 | plan limit |
+| Quality layers | structure + build | + browser functional/responsive | + AI visual review |
+| Agent brief (planner / architecture / code) | essential pages, compact | all requested + helpful pages | complete premium build |
+
+Every level runs the full advanced pipeline (plan, design system, architecture, ordered generation, integration, build check, repair). A level can only lower limits, never exceed the plan or operator ceilings, and there is still no file-count cap. Quota use is unchanged.
+
 ## Configuration (all optional)
 | Variable | Purpose |
 |---|---|

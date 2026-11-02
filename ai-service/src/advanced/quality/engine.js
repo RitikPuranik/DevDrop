@@ -15,8 +15,10 @@ const LAYERS = ['structural', 'build', 'functional', 'responsive', 'visual'];
 const filesMentioned = (text, known) => known.filter((p) => String(text).includes(p.slice(1)) || String(text).includes(p)).slice(0, 6);
 let n = 0;
 
-async function runQualityEngine({ files, manifest, pageFileIds, dependencies = {}, build, includeVisual = false, visualAgent = null, skills = null, spec = {}, onPhase = () => {}, probe = probeDist }) {
-  const cfg = settings();
+async function runQualityEngine({ files, manifest, pageFileIds, dependencies = {}, build, includeVisual = false, visualAgent = null, skills = null, spec = {}, onPhase = () => {}, probe = probeDist, qa = null }) {
+  // `qa` (from the build level) can only switch layers OFF; the operator's env switches still win.
+  const base = settings();
+  const cfg = { ...base, browserQa: base.browserQa && (qa ? qa.browser !== false : true), visualQa: base.visualQa && (qa ? qa.visual !== false : true) };
   const result = { issues: [], layers: Object.fromEntries(LAYERS.map((l) => [l, { status: 'pending', count: 0 }])), dependencies, buildResult: null, probeSkipped: null, passed: false };
   const finish = () => {
     for (const l of LAYERS) {
@@ -73,7 +75,7 @@ async function runQualityEngine({ files, manifest, pageFileIds, dependencies = {
   }
   result.layers.build.status = 'passed';
   probeRaw = built.afterBuildResult;
-  if (!cfg.browserQa) result.probeSkipped = 'browser QA disabled';
+  if (!cfg.browserQa) result.probeSkipped = base.browserQa && qa && qa.browser === false ? 'not part of the selected build level' : 'browser QA disabled';
   else if (!probeRaw || probeRaw.skipped || probeRaw.error) result.probeSkipped = probeRaw?.reason || probeRaw?.error || 'browser unavailable';
 
   if (probeRaw && !probeRaw.skipped && !probeRaw.error) {
@@ -83,6 +85,8 @@ async function runQualityEngine({ files, manifest, pageFileIds, dependencies = {
   } else {
     for (const l of ['functional', 'responsive']) result.layers[l].status = result.layers[l].status === 'pending' ? 'skipped' : result.layers[l].status;
   }
+
+  if (!cfg.visualQa) result.layers.visual.status = 'skipped';
 
   // --- visual QA: one multimodal call, only on a site that already works
   if (wantShots && probeRaw?.shots?.length && !result.issues.some((i) => i.blocking)) {

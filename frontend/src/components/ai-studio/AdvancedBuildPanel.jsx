@@ -1,4 +1,5 @@
 import React from 'react';
+import { levelLabel } from './advancedLevels';
 import { FileText, Layers, Wrench, ShieldCheck, LockKeyhole } from 'lucide-react';
 
 const LAYER_LABEL = { structural: 'Structure', build: 'Build', functional: 'Functionality', responsive: 'Responsive', visual: 'Visual' };
@@ -16,6 +17,7 @@ export default function AdvancedBuildPanel({ snapshot, summary, isGenerating }) 
   return (
     <div className="space-y-3 rounded-2xl border border-[var(--s-line)] bg-white/[0.02] p-3.5 text-[12px] text-[var(--s-muted)]" data-testid="advanced-panel">
       <div className="flex items-center gap-2 text-[var(--s-text)]"><Layers className="h-3.5 w-3.5" /><span className="font-medium">Advanced build</span>
+        {(summary?.level || s?.level) && <span className="rounded-full border border-[var(--s-line)] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[var(--s-hi)]" data-testid="advanced-level-badge">{levelLabel(summary?.level || s?.level) || summary?.level || s?.level} level</span>}
         {s?.complexity && <span className="rounded-full border border-[var(--s-line)] px-2 py-0.5 text-[10px] uppercase tracking-wide">{s.complexity}</span>}</div>
       {pages.length > 0 && <div>
         <p className="mb-1 text-[10px] uppercase tracking-[0.14em] text-[var(--s-faint)]">Planned pages{s?.pagesTotal ? ` · ${s.pagesDone || 0}/${s.pagesTotal} done` : ''}</p>
