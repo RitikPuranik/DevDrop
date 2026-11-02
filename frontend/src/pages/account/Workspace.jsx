@@ -26,7 +26,6 @@ import {
 import { userAPI } from '../../api/user';
 import { sellerAPI } from '../../api/seller';
 import { buyerAPI } from '../../api/buyer';
-import { wishlistAPI } from '../../api/wishlist';
 import { authAPI } from '../../api/auth';
 import { deploymentAPI } from '../../api/deployment';
 
@@ -69,7 +68,6 @@ const NAV_ITEMS = [
     badge: 'NEW',
     external: '/deploy-own',
   },
-  { id: 'wishlist', label: 'Wishlist', icon: Heart },
   { id: 'pricing', label: 'Pricing', icon: Sparkles },
 ];
 
@@ -112,12 +110,10 @@ export default function Workspace() {
 
   const [listings, setListings] = useState([]);
   const [purchases, setPurchases] = useState([]);
-  const [wishlist, setWishlist] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [listingsLoading, setListingsLoading] = useState(false);
   const [purchasesLoading, setPurchasesLoading] = useState(false);
-  const [wishlistLoading, setWishlistLoading] = useState(false);
 
   // Deployments
   const [deployments, setDeployments] = useState([]);
@@ -181,10 +177,6 @@ export default function Workspace() {
 
     if (activeSection === 'deployments') {
       fetchDeployments();
-    }
-
-    if (activeSection === 'wishlist') {
-      fetchWishlist();
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -347,19 +339,6 @@ export default function Workspace() {
   };
 
 
-  const fetchWishlist = async () => {
-    try {
-      setWishlistLoading(true);
-
-      const res = await wishlistAPI.getWishlist();
-
-      setWishlist(res.data?.data || []);
-    } catch {
-      setWishlist([]);
-    } finally {
-      setWishlistLoading(false);
-    }
-  };
 
 
   // -------------------------------------------------------
@@ -488,17 +467,6 @@ export default function Workspace() {
   };
 
 
-  const handleRemoveWishlist = async (websiteId) => {
-    try {
-      await wishlistAPI.remove(websiteId);
-
-      toast.success('Removed from wishlist');
-
-      fetchWishlist();
-    } catch {
-      toast.error('Failed to remove');
-    }
-  };
 
 
   const handleLogout = () => {
@@ -582,12 +550,6 @@ export default function Workspace() {
     pricing: {
       title: 'Build more. Ship faster.',
       subtitle: 'Choose your plan and unlock more possibilities with DevDrop AI.',
-    },
-
-    wishlist: {
-      title: 'Wishlist',
-      subtitle:
-        'Templates you have saved for later.',
     },
 
   };
@@ -1976,172 +1938,6 @@ export default function Workspace() {
                       deployment={deployment}
                     />
                   ))}
-
-                </div>
-
-              )}
-
-            </motion.div>
-          )}
-
-
-          {/* =================================================
-              WISHLIST
-          ================================================= */}
-
-          {activeSection === 'wishlist' && (
-            <motion.div
-              key="wishlist"
-              {...pageTransition}
-            >
-
-              {wishlistLoading ? (
-
-                <CardGridSkeleton count={6} />
-
-              ) : wishlist.length === 0 ? (
-
-                <EmptyState
-                  icon={Heart}
-                  title="Your wishlist is empty"
-                  description="Save projects you like and come back to them later."
-                  action="Browse marketplace"
-                  onAction={() =>
-                    navigate('/template')
-                  }
-                />
-
-              ) : (
-
-                <div className="
-                  grid
-                  grid-cols-1
-                  md:grid-cols-2
-                  xl:grid-cols-3
-                  gap-4
-                ">
-
-                  {wishlist.map((w) => {
-
-                    const web =
-                      w.websiteId || {};
-
-                    const cat =
-                      web.category || 'free';
-
-                    const previewVideo =
-                      web.files?.previewVideo
-                        ?.url || null;
-
-                    return (
-                      <motion.div
-                        key={w._id}
-                        {...pageTransition}
-                        onClick={() =>
-                          navigate(
-                            `/website/${web._id}`
-                          )
-                        }
-                        className={`
-                          ${cardClass}
-                          p-3
-                          cursor-pointer
-                          hover:border-white/[0.14]
-                          transition-all
-                        `}
-                      >
-
-                        <WishlistPreview
-                          previewVideo={
-                            previewVideo
-                          }
-                        />
-
-                        <div className="p-2 pt-4">
-
-                          <div className="
-                            flex
-                            items-center
-                            justify-between
-                            gap-3
-                          ">
-
-                            <h3 className="
-                              text-[15px]
-                              font-semibold
-                              truncate
-                            ">
-                              {web.name ||
-                                'Template'}
-                            </h3>
-
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-
-                                handleRemoveWishlist(
-                                  web._id
-                                );
-                              }}
-                              className="
-                                shrink-0
-                                w-8
-                                h-8
-                                rounded-lg
-                                flex
-                                items-center
-                                justify-center
-                                text-red-400/70
-                                hover:text-red-400
-                                hover:bg-red-400/[0.07]
-                                transition-all
-                              "
-                            >
-                              <Heart
-                                size={14}
-                                className="fill-current"
-                              />
-                            </button>
-
-                          </div>
-
-
-                          <div className="
-                            flex
-                            items-center
-                            justify-between
-                            mt-5
-                          ">
-
-                            <span className="
-                              text-[13px]
-                              font-semibold
-                              text-[var(--accent)]
-                            ">
-                              {cat === 'free'
-                                ? 'FREE'
-                                : `₹${
-                                    web.price ||
-                                    0
-                                  }`}
-                            </span>
-
-                            <span className="
-                              text-[9px]
-                              uppercase
-                              tracking-wider
-                              text-white/50
-                            ">
-                              {cat}
-                            </span>
-
-                          </div>
-
-                        </div>
-
-                      </motion.div>
-                    );
-                  })}
 
                 </div>
 

@@ -4,6 +4,7 @@ import { X, Search, Loader2, Heart, User, ChevronRight, ShoppingBag, Gavel, Spar
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { websiteAPI } from "../../api/website";
 import { buyerAPI } from "../../api/buyer";
+import { wishlistAPI } from "../../api/wishlist";
 import { toast } from 'sonner';
 
 const transition = {
@@ -25,6 +26,10 @@ export default function SmoothEliteGallery() {
     return ['free', 'paid', 'exclusive'].includes(urlFilter) ? urlFilter : 'all';
   });
 
+  // Wishlist state
+  const [wishlistIds, setWishlistIds] = useState(() => new Set());
+  const [showWishlistOnly, setShowWishlistOnly] = useState(false);
+
   // Purchase state for modal
   const [purchased, setPurchased] = useState(false);
   const [buying, setBuying] = useState(false);
@@ -41,6 +46,80 @@ export default function SmoothEliteGallery() {
       .catch(() => setPurchased(false))
       .finally(() => setCheckingPurchase(false));
   }, [selectedId]);
+
+  // Load the user's wishlisted ids (all pages) so hearts and the filter work
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const ids = new Set();
+        let page = 1;
+        let hasNext = true;
+        while (hasNext && page <= 25) {
+          const res = await wishlistAPI.getWishlist(page);
+          (res.data?.data || []).forEach((w) => {
+            const id = w.websiteId?._id || w.websiteId;
+            if (id) ids.add(String(id));
+          });
+          hasNext = !!res.data?.pagination?.hasNextPage;
+          page += 1;
+        }
+        if (!cancelled) setWishlistIds(ids);
+      } catch {
+        /* keep empty set */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isLoggedIn]);
+
+  const toggleWishlist = async (item) => {
+    if (!isLoggedIn) { toast.error('Please login first'); return; }
+    const itemId = String(item._id || item.id);
+    const wasWishlisted = wishlistIds.has(itemId);
+    const delta = wasWishlisted ? -1 : 1;
+
+    // optimistic update
+    setWishlistIds((prev) => {
+      const next = new Set(prev);
+      if (wasWishlisted) next.delete(itemId); else next.add(itemId);
+      return next;
+    });
+    setTemplates((prev) => prev.map((t) =>
+      String(t._id || t.id) === itemId
+        ? { ...t, wishlistCount: Math.max(0, (t.wishlistCount || 0) + delta) }
+        : t
+    ));
+    setSelectedId((prev) =>
+      prev && String(prev._id || prev.id) === itemId
+        ? { ...prev, wishlistCount: Math.max(0, (prev.wishlistCount || 0) + delta) }
+        : prev
+    );
+
+    try {
+      if (wasWishlisted) await wishlistAPI.remove(itemId);
+      else await wishlistAPI.add(itemId);
+    } catch (err) {
+      // already in wishlist on the server -> treat as success, otherwise roll back
+      if (!wasWishlisted && err.response?.status === 400) return;
+      setWishlistIds((prev) => {
+        const next = new Set(prev);
+        if (wasWishlisted) next.add(itemId); else next.delete(itemId);
+        return next;
+      });
+      setTemplates((prev) => prev.map((t) =>
+        String(t._id || t.id) === itemId
+          ? { ...t, wishlistCount: Math.max(0, (t.wishlistCount || 0) - delta) }
+          : t
+      ));
+      setSelectedId((prev) =>
+        prev && String(prev._id || prev.id) === itemId
+          ? { ...prev, wishlistCount: Math.max(0, (prev.wishlistCount || 0) - delta) }
+          : prev
+      );
+      toast.error(err.response?.data?.message || 'Could not update wishlist');
+    }
+  };
 
   const handleQuickPurchase = async () => {
     if (!isLoggedIn) { toast.error('Please login first'); return; }
@@ -88,9 +167,10 @@ export default function SmoothEliteGallery() {
       const type = item.type || item.category || "free";
       const matchesSearch = title.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesFilter = activeFilter === "all" || type === activeFilter;
-      return matchesSearch && matchesFilter;
+      const matchesWishlist = !showWishlistOnly || wishlistIds.has(String(item._id || item.id));
+      return matchesSearch && matchesFilter && matchesWishlist;
     });
-  }, [searchQuery, activeFilter, templates]);
+  }, [searchQuery, activeFilter, templates, showWishlistOnly, wishlistIds]);
 
   const renderPreviewPane = (item, mode = 'card') => {
     const previewVideo = item.files?.previewVideo?.url || null;
@@ -139,11 +219,18 @@ export default function SmoothEliteGallery() {
 
         {/* Wishlist overlay */}
         <div className="absolute top-3 right-3 flex items-center gap-2 z-30">
-          {(item.wishlistCount > 0) && (
-            <span className="flex items-center gap-1 bg-black/60 text-[11px] font-bold text-white/80 px-2.5 py-1 rounded-full">
-              <Heart size={9} className="text-red-400 fill-red-400" /> {item.wishlistCount}
-            </span>
-          )}
+          <button
+            type="button"
+            aria-label={wishlistIds.has(String(item._id || item.id)) ? 'Remove from wishlist' : 'Add to wishlist'}
+            aria-pressed={wishlistIds.has(String(item._id || item.id))}
+            onClick={(e) => { e.stopPropagation(); toggleWishlist(item); }}
+            className="flex items-center gap-1 bg-black/60 hover:bg-black/80 text-[11px] font-bold text-white/80 px-2.5 py-1 rounded-full transition-colors"
+          >
+            <Heart
+              size={11}
+              className={wishlistIds.has(String(item._id || item.id)) ? 'text-red-400 fill-red-400' : 'text-white/70'}
+            /> {item.wishlistCount || 0}
+          </button>
         </div>
 
         {/* Category badge */}
@@ -165,7 +252,8 @@ export default function SmoothEliteGallery() {
       {/* --- NAV DOCK (Clean, Dynamic Positioning) --- */}
       {/* Changed: Non-sticky on mobile (`relative pt-32`), stays sticky on desktop (`md:sticky md:top-0 md:pt-4`) to drop down beautifully without merging with the header navbar */}
       <nav className="relative md:sticky top-0 z-40 flex justify-center mb-8 lg:mb-12 px-4 sm:px-7 pt-32 md:pt-4 bg-[#050505]">
-        <motion.div className="flex flex-col md:flex-row items-stretch md:items-center mt-4 md:mt-20 justify-between bg-white/[0.03] border border-white/10 p-2 md:p-1.5 rounded-2xl md:rounded-full w-full max-w-5xl focus-within:border-[#e8e2d6] transition-all duration-500 gap-3 md:gap-0">
+        <div className="flex items-center gap-3 mt-4 md:mt-20 w-full max-w-6xl">
+        <motion.div className="flex flex-col md:flex-row items-stretch md:items-center justify-between bg-white/[0.03] border border-white/10 p-2 md:p-1.5 rounded-2xl md:rounded-full flex-1 min-w-0 focus-within:border-[#e8e2d6] transition-all duration-500 gap-3 md:gap-0">
           <div className="relative flex items-center w-full md:max-w-xs ml-0 md:ml-2">
             <Search className="absolute left-3 text-white/50" size={16} />
             <input
@@ -200,6 +288,33 @@ export default function SmoothEliteGallery() {
             </div>
           </div>
         </motion.div>
+
+        {/* Wishlist toggle: show only the templates you've liked */}
+        <motion.button
+          type="button"
+          whileTap={{ scale: 0.94 }}
+          onClick={() => {
+            if (!isLoggedIn) { toast.error('Please login first'); return; }
+            setShowWishlistOnly((v) => !v);
+          }}
+          aria-label="Wishlist"
+          aria-pressed={showWishlistOnly}
+          title={showWishlistOnly ? 'Show all templates' : 'Show my wishlist'}
+          className={`relative shrink-0 flex items-center justify-center h-12 w-12 md:h-[54px] md:w-[54px] rounded-full border transition-colors duration-300 ${showWishlistOnly
+            ? 'border-red-400/60 bg-red-500/10'
+            : 'border-white/10 bg-white/[0.03] hover:border-[#e8e2d6] hover:bg-white/[0.06]'}`}
+        >
+          <Heart
+            size={20}
+            className={showWishlistOnly ? 'text-red-400 fill-red-400' : 'text-white/80'}
+          />
+          {wishlistIds.size > 0 && (
+            <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[#e8e2d6] text-[#050505] text-[10px] font-bold flex items-center justify-center">
+              {wishlistIds.size}
+            </span>
+          )}
+        </motion.button>
+        </div>
       </nav>
 
       {/* --- MAIN GRID --- */}
@@ -212,7 +327,7 @@ export default function SmoothEliteGallery() {
         ) : filteredItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-40 gap-3">
             <Search size={40} className="text-white/10" />
-            <p className="text-[15px] text-white/55 font-semibold">No templates found</p>
+            <p className="text-[15px] text-white/55 font-semibold">{showWishlistOnly ? 'Your wishlist is empty' : 'No templates found'}</p>
           </div>
         ) : (
           <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
