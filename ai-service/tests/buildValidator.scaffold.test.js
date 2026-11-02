@@ -52,3 +52,32 @@ test('static validation rejects an undefined JSX component before deployment', (
   };
   expect(validateGeneratedFiles(files)).toEqual(expect.arrayContaining([expect.stringContaining('TestimonialsSection') ]));
 });
+
+describe('Router wrapper for generated sites', () => {
+  const header = { code: `import { useLocation, Link } from 'react-router-dom'; export default function Header(){ const l = useLocation(); return <Link to="/">{l.pathname}</Link>; }` };
+
+  it('wraps the app in BrowserRouter when components use router hooks but nothing renders a Router', () => {
+    const files = withScaffold({
+      '/App.js': { code: `import Header from './components/Header.jsx'; export default function App(){return <Header />}` },
+      '/components/Header.jsx': header,
+    }, {});
+
+    expect(files['/main.jsx'].code).toContain('<BrowserRouter><App /></BrowserRouter>');
+    expect(JSON.parse(files['/package.json'].code).dependencies['react-router-dom']).toBeTruthy();
+  });
+
+  it('does not add a second Router when the site already renders one', () => {
+    const files = withScaffold({
+      '/App.js': { code: `import { BrowserRouter } from 'react-router-dom'; import Header from './components/Header.jsx'; export default function App(){return <BrowserRouter><Header /></BrowserRouter>}` },
+      '/components/Header.jsx': header,
+    }, {});
+
+    expect(files['/main.jsx'].code).not.toContain('BrowserRouter');
+  });
+
+  it('keeps the plain entry when the site does not use react-router', () => {
+    const files = withScaffold({ '/App.js': { code: 'export default function App(){return null;}' } }, {});
+
+    expect(files['/main.jsx'].code).not.toContain('BrowserRouter');
+  });
+});

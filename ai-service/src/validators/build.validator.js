@@ -65,6 +65,26 @@ const DEFAULT_ENGINES = { node: '22.x' };
 const DEFAULT_FAVICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#111827"/><path d="M18 16h20l8 8v24H18z" fill="none" stroke="#fff" stroke-width="4"/><path d="M38 16v10h10" fill="none" stroke="#fff" stroke-width="4"/></svg>';
 const DEFAULT_INDEX_HTML = '<!doctype html><html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/><link rel="icon" href="/favicon.svg"/><title>DevDrop</title><script src="https://cdn.tailwindcss.com"></script></head><body><div id="root"></div><script type="module" src="/main.jsx"></script></body></html>';
 const DEFAULT_MAIN_JSX = 'import React from "react"; import { createRoot } from "react-dom/client"; import App from "./App.js"; createRoot(document.getElementById("root")).render(<React.StrictMode><App /></React.StrictMode>);';
+const ROUTER_MAIN_JSX = 'import React from "react"; import { createRoot } from "react-dom/client"; import { BrowserRouter } from "react-router-dom"; import App from "./App.js"; createRoot(document.getElementById("root")).render(<React.StrictMode><BrowserRouter><App /></BrowserRouter></React.StrictMode>);';
+
+// Generated sites often call useLocation()/useNavigate()/<Link> in shared components (Header, Footer) but
+// nothing renders a <Router> above them, which crashes with "useLocation() may be used only in the context
+// of a <Router> component". The entry file therefore supplies one, unless the site already creates its own
+// (a nested Router is also a crash).
+const ROUTER_IMPORT_RE = /from\s*['"]react-router(?:-dom)?['"]|require\(\s*['"]react-router(?:-dom)?['"]\s*\)/;
+const OWN_ROUTER_RE = /<\s*(?:BrowserRouter|HashRouter|MemoryRouter|StaticRouter|Router|RouterProvider)\b|createBrowserRouter\s*\(|createHashRouter\s*\(|createMemoryRouter\s*\(/;
+function routerNeeds(files) {
+  let usesRouter = false;
+  let hasOwnRouter = false;
+  for (const [filePath, obj] of Object.entries(files || {})) {
+    if (!/\.(?:jsx?|tsx?|mjs)$/i.test(filePath) || /^\/(?:main|index)\.(?:jsx?|tsx?)$/i.test(filePath)) continue;
+    const code = typeof obj === 'string' ? obj : obj?.code;
+    if (typeof code !== 'string') continue;
+    if (ROUTER_IMPORT_RE.test(code)) usesRouter = true;
+    if (OWN_ROUTER_RE.test(code)) hasOwnRouter = true;
+  }
+  return { usesRouter, hasOwnRouter, needsRouterWrapper: usesRouter && !hasOwnRouter };
+}
 
 // Pure helper: fills in the scaffold files a generated site needs to build
 // (package.json, index.html, main.jsx, vite.config.js) without ever
@@ -74,6 +94,10 @@ const DEFAULT_MAIN_JSX = 'import React from "react"; import { createRoot } from 
 // scaffold logic can be unit-tested without shelling out to npm/vite.
 function withScaffold(files, dependencies) {
   const out = { ...(files || {}) };
+  const { needsRouterWrapper } = routerNeeds(out);
+  if (needsRouterWrapper && !out['/main.jsx']) {
+    dependencies = { 'react-router-dom': '^7.0.0', ...(dependencies || {}) };
+  }
   const usesDefaultViteConfig = !out['/vite.config.js'] && !out['/vite.config.mjs'];
   if (!out['/package.json']) {
     const pkg = {
@@ -98,7 +122,7 @@ function withScaffold(files, dependencies) {
     }
   }
   if (!out['/index.html']) out['/index.html'] = { code: DEFAULT_INDEX_HTML };
-  if (!out['/main.jsx']) out['/main.jsx'] = { code: DEFAULT_MAIN_JSX };
+  if (!out['/main.jsx']) out['/main.jsx'] = { code: needsRouterWrapper ? ROUTER_MAIN_JSX : DEFAULT_MAIN_JSX };
   if (!out['/vite.config.js']) out['/vite.config.js'] = { code: DEFAULT_VITE_CONFIG };
   if (!out['/favicon.svg']) out['/favicon.svg'] = { code: DEFAULT_FAVICON_SVG };
   if (!out['/.npmrc']) out['/.npmrc'] = { code: DEFAULT_NPMRC };
@@ -224,4 +248,4 @@ async function run({ files, dependencies = {}, afterBuild = null }) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 }
-module.exports = { run, withScaffold, auditProductionBundle, readResolvedDependencies };
+module.exports = { run, withScaffold, routerNeeds, auditProductionBundle, readResolvedDependencies };
