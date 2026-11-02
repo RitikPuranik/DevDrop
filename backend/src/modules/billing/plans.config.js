@@ -11,6 +11,14 @@ const INTERVALS = ['monthly', 'yearly'];
 const MONTHS = { monthly: 1, yearly: 12 };
 const FAIR_USE_EDITS_PER_HOUR = 60; // safeguard behind "unlimited" AI edits on paid plans
 
+/**
+ * Backend-enforced feature entitlements. The plan catalogue below is the ONLY place that decides which plan holds which
+ * entitlement; nothing the browser sends (plan name, flags, feature toggles) is ever consulted.
+ */
+const ENTITLEMENTS = Object.freeze({
+  ADVANCED_WEBSITE_GENERATION: 'ADVANCED_WEBSITE_GENERATION',
+});
+
 const optInt = (value) => {
   if (value === undefined || value === null || String(value).trim() === '') return null;
   const n = Number.parseInt(value, 10);
@@ -46,7 +54,38 @@ function getBillingSettings(env = process.env) {
   };
 }
 
-function featureList({ generationQuota, quotaPeriod, aiEdits, tierLabel }) {
+const optNum = (value) => {
+  if (value === undefined || value === null || String(value).trim() === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+/**
+ * Resource budgets for ONE advanced generation job. These control real consumption (time, model calls, tokens, cost,
+ * output size, repair rounds, parallelism, concurrent jobs). There is deliberately NO maximum file count here: a project
+ * is never rejected because its architecture needs more files than another project's.
+ * Every value can be overridden per plan from the environment, e.g. ADV_PRO_MAX_TOKENS / ADV_PLUS_MAX_TOKENS.
+ */
+const ADVANCED_LIMIT_DEFAULTS = {
+  PRO: { maxWallClockMs: 45 * 60 * 1000, maxLlmCalls: 400, maxTotalTokens: 4_000_000, maxCostUsd: 3, maxOutputBytes: 8 * 1024 * 1024, maxRepairAttempts: 4, maxParallelism: 3, maxConcurrentJobs: 1 },
+  PLUS: { maxWallClockMs: 90 * 60 * 1000, maxLlmCalls: 800, maxTotalTokens: 10_000_000, maxCostUsd: 8, maxOutputBytes: 12 * 1024 * 1024, maxRepairAttempts: 6, maxParallelism: 4, maxConcurrentJobs: 2 },
+};
+const ADVANCED_LIMIT_ENV = { maxWallClockMs: 'WALL_CLOCK_MS', maxLlmCalls: 'MAX_LLM_CALLS', maxTotalTokens: 'MAX_TOKENS', maxCostUsd: 'MAX_COST_USD', maxOutputBytes: 'MAX_OUTPUT_BYTES', maxRepairAttempts: 'MAX_REPAIR_ATTEMPTS', maxParallelism: 'PARALLELISM', maxConcurrentJobs: 'CONCURRENT_JOBS' };
+
+function getAdvancedLimits(envKey, env = process.env) {
+  const defaults = ADVANCED_LIMIT_DEFAULTS[envKey];
+  if (!defaults) return null;
+  const out = {};
+  for (const [field, suffix] of Object.entries(ADVANCED_LIMIT_ENV)) {
+    out[field] = optNum(env[`ADV_${envKey}_${suffix}`]) ?? defaults[field];
+  }
+  // The result is persisted on the job and returned by the ai-service, which has its own 12MB cap: never promise more.
+  const resultCap = optNum(env.AI_MAX_RESULT_BYTES) ?? 12 * 1024 * 1024;
+  out.maxOutputBytes = Math.min(out.maxOutputBytes, resultCap);
+  return out;
+}
+
+function featureList({ generationQuota, quotaPeriod, aiEdits, tierLabel, advanced }) {
   const gen = quotaPeriod === 'monthly_calendar'
     ? `${generationQuota} website generation per month`
     : `${generationQuota} website generations per billing cycle`;
@@ -54,6 +93,7 @@ function featureList({ generationQuota, quotaPeriod, aiEdits, tierLabel }) {
   items.push(aiEdits.unlimited ? 'Unlimited AI edits (fair use applies)' : `${aiEdits.limit} AI edits per month`);
   items.push(`${tierLabel} AI generation`);
   items.push(tierLabel === 'Standard' ? 'Basic page allowance' : 'More pages per website');
+  if (advanced) items.push('Advanced multi-page website generation with automatic quality checks and repair');
   return items;
 }
 
@@ -83,7 +123,10 @@ function buildPlans(env = process.env) {
       quotaPeriod: def.quotaPeriod, // 'monthly_calendar' (Free: resets on the 1st, IST) | 'billing_cycle' (paid: resets monthly from the subscription date)
       aiEdits,
       generationTierLabel: def.tierLabel,
-      features: featureList({ generationQuota: def.generationQuota, quotaPeriod: def.quotaPeriod, aiEdits, tierLabel: def.tierLabel }),
+      entitlements: [...(def.entitlements || [])],
+      // Resource budgets are server-side only; they are consumed by the generation controller and never shown as plan features.
+      advancedLimits: def.entitlements?.includes(ENTITLEMENTS.ADVANCED_WEBSITE_GENERATION) ? getAdvancedLimits(def.envKey, env) : null,
+      features: featureList({ generationQuota: def.generationQuota, quotaPeriod: def.quotaPeriod, aiEdits, tierLabel: def.tierLabel, advanced: def.entitlements?.includes(ENTITLEMENTS.ADVANCED_WEBSITE_GENERATION) }),
       available: true,
       purchasable: def.monthlyPriceMinor > 0,
       recommended: Boolean(def.recommended),
@@ -94,12 +137,12 @@ function buildPlans(env = process.env) {
 
   return {
     free: make({ id: 'free', envKey: 'FREE', name: 'Free', rank: 0, description: 'Try DevDrop AI on your first website.', monthlyPriceMinor: 0, annualDiscountBps: 0, generationQuota: 1, quotaPeriod: 'monthly_calendar', editLimit: 5, tierLabel: 'Standard', cta: 'Get Started' }),
-    pro: make({ id: 'pro', envKey: 'PRO', name: 'Pro', rank: 1, description: 'For builders shipping websites regularly.', monthlyPriceMinor: 79900, annualDiscountBps: 500, generationQuota: 20, quotaPeriod: 'billing_cycle', editLimit: null, tierLabel: 'Better', recommended: true, cta: 'Upgrade to Pro' }),
-    plus: make({ id: 'plus', envKey: 'PLUS', name: 'Plus', rank: 2, description: 'For studios and power users who build at volume.', monthlyPriceMinor: 129900, annualDiscountBps: 1000, generationQuota: 50, quotaPeriod: 'billing_cycle', editLimit: null, tierLabel: 'Better', premium: true, cta: 'Upgrade to Plus' }),
+    pro: make({ id: 'pro', envKey: 'PRO', name: 'Pro', rank: 1, description: 'For builders shipping websites regularly.', monthlyPriceMinor: 79900, annualDiscountBps: 500, generationQuota: 20, quotaPeriod: 'billing_cycle', editLimit: null, tierLabel: 'Better', recommended: true, entitlements: [ENTITLEMENTS.ADVANCED_WEBSITE_GENERATION], cta: 'Upgrade to Pro' }),
+    plus: make({ id: 'plus', envKey: 'PLUS', name: 'Plus', rank: 2, description: 'For studios and power users who build at volume.', monthlyPriceMinor: 129900, annualDiscountBps: 1000, generationQuota: 50, quotaPeriod: 'billing_cycle', editLimit: null, tierLabel: 'Better', premium: true, entitlements: [ENTITLEMENTS.ADVANCED_WEBSITE_GENERATION], cta: 'Upgrade to Plus' }),
   };
 }
 
 const getPlans = (env = process.env) => buildPlans(env);
 const getPlan = (id, env = process.env) => buildPlans(env)[id] || null;
 
-module.exports = { CURRENCY, INTERVALS, MONTHS, getBillingSettings, getPlans, getPlan, optInt };
+module.exports = { CURRENCY, INTERVALS, MONTHS, ENTITLEMENTS, getBillingSettings, getPlans, getPlan, getAdvancedLimits, optInt };

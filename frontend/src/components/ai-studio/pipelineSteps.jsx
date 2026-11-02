@@ -163,3 +163,24 @@ export function PipelineSteps({ steps, variant = 'compact' }) {
     </ol>
   );
 }
+
+
+/**
+ * Advanced (Plus/Pro) generation: steps come from the real snapshot the ai-service reports (phases, counters),
+ * never from timers. Returns the same shape as computePipeline so PipelineSteps / BuildStatusCard render it unchanged.
+ */
+export function computeAdvancedPipeline(snapshot, { isGenerating = false, complete = false } = {}) {
+  const phases = Array.isArray(snapshot?.phases) ? snapshot.phases : [];
+  const steps = phases.filter((p) => p.status !== 'skipped').map((p) => {
+    let detail = null;
+    if (p.status === 'running') {
+      if (p.id === 'pages' && snapshot.pagesTotal) detail = `${snapshot.pagesDone || 0} of ${snapshot.pagesTotal} pages`;
+      else detail = snapshot.currentTask || null;
+    }
+    const state = complete || p.status === 'done' ? 'done' : p.status === 'running' ? 'active' : p.status === 'failed' ? 'failed' : 'pending';
+    return { id: p.id, label: p.label, description: '', state, detail };
+  });
+  const done = steps.filter((s) => s.state === 'done').length;
+  const percent = complete ? 100 : steps.length ? Math.min(isGenerating ? 99 : 100, Math.round((done / steps.length) * 100)) : 0;
+  return { steps, percent, queued: isGenerating && !phases.some((p) => p.status !== 'pending') };
+}

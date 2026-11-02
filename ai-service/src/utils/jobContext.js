@@ -7,7 +7,7 @@ const { AsyncLocalStorage } = require('async_hooks');
  * having to pass those through its arguments.
  *
  * ctx shape (all optional):
- *   { jobId, onCapacityWait(info) -> async resume(), deadlineAt }
+ *   { jobId, onCapacityWait(info) -> async resume(), deadlineAt, isCancelled(), beforeLlmCall(), afterLlmCall({input,value,usage,model}) }
  */
 const storage = new AsyncLocalStorage();
 

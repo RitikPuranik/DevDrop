@@ -21,7 +21,10 @@ const {
 
 // Safety guards so one huge/odd project can't hang the server or blow past
 // GitHub's practical API limits.
-const MAX_EXPORT_FILES = 3000;
+const MAX_EXPORT_FILES = 3000; // marketplace source exports only; AI Studio exports are bounded by bytes (below), never by file count
+// AI Studio projects may legitimately contain many small, well-separated files, so an AI Studio export is limited by the
+// total bytes it would push (a real resource), not by how many files the architecture needed.
+const MAX_AI_STUDIO_EXPORT_BYTES = Number.parseInt(process.env.EXPORT_MAX_TOTAL_BYTES || String(500 * 1024 * 1024), 10);
 const MAX_FILE_SIZE_BYTES = 45 * 1024 * 1024; // GitHub's blob API caps a single blob at 100MB; stay well under it
 const BLOB_UPLOAD_CONCURRENCY = 6;
 
@@ -76,6 +79,18 @@ const isAlwaysExcluded = (posixPath) => {
   if (isBlockedEnvFile(fileName)) return true;
   if (hasExcludedDirSegment(posixPath)) return true;
   return false;
+};
+
+// AI Studio projects hold generated SOURCE only (never build output), and their folder names are chosen by the model per
+// website. Folders such as `features/build`, `pages/out` or `data/dist` are legitimate source, so the marketplace's
+// build-artifact exclusions must not silently drop them from a GitHub push / Vercel deployment. Only dependency and VCS
+// folders are excluded here.
+const AI_STUDIO_EXCLUDED_DIR_NAMES = ['node_modules', '.git'];
+const isAiStudioExcluded = (posixPath) => {
+  const fileName = path.posix.basename(posixPath);
+  if (EXCLUDED_EXPORT_FILE_NAMES.includes(fileName)) return true;
+  if (isBlockedEnvFile(fileName)) return true;
+  return posixPath.split('/').some((segment) => AI_STUDIO_EXCLUDED_DIR_NAMES.includes(segment));
 };
 
 /**
@@ -477,7 +492,7 @@ const buildAiStudioRepoFiles = (project) => {
   const flat = {};
   for (const [filePath, value] of Object.entries(project.files || {})) {
     const safe = toSafeRelativePath(String(filePath).replace(/^\/+/, ''));
-    if (!safe || isAlwaysExcluded(safe)) continue;
+    if (!safe || isAiStudioExcluded(safe)) continue;
     flat[`/${safe}`] = fileToText(value);
   }
   const out = normalizeProjectFiles(flattenAiStudioRootWrapper(flat));
@@ -610,7 +625,7 @@ const runAiStudioExport = async (exportId) => {
     } catch (error) {
       console.warn(`AI Studio export ${exportId}: asset localization skipped:`, error.message);
     }
-    if (files.length > MAX_EXPORT_FILES) throw new Error('NO_FILES');
+    if (files.reduce((total, f) => total + f.buffer.length, 0) > MAX_AI_STUDIO_EXPORT_BYTES) throw new Error('TOO_LARGE');
 
     let repo;
     try {
@@ -654,6 +669,7 @@ const runAiStudioExport = async (exportId) => {
       PROJECT_MISSING: 'This AI Studio project is no longer available. Regenerate it and try again.',
       NOT_CONNECTED: 'Your GitHub connection is missing. Please reconnect and try again.',
       NO_FILES: 'This project has no generated files to push yet.',
+      TOO_LARGE: 'This project is too large to push to GitHub in one go. Download the ZIP instead.',
       NAME_TAKEN: 'A repository with this name already exists in your GitHub account. Please choose another name.',
       AUTH_EXPIRED: 'Your GitHub authorization has expired. Please reconnect GitHub and try again.',
     };
@@ -673,5 +689,6 @@ module.exports = {
   runExport,
   runAiStudioExport,
   buildAiStudioRepoFiles,
+  isAiStudioExcluded,
   localizeSignedAssetUrls,
 };

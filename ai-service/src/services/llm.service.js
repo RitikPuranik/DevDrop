@@ -420,6 +420,8 @@ async function callGemini({ system, input, timeout = DEFAULT_TIMEOUT_MS }) {
     const startedAt = Date.now();
     // The user pressed Stop: do not spend another provider call on this job.
     if (getJobContext().isCancelled?.()) throw Object.assign(new Error('Job cancelled'), { cancelled: true });
+    // Resource metering hook (advanced pipeline): throws BUDGET_EXCEEDED before another provider call is spent. No-op for every other job.
+    getJobContext().beforeLlmCall?.();
 
     try {
       // ALL provider failover (project rate limits, model capacity, invalid
@@ -484,8 +486,11 @@ async function callGemini({ system, input, timeout = DEFAULT_TIMEOUT_MS }) {
       });
 
       const parsed = result?.parsed;
+      const usage = result?.response?.data?.usageMetadata || null;
+      try { getJobContext().afterLlmCall?.({ input, value: parsed, usage, model }); } catch { /* metering must never fail a call that already succeeded */ }
 
       return {
+        usage,
         value: parsed,
         // The pool selected the model after walking the model list.
         model,

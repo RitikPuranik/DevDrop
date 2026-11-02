@@ -38,6 +38,7 @@ const serializeJob = (job, debugAvailable) => {
     stageStatus: job.stageStatus,
     generationMeta: job.generationMeta || { agents: [] },
     mode: job.mode,
+    tier: job.tier || 'standard',
     debugAvailable: Boolean(debugAvailable),
     statusMessage: job.statusMessage || null,
     waitingUntil: job.waitingUntil || null,
@@ -76,6 +77,21 @@ exports.reconcileJob = reconcileJob;
 
 const hashPayload = (payload) => crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 
+// The browser may only ever ASK for a pipeline; the backend decides. Anything but these two exact strings is ignored.
+const requestedTierOf = (body) => (body?.generationTier === 'advanced' || body?.generationTier === 'standard' ? body.generationTier : undefined);
+
+// Per-user cap on simultaneous advanced jobs (they are long-running and expensive). Dead jobs are reconciled first so a lost job never blocks a user.
+const assertAdvancedConcurrency = async (userId, limits) => {
+  const max = limits?.maxConcurrentJobs;
+  if (!max) return;
+  const active = await QueueJob.find({ userId, type: JOB_TYPES.AI_GENERATE, tier: 'advanced', status: { $in: jobStore.ACTIVE } }).select('jobKey status mode projectId userId createdAt').limit(max + 5);
+  let live = 0;
+  for (const job of active) if (await reconcileJob(job)) live += 1;
+  if (live >= max) {
+    throw new BillingError('ADVANCED_CONCURRENCY_LIMIT', `You already have ${live} advanced generation${live === 1 ? '' : 's'} running. Wait for one to finish, or stop it, before starting another.`, { limit: max, running: live });
+  }
+};
+
 const findOwnedJob = (jobKey, userId) => QueueJob.findOne({ jobKey, userId, type: JOB_TYPES.AI_GENERATE });
 
 exports.generate = async (req, res) => {
@@ -93,7 +109,10 @@ exports.generate = async (req, res) => {
     // whether this is an edit or a (quota-consuming) generation.
     const ownedProject = projectId ? await lifecycle().getOwnedProject(projectId, req.userId).catch(() => null) : null;
     const usageKind = await entitlements.classifyRequest({ userId: req.userId, projectId, claimsEdit: hasExistingFiles, project: ownedProject });
-    await entitlements.checkAccess(req.userId, usageKind);
+    const ent = await entitlements.checkAccess(req.userId, usageKind);
+    // Which pipeline? Decided here, from the server-resolved plan, before any expensive work. A user without the
+    // entitlement who asks for 'advanced' (e.g. a hand-crafted API call) is refused with FEATURE_NOT_IN_PLAN.
+    const decision = entitlements.resolveGenerationTier({ ent, requested: requestedTierOf(req.body), usageKind });
     // Throws 400/403/404/502 with a user-facing message for critical asset
     // problems; optional document-extraction problems are reported per asset
     // (assets.*.extraction.status) and never fail the request.
@@ -119,6 +138,9 @@ exports.generate = async (req, res) => {
       mode,
       existingFiles,
       existingDependencies: (existingFiles && fileData?.dependencies) || {},
+      // Server-decided. ai-service only runs the advanced pipeline for a payload that carries this, and the payload
+      // endpoint re-checks the entitlement when the worker picks the job up.
+      ...(decision.tier === 'advanced' ? { tier: 'advanced', advanced: { limits: decision.limits } } : { tier: 'standard' }),
     };
 
     // Duplicate-submission protection: an identical request from the same user that is still
@@ -143,6 +165,8 @@ exports.generate = async (req, res) => {
       }
     }
 
+    if (decision.tier === 'advanced') await assertAdvancedConcurrency(req.userId, decision.limits);
+
     const jobKey = crypto.randomUUID();
     // ---- ENTITLEMENT GATE (2/2): atomically reserve the unit. If this throws, no job is created or enqueued.
     await entitlements.reserveJob({ userId: req.userId, jobKey, kind: usageKind, projectId });
@@ -155,9 +179,10 @@ exports.generate = async (req, res) => {
         refType: 'ai-payload',
         refId: payloadHash,
         mode,
+        tier: decision.tier,
         projectId,
         payload, // large input stays in MongoDB; Redis only carries the job key
-        data: { mode },
+        data: { mode, tier: decision.tier },
         priority: queue.PRIORITY.TRANSACTIONAL,
       });
     } catch (enqueueError) {
@@ -172,7 +197,7 @@ exports.generate = async (req, res) => {
         spec: { websiteType, userData, preferences: payload.preferences, assets },
       }).catch((e) => console.warn('AI Studio attachJob failed:', e.message));
     }
-    res.status(202).json({ success:true, data:{ jobId: jobKey, status:'queued' } });
+    res.status(202).json({ success:true, data:{ jobId: jobKey, status:'queued', tier: decision.tier } });
   } catch(error) {
     if (error instanceof BillingError) return sendBillingError(res, error);
     console.error('AI generate error:', error.message);
@@ -195,13 +220,22 @@ exports.getJob = async (req,res) => {
 
 exports.debugRetry = async (req, res) => {
   try {
-    const original = await QueueJob.findOne({ jobKey: req.params.id, userId: req.userId, type: JOB_TYPES.AI_GENERATE }).select('+debugContext status projectId');
+    const original = await QueueJob.findOne({ jobKey: req.params.id, userId: req.userId, type: JOB_TYPES.AI_GENERATE }).select('+debugContext status projectId tier');
     if (!original) return res.status(404).json({ success:false, message:'Job not found' });
     if (original.status !== 'failed' || !original.debugContext) {
       return res.status(404).json({ success:false, message:'No debug retry is available for this job' });
     }
     const ctx = original.debugContext;
     const debugJobId = crypto.randomUUID();
+    // A failed ADVANCED job is repaired by the advanced repair engine, but only while the user is still entitled (re-checked now).
+    let debugTier = 'standard';
+    let debugLimits = null;
+    if (original.tier === 'advanced') {
+      const ent = await entitlements.resolveEntitlement(req.userId);
+      const decision = entitlements.resolveGenerationTier({ ent, requested: undefined, usageKind: 'generate' });
+      debugTier = decision.tier;
+      debugLimits = decision.limits;
+    }
     // Same gate as generate(): entitlement re-checked, and the unit the failure released is re-taken (one unit per generation).
     await entitlements.reserveDebugRetry({ userId: req.userId, originalJobKey: original.jobKey, debugJobKey: debugJobId, projectId: original.projectId });
     try {
@@ -213,6 +247,7 @@ exports.debugRetry = async (req, res) => {
       refType: 'ai-debug-of',
       refId: original.jobKey,
       mode: 'debug',
+      tier: debugTier,
       projectId: original.projectId,
       payload: {
         mode: 'debug',
@@ -225,8 +260,9 @@ exports.debugRetry = async (req, res) => {
         buildOutput: ctx.buildOutput,
         mediaManifest: ctx.mediaManifest || [],
         mediaPlan: ctx.mediaPlan || [],
+        ...(debugTier === 'advanced' ? { tier: 'advanced', advanced: { limits: debugLimits, context: ctx.advanced || null } } : { tier: 'standard' }),
       },
-      data: { mode: 'debug' },
+      data: { mode: 'debug', tier: debugTier },
       priority: queue.PRIORITY.TRANSACTIONAL,
     });
     } catch (enqueueError) {
@@ -242,7 +278,7 @@ exports.debugRetry = async (req, res) => {
         await project.save().catch(() => {});
       }
     }
-    res.status(202).json({ success:true, data:{jobId:debugJobId,status:'queued',mode:'debug'} });
+    res.status(202).json({ success:true, data:{jobId:debugJobId,status:'queued',mode:'debug',tier:debugTier} });
   } catch(error) {
     if (error instanceof BillingError) return sendBillingError(res, error);
     if (error.code === 'QUEUE_UNAVAILABLE') return res.status(503).json({ success:false, message:'AI generation is temporarily unavailable. Please try again shortly.' });

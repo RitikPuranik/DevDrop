@@ -21,6 +21,11 @@ const queueJobSchema = new mongoose.Schema(
     currentStage: { type: String, default: 'queued' },
     stageStatus: { type: String, default: 'queued' },
     mode: { type: String },
+    // Which generation pipeline this job runs on. Decided by the backend from the user's entitlement, never by the client.
+    tier: { type: String, enum: ['standard', 'advanced'], default: 'standard', index: true },
+    // Advanced pipeline progress snapshots so a retried / restarted attempt resumes instead of starting over. Cleared on any terminal state.
+    checkpoint: { type: mongoose.Schema.Types.Mixed, select: false },
+    checkpointAt: { type: Date },
     // AI Studio project this job belongs to (so the result is saved to the project even if the tab is gone).
     projectId: { type: String, index: true },
     // "Waiting for Gemini capacity" state reported by the ai-service worker, and failure kind.

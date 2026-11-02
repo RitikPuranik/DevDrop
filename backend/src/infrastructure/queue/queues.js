@@ -70,6 +70,7 @@ const enqueueJob = async ({
   refType,
   refId,
   mode,
+  tier, // 'standard' | 'advanced' (ai-queue only)
   projectId,
   payload, // large input persisted in Mongo only
   priority = PRIORITY.NOTIFICATION,
@@ -104,6 +105,7 @@ const enqueueJob = async ({
       refType,
       refId,
       mode,
+      ...(tier ? { tier } : {}),
       ...(projectId ? { projectId: String(projectId) } : {}),
       status: 'queued',
       enqueuedAt: new Date(),

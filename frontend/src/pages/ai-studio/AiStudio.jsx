@@ -10,9 +10,12 @@ import { QUOTA_EVENT } from '../../components/billing/QuotaModalHost';
 import { aiStudioAPI } from '../../api/aiStudio';
 import { subscribeToJob } from '../../api/socket';
 import AppPreview from '../../components/ai-studio/AppPreview';
-import { computePipeline } from '../../components/ai-studio/pipelineSteps';
+import { computePipeline, computeAdvancedPipeline } from '../../components/ai-studio/pipelineSteps';
 import TypeArt from '../../components/ai-studio/TypeArt';
 import BuildStatusCard from '../../components/ai-studio/BuildStatusCard';
+import AdvancedBuildPanel, { AdvancedUpgradePrompt } from '../../components/ai-studio/AdvancedBuildPanel';
+import { billingAPI } from '../../api/billing';
+import { pricingPath } from '../../components/billing/billingUtils';
 import PortfolioBuilder from '../../components/ai-studio/PortfolioBuilder';
 import { buildPortfolioPrompt } from '../../components/ai-studio/portfolioPrompt';
 import WebsiteBuilder, { buildWebsitePrompt } from '../../components/ai-studio/WebsiteBuilder';
@@ -33,6 +36,7 @@ const STOP_NOTICE='Generation stopped. Tell me what to change, or start a new ge
 
 export default function AiStudio() {
   const navigate = useNavigate(); const posthog = usePostHog();
+  const [advancedLive,setAdvancedLive]=useState(null); const [advancedSummary,setAdvancedSummary]=useState(null); const [advancedAllowed,setAdvancedAllowed]=useState(null);
   const [studioMode,setStudioMode]=useState('types'); const [mobileView,setMobileView]=useState('chat'); const [failedJobId,setFailedJobId]=useState(null); const [debugRetryAvailable,setDebugRetryAvailable]=useState(false); const [messages,setMessages]=useState([]); const [fileData,setFileData]=useState(null); const [appTitle,setAppTitle]=useState(null); const [input,setInput]=useState(''); const [isGenerating,setIsGenerating]=useState(false); const [genStatusLabel,setGenStatusLabel]=useState('Generating…'); const [pipeline,setPipeline]=useState({}); const [genMode,setGenMode]=useState('generate'); const [currentStage,setCurrentStage]=useState(null); const [error,setError]=useState(null); const [showContract,setShowContract]=useState(false); const scrollRef=useRef(null);
   // stopped: the user pressed Stop (or it was stopped from another tab). resuming: restoring a saved project after a refresh.
   const [stopped,setStopped]=useState(false); const [stopping,setStopping]=useState(false); const [resuming,setResuming]=useState(()=>Boolean(readSavedId()));
@@ -67,9 +71,10 @@ export default function AiStudio() {
   const composerRef=useRef(null);
   useEffect(()=>{const el=composerRef.current;if(!el)return;const MAX=176;el.style.height='auto';el.style.height=`${Math.min(el.scrollHeight,MAX)}px`;el.style.overflowY=el.scrollHeight>MAX?'auto':'hidden';},[input]);
   useEffect(()=>{scrollRef.current?.scrollTo({top:scrollRef.current.scrollHeight,behavior:'smooth'});},[messages,isGenerating]);
+  useEffect(()=>{let alive=true;billingAPI.usage().then(({data})=>{if(alive)setAdvancedAllowed(Boolean(data?.data?.features?.advancedWebsiteGeneration));}).catch(()=>{});return()=>{alive=false;};},[]);
   if(!aiStudioEnabled)return null;
   const stageLabel=(stage)=>{if(stage.startsWith('code:'))return `Generating ${stage.slice(5)}…`;if(stage==='build-validator')return 'Validating build…';if(stage.startsWith('deployment-readiness'))return 'Checking Vercel readiness…';if(stage==='relevant-files')return 'Finding affected files…';if(stage==='edit')return 'Applying edit…';if(stage.startsWith('edit-debug'))return 'Fixing an issue…';return `${stage.charAt(0).toUpperCase()+stage.slice(1)}…`;};
-  const updateProgress=(job)=>{const agents=job?.generationMeta?.agents||[]; const next={}; for(const a of agents)next[a.name]=a.status; setPipeline(next); if(job?.mode)setGenMode(job.mode); setCurrentStage(job?.currentStage||null); if(job?.currentStage)setGenStatusLabel(stageLabel(job.currentStage));};
+  const updateProgress=(job)=>{if(job?.generationMeta?.advanced)setAdvancedLive(job.generationMeta.advanced);const agents=job?.generationMeta?.agents||[]; const next={}; for(const a of agents)next[a.name]=a.status; setPipeline(next); if(job?.mode)setGenMode(job.mode); setCurrentStage(job?.currentStage||null); if(job?.currentStage)setGenStatusLabel(stageLabel(job.currentStage));};
   // Waits for a job's result over its ai-job:<jobId> socket room. Each stage arrives the moment the
   // ai-service reports it (webhook -> backend -> socket). There is no timer: one status fetch happens when
   // the subscription goes live and again after a reconnect, which is how a refreshed or re-opened page
@@ -90,7 +95,8 @@ export default function AiStudio() {
     syncNowRef.current=sync;
     cancelWaitRef.current=()=>failWith(STOP_NOTICE,{cancelled:true});
     unsubscribe=subscribeToJob(jobId,{
-      onStage:({stage,status,details})=>{
+      onStage:({stage,status,details,advanced})=>{
+        if(advanced)setAdvancedLive(advanced);
         if(details)setPipeline(prev=>({...prev,[stage]:status}));
         setCurrentStage(stage); setGenStatusLabel(stageLabel(stage));
       },
@@ -117,6 +123,7 @@ export default function AiStudio() {
     setVersionRefreshKey(k=>k+1);
   };
   const applyResult=(result)=>{
+    setAdvancedSummary(result?.generationMeta?.advanced||null); setAdvancedLive(null);
     setMessages(prev=>[...prev,{role:'assistant',content:result.assistantMessage||'Done.'}]);
     setFileData({files:result.files,dependencies:result.dependencies});
     setMobileView('preview'); if(result.title)setAppTitle(result.title);
@@ -141,7 +148,7 @@ export default function AiStudio() {
     catch(err){handleJobError(err);}
     finally{currentJobRef.current=null;setStopping(false);setIsGenerating(false);}
   };
-  const runGeneration=async(nextMessages,spec={})=>{setIsGenerating(true);setError(null);setStopped(false);setFailedJobId(null);setDebugRetryAvailable(false);setPipeline({});setCurrentStage('queued');
+  const runGeneration=async(nextMessages,spec={})=>{setIsGenerating(true);setError(null);setStopped(false);setFailedJobId(null);setDebugRetryAvailable(false);setPipeline({});setAdvancedLive(null);setAdvancedSummary(null);setCurrentStage('queued');
     // Optimistic guess so the sidebar shows the right stage list immediately,
     // before the first poll response confirms the actual mode the backend
     // picked (based on whether we're sending existing project files back).
@@ -335,7 +342,9 @@ export default function AiStudio() {
   if(studioMode==='portfolio')return <div key="studio-portfolio" className="studio fixed inset-0 z-40 overflow-y-auto"><PortfolioBuilder onBack={()=>setStudioMode('types')} onGenerate={handlePortfolioGenerate}/></div>;
   if(['ecommerce','blog','landing','cafe','hotel','studio','saas','event','education','custom'].includes(studioMode))return <div key={`studio-${studioMode}`} className="studio fixed inset-0 z-40 overflow-y-auto"><WebsiteBuilder type={studioMode} onBack={()=>setStudioMode('types')} onGenerate={handleWebsiteGenerate}/></div>;
   const pipelineMode=genMode==='debug'?'debug':(genMode==='edit'?'edit':'generate');
-  const {steps:pipelineSteps,percent,queued}=computePipeline({mode:pipelineMode,pipeline,isGenerating,complete:!isGenerating&&Boolean(fileData)&&!error,currentStage});
+  const complete=!isGenerating&&Boolean(fileData)&&!error;
+  const advancedView=advancedLive||(advancedSummary?.progress)||null;
+  const {steps:pipelineSteps,percent,queued}=advancedView&&genMode!=='edit'?computeAdvancedPipeline(advancedView,{isGenerating,complete}):computePipeline({mode:pipelineMode,pipeline,isGenerating,complete,currentStage});
   const firstPrompt=messages[0]?.role==='user'?messages[0].content:'';
   const chatMessages=firstPrompt?messages.slice(1):messages;
   const ruleLines=firstPrompt.split('\n').map(l=>l.replace(/^\s*[-*•]\s*/,'').trim()).filter(Boolean);
@@ -362,6 +371,8 @@ export default function AiStudio() {
             ?<div key={i} className="ml-auto max-w-[88%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-white/[0.07] px-3.5 py-2.5 text-[13px] leading-5 text-[var(--s-text)]">{m.content}</div>
             :<div key={i} className="flex gap-2.5"><span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/[0.07]"><Sparkles className="h-3 w-3 text-[var(--s-text)]"/></span><div className="whitespace-pre-wrap text-[13px] leading-6 text-[var(--s-muted)]">{m.content}</div></div>)}
           <BuildStatusCard steps={pipelineSteps} percent={percent} isGenerating={isGenerating} queued={queued} failed={Boolean(error&&!fileData)} completed={Boolean(fileData)&&!error}/>
+          {(advancedLive||advancedSummary)&&<AdvancedBuildPanel snapshot={advancedLive} summary={advancedSummary} isGenerating={isGenerating}/>}
+          {advancedAllowed===false&&!isGenerating&&!advancedSummary&&<AdvancedUpgradePrompt onUpgrade={()=>navigate(pricingPath('plus'))}/>}
         </div>
         <div className="mb-14 shrink-0 px-4 pb-4 lg:mb-0">
           {isGenerating&&<div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-[var(--s-line)] px-3 py-2">

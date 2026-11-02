@@ -150,7 +150,7 @@ function auditProductionBundle(distDir) {
   return { ok: errors.length === 0, errors };
 }
 
-async function run({ files, dependencies = {} }) {
+async function run({ files, dependencies = {}, afterBuild = null }) {
   const started = Date.now();
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devdrop-build-'));
   try {
@@ -214,7 +214,10 @@ async function run({ files, dependencies = {} }) {
       };
     }
     if (runtime.skipped) warnings.push(`Runtime check skipped: ${runtime.reason}`);
-    return { success: true, errors: [], warnings, runtime, resolvedDependencies: readResolvedDependencies(dir), durationMs: Date.now() - started };
+    // Advanced pipeline hook: lets the quality engine test the BUILT site (all routes, viewports) before the temp dir is removed.
+    let afterBuildResult = null;
+    if (typeof afterBuild === 'function') { try { afterBuildResult = await afterBuild(path.join(dir, 'dist')); } catch (e) { afterBuildResult = { error: String(e.message || e) }; } }
+    return { success: true, errors: [], warnings, runtime, resolvedDependencies: readResolvedDependencies(dir), durationMs: Date.now() - started, afterBuildResult };
   } catch (error) {
     return { success: false, errors: [String(error.stderr || error.stdout || error.message).slice(-12000)], warnings: [], durationMs: Date.now() - started, exitCode: error.code || null };
   } finally {

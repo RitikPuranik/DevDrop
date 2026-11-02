@@ -40,11 +40,21 @@ pre, code { max-width: 100%; overflow-x: auto; white-space: pre-wrap; overflow-w
 }
 `;
 
+// The ai-service delivers files as { code } objects; the browser sync and older projects store plain strings. Every
+// consumer must read both, otherwise a { code } object is serialised as JSON text instead of the source it holds.
+const fileText = (value) => {
+  if (typeof value === 'string') return value;
+  if (value && typeof value.code === 'string') return value.code;
+  if (value === null || value === undefined) return '';
+  return JSON.stringify(value, null, 2);
+};
+
 const normalizeProjectFiles = (source = {}) => {
   const files = { ...(source || {}) };
   const app = files['/App.js'];
+  const appText = app === undefined ? null : fileText(app);
   const css = files[DEV_DROP_RESPONSIVE_PATH];
-  const cssText = typeof css === 'string' ? css : '';
+  const cssText = css === undefined ? '' : fileText(css);
 
   if (!cssText.includes('DevDrop responsive runtime')) {
     files[DEV_DROP_RESPONSIVE_PATH] = cssText
@@ -52,8 +62,10 @@ const normalizeProjectFiles = (source = {}) => {
       : DEV_DROP_RESPONSIVE_CSS;
   }
 
-  if (typeof app === 'string' && !app.includes('./__devdrop-responsive.css') && !app.includes('/__devdrop-responsive.css')) {
-    files['/App.js'] = `import './__devdrop-responsive.css';\n${app}`;
+  if (appText !== null && !appText.includes('./__devdrop-responsive.css') && !appText.includes('/__devdrop-responsive.css')) {
+    const next = `import './__devdrop-responsive.css';\n${appText}`;
+    // Keep the entry's original shape ({ code } stays { code }).
+    files['/App.js'] = app && typeof app === 'object' ? { ...app, code: next } : next;
   }
 
   return files;
@@ -77,8 +89,7 @@ const buildProjectZip = (files = {}) => {
   for (const [path, content] of entries) {
     if (!path) continue;
     const cleanPath = path.replace(/^\/+/, '');
-    const body = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
-    zip.addFile(cleanPath, Buffer.from(body, 'utf8'));
+    zip.addFile(cleanPath, Buffer.from(fileText(content), 'utf8'));
   }
   return zip.toBuffer();
 };
@@ -101,4 +112,4 @@ const readVersionZip = (buffer) => {
   return { files: parsed.files || {}, dependencies: parsed.dependencies || {}, title: parsed.title || null };
 };
 
-module.exports = { buildProjectZip, normalizeProjectFiles, buildVersionZip, readVersionZip };
+module.exports = { buildProjectZip, normalizeProjectFiles, buildVersionZip, readVersionZip, fileText };

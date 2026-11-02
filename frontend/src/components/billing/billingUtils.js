@@ -43,7 +43,8 @@ export function loadRazorpay() {
 export function quotaModalFromError(err) {
   const { code, data, message } = errorInfo(err);
   switch (code) {
-    case 'PLAN_UPGRADE_REQUIRED': return { variant: 'unlock', code, message, data: data || {} };
+    case 'PLAN_UPGRADE_REQUIRED':
+    case 'FEATURE_NOT_IN_PLAN': return { variant: 'unlock', code, message, data: data || {} };
     case 'GENERATION_QUOTA_EXCEEDED':
     case 'EDIT_QUOTA_EXCEEDED': return { variant: 'quota', code, message, data: data || {} };
     case 'SUBSCRIPTION_INACTIVE': return { variant: 'inactive', code, message, data: data || {} };

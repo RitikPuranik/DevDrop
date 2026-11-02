@@ -16,7 +16,7 @@
  */
 const { Subscription, UsageCounter, GenerationLedger } = require('./models');
 const { BillingError } = require('./errors');
-const { getPlans, getBillingSettings } = require('./plans.config');
+const { getPlans, getBillingSettings, ENTITLEMENTS } = require('./plans.config');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
@@ -307,6 +307,45 @@ async function classifyRequest({ userId, projectId, claimsEdit, project }) {
   return 'generate';
 }
 
+
+// ---------- feature entitlements ----------
+const PAID_STATUSES = ['active', 'cancelling', 'grace'];
+
+/** True only when the user's CURRENT, server-resolved plan holds the entitlement (never a client claim). */
+function hasEntitlement(ent, name) {
+  return Boolean(ent && PAID_STATUSES.includes(ent.status) && Array.isArray(ent.plan?.entitlements) && ent.plan.entitlements.includes(name));
+}
+
+/** Operational kill-switch: ADVANCED_GENERATION_ENABLED=false routes everyone to the existing pipeline without touching plans. */
+const advancedGenerationEnabled = (env = process.env) => !/^(0|false|no|off)$/i.test(String(env.ADVANCED_GENERATION_ENABLED ?? 'true'));
+
+function featureNotInPlanError(ent, feature) {
+  return new BillingError('FEATURE_NOT_IN_PLAN', 'Advanced website generation is available on the Pro and Plus plans.', {
+    feature,
+    currentPlan: { id: ent.plan.id, name: ent.plan.name },
+    upgradeOptions: upgradeOptionsFor(ent).filter((o) => ent.plans[o.planId]?.entitlements?.includes(feature)),
+    subscriptionStatus: ent.status,
+  });
+}
+
+/**
+ * Decides, from server state only, which generation pipeline a request runs on.
+ *   requested === 'advanced' by a user without the entitlement  -> FEATURE_NOT_IN_PLAN (nothing is queued, nothing is charged)
+ *   entitled + a new generation (not an edit)                    -> 'advanced', with this plan's resource budget
+ *   everyone else                                                -> 'standard' (the existing pipeline, unchanged)
+ * Call it BEFORE any expensive request preparation.
+ */
+function resolveGenerationTier({ ent, requested, usageKind = 'generate', env = process.env }) {
+  const feature = ENTITLEMENTS.ADVANCED_WEBSITE_GENERATION;
+  const entitled = hasEntitlement(ent, feature);
+  if (requested === 'advanced' && !entitled) throw featureNotInPlanError(ent, feature);
+  const optedDown = requested === 'standard';
+  if (entitled && usageKind === 'generate' && !optedDown && advancedGenerationEnabled(env)) {
+    return { tier: 'advanced', entitled, limits: ent.plan.advancedLimits || null };
+  }
+  return { tier: 'standard', entitled, limits: null };
+}
+
 // ---------- read models for the API ----------
 async function getUsageSummary(userId) {
   await reconcileUserReservations(userId);
@@ -329,10 +368,14 @@ async function getUsageSummary(userId) {
       : { unlimited: false, used: counter.editsUsed || 0, limit: editLimit, remaining: Math.max(0, editLimit - (counter.editsUsed || 0)) },
     upgradeOptions: upgradeOptionsFor(ent),
     isTopPlan: upgradeOptionsFor(ent).length === 0,
+    // Display only: the browser uses this to decide what to SHOW. The backend re-decides on every request.
+    entitlements: [...(ent.plan.entitlements || [])].filter(() => PAID_STATUSES.includes(ent.status)),
+    features: { advancedWebsiteGeneration: hasEntitlement(ent, ENTITLEMENTS.ADVANCED_WEBSITE_GENERATION) && advancedGenerationEnabled() },
   };
 }
 
 module.exports = {
   addMonths, quotaWindow, resolveEntitlement, checkAccess, reserveJob, reserveDebugRetry, commitJob, releaseJob,
   isJobAuthorized, reconcileUserReservations, classifyRequest, getUsageSummary, upgradeOptionsFor, freeWindow, DAY_MS,
+  hasEntitlement, resolveGenerationTier, advancedGenerationEnabled, ENTITLEMENTS,
 };

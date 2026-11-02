@@ -4,6 +4,8 @@
 // (modals, inline messages); `message` is always safe to show. Internal details never go in `details`.
 const HTTP_STATUS = {
   PLAN_UPGRADE_REQUIRED: 403,
+  FEATURE_NOT_IN_PLAN: 403,
+  ADVANCED_CONCURRENCY_LIMIT: 429,
   GENERATION_QUOTA_EXCEEDED: 402,
   EDIT_QUOTA_EXCEEDED: 402,
   FAIR_USE_LIMIT_REACHED: 429,

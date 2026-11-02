@@ -7,6 +7,7 @@ const { classifyError, FAILURE } = require('./errors');
 const backend = require('./backendClient');
 const { generateWebsite, debugWebsite } = require('../orchestrator/websiteGeneration.orchestrator');
 const { editWebsite } = require('../orchestrator/websiteEditing.orchestrator');
+const { generateAdvancedWebsite, debugAdvancedWebsite } = require('../orchestrator/advancedGeneration.orchestrator');
 const { runWithJob } = require('../utils/jobContext');
 
 const int = (key, fallback, min = 0) => {
@@ -67,7 +68,13 @@ function startCancelListener(subscriberFactory = () => createQueueRedisConnectio
 // One readable line per queue lifecycle event. Never logs payloads or secrets.
 const qlog = (event, fields = {}) => console.log(`[ai-queue] ${event}`, fields);
 
-const pickRunner = (mode) => (mode === 'debug' ? debugWebsite : mode === 'edit' ? editWebsite : generateWebsite);
+// The advanced pipeline runs only for jobs the BACKEND marked advanced (entitlement decided and re-verified there).
+// Edits always use the existing edit pipeline.
+const pickRunner = (mode, tier) => {
+  if (mode === 'edit') return editWebsite;
+  if (tier === 'advanced') return mode === 'debug' ? debugAdvancedWebsite : generateAdvancedWebsite;
+  return mode === 'debug' ? debugWebsite : generateWebsite;
+};
 
 // Quota exhaustion: wait for the provider cooldown (bounded) instead of retrying immediately.
 const quotaDelayMs = (error, cfg, attemptIndex) => {
@@ -98,6 +105,9 @@ function createAiProcessor(overrides = {}) {
     }
     const payload = input.payload;
     const mode = payload.mode || input.mode || 'generate';
+    const tier = input.tier === 'advanced' && payload.tier === 'advanced' ? 'advanced' : 'standard';
+    let advancedSnapshot = null;
+    let lastProgressSent = 0;
 
     await deps.backend.sendEvent('started', jobKey, { attempt: job.attemptsMade + 1 });
 
@@ -137,9 +147,22 @@ function createAiProcessor(overrides = {}) {
       }
       job.updateProgress({ stage, status }).catch(() => {});
       // Fire-and-forget: a slow webhook must never stall generation. The reply flags cancellation.
-      Promise.resolve(deps.backend.sendEvent('stage', jobKey, { stage, status, details: details || null }))
+      Promise.resolve(deps.backend.sendEvent('stage', jobKey, { stage, status, details: details || null, ...(advancedSnapshot ? { advanced: advancedSnapshot } : {}) }))
         .then((reply) => { if (reply?.cancelled) cancelled = true; })
         .catch(() => {});
+    };
+
+    // Advanced jobs: truthful progress (real file/phase state), throttled; durable checkpoints for resume.
+    const onProgress = (snap) => {
+      advancedSnapshot = snap;
+      const now = Date.now();
+      if (cancelled || now - lastProgressSent < 1500) return;
+      lastProgressSent = now;
+      Promise.resolve(deps.backend.sendEvent('stage', jobKey, { stage: currentStage, status: 'processing', details: null, advanced: snap }))
+        .then((reply) => { if (reply?.cancelled) cancelled = true; }).catch(() => {});
+    };
+    const onCheckpoint = (checkpoint) => {
+      Promise.resolve(deps.backend.sendEvent('checkpoint', jobKey, { checkpoint })).catch(() => {});
     };
 
     // Pressing Stop frees this worker slot at once (the next queued job starts) instead of waiting for the
@@ -152,8 +175,9 @@ function createAiProcessor(overrides = {}) {
     runningJobs.set(jobKey, stopNow);
 
     try {
-      const run = deps.pickRunner(mode);
-      const running = withTimeout(runWithJob(jobContext, () => run(payload, { onStage })), cfg.timeoutMs);
+      const run = tier === 'advanced' ? deps.pickRunner(mode, tier) : deps.pickRunner(mode);
+      const runOpts = tier === 'advanced' ? { onStage, onProgress, onCheckpoint, checkpoint: input.checkpoint || null } : { onStage };
+      const running = withTimeout(runWithJob(jobContext, () => run(payload, runOpts)), cfg.timeoutMs);
       running.catch(() => {}); // an abandoned run must never become an unhandled rejection
       const result = await Promise.race([running, stopped]);
       await deps.backend.deliverTerminal('completed', jobKey, { result, generationMeta: { agents } });
@@ -261,4 +285,4 @@ function createAiWorker({ connection, processor } = {}) {
   return worker;
 }
 
-module.exports = { createAiWorker, createAiProcessor, settings, cancelRunningJob, startCancelListener };
+module.exports = { createAiWorker, createAiProcessor, settings, cancelRunningJob, startCancelListener, pickRunner };

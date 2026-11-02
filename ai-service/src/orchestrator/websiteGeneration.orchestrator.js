@@ -210,4 +210,4 @@ async function runGeneration(input,{onStage}={}){
  }
  throw new Error('Generation failed after maximum repair attempts');
 }
-module.exports={generateWebsite,debugWebsite};
+module.exports={generateWebsite,debugWebsite,normalizeInput,extractReferenceImage,buildGeneratedTitle,buildDebugContext,mergeFiles};

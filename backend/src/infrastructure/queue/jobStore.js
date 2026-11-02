@@ -51,7 +51,7 @@ const markCompleted = (jobKey, { queue, result, resultRef, generationMeta, deliv
         ...(generationMeta ? { generationMeta } : {}),
         ...(delivery ? { delivery } : {}),
       },
-      $unset: { payload: '' },
+      $unset: { payload: '', checkpoint: '' },
     },
     { new: true }
   );
@@ -73,7 +73,7 @@ const markFailed = (jobKey, error, { queue, debugContext, attemptsMade, errorTyp
         statusMessage: null,
         waitingUntil: null,
       },
-      $unset: { payload: '' },
+      $unset: { payload: '', checkpoint: '' },
     },
     { new: true }
   );
@@ -81,7 +81,7 @@ const markFailed = (jobKey, error, { queue, debugContext, attemptsMade, errorTyp
 const markCancelled = (jobKey, { queue } = {}) =>
   QueueJob.findOneAndUpdate(
     guardTerminal(jobKey),
-    { $set: { status: 'cancelled', finishedAt: new Date(), expiresAt: expiryFor(queue, 'completed') }, $unset: { payload: '' } },
+    { $set: { status: 'cancelled', finishedAt: new Date(), expiresAt: expiryFor(queue, 'completed') }, $unset: { payload: '', checkpoint: '' } },
     { new: true }
   );
 

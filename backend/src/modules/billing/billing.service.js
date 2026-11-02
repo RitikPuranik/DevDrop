@@ -8,23 +8,9 @@ const { computeQuote } = require('./money');
 const couponService = require('./coupon.service');
 const entitlements = require('./entitlement.service');
 const razorpay = require('../../services/razorpay.service');
-const events = require('../../infrastructure/events');
 
 const { addMonths, resolveEntitlement, DAY_MS } = entitlements;
 const OPEN_STATUSES = ['created', 'failed'];
-
-/**
- * Admin WhatsApp alert for a confirmed subscription payment. Called only once the order is paid AND its entitlement
- * is applied. It is idempotent (keyed by the order id) and never throws, so webhook retries, the verify endpoint, the
- * status poller and page refreshes all converge on ONE notification and can never break checkout.
- */
-async function notifyAdminOfPaidOrder(order) {
-  try {
-    await events.notifySubscriptionPaid(order);
-  } catch (error) {
-    console.error('[billing] admin WhatsApp notification could not be queued:', error?.message);
-  }
-}
 
 // ------------------------------------------------------------------ catalogue
 
@@ -78,7 +64,7 @@ async function getPlansView(userId) {
     fairUse: { editsPerHour: settings.fairUseEditsPerHour, text: `Unlimited AI edits are subject to a fair-use limit of ${settings.fairUseEditsPerHour} edits per hour.` },
     currentPlanId: ent.plan.id,
     subscriptionStatus: ent.status,
-    plans: Object.values(ent.plans).sort((a, b) => a.rank - b.rank).map((plan) => ({
+    plans: Object.values(ent.plans).sort((a, b) => a.rank - b.rank).map(({ advancedLimits, ...plan }) => ({ // eslint-disable-line no-unused-vars -- resource budgets stay server-side
       ...plan,
       pricing: planPricing(plan, settings),
       eligibility: eligibilityFor(plan, ent),
@@ -251,10 +237,7 @@ async function finalizePaidOrder(orderId, { paymentId, amountMinor, currency, so
   );
   order = claimed || (await BillingOrder.findById(order._id));
   if (order.status !== 'paid') throw new BillingError('PAYMENT_VERIFICATION_FAILED', 'We couldn’t verify this payment.');
-  if (order.appliedAt) {
-    await notifyAdminOfPaidOrder(order); // no-op if already queued; repairs a notification lost to a crash after apply
-    return { order, duplicate: true };
-  }
+  if (order.appliedAt) return { order, duplicate: true };
 
   // Phase 2: fix the term on the order once, then apply it.
   if (!order.periodStart) {
@@ -266,7 +249,6 @@ async function finalizePaidOrder(orderId, { paymentId, amountMinor, currency, so
   await applyOrderToSubscription(order);
   await couponService.redeemRedemption(order._id);
   order = await BillingOrder.findOneAndUpdate({ _id: order._id, appliedAt: null }, { $set: { appliedAt: new Date() } }, { new: true }) || (await BillingOrder.findById(order._id));
-  await notifyAdminOfPaidOrder(order);
   return { order, duplicate: !claimed, source };
 }
 

@@ -132,3 +132,15 @@ describe('failure classification', () => {
     expect(classifyError(new Error('validation failed'))).toBe(FAILURE.PERMANENT);
   });
 });
+
+describe('advanced tier routing', () => {
+  const { pickRunner } = require('../src/queue/worker');
+  it('uses the advanced pipeline only when the backend marked the job advanced', () => {
+    const { generateAdvancedWebsite, debugAdvancedWebsite } = require('../src/orchestrator/advancedGeneration.orchestrator');
+    const { generateWebsite } = require('../src/orchestrator/websiteGeneration.orchestrator');
+    expect(pickRunner('generate', 'advanced')).toBe(generateAdvancedWebsite);
+    expect(pickRunner('debug', 'advanced')).toBe(debugAdvancedWebsite);
+    expect(pickRunner('generate', 'standard')).toBe(generateWebsite);
+    expect(pickRunner('generate')).toBe(generateWebsite);
+  });
+});
