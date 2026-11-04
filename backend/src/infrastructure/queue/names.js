@@ -21,6 +21,7 @@ const JOB_TYPES = Object.freeze({
   RUN_DEPLOYMENT: 'RUN_DEPLOYMENT',
   EXPORT_PROJECT: 'EXPORT_PROJECT',
   KASHI_FIX: 'KASHI_FIX',
+  VERIFY_ROLLBACK: 'VERIFY_ROLLBACK', // confirms a Vercel rollback/promote actually switched production
   // events-queue: emails
   EMAIL_VERIFICATION: 'EMAIL_VERIFICATION',
   EMAIL_WELCOME: 'EMAIL_WELCOME',

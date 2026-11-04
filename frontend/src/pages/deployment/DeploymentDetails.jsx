@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowUpRight, Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { deploymentAPI } from '../../api/deployment';
 import KashiFixPanel from '../../components/kashi/KashiFixPanel';
+import DeploymentHistory from '../../components/deployment/management/DeploymentHistory';
 
 const POLL_INTERVAL_MS = 3000;
 const SERIF = { fontFamily: 'var(--font-ui, Inter, system-ui, sans-serif)' };
@@ -128,6 +129,10 @@ export default function DeploymentDetails() {
             <CancelledView deployment={deployment} onRedeploy={handleRedeploy} redeploying={redeploying} />
           )}
         </motion.main>
+
+        {deployment.frontendProvider === 'vercel' && deployment.vercel?.projectId && !deployment.isActive && (
+          <DeploymentHistory deploymentId={deployment.id} />
+        )}
 
         {['FAILED', 'SUCCESS'].includes(deployment.status) && (
           <KashiFixPanel deployment={deployment} onChanged={fetchDeployment} />

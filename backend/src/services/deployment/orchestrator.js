@@ -95,6 +95,18 @@ const decryptPendingSecrets = (deployment) => {
   }
 };
 
+/** Best-effort: record this Vercel deployment in the site's version history. Must never affect the deploy itself. */
+const recordVersionHistory = async (deployment, vercelDeploymentId) => {
+  try {
+    // Lazy require: version management is optional bookkeeping, not part of the deploy path.
+    const { syncSite } = require('./versionSync.service');
+    await syncSite(deployment, { force: true, hintDeploymentId: vercelDeploymentId });
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn(`[deployment.orchestrator] version history sync skipped for ${deployment._id}: ${error.message}`);
+  }
+};
+
 /**
  * Runs (or resumes) one deployment: backend first if it has one, then
  * frontend, then — only for true fullstack deployments — a backend resync
@@ -210,6 +222,7 @@ const runDeployment = async (deploymentId) => {
       markEnvConfigured(deployment, 'frontend', frontendVars);
       deployment.status = DEPLOYMENT_STATUS.FRONTEND_DEPLOYED;
       await deployment.save();
+      await recordVersionHistory(deployment, deployId);
     }
 
     // ---- Phase 3: resync backend now that the frontend URL exists ----

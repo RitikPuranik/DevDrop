@@ -135,6 +135,26 @@ const deploymentSchema = new mongoose.Schema(
     errorStep: String,
 
     lastDeployedAt: Date,
+
+    // Bookkeeping for deployment-version management (see
+    // services/deployment/versionSync.service.js). One DeploymentVersion
+    // document exists per Vercel deployment of this site's frontend project.
+    // None of this is used by the deploy orchestrator.
+    versioning: {
+      // Last version number handed out; advanced atomically ($inc) so
+      // numbers are never reused, even if a version document is removed.
+      seq: { type: Number, default: 0 },
+      // Short lease so two concurrent syncs can't both assign numbers.
+      syncLockUntil: { type: Date, default: null },
+      lastSyncedAt: { type: Date, default: null },
+      lastSyncError: { type: String, default: null },
+      // True when the project has more history than the bounded backfill read.
+      historyTruncated: { type: Boolean, default: false },
+      // Mirrors Vercel's project setting. Vercel turns auto-assignment of
+      // production domains OFF after an instant rollback.
+      autoAssignCustomDomains: { type: Boolean, default: null },
+      productionCheckedAt: { type: Date, default: null },
+    },
   },
   { timestamps: true }
 );

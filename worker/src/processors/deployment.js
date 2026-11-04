@@ -45,6 +45,16 @@ const processDeploymentJob = async (job) => {
       return { result: { runId: String(runId) } };
     }
 
+    case JOB_TYPES.VERIFY_ROLLBACK: {
+      const { operationId } = job.data;
+      if (!operationId) throw permanent('VERIFY_ROLLBACK requires operationId', 'BAD_PAYLOAD');
+      // Lazy require keeps this processor's other job types independent of the rollback service.
+      const rollbackService = require('../../../backend/src/services/deployment/rollback.service');
+      const op = await rollbackService.runVerificationLoop(operationId);
+      if (!op) return { result: { skipped: true, reason: 'operation_removed' } };
+      return { result: { operationId: String(operationId), status: op.status } };
+    }
+
     default:
       throw permanent(`No deployment-queue handler for ${job.name}`, 'UNKNOWN_JOB_TYPE');
   }

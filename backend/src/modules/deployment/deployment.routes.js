@@ -3,9 +3,11 @@ const router = express.Router();
 
 const { auth } = require('../../shared/middleware/auth');
 const verifyEmail = require('../../shared/middleware/verifyEmail');
-const { authLimiter, deployLimiter } = require('../../shared/middleware/rateLimit');
+const { authLimiter, deployLimiter, rollbackLimiter, deploymentLogsLimiter, versionSyncLimiter } = require('../../shared/middleware/rateLimit');
+const { body, query } = require('express-validator');
 const { validators, handleValidationErrors } = require('../../shared/utils/validators');
 const deploymentController = require('./deployment.controller');
+const versionsController = require('./deploymentVersions.controller');
 
 // Vercel redirects the user's browser here directly — no Authorization
 // header will be present, so this must stay outside router.use(auth).
@@ -62,5 +64,43 @@ router.post(
   deploymentController.redeploy
 );
 router.post('/:deploymentId/cancel', validators.mongoId('deploymentId'), handleValidationErrors, deploymentController.cancelDeployment);
+
+// ── Version history, rollback, logs ──
+// Multi-segment paths, so they can't collide with the single-segment '/:websiteId' / '/:deploymentId' routes.
+// :deploymentId is the DevDrop site record; ownership is verified server-side on every call.
+const dep = [validators.mongoId('deploymentId')];
+const depVersion = [validators.mongoId('deploymentId'), validators.mongoId('versionId')];
+
+router.get('/:deploymentId/versions', ...dep, query('limit').optional().isInt({ min: 1, max: 50 }), query('environment').optional().isIn(['production', 'preview']), query('state').optional().isIn(['QUEUED', 'INITIALIZING', 'BUILDING', 'READY', 'ERROR', 'CANCELED']), handleValidationErrors, versionsController.listVersions);
+router.post('/:deploymentId/versions/sync', ...dep, handleValidationErrors, versionSyncLimiter, versionsController.syncVersions);
+router.get('/:deploymentId/versions/:versionId', ...depVersion, handleValidationErrors, versionsController.getVersion);
+router.get('/:deploymentId/versions/:versionId/rollback-check', ...depVersion, handleValidationErrors, deploymentLogsLimiter, versionsController.rollbackCheck);
+
+const logQuery = [
+  query('type').optional().isIn(['build', 'runtime', 'error']),
+  query('q').optional().isString().isLength({ max: 200 }),
+  query('severity').optional().isString().isLength({ max: 60 }),
+  query('limit').optional().isInt({ min: 1, max: 500 }),
+  query('order').optional().isIn(['asc', 'desc']),
+  query('cursor').optional().isString().isLength({ max: 200 }),
+];
+router.get('/:deploymentId/versions/:versionId/logs', ...depVersion, ...logQuery, handleValidationErrors, deploymentLogsLimiter, versionsController.getLogs);
+router.get('/:deploymentId/versions/:versionId/logs/build', ...depVersion, ...logQuery, handleValidationErrors, deploymentLogsLimiter, versionsController.getBuildLogs);
+
+router.post(
+  '/:deploymentId/rollback',
+  ...dep,
+  body('versionId').isMongoId().withMessage('versionId is required'),
+  body('confirm').equals('true').withMessage('Rollback must be explicitly confirmed').bail().toBoolean(),
+  body('idempotencyKey').optional().isString().matches(/^[A-Za-z0-9_-]{8,100}$/).withMessage('Invalid idempotency key'),
+  body('reason').optional().isString().isLength({ max: 200 }),
+  handleValidationErrors,
+  verifyEmail,
+  rollbackLimiter,
+  versionsController.createRollback
+);
+router.get('/:deploymentId/rollbacks', ...dep, handleValidationErrors, versionsController.listOperations);
+router.get('/:deploymentId/rollback/:operationId', validators.mongoId('deploymentId'), validators.mongoId('operationId'), handleValidationErrors, versionsController.getOperation);
+router.post('/:deploymentId/rollback/:operationId/retry', validators.mongoId('deploymentId'), validators.mongoId('operationId'), handleValidationErrors, verifyEmail, rollbackLimiter, versionsController.retryOperation);
 
 module.exports = router;

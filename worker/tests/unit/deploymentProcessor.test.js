@@ -6,6 +6,7 @@ const mockDeployment = { findById: jest.fn(), updateOne: jest.fn() };
 const mockExport = { findById: jest.fn(), updateOne: jest.fn() };
 const mockKashi = { findOneAndUpdate: jest.fn() };
 const mockProgress = jest.fn();
+const mockVerifyLoop = jest.fn();
 
 jest.mock('../../../backend/src/services/deployment/orchestrator', () => ({ runDeployment: (...a) => mockRunDeployment(...a) }));
 jest.mock('../../../backend/src/services/projectExport.service', () => ({ runExport: (...a) => mockRunExport(...a), runAiStudioExport: (...a) => mockRunAiExport(...a) }));
@@ -13,6 +14,7 @@ jest.mock('../../../backend/src/modules/kashi/kashiFixer.service', () => ({ runL
 jest.mock('../../../backend/src/modules/deployment/deployment.model', () => mockDeployment);
 jest.mock('../../../backend/src/modules/github/projectExport.model', () => mockExport);
 jest.mock('../../../backend/src/modules/kashi/kashiFixRun.model', () => mockKashi);
+jest.mock('../../../backend/src/services/deployment/rollback.service', () => ({ runVerificationLoop: (...a) => mockVerifyLoop(...a) }));
 jest.mock('../../src/callback', () => ({ sendTaskProgress: (...a) => mockProgress(...a) }));
 
 const { UnrecoverableError } = require('../../../backend/src/infrastructure/queue/errors');
@@ -84,5 +86,20 @@ describe('final-failure recovery (crash / stall / timeout)', () => {
     mockKashi.findOneAndUpdate.mockResolvedValue({ _id: 'r1' });
     await onDeploymentFinalFailure({ name: 'KASHI_FIX', data: { runId: 'r1', jobKey: 'k' } }, new Error('x'));
     expect(mockProgress).toHaveBeenCalledWith({ taskId: 'k' }, expect.objectContaining({ type: 'status', status: 'failed' }));
+  });
+});
+
+describe('VERIFY_ROLLBACK', () => {
+  it('drives the rollback verification loop (read-only; never re-sends the rollback)', async () => {
+    mockVerifyLoop.mockResolvedValue({ status: 'succeeded' });
+    const out = await processDeploymentJob({ name: 'VERIFY_ROLLBACK', data: { jobKey: 'k', operationId: 'op1' } });
+    expect(mockVerifyLoop).toHaveBeenCalledWith('op1');
+    expect(out.result).toMatchObject({ operationId: 'op1', status: 'succeeded' });
+  });
+
+  it('skips an operation that no longer exists and rejects bad payloads permanently', async () => {
+    mockVerifyLoop.mockResolvedValue(null);
+    expect((await processDeploymentJob({ name: 'VERIFY_ROLLBACK', data: { jobKey: 'k', operationId: 'gone' } })).result.skipped).toBe(true);
+    await expect(processDeploymentJob({ name: 'VERIFY_ROLLBACK', data: { jobKey: 'k' } })).rejects.toBeInstanceOf(UnrecoverableError);
   });
 });

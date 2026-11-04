@@ -434,6 +434,245 @@ const cancelDeployment = async (credential, metadata, deployId) => {
   }
 };
 
+
+// ─────────────────────────────────────────────────────────────────────────
+// Deployment history, production state, rollback and logs
+// (Deployment management). Every endpoint below is a documented Vercel REST
+// API endpoint:
+//   GET  /v6/deployments                                   list deployments
+//   GET  /v13/deployments/{id}                             deployment detail
+//   GET  /v9/projects/{id}                                 project (targets.production, autoAssignCustomDomains, lastAliasRequest)
+//   POST /v1/projects/{projectId}/rollback/{deploymentId}  instant rollback (no rebuild)
+//   POST /v10/projects/{projectId}/promote/{deploymentId}  promote a staged production deployment (no rebuild)
+//   GET  /v1/projects/{projectId}/promote/aliases          alias mapping status of the last promote/rollback
+//   GET  /v3/deployments/{id}/events                       build logs
+//   GET  /v1/projects/{projectId}/deployments/{id}/runtime-logs   runtime logs (stream+json, no paging params)
+// ─────────────────────────────────────────────────────────────────────────
+
+const { classifyVercelError, VercelRequestError } = require('../vercelErrors');
+
+const toMs = (value) => {
+  if (value == null) return null;
+  const n = typeof value === 'number' ? value : Date.parse(value);
+  return Number.isFinite(n) ? n : null;
+};
+
+const VERSION_STATES = new Set(['QUEUED', 'INITIALIZING', 'BUILDING', 'READY', 'ERROR', 'CANCELED']);
+
+/** Normalizes a Vercel deployment object (v6 list item or v13 detail) into DevDrop's shape. */
+const normalizeDeployment = (d = {}) => {
+  const rawState = String(d.readyState || d.state || '').toUpperCase();
+  const buildingAt = toMs(d.buildingAt);
+  const readyAt = toMs(d.ready ?? d.readyAt);
+  const target = d.target || null;
+  const meta = d.meta || {};
+  return {
+    id: d.uid || d.id,
+    projectId: d.projectId || null,
+    url: d.url ? `https://${String(d.url).replace(/^https?:\/\//, '')}` : null,
+    state: VERSION_STATES.has(rawState) ? rawState : 'UNKNOWN',
+    readySubstate: d.readySubstate ? String(d.readySubstate).toUpperCase() : null,
+    target,
+    environment: target === 'production' ? 'production' : 'preview',
+    createdAt: toMs(d.createdAt ?? d.created),
+    buildingAt,
+    readyAt,
+    durationMs: buildingAt && readyAt && readyAt >= buildingAt ? readyAt - buildingAt : null,
+    commitSha: meta.githubCommitSha || meta.gitlabCommitSha || meta.bitbucketCommitSha || null,
+    commitMessage: meta.githubCommitMessage || meta.gitlabCommitMessage || meta.bitbucketCommitMessage || null,
+    commitRef: meta.githubCommitRef || meta.gitlabCommitRef || meta.bitbucketCommitRef || null,
+    inspectorUrl: d.inspectorUrl || null,
+    errorCode: d.errorCode || null,
+    errorMessage: d.errorMessage || null,
+    aliases: Array.isArray(d.alias) ? d.alias : [],
+    creatorId: d.creator?.uid || null,
+  };
+};
+
+const wrapRead = (error) => new VercelRequestError(classifyVercelError(error, 'read'), error);
+
+/** One bounded page of a project's deployments (newest first). `next` is the `until` cursor for the following page. */
+const listDeploymentsPage = async (credential, metadata, projectId, { limit = 100, until, since } = {}) => {
+  try {
+    const params = { projectId, limit: Math.min(Math.max(limit, 1), 100) };
+    if (until) params.until = until;
+    if (since) params.since = since;
+    const { data } = await vercelApi(credential, metadata?.teamId).get('/v6/deployments', { params });
+    const deployments = (data?.deployments || []).map((d) => normalizeDeployment({ ...d, projectId: d.projectId || projectId }));
+    return { deployments, next: data?.pagination?.next ?? null };
+  } catch (error) {
+    throw wrapRead(error);
+  }
+};
+
+/** Fresh deployment detail (includes readySubstate, errorMessage, aliases). */
+const getDeployment = async (credential, metadata, deploymentId) => {
+  try {
+    const { data } = await vercelApi(credential, metadata?.teamId).get(`/v13/deployments/${encodeURIComponent(deploymentId)}`);
+    return normalizeDeployment(data);
+  } catch (error) {
+    throw wrapRead(error);
+  }
+};
+
+/** Project fields relevant to "what is serving production right now". */
+const extractProductionState = (project = {}) => {
+  const lar = project.lastAliasRequest || null;
+  return {
+    projectId: project.id || null,
+    projectName: project.name || null,
+    // targets.production is the deployment currently aliased to production domains.
+    currentDeploymentId: project.targets?.production?.id || null,
+    autoAssignCustomDomains: typeof project.autoAssignCustomDomains === 'boolean' ? project.autoAssignCustomDomains : null,
+    lastAliasRequest: lar
+      ? {
+          type: lar.type || null,
+          fromDeploymentId: lar.fromDeploymentId || null,
+          toDeploymentId: lar.toDeploymentId || null,
+          jobStatus: lar.jobStatus || null,
+          requestedAt: toMs(lar.requestedAt),
+        }
+      : null,
+  };
+};
+
+const getProductionState = async (credential, metadata, projectId) => {
+  try {
+    const { data } = await vercelApi(credential, metadata?.teamId).get(`/v9/projects/${encodeURIComponent(projectId)}`);
+    return extractProductionState(data);
+  } catch (error) {
+    throw wrapRead(error);
+  }
+};
+
+/** Instant rollback: re-points production domains at an existing deployment. No rebuild. Not idempotent-safe to blind-retry. */
+const requestRollback = async (credential, metadata, projectId, deploymentId, { description } = {}) => {
+  try {
+    const params = {};
+    if (description) params.description = String(description).slice(0, 200);
+    await vercelApi(credential, metadata?.teamId).post(
+      `/v1/projects/${encodeURIComponent(projectId)}/rollback/${encodeURIComponent(deploymentId)}`,
+      null,
+      { params }
+    );
+    return { accepted: true };
+  } catch (error) {
+    throw new VercelRequestError(classifyVercelError(error, 'rollback'), error);
+  }
+};
+
+/** Promotes a staged production deployment (never served traffic) without rebuilding it. */
+const requestPromote = async (credential, metadata, projectId, deploymentId) => {
+  try {
+    await vercelApi(credential, metadata?.teamId).post(
+      `/v10/projects/${encodeURIComponent(projectId)}/promote/${encodeURIComponent(deploymentId)}`
+    );
+    return { accepted: true };
+  } catch (error) {
+    throw new VercelRequestError(classifyVercelError(error, 'promote'), error);
+  }
+};
+
+/** Alias-mapping status of the project's most recent promote/rollback request (bounded to failures by default). */
+const getPromoteAliases = async (credential, metadata, projectId, { failedOnly = false, limit = 20 } = {}) => {
+  try {
+    const { data } = await vercelApi(credential, metadata?.teamId).get(`/v1/projects/${encodeURIComponent(projectId)}/promote/aliases`, {
+      params: { limit: Math.min(limit, 100), ...(failedOnly ? { failedOnly: true } : {}) },
+    });
+    return Array.isArray(data?.aliases) ? data.aliases.map((a) => ({ alias: a.alias, status: a.status, id: a.id })) : [];
+  } catch (error) {
+    throw wrapRead(error);
+  }
+};
+
+/** Bounded build-log read: at most `limit` events, oldest first. */
+const getBuildEvents = async (credential, metadata, deploymentId, { limit = 1000 } = {}) => {
+  try {
+    const { data } = await vercelApi(credential, metadata?.teamId).get(`/v3/deployments/${encodeURIComponent(deploymentId)}/events`, {
+      params: { builds: 1, direction: 'forward', limit: Math.min(Math.max(limit, 1), 5000) },
+    });
+    return Array.isArray(data) ? data : data?.events || [];
+  } catch (error) {
+    throw wrapRead(error);
+  }
+};
+
+/**
+ * Runtime logs are a `application/stream+json` response with no documented
+ * paging/filter parameters, so the only safe way to read them is to consume
+ * the stream until a line/byte/time budget is spent and then abort it.
+ */
+const readRuntimeLogs = async (credential, metadata, projectId, deploymentId, { maxLines = 1000, maxBytes = 1024 * 1024, timeoutMs = 6000 } = {}) => {
+  let response;
+  try {
+    response = await vercelApi(credential, metadata?.teamId).get(
+      `/v1/projects/${encodeURIComponent(projectId)}/deployments/${encodeURIComponent(deploymentId)}/runtime-logs`,
+      { responseType: 'stream', timeout: Math.min(timeoutMs, 15000), headers: { Accept: 'application/stream+json' } }
+    );
+  } catch (error) {
+    throw wrapRead(error);
+  }
+
+  const stream = response.data;
+  return new Promise((resolve, reject) => {
+    const entries = [];
+    let buffered = '';
+    let bytes = 0;
+    let truncated = false;
+    let finished = false;
+
+    const finish = (err) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      try { stream.destroy(); } catch { /* already closed */ }
+      if (err && entries.length === 0) reject(wrapRead(err));
+      else resolve({ entries, truncated });
+    };
+
+    const pushLine = (line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      try {
+        entries.push(JSON.parse(trimmed));
+      } catch {
+        // Ignore non-JSON keep-alive/garbage lines.
+      }
+      if (entries.length >= maxLines) {
+        truncated = true;
+        finish();
+      }
+    };
+
+    const timer = setTimeout(() => {
+      truncated = true;
+      finish();
+    }, timeoutMs);
+    timer.unref?.();
+
+    stream.on('data', (chunk) => {
+      if (finished) return;
+      bytes += chunk.length;
+      buffered += chunk.toString('utf8');
+      const lines = buffered.split('\n');
+      buffered = lines.pop();
+      for (const line of lines) {
+        if (finished) return;
+        pushLine(line);
+      }
+      if (bytes >= maxBytes) {
+        truncated = true;
+        finish();
+      }
+    });
+    stream.on('end', () => {
+      if (!finished && buffered) pushLine(buffered);
+      finish();
+    });
+    stream.on('error', (err) => finish(err));
+  });
+};
+
 module.exports = {
   isConfigured,
   getInstallUrl,
@@ -455,4 +694,14 @@ module.exports = {
   getBuildLogs,
   listProjectDeployments,
   cancelDeployment,
+  normalizeDeployment,
+  extractProductionState,
+  listDeploymentsPage,
+  getDeployment,
+  getProductionState,
+  requestRollback,
+  requestPromote,
+  getPromoteAliases,
+  getBuildEvents,
+  readRuntimeLogs,
 };

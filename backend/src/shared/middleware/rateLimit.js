@@ -196,7 +196,52 @@ const kashiChatLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// ── Deployment management (versions / rollback / logs) ──
+const byUserOrIp = (req) => (req.userId ? req.userId.toString() : req.ip);
+
+// A rollback changes what the public sees; keep it tight per user.
+const rollbackLimiter = rateLimit({
+  windowMs: readEnvNumber('ROLLBACK_RATE_LIMIT_WINDOW_MS', 10 * 60 * 1000),
+  max: readEnvNumber('ROLLBACK_RATE_LIMIT_MAX_REQUESTS', 6),
+  keyGenerator: byUserOrIp,
+  message: { success: false, code: 'RATE_LIMITED', message: 'Too many rollback attempts. Please wait a few minutes and try again.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Log reads fan out to Vercel (one request per refresh), so cap them per user.
+const deploymentLogsLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: readEnvNumber('DEPLOYMENT_LOGS_RATE_LIMIT_MAX_REQUESTS', 60),
+  keyGenerator: byUserOrIp,
+  message: { success: false, code: 'RATE_LIMITED', message: 'Too many log requests. Please slow down (turn off auto-refresh or wait a moment).' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const versionSyncLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: readEnvNumber('VERSION_SYNC_RATE_LIMIT_MAX_REQUESTS', 6),
+  keyGenerator: byUserOrIp,
+  message: { success: false, code: 'RATE_LIMITED', message: 'Refreshing too often. Please wait a minute.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Unauthenticated (signature-checked) endpoint: cheap flood protection before the HMAC runs.
+const vercelWebhookLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: readEnvNumber('VERCEL_WEBHOOK_RATE_LIMIT_MAX_REQUESTS', 300),
+  message: { success: false, message: 'Too many webhook requests.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 module.exports = {
+  rollbackLimiter,
+  deploymentLogsLimiter,
+  versionSyncLimiter,
+  vercelWebhookLimiter,
   kashiChatLimiter,
   generalLimiter,
   authLimiter,

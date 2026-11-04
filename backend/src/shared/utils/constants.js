@@ -193,6 +193,32 @@ const DEPLOYMENT_ACTIVE_STATUSES = [
   DEPLOYMENT_STATUS.REDEPLOYING_BACKEND,
 ];
 
+// ─── Deployment version management (Vercel deployment history / rollback) ───
+const VERSION_ENVIRONMENT = { PRODUCTION: 'production', PREVIEW: 'preview' };
+
+// Vercel's deployment readyState values, plus UNKNOWN for anything unexpected.
+const VERSION_STATE = {
+  QUEUED: 'QUEUED',
+  INITIALIZING: 'INITIALIZING',
+  BUILDING: 'BUILDING',
+  READY: 'READY',
+  ERROR: 'ERROR',
+  CANCELED: 'CANCELED',
+  UNKNOWN: 'UNKNOWN',
+};
+
+// One DevDrop rollback/promote operation. Active statuses hold the per-project lock.
+const ROLLBACK_STATUS = {
+  PENDING: 'pending',
+  REQUESTING: 'requesting',
+  VERIFYING: 'verifying',
+  SUCCEEDED: 'succeeded',
+  FAILED: 'failed',
+  VERIFICATION_TIMEOUT: 'verification_timeout',
+  UNVERIFIED: 'unverified',
+};
+const ROLLBACK_ACTIVE_STATUSES = [ROLLBACK_STATUS.PENDING, ROLLBACK_STATUS.REQUESTING, ROLLBACK_STATUS.VERIFYING];
+
 // Directory/file names excluded from every GitHub export, regardless of
 // the purchased project's own .gitignore. Matched against each path
 // SEGMENT (not substrings), so e.g. "my-dist-tool/" is not excluded
@@ -244,4 +270,8 @@ module.exports = {
   DEPLOYMENT_ARCHITECTURE,
   DEPLOYMENT_STATUS,
   DEPLOYMENT_ACTIVE_STATUSES,
+  VERSION_ENVIRONMENT,
+  VERSION_STATE,
+  ROLLBACK_STATUS,
+  ROLLBACK_ACTIVE_STATUSES,
 };
