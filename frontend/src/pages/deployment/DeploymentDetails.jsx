@@ -5,7 +5,7 @@ import { ArrowLeft, ArrowUpRight, Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { deploymentAPI } from '../../api/deployment';
 import KashiFixPanel from '../../components/kashi/KashiFixPanel';
-import DeploymentHistory from '../../components/deployment/management/DeploymentHistory';
+import DeploymentConsole from '../../components/deployment/management/DeploymentConsole';
 
 const POLL_INTERVAL_MS = 3000;
 const SERIF = { fontFamily: 'var(--font-ui, Inter, system-ui, sans-serif)' };
@@ -89,13 +89,18 @@ export default function DeploymentDetails() {
   }
   if (!deployment) return null;
 
-  
+  // Settled Vercel sites get the console layout: status, logs for the latest deployment, and history.
+  const showConsole =
+    !deployment.isActive &&
+    ['SUCCESS', 'FAILED', 'CANCELLED'].includes(deployment.status) &&
+    deployment.frontendProvider === 'vercel' &&
+    Boolean(deployment.vercel?.projectId);
 
   return (
     <div className="ui-surface relative min-h-screen overflow-hidden bg-[#090909] text-[#e7e7e7] selection:bg-white/15">
       <Ambient />
 
-      <div className="relative z-10 max-w-3xl mx-auto px-4 sm:px-6 pt-7 pb-20 md:pt-10">
+      <div className={`relative z-10 mx-auto px-4 sm:px-6 pt-7 pb-20 md:pt-10 ${showConsole ? 'max-w-6xl' : 'max-w-3xl'}`}>
         <button
           type="button"
           onClick={() => navigate('/workspace')}
@@ -111,31 +116,31 @@ export default function DeploymentDetails() {
           </p>
         </header>
 
-        <motion.main
-          key={deployment.isActive ? 'active' : deployment.status}
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, ease: EASE }}
-          className="rounded-2xl border border-white/[0.10] bg-[#101010] p-5 sm:p-7 md:p-8 shadow-[0_16px_48px_rgba(0,0,0,0.16)]"
-        >
-          {deployment.isActive && <ProgressView deployment={deployment} />}
-          {deployment.status === 'SUCCESS' && (
-            <SuccessView deployment={deployment} onRedeploy={handleRedeploy} redeploying={redeploying} />
-          )}
-          {deployment.status === 'FAILED' && (
-            <FailedView deployment={deployment} onRedeploy={handleRedeploy} redeploying={redeploying} />
-          )}
-          {deployment.status === 'CANCELLED' && (
-            <CancelledView deployment={deployment} onRedeploy={handleRedeploy} redeploying={redeploying} />
-          )}
-        </motion.main>
-
-        {deployment.frontendProvider === 'vercel' && deployment.vercel?.projectId && !deployment.isActive && (
-          <DeploymentHistory deploymentId={deployment.id} />
+        {showConsole ? (
+          <DeploymentConsole deployment={deployment} onRedeploy={handleRedeploy} redeploying={redeploying} />
+        ) : (
+          <motion.main
+            key={deployment.isActive ? 'active' : deployment.status}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: EASE }}
+            className="rounded-2xl border border-white/[0.10] bg-[#101010] p-5 sm:p-7 md:p-8 shadow-[0_16px_48px_rgba(0,0,0,0.16)]"
+          >
+            {deployment.isActive && <ProgressView deployment={deployment} />}
+            {deployment.status === 'SUCCESS' && (
+              <SuccessView deployment={deployment} onRedeploy={handleRedeploy} redeploying={redeploying} />
+            )}
+            {deployment.status === 'FAILED' && (
+              <FailedView deployment={deployment} onRedeploy={handleRedeploy} redeploying={redeploying} />
+            )}
+            {deployment.status === 'CANCELLED' && (
+              <CancelledView deployment={deployment} onRedeploy={handleRedeploy} redeploying={redeploying} />
+            )}
+          </motion.main>
         )}
 
         {['FAILED', 'SUCCESS'].includes(deployment.status) && (
-          <KashiFixPanel deployment={deployment} onChanged={fetchDeployment} />
+          <div className={showConsole ? 'mt-5' : ''}><KashiFixPanel deployment={deployment} onChanged={fetchDeployment} /></div>
         )}
       </div>
     </div>

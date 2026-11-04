@@ -196,20 +196,9 @@ const kashiChatLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// ── Deployment management (versions / rollback / logs) ──
+// ── Deployment management (versions / logs) ──
 const byUserOrIp = (req) => (req.userId ? req.userId.toString() : req.ip);
 
-// A rollback changes what the public sees; keep it tight per user.
-const rollbackLimiter = rateLimit({
-  windowMs: readEnvNumber('ROLLBACK_RATE_LIMIT_WINDOW_MS', 10 * 60 * 1000),
-  max: readEnvNumber('ROLLBACK_RATE_LIMIT_MAX_REQUESTS', 6),
-  keyGenerator: byUserOrIp,
-  message: { success: false, code: 'RATE_LIMITED', message: 'Too many rollback attempts. Please wait a few minutes and try again.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-// Log reads fan out to Vercel (one request per refresh), so cap them per user.
 const deploymentLogsLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: readEnvNumber('DEPLOYMENT_LOGS_RATE_LIMIT_MAX_REQUESTS', 60),
@@ -238,7 +227,6 @@ const vercelWebhookLimiter = rateLimit({
 });
 
 module.exports = {
-  rollbackLimiter,
   deploymentLogsLimiter,
   versionSyncLimiter,
   vercelWebhookLimiter,

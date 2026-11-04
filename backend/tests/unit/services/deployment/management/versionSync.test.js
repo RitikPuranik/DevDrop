@@ -16,7 +16,7 @@ beforeEach(async () => {
   Deployment.__reset(); Version.__reset(); stubNoTransactions();
   site = await seedSite(Deployment);
   provider.listDeploymentsPage.mockReset().mockResolvedValue({ deployments: [vdep('d4', 4000), vdep('d3', 3000, { environment: 'preview', target: null }), vdep('d2', 2000), vdep('d1', 1000)], next: null });
-  provider.getProductionState.mockReset().mockResolvedValue({ currentDeploymentId: 'd4', autoAssignCustomDomains: true, lastAliasRequest: null });
+  provider.getProductionState.mockReset().mockResolvedValue({ currentDeploymentId: 'd4' });
   provider.getDeployment.mockReset();
 });
 afterEach(() => jest.restoreAllMocks());
@@ -43,7 +43,7 @@ describe('versionSync.syncSite', () => {
   it('keeps history and numbering stable when newer deployments arrive; handles external ones', async () => {
     await sync.syncSite(site, { force: true });
     provider.listDeploymentsPage.mockResolvedValue({ deployments: [vdep('d5', 5000), vdep('d4', 4000)], next: null });
-    provider.getProductionState.mockResolvedValue({ currentDeploymentId: 'd5', autoAssignCustomDomains: true });
+    provider.getProductionState.mockResolvedValue({ currentDeploymentId: 'd5' });
     const r = await sync.syncSite(site, { force: true });
     expect(r.created).toBe(1);
     const m = byLabel();
@@ -134,13 +134,11 @@ describe('versionSync reads', () => {
     expect(versions).toHaveLength(0);
   });
 
-  it('annotates rollback eligibility (preview/failed/current ineligible; older production eligible)', async () => {
+  it('serializes roles and never exposes rollback fields', async () => {
     const summary = await sync.getSummary(site._id);
     const { versions } = await sync.listVersions(site, { limit: 50 });
-    const e = Object.fromEntries(versions.map((v) => [v.versionNumber, sync.serializeVersion(v, summary).rollback]));
-    expect(e[2]).toMatchObject({ eligible: true, kind: 'rollback' });
-    expect(e[3].reason.code).toBe('PREVIEW_NOT_ELIGIBLE');
-    expect(e[5].reason.code).toBe('NOT_READY');
-    expect(e[4].reason.code).toBe('ALREADY_LIVE');
+    const out = versions.map((v) => sync.serializeVersion(v, summary));
+    expect(out.find((v) => v.versionNumber === 4).role).toBe('current-production');
+    expect(out.every((v) => !('rollback' in v))).toBe(true);
   });
 });

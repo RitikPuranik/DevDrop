@@ -1,8 +1,8 @@
 /* eslint-disable no-console */
 // DevDrop uses Mongoose (no Prisma migrations). Run once after deploying the
 // deployment-management feature to build the new collections' indexes,
-// including the partial unique indexes that enforce "one live production per
-// site" and "one active rollback per Vercel project".
+// including the partial unique index that enforces "one live production per
+// site".
 //   node backend/scripts/ensure-deployment-management-indexes.js
 require('dotenv').config();
 const mongoose = require('mongoose');
@@ -11,7 +11,6 @@ const mongoose = require('mongoose');
   await mongoose.connect(process.env.MONGODB_URI || process.env.MONGO_URI);
   const models = [
     require('../src/modules/deployment/deploymentVersion.model'),
-    require('../src/modules/deployment/rollbackOperation.model'),
     require('../src/modules/deployment/vercelWebhookEvent.model'),
   ];
   for (const Model of models) {

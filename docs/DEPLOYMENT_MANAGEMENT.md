@@ -1,15 +1,19 @@
-# Vercel deployment management
+# Vercel deployment history and logs
 
-Version history, one-click rollback and logs for sites deployed to Vercel.
-A "site" is the existing `Deployment` document; each Vercel deployment becomes a `DeploymentVersion`.
+The deployment page of a Vercel-hosted site shows the status of the site, the
+logs of the selected deployment (the latest one by default) and the full
+deployment history. DevDrop only reads from Vercel here; it never changes
+which deployment is live.
 
 ## Architecture
-- **Models** (`backend/src/modules/deployment/`): `DeploymentVersion` (persistent DevDrop version number ↔ Vercel deployment id; partial unique index: one current production per site), `RollbackOperation` (audit trail per attempt; partial unique indexes: one active operation per Vercel project, idempotency key per site), `VercelWebhookEvent` (dedupe, TTL).
-- **Services** (`backend/src/services/deployment/`): `versionSync`, `rollback`, `deploymentLogs`, `vercelWebhook`, `rollbackEligibility`, `logRedaction`, `vercelErrors`.
-- **Rollback** uses Vercel's instant rollback (previously promoted production deployments) or promote (staged production deployments). No rebuild. The request is sent once; ambiguous outcomes (timeout/5xx) are reconciled against Vercel's current production deployment, never blindly re-sent.
-- **State machine**: pending → requesting → verifying → succeeded | failed | verification_timeout | unverified. DevDrop's "current production" pointer only moves after Vercel reports the target as live. Verification runs lazily while the UI polls, with a `VERIFY_ROLLBACK` BullMQ job as a backstop.
-- **Logs**: bounded snapshot (events/bytes/time caps), secrets redacted on ingestion, short-lived in-memory cache, opaque cursor pagination (409 `CURSOR_EXPIRED` once the snapshot is gone). Nothing is persisted.
-- **Webhooks**: `POST /api/webhooks/vercel`, raw-body HMAC-SHA1 verification, idempotent. The payload is only a hint; state is always re-read from Vercel.
+- **Models** (`backend/src/modules/deployment/`): `DeploymentVersion` (persistent DevDrop version number <-> Vercel deployment id; partial unique index: one current production per site) and `VercelWebhookEvent` (dedupe, TTL). A "site" is the existing `Deployment` document.
+- **Services** (`backend/src/services/deployment/`): `versionSync`, `deploymentLogs`, `vercelWebhook`, `logRedaction`, `vercelErrors`, `vercelContext`.
+- **Version sync**: first sync backfills a bounded history, later syncs read the newest page. Versions are numbered chronologically (v1, v2, ...). Deployments created directly on Vercel are imported too. The "live" marker comes from Vercel's project state.
+- **Logs**: bounded snapshot (event/byte/time caps), secrets redacted on ingestion, short-lived in-memory cache, opaque cursor pagination (409 `CURSOR_EXPIRED` once the snapshot is gone). Nothing is persisted.
+- **Webhooks**: `POST /api/webhooks/vercel`, raw-body HMAC-SHA1 verification (`x-vercel-signature`), idempotent. The payload is only a hint; state is always re-read from Vercel.
+
+## UI (`frontend/src/components/deployment/management/`)
+`DeploymentConsole` is used for settled (success / failed / cancelled) Vercel sites: status hero, logs panel, and the history timeline. Selecting a version in the timeline switches the logs; on first load the newest deployment is selected. While a deployment is still building, the list is re-checked slowly (every 8 s, for at most 10 minutes).
 
 ## API (all under `/api/deployments/:deploymentId`, owner-scoped)
 | Method | Path | Notes |
@@ -17,33 +21,18 @@ A "site" is the existing `Deployment` document; each Vercel deployment becomes a
 | GET | `/versions` | cursor pagination, `environment` filter; lazy sync |
 | POST | `/versions/sync` | rate limited |
 | GET | `/versions/:versionId` | details + log availability |
-| GET | `/rollback-check?versionId=` | read-only preflight |
-| POST | `/rollback` | body `{versionId, confirm:true, idempotencyKey}`; 202, or 200 for an idempotent replay |
-| GET | `/rollbacks`, `/rollback/:operationId` | history / status |
-| POST | `/rollback/:operationId/retry` | |
-| GET | `/versions/:versionId/logs`, `/logs/build` | search, level, time range, cursor |
+| GET | `/versions/:versionId/logs`, `/logs/build` | search, severity, time range, cursor |
 
 ## Setup
-1. Run `node backend/scripts/ensure-deployment-management-indexes.js` once (Mongoose; no Prisma migrations exist).
-2. Set `VERCEL_WEBHOOK_SECRET` (see `backend/.env.example` for all optional tuning variables).
-3. In the Vercel integration, add a webhook to `https://<api-host>/api/webhooks/vercel` for deployment created/ready/error/promoted events, using the same secret.
-4. The connected Vercel token needs access to read deployments/events/logs and to promote deployments on the project.
+1. Run `node backend/scripts/ensure-deployment-management-indexes.js` once (Mongoose; there are no Prisma migrations).
+2. Webhooks (optional, they only make new deployments appear automatically): point your Vercel integration's webhook at `https://<api-host>/api/webhooks/vercel` and select the `deployment.*` events. Integration webhooks are signed with the integration Client Secret, so `VERCEL_CLIENT_SECRET` is enough. Set `VERCEL_WEBHOOK_SECRET` only for an account-level webhook that shows its own secret. With no secret configured the endpoint answers 503.
+3. Optional tuning variables are listed in `backend/.env.example`.
 
 ## Tests
-- Backend: `cd backend && npx jest tests/unit/services/deployment/management tests/api/deployments/deploymentVersions.api.test.js`
-- Worker: `cd worker && npx jest tests/unit/deploymentProcessor.test.js`
+- Backend: `cd backend && npx jest tests/unit/services/deployment/management tests/api/deployments`
 - Frontend: `cd frontend && npx vitest run src/components/deployment`
 - Vercel is mocked everywhere; the database layer uses an in-memory fake (`backend/tests/helpers/fakeManagementDb.js`).
 
-### Integration test against a real Vercel project
-1. Create a throwaway Vercel project and deploy it from DevDrop twice (two production deployments).
-2. Open the site's deployment page → "Deployment history"; confirm v1/v2, v2 marked Live.
-3. Roll back to v1; confirm the progress dialog ends in success, v1 becomes Live and the Vercel dashboard agrees.
-4. Confirm the "automatic production deployments paused" banner, then use "Undo Rollback" in Vercel and click Refresh.
-5. Push a commit directly to the repo; confirm the new version appears after Refresh or webhook delivery.
-
 ## Limitations
-- Not exercised against live Vercel; some response fields (`targets.production.id`, alias job status) are handled defensively from docs.
-- No in-app "undo rollback"; the UI explains how to do it in Vercel.
+- Not exercised against a live Vercel project; some response fields are handled defensively from the docs.
 - Runtime logs cover a bounded recent window without server-side filtering; snapshots are per process.
-- Rollback verification jobs share the deployment queue (concurrency 1); the request itself is sent inline.

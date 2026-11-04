@@ -21,8 +21,6 @@ const STATUS_BY_VERCEL_CODE = {
   AUTH_REJECTED: 502, // never surface an upstream 401 as ours: the frontend treats 401 as a DevDrop session problem
   NOT_FOUND: 404,
   GONE: 410,
-  CONFLICT: 409,
-  NOT_ELIGIBLE: 422,
   RATE_LIMITED: 429,
   INVALID_REQUEST: 502,
 };

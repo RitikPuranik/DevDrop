@@ -150,9 +150,6 @@ const deploymentSchema = new mongoose.Schema(
       lastSyncError: { type: String, default: null },
       // True when the project has more history than the bounded backfill read.
       historyTruncated: { type: Boolean, default: false },
-      // Mirrors Vercel's project setting. Vercel turns auto-assignment of
-      // production domains OFF after an instant rollback.
-      autoAssignCustomDomains: { type: Boolean, default: null },
       productionCheckedAt: { type: Date, default: null },
     },
   },

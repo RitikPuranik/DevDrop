@@ -25,15 +25,10 @@ export const deploymentAPI = {
   redeploy: (deploymentId) => api.post(`/deployments/${deploymentId}/redeploy`),
   cancel: (deploymentId) => api.post(`/deployments/${deploymentId}/cancel`),
 
-  // Version history, rollback and logs. :deploymentId is the DevDrop site record;
+  // Version history and logs. :deploymentId is the DevDrop site record;
   // the backend resolves Vercel ids itself and re-checks ownership on every call.
   listVersions: (deploymentId, params) => api.get(`/deployments/${deploymentId}/versions`, { params }),
   syncVersions: (deploymentId) => api.post(`/deployments/${deploymentId}/versions/sync`),
   getVersion: (deploymentId, versionId) => api.get(`/deployments/${deploymentId}/versions/${versionId}`),
-  rollbackCheck: (deploymentId, versionId) => api.get(`/deployments/${deploymentId}/versions/${versionId}/rollback-check`),
-  rollback: (deploymentId, versionId, idempotencyKey) =>
-    api.post(`/deployments/${deploymentId}/rollback`, { versionId, confirm: true, idempotencyKey }),
-  getRollback: (deploymentId, operationId) => api.get(`/deployments/${deploymentId}/rollback/${operationId}`),
-  retryRollback: (deploymentId, operationId) => api.post(`/deployments/${deploymentId}/rollback/${operationId}/retry`),
   versionLogs: (deploymentId, versionId, params) => api.get(`/deployments/${deploymentId}/versions/${versionId}/logs`, { params }),
 };

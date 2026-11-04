@@ -16,7 +16,7 @@ const isVercelSite = (site) => Boolean(site && site.frontendProvider === DEPLOYM
  */
 const loadVercelContext = async (site) => {
   if (!isVercelSite(site)) {
-    throw new ManagementError(409, 'NOT_A_VERCEL_SITE', 'This deployment is not hosted on Vercel, so versions and rollbacks are not available for it.');
+    throw new ManagementError(409, 'NOT_A_VERCEL_SITE', 'This deployment is not hosted on Vercel, so deployment history is not available for it.');
   }
   const connection = await DeploymentProviderConnection.findOne({ userId: site.userId, provider: DEPLOYMENT_PROVIDERS.VERCEL }).select('+credentialEncrypted');
   if (!connection) {

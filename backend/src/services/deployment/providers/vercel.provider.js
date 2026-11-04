@@ -436,15 +436,12 @@ const cancelDeployment = async (credential, metadata, deployId) => {
 
 
 // ─────────────────────────────────────────────────────────────────────────
-// Deployment history, production state, rollback and logs
+// Deployment history, production state and logs
 // (Deployment management). Every endpoint below is a documented Vercel REST
 // API endpoint:
 //   GET  /v6/deployments                                   list deployments
 //   GET  /v13/deployments/{id}                             deployment detail
-//   GET  /v9/projects/{id}                                 project (targets.production, autoAssignCustomDomains, lastAliasRequest)
-//   POST /v1/projects/{projectId}/rollback/{deploymentId}  instant rollback (no rebuild)
-//   POST /v10/projects/{projectId}/promote/{deploymentId}  promote a staged production deployment (no rebuild)
-//   GET  /v1/projects/{projectId}/promote/aliases          alias mapping status of the last promote/rollback
+//   GET  /v9/projects/{id}                                 project (targets.production)
 //   GET  /v3/deployments/{id}/events                       build logs
 //   GET  /v1/projects/{projectId}/deployments/{id}/runtime-logs   runtime logs (stream+json, no paging params)
 // ─────────────────────────────────────────────────────────────────────────
@@ -489,7 +486,7 @@ const normalizeDeployment = (d = {}) => {
   };
 };
 
-const wrapRead = (error) => new VercelRequestError(classifyVercelError(error, 'read'), error);
+const wrapRead = (error) => new VercelRequestError(classifyVercelError(error), error);
 
 /** One bounded page of a project's deployments (newest first). `next` is the `until` cursor for the following page. */
 const listDeploymentsPage = async (credential, metadata, projectId, { limit = 100, until, since } = {}) => {
@@ -516,70 +513,17 @@ const getDeployment = async (credential, metadata, deploymentId) => {
 };
 
 /** Project fields relevant to "what is serving production right now". */
-const extractProductionState = (project = {}) => {
-  const lar = project.lastAliasRequest || null;
-  return {
-    projectId: project.id || null,
-    projectName: project.name || null,
-    // targets.production is the deployment currently aliased to production domains.
-    currentDeploymentId: project.targets?.production?.id || null,
-    autoAssignCustomDomains: typeof project.autoAssignCustomDomains === 'boolean' ? project.autoAssignCustomDomains : null,
-    lastAliasRequest: lar
-      ? {
-          type: lar.type || null,
-          fromDeploymentId: lar.fromDeploymentId || null,
-          toDeploymentId: lar.toDeploymentId || null,
-          jobStatus: lar.jobStatus || null,
-          requestedAt: toMs(lar.requestedAt),
-        }
-      : null,
-  };
-};
+const extractProductionState = (project = {}) => ({
+  projectId: project.id || null,
+  projectName: project.name || null,
+  // targets.production is the deployment currently aliased to production domains.
+  currentDeploymentId: project.targets?.production?.id || null,
+});
 
 const getProductionState = async (credential, metadata, projectId) => {
   try {
     const { data } = await vercelApi(credential, metadata?.teamId).get(`/v9/projects/${encodeURIComponent(projectId)}`);
     return extractProductionState(data);
-  } catch (error) {
-    throw wrapRead(error);
-  }
-};
-
-/** Instant rollback: re-points production domains at an existing deployment. No rebuild. Not idempotent-safe to blind-retry. */
-const requestRollback = async (credential, metadata, projectId, deploymentId, { description } = {}) => {
-  try {
-    const params = {};
-    if (description) params.description = String(description).slice(0, 200);
-    await vercelApi(credential, metadata?.teamId).post(
-      `/v1/projects/${encodeURIComponent(projectId)}/rollback/${encodeURIComponent(deploymentId)}`,
-      null,
-      { params }
-    );
-    return { accepted: true };
-  } catch (error) {
-    throw new VercelRequestError(classifyVercelError(error, 'rollback'), error);
-  }
-};
-
-/** Promotes a staged production deployment (never served traffic) without rebuilding it. */
-const requestPromote = async (credential, metadata, projectId, deploymentId) => {
-  try {
-    await vercelApi(credential, metadata?.teamId).post(
-      `/v10/projects/${encodeURIComponent(projectId)}/promote/${encodeURIComponent(deploymentId)}`
-    );
-    return { accepted: true };
-  } catch (error) {
-    throw new VercelRequestError(classifyVercelError(error, 'promote'), error);
-  }
-};
-
-/** Alias-mapping status of the project's most recent promote/rollback request (bounded to failures by default). */
-const getPromoteAliases = async (credential, metadata, projectId, { failedOnly = false, limit = 20 } = {}) => {
-  try {
-    const { data } = await vercelApi(credential, metadata?.teamId).get(`/v1/projects/${encodeURIComponent(projectId)}/promote/aliases`, {
-      params: { limit: Math.min(limit, 100), ...(failedOnly ? { failedOnly: true } : {}) },
-    });
-    return Array.isArray(data?.aliases) ? data.aliases.map((a) => ({ alias: a.alias, status: a.status, id: a.id })) : [];
   } catch (error) {
     throw wrapRead(error);
   }
@@ -699,9 +643,6 @@ module.exports = {
   listDeploymentsPage,
   getDeployment,
   getProductionState,
-  requestRollback,
-  requestPromote,
-  getPromoteAliases,
   getBuildEvents,
   readRuntimeLogs,
 };

@@ -1,4 +1,4 @@
-// Shared wiring for the version-sync / rollback service tests (jest.mock calls must live in the test files themselves).
+// Shared wiring for the version-sync / logs service tests (jest.mock calls must live in the test files themselves).
 const mongoose = require('mongoose');
 
 const seedSite = (Deployment, o = {}) =>
@@ -19,13 +19,6 @@ const modelDefs = () => {
         { fields: ['deploymentRef', 'vercelDeploymentId'] },
         { fields: ['deploymentRef', 'versionNumber'] },
         { fields: ['deploymentRef'], partial: (d) => d.isCurrentProduction === true },
-      ],
-    }),
-    RollbackOperation: () => createFakeModel({
-      defaults: () => ({ active: true, status: 'pending', events: [], outcomeUnknown: false, lastCheckedAt: null }),
-      uniques: [
-        { fields: ['vercelProjectId'], partial: (d) => d.active === true },
-        { fields: ['deploymentRef', 'idempotencyKey'] },
       ],
     }),
   };

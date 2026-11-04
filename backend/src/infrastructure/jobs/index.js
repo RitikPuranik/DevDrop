@@ -57,25 +57,6 @@ const enqueueKashiFix = async (runId, userId) => {
   });
 };
 
-// Backstop that drives a rollback/promote to a confirmed outcome even if nobody is polling its status.
-// attempts: 1 — the processor only READS Vercel (the rollback itself is never re-sent), and the loop
-// is bounded by the operation's own deadline, so a replay adds nothing.
-const enqueueRollbackVerification = async (operationId, userId) => {
-  if (await alreadyInFlight(JOB_TYPES.VERIFY_ROLLBACK, operationId)) return { duplicate: true };
-  return enqueueJob({
-    queue: QUEUE_NAMES.DEPLOYMENT,
-    type: JOB_TYPES.VERIFY_ROLLBACK,
-    jobKey: `rollback-verify-${operationId}-${nonce()}`,
-    userId,
-    refType: 'rollback-operation',
-    refId: String(operationId),
-    data: { operationId: String(operationId) },
-    priority: PRIORITY.SECURITY,
-    attempts: 1,
-    durable: true,
-  });
-};
-
 const enqueueBackup = async (params, userId) => {
   const jobKey = `backup-${nonce()}`;
   const result = await enqueueJob({
@@ -92,4 +73,4 @@ const enqueueBackup = async (params, userId) => {
   return { ...result, taskId: jobKey };
 };
 
-module.exports = { enqueueDeployment, enqueueProjectExport, enqueueKashiFix, enqueueRollbackVerification, enqueueBackup };
+module.exports = { enqueueDeployment, enqueueProjectExport, enqueueKashiFix, enqueueBackup };

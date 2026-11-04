@@ -5,7 +5,6 @@ const Deployment = require('../../modules/deployment/deployment.model');
 const DeploymentVersion = require('../../modules/deployment/deploymentVersion.model');
 const vercelProvider = require('./providers/vercel.provider');
 const { loadVercelContext, isVercelSite } = require('./vercelContext');
-const { evaluateEligibility } = require('./rollbackEligibility');
 const { ManagementError } = require('./managementError');
 const { VERSION_STATE } = require('../../shared/utils/constants');
 
@@ -236,7 +235,6 @@ const syncSite = async (site, { force = false, hintDeploymentId = null } = {}) =
     const setOnSite = { 'versioning.lastSyncedAt': new Date(), 'versioning.lastSyncError': null, 'versioning.historyTruncated': historyTruncated };
     if (!production.error) {
       setOnSite['versioning.productionCheckedAt'] = new Date();
-      if (production.autoAssignCustomDomains !== null) setOnSite['versioning.autoAssignCustomDomains'] = production.autoAssignCustomDomains;
       if (production.currentDeploymentId) {
         const before = await DeploymentVersion.findOne({ deploymentRef: site._id, isCurrentProduction: true }).select('vercelDeploymentId');
         const now = await setCurrentProduction(site, production.currentDeploymentId);
@@ -284,13 +282,9 @@ const getSummary = async (siteId) => {
   };
 };
 
-/** Public shape of a version, including its role and (cheap, stored-data) rollback eligibility. */
+/** Public shape of a version, including its role. */
 const serializeVersion = (v, summary = {}) => {
   const id = String(v._id);
-  const eligibility = evaluateEligibility(
-    { environment: v.environment, state: v.state, readySubstate: v.readySubstate, availability: v.availability },
-    { isCurrentProduction: v.isCurrentProduction }
-  );
   const isLatest = summary.latestVersionId && String(summary.latestVersionId) === id;
   const isLatestSuccessful = summary.latestSuccessfulVersionId && String(summary.latestSuccessfulVersionId) === id;
   const role = v.isCurrentProduction ? 'current-production' : isLatest ? 'latest' : isLatestSuccessful ? 'latest-successful' : 'historical';
@@ -320,7 +314,6 @@ const serializeVersion = (v, summary = {}) => {
     errorCode: v.errorCode,
     errorMessage: v.errorMessage,
     lastProductionAt: v.lastProductionAt,
-    rollback: { eligible: eligibility.eligible, kind: eligibility.kind, reason: eligibility.reason },
   };
 };
 

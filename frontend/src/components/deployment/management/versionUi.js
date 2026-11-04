@@ -57,13 +57,6 @@ export const formatLogTime = (ts) => {
 };
 
 /** Stable key so a double-click / network retry of the same confirmation maps to one server-side operation. */
-export const newIdempotencyKey = () => {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
-  return `k-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
-};
-
-export const isOperationActive = (op) => Boolean(op && op.active);
-
 /** Pulls the server's user-safe message out of an axios error. */
 export const apiErrorMessage = (err, fallback = 'Something went wrong. Please try again.') =>
   err?.response?.data?.message || (err?.code === 'ECONNABORTED' ? 'The request timed out.' : fallback);
@@ -87,10 +80,3 @@ export const LEVEL_CLASSES = {
   info: 'text-white/50',
   debug: 'text-white/30',
 };
-
-export const OPERATION_STEPS = [
-  { key: 'validated', label: 'Checked' },
-  { key: 'requested', label: 'Sent to Vercel' },
-  { key: 'verifying', label: 'Switching production' },
-  { key: 'confirmed', label: 'Confirmed' },
-];

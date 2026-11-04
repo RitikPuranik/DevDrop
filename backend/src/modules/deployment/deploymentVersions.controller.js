@@ -1,7 +1,6 @@
 const Deployment = require('./deployment.model');
 const DeploymentVersion = require('./deploymentVersion.model');
 const versionSync = require('../../services/deployment/versionSync.service');
-const rollbackService = require('../../services/deployment/rollback.service');
 const logsService = require('../../services/deployment/deploymentLogs.service');
 const { isVercelSite } = require('../../services/deployment/vercelContext');
 const { ManagementError } = require('../../services/deployment/managementError');
@@ -38,10 +37,9 @@ const loadOwnedVersion = async (site, versionId) => {
 
 const buildListPayload = async (site, query, { synced }) => {
   const fresh = (await Deployment.findById(site._id).select('versioning status')) || site;
-  const [{ versions, nextCursor }, summary, active] = await Promise.all([
+  const [{ versions, nextCursor }, summary] = await Promise.all([
     versionSync.listVersions(site, query),
     versionSync.getSummary(site._id),
-    rollbackService.getActiveOperation(site),
   ]);
   const v = fresh.versioning || {};
   return {
@@ -50,9 +48,7 @@ const buildListPayload = async (site, query, { synced }) => {
     nextCursor,
     summary,
     sync: { lastSyncedAt: v.lastSyncedAt || null, error: v.lastSyncError || null, historyTruncated: Boolean(v.historyTruncated), refreshed: Boolean(synced) },
-    autoAssign: { enabled: v.autoAssignCustomDomains ?? null, paused: v.autoAssignCustomDomains === false },
     deployInProgress: ['ANALYZING', 'QUEUED', 'DEPLOYING_BACKEND', 'BACKEND_DEPLOYED', 'DEPLOYING_FRONTEND', 'FRONTEND_DEPLOYED', 'SYNCHRONIZING_ENV', 'REDEPLOYING_BACKEND'].includes(fresh.status),
-    activeOperation: active ? rollbackService.serializeOperation(active) : null,
   };
 };
 
@@ -99,66 +95,6 @@ const getVersion = async (req, res) => {
   }
 };
 
-/** GET /api/deployments/:deploymentId/versions/:versionId/rollback-check */
-const rollbackCheck = async (req, res) => {
-  try {
-    const site = await loadOwnedSite(req);
-    res.json({ success: true, data: await rollbackService.getRollbackCheck(site, req.params.versionId) });
-  } catch (error) {
-    respondError(res, error);
-  }
-};
-
-/** POST /api/deployments/:deploymentId/rollback  body: { versionId, confirm: true, idempotencyKey?, reason? } */
-const createRollback = async (req, res) => {
-  try {
-    const site = await loadOwnedSite(req);
-    const { operation, idempotent } = await rollbackService.startOperation({
-      site,
-      versionId: req.body.versionId,
-      idempotencyKey: req.body.idempotencyKey || null,
-      reason: req.body.reason || null,
-      ip: req.ip,
-    });
-    res.status(idempotent ? 200 : 202).json({ success: true, idempotent, data: rollbackService.serializeOperation(operation) });
-  } catch (error) {
-    respondError(res, error);
-  }
-};
-
-/** GET /api/deployments/:deploymentId/rollback/:operationId */
-const getOperation = async (req, res) => {
-  try {
-    const site = await loadOwnedSite(req);
-    const op = await rollbackService.getOperation(site, req.params.operationId);
-    res.json({ success: true, data: rollbackService.serializeOperation(op) });
-  } catch (error) {
-    respondError(res, error);
-  }
-};
-
-/** GET /api/deployments/:deploymentId/rollbacks */
-const listOperations = async (req, res) => {
-  try {
-    const site = await loadOwnedSite(req);
-    const ops = await rollbackService.listOperations(site, { limit: req.query.limit });
-    res.json({ success: true, data: ops.map(rollbackService.serializeOperation) });
-  } catch (error) {
-    respondError(res, error);
-  }
-};
-
-/** POST /api/deployments/:deploymentId/rollback/:operationId/retry */
-const retryOperation = async (req, res) => {
-  try {
-    const site = await loadOwnedSite(req);
-    const { operation } = await rollbackService.retryOperation({ site, operationId: req.params.operationId, ip: req.ip });
-    res.status(202).json({ success: true, data: rollbackService.serializeOperation(operation) });
-  } catch (error) {
-    respondError(res, error);
-  }
-};
-
 const logsHandler = (forcedType) => async (req, res) => {
   try {
     const site = await loadOwnedSite(req);
@@ -175,11 +111,6 @@ module.exports = {
   listVersions,
   syncVersions,
   getVersion,
-  rollbackCheck,
-  createRollback,
-  getOperation,
-  listOperations,
-  retryOperation,
   getLogs: logsHandler(null),
   getBuildLogs: logsHandler('build'),
 };

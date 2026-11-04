@@ -14,26 +14,9 @@ describe('vercel.provider deployment management', () => {
   });
 
   it('extracts production state from the project', () => {
-    const s = provider.extractProductionState({ id: 'prj', targets: { production: { id: 'dpl_9' } }, autoAssignCustomDomains: false, lastAliasRequest: { type: 'rollback', toDeploymentId: 'dpl_9', jobStatus: 'succeeded', requestedAt: 5 } });
-    expect(s).toMatchObject({ currentDeploymentId: 'dpl_9', autoAssignCustomDomains: false, lastAliasRequest: { toDeploymentId: 'dpl_9', jobStatus: 'succeeded' } });
+    const s = provider.extractProductionState({ id: 'prj', targets: { production: { id: 'dpl_9' } } });
+    expect(s).toMatchObject({ currentDeploymentId: 'dpl_9' });
     expect(provider.extractProductionState({}).currentDeploymentId).toBeNull();
-  });
-
-  it('rollback uses the documented endpoint with the exact deployment id and no body', async () => {
-    const api = mockApi({ post: jest.fn().mockResolvedValue({ status: 201 }) });
-    await provider.requestRollback('tok', { teamId: 'team_1' }, 'prj_1', 'dpl_v2', { description: 'why' });
-    expect(api.post).toHaveBeenCalledWith('/v1/projects/prj_1/rollback/dpl_v2', null, { params: { description: 'why' } });
-  });
-
-  it('promote uses the documented v10 endpoint', async () => {
-    const api = mockApi({ post: jest.fn().mockResolvedValue({ status: 201 }) });
-    await provider.requestPromote('tok', {}, 'prj_1', 'dpl_3');
-    expect(api.post).toHaveBeenCalledWith('/v10/projects/prj_1/promote/dpl_3');
-  });
-
-  it('wraps a failed rollback in a classified error', async () => {
-    mockApi({ post: jest.fn().mockRejectedValue({ response: { status: 402 } }) });
-    await expect(provider.requestRollback('t', {}, 'p', 'd')).rejects.toMatchObject({ vercel: { code: 'PLAN_RESTRICTION' } });
   });
 
   it('bounds build-log reads with a limit', async () => {
